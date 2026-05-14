@@ -198,15 +198,20 @@ def _has_staged_t1(dirs):
 
 
 def _write_qsiprep_eddy_cuda_config(dirs):
-    """Write eddy CUDA config with multi-threaded GP estimation.
+    """Write eddy CUDA config for production DWI runs.
 
-    num_threads=1 starved task 65's GPU-based eddy GP estimation (3.5h+ at
-    100% CPU with no progress).  Defaults to DWI_QSIPREP_OMP_NTHREADS (4)
-    with a floor of 2; override via IMAGE_AGENT_EDDY_NUM_THREADS.
+    QSIPrep currently forces CUDA eddy to --nthr=1 internally, so
+    num_threads is a backstop for CPU eddy or future QSIPrep images. Defaults
+    to DWI_QSIPREP_OMP_NTHREADS (4) with a floor of 2; override via
+    IMAGE_AGENT_EDDY_NUM_THREADS.
 
     dont_peas=true skips post-eddy alignment QC estimation.  This does not
     affect core eddy correction quality and is a well-established production
     speed optimization for multi-shell data.
+
+    cnr_maps=false disables non-essential CNR map generation after repeated
+    long-running eddy_cuda runs on 129-volume test data. This preserves core
+    corrected DWI, motion/eddy parameters, and downstream QSIRecon inputs.
     """
     config_path = dirs["root"] / "eddy_cuda_config.json"
     config_path.write_text(
@@ -226,7 +231,7 @@ def _write_qsiprep_eddy_cuda_config(dirs):
                 "num_threads": DWI_QSIPREP_EDDY_NUM_THREADS,
                 "is_shelled": True,
                 "use_cuda": True,
-                "cnr_maps": True,
+                "cnr_maps": False,
                 "residuals": False,
                 "output_type": "NIFTI_GZ",
                 "args": "",

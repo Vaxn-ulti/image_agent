@@ -150,6 +150,7 @@ def test_dwi_without_project_t1_uses_anat_modality_none(tmp_path, monkeypatch):
     assert config['use_cuda'] is True
     assert config['num_threads'] >= 2
     assert config['dont_peas'] is True
+    assert config['cnr_maps'] is False
 
 
 def test_eddy_config_uses_default_omp_threads(tmp_path, monkeypatch):
@@ -167,6 +168,7 @@ def test_eddy_config_uses_default_omp_threads(tmp_path, monkeypatch):
     config = json.loads((tmp_path / "eddy_cuda_config.json").read_text(encoding="utf-8"))
     assert config["num_threads"] == 4
     assert config["use_cuda"] is True
+    assert config["cnr_maps"] is False
 
 
 def test_eddy_config_env_override(tmp_path, monkeypatch):
@@ -183,6 +185,7 @@ def test_eddy_config_env_override(tmp_path, monkeypatch):
     assert config["num_threads"] == 4
     assert config["use_cuda"] is True
     assert config["dont_peas"] is True
+    assert config["cnr_maps"] is False
 
 
 def test_eddy_config_floor_enforced(tmp_path, monkeypatch):

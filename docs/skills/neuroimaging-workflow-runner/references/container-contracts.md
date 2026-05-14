@@ -56,7 +56,7 @@ QSIPrep:
 docker run --rm --gpus all -v {bids}:/data:ro -v {output}:/output -v {work}:/work -v {fs_license}:/opt/freesurfer/license.txt:ro -v {eddy_cuda_config}:/eddy_cuda_config.json:ro pennlinc/qsiprep:latest /data /output participant --eddy-config /eddy_cuda_config.json
 ```
 
-QSIPrep validation must confirm `eddy_cuda_config.json` exists, is mounted at `/eddy_cuda_config.json`, and contains `use_cuda: true`, `num_threads >= 4`, and `dont_peas: true`. Do not silently fall back to `eddy_cpu`. QSIPrep source forces CUDA eddy to 1 thread; verify CUDA usage by `eddy_cuda*` binary and logs/GPU visibility, not by requiring a specific eddy `--nthr` value at runtime.
+QSIPrep validation must confirm `eddy_cuda_config.json` exists, is mounted at `/eddy_cuda_config.json`, and contains `use_cuda: true`, `num_threads >= 4`, `dont_peas: true`, and `cnr_maps: false`. Do not silently fall back to `eddy_cpu`. QSIPrep source forces CUDA eddy to 1 thread; verify CUDA usage by `eddy_cuda*` binary and logs/GPU visibility, not by requiring a specific eddy `--nthr` value at runtime. `cnr_maps: false` skips non-essential CNR map generation while preserving corrected DWI and QSIRecon inputs.
 
 QSIPrep detection uses `eddy_cuda*` glob (not exact `eddy_cuda`) to find versioned binaries like `eddy_cuda11.0`. The backend bash wrapper symlinks `eddy_cuda` → `eddy_cuda11.0` and `eddy_cuda10.2` → `eddy_cuda11.0` before invoking qsiprep, so the QSIPrep process sees the expected `eddy_cuda` name.
 
