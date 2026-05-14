@@ -6,7 +6,8 @@
 - Backend generates `eddy_cuda_config.json` for `dwi_qsiprep`, mounts it as `/eddy_cuda_config.json`, and passes `--eddy-config /eddy_cuda_config.json`.
 - The generated JSON must set `use_cuda: true`, `num_threads >= 4`, and `dont_peas: true`.
 - Eddy `num_threads` defaults to `DWI_QSIPREP_OMP_NTHREADS` (4) with a floor of 2; override via `IMAGE_AGENT_EDDY_NUM_THREADS`.
-- Single-threaded eddy starves GPU-based GP estimation on multi-shell DWI (task 65 stall: 3.5h+ at 100% CPU, no progress).
+- QSIPrep source (`qsiprep/workflows/dwi/fsl.py`) forces CUDA eddy to 1 thread. Single-threaded CUDA eddy is expected, not a failure.
+- The `num_threads >= 4` floor in the config is a safety backstop for non-CUDA eddy or future QSIPrep versions that remove the override.
 - `pennlinc/qsiprep:latest` exposes `eddy_cuda11.0` at `/app/.pixi/envs/qsiprep/bin/eddy_cuda11.0`. Detection uses `eddy_cuda*` glob to accept versioned binaries (`eddy_cuda11.0`, `eddy_cuda10.2`, etc.), not only an exact `eddy_cuda` name.
 - Real DWI tasks 61 and 62 are running with GPU/CUDA eddy.
 - Backend creates symlinks `eddy_cuda` → `eddy_cuda11.0` and `eddy_cuda10.2` → `eddy_cuda11.0` inside `/app/.pixi/envs/qsiprep/bin` via a bash wrapper script.
@@ -24,11 +25,12 @@ docker run --rm --gpus all -v {bids}:/data:ro -v {output}:/output -v {work}:/wor
 Validation must:
 
 - Check BIDS DWI, `.bval`, `.bvec`, license, output, and work mounts.
-- Confirm the config file exists and contains `use_cuda: true`.
+- Confirm the config file exists and contains `use_cuda: true` and `dont_peas: true`.
 - Inspect image availability.
 - Run a fast capability probe using `eddy_cuda*` glob across known QSIPrep/FSL paths (not exact `eddy_cuda`).
 - Fail fast if no `eddy_cuda*` executable is found, naming the required CUDA-enabled QSIPrep/FSL image.
 - Never fall back to `eddy_cpu` for production DWI runs under the current strategy.
+- Verify CUDA eddy usage by `eddy_cuda*` binary presence and logs/GPU visibility, not by expecting a specific eddy `--nthr` value at runtime.
 
 ## QSIRecon Policy
 
@@ -48,6 +50,20 @@ Validation must record:
 - The exact command and mounts, including the `--recon-spec` value.
 
 Do not add undocumented QSIRecon CUDA CLI flags. If a future image or documentation provides one, update this reference and `docs/workflows/dwi-qsi-workflow.md` in the same change.
+
+## 2026-05-15 Controller Finding: CUDA Eddy Forced Single-Thread
+
+`pennlinc/qsiprep:latest` source (`qsiprep/workflows/dwi/fsl.py`) forces CUDA eddy to 1 thread:
+
+```python
+if eddy_args['use_cuda']:
+    eddy_args['num_threads'] = 1
+```
+
+- Eddy `--nthr=1` is expected when CUDA is active. Do not treat it as a failure.
+- Global QSIPrep resources (`--nthreads 8 --omp-nthreads 4 --mem 24000`) control non-eddy parallelism and are the correct defaults.
+- Verify CUDA usage by `eddy_cuda*` binary presence, GPU-visible log lines, and Docker `--gpus all`. Do not assert a specific eddy `--nthr` value (>1) in CUDA runs.
+- The `num_threads >= 4` floor in `eddy_cuda_config.json` remains as a backstop for non-CUDA eddy or future QSIPrep versions.
 
 ## 2026-05-14 DWI Stall Lesson
 

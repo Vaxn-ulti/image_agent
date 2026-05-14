@@ -48,7 +48,7 @@ Command pattern:
 docker run --rm --gpus all -v {bids}:/data:ro -v {output}:/output -v {work}:/work -v {fs_license}:/opt/freesurfer/license.txt:ro -v {eddy_cuda_config}:/eddy_cuda_config.json:ro pennlinc/qsiprep:latest /data /output participant --eddy-config /eddy_cuda_config.json
 ```
 
-`eddy_cuda_config.json` must contain `use_cuda: true`, `num_threads >= 4`, and `dont_peas: true`. A single-threaded eddy starves the GPU-based Gaussian Process estimation on multi-shell DWI data, causing multi-hour stalls with no progress. `dont_peas` skips post-eddy alignment QC estimation — this does not affect core eddy correction quality and is a well-established production speed optimization.
+`eddy_cuda_config.json` must contain `use_cuda: true`, `num_threads >= 4`, and `dont_peas: true`. `dont_peas` skips post-eddy alignment QC estimation — this does not affect core eddy correction quality and is a well-established production speed optimization. QSIPrep source forces CUDA eddy to 1 thread regardless of the config `num_threads`; the config floor serves as a safety backstop should a future image change this behavior.
 
 The backend wraps QSIPrep in a bash script that symlinks `eddy_cuda` → `eddy_cuda11.0` and `eddy_cuda10.2` → `eddy_cuda11.0` inside `/app/.pixi/envs/qsiprep/bin` before invoking qsiprep, so the QSIPrep process sees the expected binary names.
 
@@ -127,12 +127,24 @@ Task 65 (129 bvals, ~87 MB DWI) ran eddy_cuda10.2 for >3.5 hours at 100% CPU wit
 - Floor of 2 enforced: `DWI_QSIPREP_EDDY_NUM_THREADS = max(2, ...)`.
 - `dont_peas: true` skips post-eddy alignment QC estimation for speed. This does not affect core eddy correction quality.
 - Override: `IMAGE_AGENT_EDDY_NUM_THREADS=4` for larger multi-shell datasets.
+- Do not set `num_threads: 1` in any eddy config unless a documented override protocol justifies it for a specific single-shell dataset.
 
 ### Verification
 
 - Existing test asserts `num_threads >= 4` and `dont_peas: true`.
 - Env-override and floor-enforcement tests in `apps/api/tests/test_api_flow.py`.
-- Do not set `num_threads: 1` in any eddy config unless a documented override protocol justifies it for a specific single-shell dataset.
+
+## 2026-05-15 Controller Finding: CUDA Eddy Forced Single-Thread
+
+- `pennlinc/qsiprep:latest` source (`qsiprep/workflows/dwi/fsl.py`) forces CUDA eddy to 1 thread:
+  ```python
+  if eddy_args['use_cuda']:
+      eddy_args['num_threads'] = 1
+  ```
+- Eddy `--nthr=1` is expected when CUDA is active; do not treat it as a failure.
+- Global QSIPrep resources (`--nthreads 8 --omp-nthreads 4 --mem 24000`) control non-eddy parallelism and are the correct defaults.
+- Verify CUDA usage by `eddy_cuda*` binary presence, GPU-visible log lines, and Docker `--gpus all`. Do not assert a specific eddy `--nthr` value (>1) in CUDA runs.
+- The `num_threads >= 4` floor in `eddy_cuda_config.json` is a backstop for non-CUDA eddy or future QSIPrep versions that remove the override.
 
 ## 2026-05-14 Recovery Policy: DWI Memory Pressure
 
