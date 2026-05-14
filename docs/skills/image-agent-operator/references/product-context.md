@@ -57,7 +57,7 @@ Current DWI preprocessing strategy is CUDA-oriented QSIPrep:
 - Backend generates `eddy_cuda_config.json`.
 - Command mounts it at `/eddy_cuda_config.json`.
 - Command passes `--eddy-config /eddy_cuda_config.json`.
-- Config contains `use_cuda: true`, `num_threads >= 2`, and `dont_peas: true` (single-threaded eddy starves GPU GP estimation).
+- Config contains `use_cuda: true`, `num_threads >= 4`, and `dont_peas: true` (single-threaded eddy starves GPU GP estimation).
 
 `pennlinc/qsiprep:latest` exposes `eddy_cuda11.0` at `/app/.pixi/envs/qsiprep/bin/`. Detection uses `eddy_cuda*` glob to accept versioned binaries. Real DWI tasks 61 and 62 are running with GPU/CUDA eddy.
 

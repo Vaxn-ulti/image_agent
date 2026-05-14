@@ -48,7 +48,7 @@ Command pattern:
 docker run --rm --gpus all -v {bids}:/data:ro -v {output}:/output -v {work}:/work -v {fs_license}:/opt/freesurfer/license.txt:ro -v {eddy_cuda_config}:/eddy_cuda_config.json:ro pennlinc/qsiprep:latest /data /output participant --eddy-config /eddy_cuda_config.json
 ```
 
-`eddy_cuda_config.json` must contain `use_cuda: true`, `num_threads >= 2`, and `dont_peas: true`. A single-threaded eddy starves the GPU-based Gaussian Process estimation on multi-shell DWI data, causing multi-hour stalls with no progress. `dont_peas` skips post-eddy alignment QC estimation — this does not affect core eddy correction quality and is a well-established production speed optimization.
+`eddy_cuda_config.json` must contain `use_cuda: true`, `num_threads >= 4`, and `dont_peas: true`. A single-threaded eddy starves the GPU-based Gaussian Process estimation on multi-shell DWI data, causing multi-hour stalls with no progress. `dont_peas` skips post-eddy alignment QC estimation — this does not affect core eddy correction quality and is a well-established production speed optimization.
 
 The backend wraps QSIPrep in a bash script that symlinks `eddy_cuda` → `eddy_cuda11.0` and `eddy_cuda10.2` → `eddy_cuda11.0` inside `/app/.pixi/envs/qsiprep/bin` before invoking qsiprep, so the QSIPrep process sees the expected binary names.
 
@@ -123,14 +123,14 @@ Task 65 (129 bvals, ~87 MB DWI) ran eddy_cuda10.2 for >3.5 hours at 100% CPU wit
 
 ### Eddy Threading Rule
 
-- `_write_qsiprep_eddy_cuda_config()` sets `num_threads` from `IMAGE_AGENT_EDDY_NUM_THREADS` env var, defaulting to `DWI_QSIPREP_OMP_NTHREADS` (2).
+- `_write_qsiprep_eddy_cuda_config()` sets `num_threads` from `IMAGE_AGENT_EDDY_NUM_THREADS` env var, defaulting to `DWI_QSIPREP_OMP_NTHREADS` (4).
 - Floor of 2 enforced: `DWI_QSIPREP_EDDY_NUM_THREADS = max(2, ...)`.
 - `dont_peas: true` skips post-eddy alignment QC estimation for speed. This does not affect core eddy correction quality.
 - Override: `IMAGE_AGENT_EDDY_NUM_THREADS=4` for larger multi-shell datasets.
 
 ### Verification
 
-- Existing test asserts `num_threads >= 2` and `dont_peas: true`.
+- Existing test asserts `num_threads >= 4` and `dont_peas: true`.
 - Env-override and floor-enforcement tests in `apps/api/tests/test_api_flow.py`.
 - Do not set `num_threads: 1` in any eddy config unless a documented override protocol justifies it for a specific single-shell dataset.
 
@@ -141,7 +141,7 @@ Real QSIPrep tasks 61 and 62 stalled under memory pressure while six QSIPrep con
 Current backend policy for real DWI runs:
 
 - Use Docker `--gpus all` and require `eddy_cuda*` inside the QSIPrep image.
-- Default QSIPrep resources are `--nthreads 4 --omp-nthreads 2 --mem 16000` unless overridden by environment variables.
+- Default QSIPrep resources are `--nthreads 8 --omp-nthreads 4 --mem 24000` unless overridden by environment variables.
 - Serialize project-owned real `dwi_qsiprep` and `dwi_qsi_full` runs through `data/projects/locks/dwi_qsiprep.lock`.
 - Allow queued DWI tasks to wait on the lock instead of launching concurrent QSIPrep containers.
 - Treat validation-only success as insufficient for acceptance.

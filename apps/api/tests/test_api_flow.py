@@ -153,10 +153,10 @@ def test_dwi_without_project_t1_uses_anat_modality_none(tmp_path, monkeypatch):
 
 
 def test_eddy_config_uses_default_omp_threads(tmp_path, monkeypatch):
-    """eddy num_threads defaults to DWI_QSIPREP_OMP_NTHREADS (2) with floor 2."""
+    """eddy num_threads defaults to DWI_QSIPREP_OMP_NTHREADS (4) with floor 2."""
     monkeypatch.delenv("IMAGE_AGENT_EDDY_NUM_THREADS", raising=False)
-    monkeypatch.setenv("IMAGE_AGENT_DWI_QSIPREP_OMP_NTHREADS", "2")
-    monkeypatch.setenv("IMAGE_AGENT_DWI_QSIPREP_NTHREADS", "4")
+    monkeypatch.setenv("IMAGE_AGENT_DWI_QSIPREP_OMP_NTHREADS", "4")
+    monkeypatch.setenv("IMAGE_AGENT_DWI_QSIPREP_NTHREADS", "8")
     # Force re-import so module-level constants pick up monkeypatched env
     import app.workflows.pipeline as p
     import importlib
@@ -165,7 +165,7 @@ def test_eddy_config_uses_default_omp_threads(tmp_path, monkeypatch):
     (dirs["bids"] / "sub-01" / "dwi").mkdir(parents=True)
     p._write_qsiprep_eddy_cuda_config(dirs)
     config = json.loads((tmp_path / "eddy_cuda_config.json").read_text(encoding="utf-8"))
-    assert config["num_threads"] == 2
+    assert config["num_threads"] == 4
     assert config["use_cuda"] is True
 
 
@@ -712,9 +712,9 @@ def test_dwi_qsiprep_uses_reduced_resource_defaults(monkeypatch, tmp_path):
     cmd = pipeline._commands('dwi_qsiprep', dirs)[0]
     wrapper_script = cmd[cmd.index('-c') + 1]
 
-    assert '--nthreads 4' in wrapper_script
-    assert '--omp-nthreads 2' in wrapper_script
-    assert '--mem 16000' in wrapper_script
+    assert '--nthreads 8' in wrapper_script
+    assert '--omp-nthreads 4' in wrapper_script
+    assert '--mem 24000' in wrapper_script
 
 
 def test_dwi_workflow_lock_uses_projects_root(monkeypatch, tmp_path):
@@ -826,7 +826,7 @@ def test_commands_includes_labels_when_task_provided(monkeypatch, tmp_path):
     assert "image_agent.project_id=3" in cmd
     assert "image_agent.workflow_type=dwi_qsiprep" in cmd
     # Verify the wrapper script is still intact after label injection
-    assert "--nthreads 4" in wrapper_script
+    assert "--nthreads 8" in wrapper_script
 
 
 def test_commands_without_task_omits_labels(monkeypatch, tmp_path):
