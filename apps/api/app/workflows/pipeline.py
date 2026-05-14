@@ -15,6 +15,12 @@ SUBJECT = "01"
 DWI_QSIPREP_NTHREADS = int(os.environ.get("IMAGE_AGENT_DWI_QSIPREP_NTHREADS", "4"))
 DWI_QSIPREP_OMP_NTHREADS = int(os.environ.get("IMAGE_AGENT_DWI_QSIPREP_OMP_NTHREADS", "2"))
 DWI_QSIPREP_MEM_MB = int(os.environ.get("IMAGE_AGENT_DWI_QSIPREP_MEM_MB", "16000"))
+# Floor of 2: single-threaded eddy starves the GPU-based GP estimation and causes
+# multi-hour stalls on multi-shell DWI data (task 65).  Must stay >= 2.
+DWI_QSIPREP_EDDY_NUM_THREADS = max(2, int(os.environ.get(
+    "IMAGE_AGENT_EDDY_NUM_THREADS",
+    str(DWI_QSIPREP_OMP_NTHREADS),
+)))
 DWI_QSIRECON_NPROCS = int(os.environ.get("IMAGE_AGENT_DWI_QSIRECON_NPROCS", "4"))
 DWI_QSIRECON_OMP_NTHREADS = int(os.environ.get("IMAGE_AGENT_DWI_QSIRECON_OMP_NTHREADS", "2"))
 DWI_QSIRECON_MEM_MB = int(os.environ.get("IMAGE_AGENT_DWI_QSIRECON_MEM_MB", "16000"))
@@ -192,7 +198,16 @@ def _has_staged_t1(dirs):
 
 
 def _write_qsiprep_eddy_cuda_config(dirs):
-    """Force QSIPrep's Eddy node to request eddy_cuda instead of eddy_cpu."""
+    """Write eddy CUDA config with multi-threaded GP estimation.
+
+    num_threads=1 starved task 65's GPU-based eddy GP estimation (3.5h+ at
+    100% CPU with no progress).  Defaults to DWI_QSIPREP_OMP_NTHREADS (2)
+    with a floor of 2; override via IMAGE_AGENT_EDDY_NUM_THREADS.
+
+    dont_peas=true skips post-eddy alignment QC estimation.  This does not
+    affect core eddy correction quality and is a well-established production
+    speed optimization for multi-shell data.
+    """
     config_path = dirs["root"] / "eddy_cuda_config.json"
     config_path.write_text(
         json.dumps(
@@ -204,11 +219,11 @@ def _write_qsiprep_eddy_cuda_config(dirs):
                 "nvoxhp": 1000,
                 "fudge_factor": 10,
                 "dont_sep_offs_move": False,
-                "dont_peas": False,
+                "dont_peas": True,
                 "niter": 5,
                 "method": "jac",
                 "repol": True,
-                "num_threads": 1,
+                "num_threads": DWI_QSIPREP_EDDY_NUM_THREADS,
                 "is_shelled": True,
                 "use_cuda": True,
                 "cnr_maps": True,

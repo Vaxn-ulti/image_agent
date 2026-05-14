@@ -53,7 +53,7 @@ Update skills when execution or review exposes a repeatable failure point that a
 - Review/test matrix includes backend, desktop, and container validation checks.
 - Remaining blockers are assigned to the orchestrator rather than hidden in skill text.
 - Final acceptance requires real container processing (not validate-only) with real data and registered outputs.
-- QSIPrep commands include `--eddy-config /eddy_cuda_config.json` with `use_cuda: true`.
+- QSIPrep commands include `--eddy-config /eddy_cuda_config.json` with `use_cuda: true`, `num_threads >= 2`, and `dont_peas: true`.
 - QSIRecon commands include `--recon-spec`.
 - Tests run with `apps/api/.venv/bin/pytest -q apps/api/tests` (currently 37 passed).
 - Operational recovery procedures cover API port conflicts, container continuity, orphan recovery, and mount safety.

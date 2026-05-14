@@ -56,7 +56,7 @@ QSIPrep:
 docker run --rm --gpus all -v {bids}:/data:ro -v {output}:/output -v {work}:/work -v {fs_license}:/opt/freesurfer/license.txt:ro -v {eddy_cuda_config}:/eddy_cuda_config.json:ro pennlinc/qsiprep:latest /data /output participant --eddy-config /eddy_cuda_config.json
 ```
 
-QSIPrep validation must confirm `eddy_cuda_config.json` exists, is mounted at `/eddy_cuda_config.json`, and contains `use_cuda: true`. Do not silently fall back to `eddy_cpu`.
+QSIPrep validation must confirm `eddy_cuda_config.json` exists, is mounted at `/eddy_cuda_config.json`, and contains `use_cuda: true`, `num_threads >= 2`, and `dont_peas: true`. Single-threaded eddy starves GPU GP estimation on multi-shell DWI (task 65 stall: 3.5h+ at 100% CPU). Do not silently fall back to `eddy_cpu`.
 
 QSIPrep detection uses `eddy_cuda*` glob (not exact `eddy_cuda`) to find versioned binaries like `eddy_cuda11.0`. The backend bash wrapper symlinks `eddy_cuda` → `eddy_cuda11.0` and `eddy_cuda10.2` → `eddy_cuda11.0` before invoking qsiprep, so the QSIPrep process sees the expected `eddy_cuda` name.
 

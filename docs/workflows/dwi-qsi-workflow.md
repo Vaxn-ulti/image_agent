@@ -48,7 +48,7 @@ Command pattern:
 docker run --rm --gpus all -v {bids}:/data:ro -v {output}:/output -v {work}:/work -v {fs_license}:/opt/freesurfer/license.txt:ro -v {eddy_cuda_config}:/eddy_cuda_config.json:ro pennlinc/qsiprep:latest /data /output participant --eddy-config /eddy_cuda_config.json
 ```
 
-`eddy_cuda_config.json` must contain `use_cuda: true`. Do not fall back to `eddy_cpu` for production DWI runs under the current strategy.
+`eddy_cuda_config.json` must contain `use_cuda: true`, `num_threads >= 2`, and `dont_peas: true`. A single-threaded eddy starves the GPU-based Gaussian Process estimation on multi-shell DWI data, causing multi-hour stalls with no progress. `dont_peas` skips post-eddy alignment QC estimation — this does not affect core eddy correction quality and is a well-established production speed optimization.
 
 The backend wraps QSIPrep in a bash script that symlinks `eddy_cuda` → `eddy_cuda11.0` and `eddy_cuda10.2` → `eddy_cuda11.0` inside `/app/.pixi/envs/qsiprep/bin` before invoking qsiprep, so the QSIPrep process sees the expected binary names.
 
@@ -116,6 +116,23 @@ QSIRecon:
 4. QSIRecon without `--recon-spec` or with an unsupported spec value fails validation fast.
 5. Full chain skips QSIRecon after QSIPrep failure.
 6. Image exposing `eddy_cuda11.0` passes eddy_cuda* detection; image with no eddy_cuda* fails validation fast.
+
+## 2026-05-14 Task 65 Stall: Eddy Single-Threaded GP Estimation
+
+Task 65 (129 bvals, ~87 MB DWI) ran eddy_cuda10.2 for >3.5 hours at 100% CPU with only small eddy output files and no workdir updates after 19:35 CST. Root cause: `eddy_cuda_config.json` hard-coded `num_threads: 1`. Single-threaded eddy starves the GPU-based Gaussian Process estimation on multi-shell data — eddy's GP estimation runs CPU-side and needs at least 2 threads to keep the GPU fed with work.
+
+### Eddy Threading Rule
+
+- `_write_qsiprep_eddy_cuda_config()` sets `num_threads` from `IMAGE_AGENT_EDDY_NUM_THREADS` env var, defaulting to `DWI_QSIPREP_OMP_NTHREADS` (2).
+- Floor of 2 enforced: `DWI_QSIPREP_EDDY_NUM_THREADS = max(2, ...)`.
+- `dont_peas: true` skips post-eddy alignment QC estimation for speed. This does not affect core eddy correction quality.
+- Override: `IMAGE_AGENT_EDDY_NUM_THREADS=4` for larger multi-shell datasets.
+
+### Verification
+
+- Existing test asserts `num_threads >= 2` and `dont_peas: true`.
+- Env-override and floor-enforcement tests in `apps/api/tests/test_api_flow.py`.
+- Do not set `num_threads: 1` in any eddy config unless a documented override protocol justifies it for a specific single-shell dataset.
 
 ## 2026-05-14 Recovery Policy: DWI Memory Pressure
 

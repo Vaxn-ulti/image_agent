@@ -146,7 +146,56 @@ def test_dwi_without_project_t1_uses_anat_modality_none(tmp_path, monkeypatch):
     assert '--anat-modality none' in wrapper_script
     assert '--eddy-config /eddy_cuda_config.json' in wrapper_script
     assert (tmp_path / 'eddy_cuda_config.json').exists()
-    assert json.loads((tmp_path / 'eddy_cuda_config.json').read_text(encoding='utf-8'))['use_cuda'] is True
+    config = json.loads((tmp_path / 'eddy_cuda_config.json').read_text(encoding='utf-8'))
+    assert config['use_cuda'] is True
+    assert config['num_threads'] >= 2
+    assert config['dont_peas'] is True
+
+
+def test_eddy_config_uses_default_omp_threads(tmp_path, monkeypatch):
+    """eddy num_threads defaults to DWI_QSIPREP_OMP_NTHREADS (2) with floor 2."""
+    monkeypatch.delenv("IMAGE_AGENT_EDDY_NUM_THREADS", raising=False)
+    monkeypatch.setenv("IMAGE_AGENT_DWI_QSIPREP_OMP_NTHREADS", "2")
+    monkeypatch.setenv("IMAGE_AGENT_DWI_QSIPREP_NTHREADS", "4")
+    # Force re-import so module-level constants pick up monkeypatched env
+    import app.workflows.pipeline as p
+    import importlib
+    importlib.reload(p)
+    dirs = {"root": tmp_path, "bids": tmp_path / "bids", "output": tmp_path / "output", "work": tmp_path / "work"}
+    (dirs["bids"] / "sub-01" / "dwi").mkdir(parents=True)
+    p._write_qsiprep_eddy_cuda_config(dirs)
+    config = json.loads((tmp_path / "eddy_cuda_config.json").read_text(encoding="utf-8"))
+    assert config["num_threads"] == 2
+    assert config["use_cuda"] is True
+
+
+def test_eddy_config_env_override(tmp_path, monkeypatch):
+    """IMAGE_AGENT_EDDY_NUM_THREADS overrides the default."""
+    monkeypatch.setenv("IMAGE_AGENT_EDDY_NUM_THREADS", "4")
+    monkeypatch.setenv("IMAGE_AGENT_DWI_QSIPREP_OMP_NTHREADS", "2")
+    import app.workflows.pipeline as p
+    import importlib
+    importlib.reload(p)
+    dirs = {"root": tmp_path, "bids": tmp_path / "bids", "output": tmp_path / "output", "work": tmp_path / "work"}
+    (dirs["bids"] / "sub-01" / "dwi").mkdir(parents=True)
+    p._write_qsiprep_eddy_cuda_config(dirs)
+    config = json.loads((tmp_path / "eddy_cuda_config.json").read_text(encoding="utf-8"))
+    assert config["num_threads"] == 4
+    assert config["use_cuda"] is True
+    assert config["dont_peas"] is True
+
+
+def test_eddy_config_floor_enforced(tmp_path, monkeypatch):
+    """num_threads never falls below 2 even if OMP/override is 1."""
+    monkeypatch.setenv("IMAGE_AGENT_EDDY_NUM_THREADS", "1")
+    import app.workflows.pipeline as p
+    import importlib
+    importlib.reload(p)
+    dirs = {"root": tmp_path, "bids": tmp_path / "bids", "output": tmp_path / "output", "work": tmp_path / "work"}
+    (dirs["bids"] / "sub-01" / "dwi").mkdir(parents=True)
+    p._write_qsiprep_eddy_cuda_config(dirs)
+    config = json.loads((tmp_path / "eddy_cuda_config.json").read_text(encoding="utf-8"))
+    assert config["num_threads"] == 2  # floor kicks in
 
 
 def test_bold_bids_includes_project_t1_when_available(tmp_path, monkeypatch):

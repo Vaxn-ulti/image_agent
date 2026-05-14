@@ -4,7 +4,9 @@
 
 - Historical DWI QSIPrep tasks `46` and `47` used `eddy_cpu`, ran too long, were stopped, and are treated as `failed`.
 - Backend generates `eddy_cuda_config.json` for `dwi_qsiprep`, mounts it as `/eddy_cuda_config.json`, and passes `--eddy-config /eddy_cuda_config.json`.
-- The generated JSON must set `use_cuda: true`.
+- The generated JSON must set `use_cuda: true`, `num_threads >= 2`, and `dont_peas: true`.
+- Eddy `num_threads` defaults to `DWI_QSIPREP_OMP_NTHREADS` (2) with a floor of 2; override via `IMAGE_AGENT_EDDY_NUM_THREADS`.
+- Single-threaded eddy starves GPU-based GP estimation on multi-shell DWI (task 65 stall: 3.5h+ at 100% CPU, no progress).
 - `pennlinc/qsiprep:latest` exposes `eddy_cuda11.0` at `/app/.pixi/envs/qsiprep/bin/eddy_cuda11.0`. Detection uses `eddy_cuda*` glob to accept versioned binaries (`eddy_cuda11.0`, `eddy_cuda10.2`, etc.), not only an exact `eddy_cuda` name.
 - Real DWI tasks 61 and 62 are running with GPU/CUDA eddy.
 - Backend creates symlinks `eddy_cuda` → `eddy_cuda11.0` and `eddy_cuda10.2` → `eddy_cuda11.0` inside `/app/.pixi/envs/qsiprep/bin` via a bash wrapper script.
