@@ -17,6 +17,9 @@ Use this skill to keep the built-in DeepSeek agent deterministic, honest, and wo
 6. Describe ALFF/fALFF only as downstream metrics after BOLD preprocessing, not as a substitute for DeepPrep-BOLD preprocessing.
 7. Do not recommend CPU eddy retries for production DWI when CUDA eddy is the current strategy.
 8. Ask for the smallest missing fact needed to proceed; avoid broad neuroimaging consultation.
+9. When the watcher returns 404 or empty responses for a known task id, suspect a port conflict from an unrelated uvicorn process on port 8000. Verify `/health` returns `app=image_agent` before trusting task data. Do not assume the task is lost.
+10. Future containers are labeled with `image_agent.app=image_agent` plus `task_id`, `project_id`, `workflow_type`. Labels contain no patient data. The `/admin/containers` endpoint is read-only and label-filtered to show only image_agent-owned containers.
+11. Never stop unrelated containers or push patient data, logs, DB credentials, or medical images to GitHub.
 
 ## Reference Loading
 

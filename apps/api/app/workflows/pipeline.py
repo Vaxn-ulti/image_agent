@@ -374,22 +374,46 @@ def inspect_runtime() -> dict:
     }
 
 
-def _commands(workflow, dirs, qsiprep_output=None):
+def _docker_labels(task, workflow):
+    if task is None:
+        return []
+    return [
+        "--label", "image_agent.app=image_agent",
+        "--label", f"image_agent.task_id={task['id']}",
+        "--label", f"image_agent.project_id={task['project_id']}",
+        "--label", f"image_agent.workflow_type={workflow}",
+    ]
+
+
+def _inject_labels(cmd, labels):
+    if not labels:
+        return cmd
+    # Only inject into docker run commands
+    if len(cmd) < 2 or cmd[0] != "docker" or cmd[1] != "run":
+        return cmd
+    if "--rm" in cmd:
+        rm_idx = cmd.index("--rm")
+        return cmd[: rm_idx + 1] + labels + cmd[rm_idx + 1 :]
+    return cmd[:2] + labels + cmd[2:]
+
+
+def _commands(workflow, dirs, qsiprep_output=None, task=None):
     license_mount = f"{FS_LICENSE}:/opt/freesurfer/license.txt:ro"
     common_env = ["-e", "TEMPLATEFLOW_HOME=/templateflow"]
     gpu_args = ["--gpus", "all"]
+    labels = _docker_labels(task, workflow)
     if workflow == "t1_deepprep":
-        return [[
+        return [_inject_labels([
             "docker", "run", "--rm", *gpu_args, "--network", "host",
             "-v", f"{dirs['bids']}:/data:ro", "-v", f"{dirs['output']}:/output", "-v", f"{dirs['work']}:/work", "-v", license_mount,
             IMAGES[workflow], "/data", "/output", "participant", "--fs_license_file", "/opt/freesurfer/license.txt", "--skip_bids_validation", "--anat_only", "--cpus", "8", "--memory", "24",
-        ]]
+        ], labels)]
     if workflow == "bold_deepprep":
-        return [[
+        return [_inject_labels([
             "docker", "run", "--rm", *gpu_args, "--network", "host",
             "-v", f"{dirs['bids']}:/data:ro", "-v", f"{dirs['output']}:/output", "-v", f"{dirs['work']}:/work", "-v", license_mount,
             IMAGES[workflow], "/data", "/output", "participant", "--fs_license_file", "/opt/freesurfer/license.txt", "--skip_bids_validation", "--bold_task_type", "rest", "--cpus", "8", "--memory", "24",
-        ]]
+        ], labels)]
     if workflow == "dwi_qsiprep":
         eddy_config = _write_qsiprep_eddy_cuda_config(dirs)
         qsiprep_bin = "/app/.pixi/envs/qsiprep/bin"
@@ -420,14 +444,14 @@ def _commands(workflow, dirs, qsiprep_output=None):
             "--entrypoint", "bash",
             IMAGES[workflow], "-c", wrapper_script,
         ]
-        return [cmd]
+        return [_inject_labels(cmd, labels)]
     if workflow == "dwi_qsirecon":
         source = qsiprep_output or dirs["bids"]
-        return [[
+        return [_inject_labels([
             "docker", "run", "--rm", *gpu_args, "--network", "host", *common_env,
             "-v", f"{source}:/data:ro", "-v", f"{dirs['output']}:/out", "-v", f"{dirs['work']}:/work", "-v", license_mount,
             IMAGES[workflow], "/data", "/out", "participant", "--participant-label", SUBJECT, "--input-type", "qsiprep", "--recon-spec", "dipy_dki", "--fs-license-file", "/opt/freesurfer/license.txt", "--skip-odf-reports", "--nprocs", str(DWI_QSIRECON_NPROCS), "--omp-nthreads", str(DWI_QSIRECON_OMP_NTHREADS), "--mem", str(DWI_QSIRECON_MEM_MB), "-w", "/work", "--notrack",
-        ]]
+        ], labels)]
     if workflow == "dwi_qsi_full":
         qsi_dirs = dict(dirs)
         qsi_dirs["output"] = dirs["output"] / "qsiprep"
@@ -435,13 +459,13 @@ def _commands(workflow, dirs, qsiprep_output=None):
         recon_dirs = dict(dirs)
         recon_dirs["output"] = dirs["output"] / "qsirecon"
         recon_dirs["work"] = dirs["work"] / "qsirecon"
-        return _commands("dwi_qsiprep", qsi_dirs) + _commands("dwi_qsirecon", recon_dirs, qsiprep_output=qsi_dirs["output"])
+        return _commands("dwi_qsiprep", qsi_dirs, task=task) + _commands("dwi_qsirecon", recon_dirs, qsiprep_output=qsi_dirs["output"], task=task)
     if workflow == "bold_fmriprep":
-        return [[
+        return [_inject_labels([
             "docker", "run", "--rm", *gpu_args, "--network", "host", *common_env,
             "-v", f"{dirs['bids']}:/data:ro", "-v", f"{dirs['output']}:/out", "-v", f"{dirs['work']}:/work", "-v", license_mount,
             IMAGES[workflow], "/data", "/out", "participant", "--participant-label", SUBJECT, "--fs-license-file", "/opt/freesurfer/license.txt", "--skip-bids-validation", "--output-spaces", "MNI152NLin2009cAsym:res-2", "--nthreads", "8", "--omp-nthreads", "4", "--mem-mb", "24000", "-w", "/work", "--notrack",
-        ]]
+        ], labels)]
     if workflow in {"bold_alff", "bold_falff"}:
         metric = "ALFF" if workflow == "bold_alff" else "fALFF"
         return [["python", "-m", "app.workflows.bold_metrics", "--metric", metric, "--bids", str(dirs["bids"]), "--out", str(dirs["output"])]]
@@ -529,7 +553,7 @@ def run_pipeline_task(task_id: int, qsiprep_task_id: int | None = None) -> None:
             if qtask is None:
                 raise RuntimeError("qsiprep_task_id not found")
             qsiprep_output = PROJECTS_ROOT / str(qtask["project_id"]) / "derivatives" / str(qtask["id"]) / "output"
-        cmds = _dicom_commands(series, dirs) if workflow == "dicom_convert" else _commands(workflow, dirs, qsiprep_output=qsiprep_output)
+        cmds = _dicom_commands(series, dirs) if workflow == "dicom_convert" else _commands(workflow, dirs, qsiprep_output=qsiprep_output, task=task)
         if validate:
             ok, inspect = (True, "local dcm2niix workflow") if workflow == "dicom_convert" else (True, "local BOLD metric workflow") if workflow in {"bold_alff", "bold_falff"} else _docker_image_exists(image)
             if ok and workflow == "dwi_qsiprep":

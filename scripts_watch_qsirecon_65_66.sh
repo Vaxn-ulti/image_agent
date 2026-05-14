@@ -12,8 +12,24 @@ log() {
   printf '\n[%s] %s\n' "$(date '+%F %T %Z')" "$*" | tee -a "$LOG"
 }
 
+check_api_identity() {
+  local health
+  health="$(curl -fsS --max-time 10 "$API/health" 2>/dev/null || true)"
+  if [[ -z "$health" ]]; then
+    log "WARNING: /health unreachable; port 8000 may be down or occupied by a non-HTTP service"
+    return 1
+  fi
+  local app_id
+  app_id="$(printf '%s' "$health" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("app",""))' 2>/dev/null || true)"
+  if [[ "$app_id" != "image_agent" ]]; then
+    log "ERROR: /health returned app=$app_id, not image_agent. Possible port conflict on 8000."
+    return 1
+  fi
+  return 0
+}
+
 api_get() {
-  curl -fsS --max-time 30 "$API/$1"
+  curl -fsS --max-time 15 --retry 2 --retry-delay 5 "$API/$1" 2>/dev/null || true
 }
 
 task_json_field() {
@@ -64,7 +80,10 @@ log "QSIRecon watcher started for QSIPrep tasks: ${QSIPREP_TASKS[*]}"
 log "Series map: 61→24 (case1/proj13), 62→27 (case3/proj15)"
 log "============================================"
 
+check_api_identity || log "WARNING: API identity check failed; watcher may be talking to wrong service"
+
 # ── Phase 1: Wait for QSIPrep tasks to finish ──
+consecutive_errors=0
 while true; do
   all_resolved=1
   for task_id in "${QSIPREP_TASKS[@]}"; do
@@ -73,9 +92,15 @@ while true; do
     body="$(api_get "tasks/$task_id" 2>>"$LOG" || true)"
     if [[ -z "$body" ]]; then
       log "WARNING: Empty response for task $task_id, will retry"
+      consecutive_errors=$((consecutive_errors + 1))
+      if [[ $consecutive_errors -ge 3 ]]; then
+        log "ERROR: $consecutive_errors consecutive empty responses. Checking API identity..."
+        check_api_identity || log "WARNING: API identity check failed; possible port conflict on 8000"
+      fi
       all_resolved=0
       continue
     fi
+    consecutive_errors=0
     status="$(task_json_field "$body" status)"
     err_msg="$(task_json_field "$body" error_message)"
     progress="$(task_json_field "$body" progress)"
@@ -127,11 +152,22 @@ log "============================================"
 log "Monitoring QSIRecon tasks: ${QSIRECON_TASKS[*]}"
 log "============================================"
 
+consecutive_errors=0
 while true; do
   all_done=1
   nvidia-smi --query-gpu=index,name,memory.used,memory.total,utilization.gpu --format=csv,noheader,nounits >>"$LOG" 2>&1 || true
   for task_id in "${QSIRECON_TASKS[@]}"; do
     body="$(api_get "tasks/$task_id" 2>>"$LOG" || true)"
+    if [[ -z "$body" ]]; then
+      consecutive_errors=$((consecutive_errors + 1))
+      if [[ $consecutive_errors -ge 3 ]]; then
+        log "ERROR: $consecutive_errors consecutive empty responses. Checking API identity..."
+        check_api_identity || log "WARNING: API identity check failed; possible port conflict on 8000"
+      fi
+      all_done=0
+      continue
+    fi
+    consecutive_errors=0
     status="$(task_json_field "$body" status)"
     log_path="$(task_json_field "$body" log_path)"
 

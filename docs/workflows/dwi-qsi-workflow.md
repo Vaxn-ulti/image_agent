@@ -134,3 +134,38 @@ Current recovery run:
 - Task 65 reruns series 24 with the reduced resource profile and CUDA eddy.
 - Task 66 reruns series 27 and waits on the DWI workflow lock until task 65 releases it.
 - Watcher `scripts_watch_qsirecon_65_66.sh` submits QSIRecon only after a real QSIPrep task completes.
+
+## Container Continuity Across API Restarts
+
+Docker containers launched by image_agent are independent of the API process. If the API is restarted, crashed, or blocked by a port conflict, running QSIPrep/QSIRecon containers continue in Docker.
+
+### Container Labels
+
+Future workflow containers (task 66+, QSIRecon, and all new runs after API restart) are labeled with:
+
+- `image_agent.app=image_agent`
+- `image_agent.task_id=<task_id>`
+- `image_agent.project_id=<project_id>`
+- `image_agent.workflow_type=<workflow_type>`
+
+Labels contain no patient data. Use `GET /admin/containers` (read-only, label-filtered) or `docker ps --filter "label=image_agent.app=image_agent"` to list image_agent-owned containers.
+
+Task 65 (series 24 QSIPrep) is unlabeled because it started before the labeling patch. It remains handled by `scripts_monitor_task.sh`. Labels take effect for task 66 and all subsequent runs.
+
+### Orphan Recovery
+
+`apps/api/app/workflows/recovery.py` can reconcile labeled completed orphan containers after an API restart. It supports `list`, `dry-run`, and `recover` commands. The module never stops or kills containers, requires output files to exist, and only acts on containers whose DB task is in `running` or `queued` state. Unlabeled containers (task 65) are invisible to it.
+
+### Mount Safety
+
+- Writable mounts outside `PROJECTS_ROOT` are rejected at launch.
+- Read-only support mounts outside `PROJECTS_ROOT` (e.g., FreeSurfer license) are allowed only when at least one project mount under `PROJECTS_ROOT` exists.
+
+### Recovery Steps
+
+1. Verify `/health` returns `app=image_agent`. Repeated 404/empty responses suggest a port conflict, not task loss.
+2. Check `docker ps --filter "label=image_agent.app=image_agent"` for labeled containers; use `docker ps` for unlabeled containers (task 65).
+3. Inspect container mounts to confirm which task/series a container belongs to.
+4. After API recovery, reconcile task state by checking both the task output directory and Docker container status. Use the recovery module for labeled orphans.
+5. Restart any watcher scripts that depend on the API (e.g. `scripts_watch_qsirecon_*.sh`).
+6. Never stop unrelated containers during recovery.

@@ -19,6 +19,33 @@ Update skills when execution or review exposes a repeatable failure point that a
 - `pennlinc/qsiprep:latest` exposes `eddy_cuda11.0` at `/app/.pixi/envs/qsiprep/bin/`. Detection uses `eddy_cuda*` glob to accept versioned binaries. Backend symlinks `eddy_cuda` → `eddy_cuda11.0` for QSIPrep compatibility.
 - Real DWI tasks 61 and 62 are running with GPU/CUDA eddy.
 
+### API Port 8000 Conflict (2026-05-14)
+
+- Unrelated uvicorn service bound port 8000, causing image_agent watcher to return 404 from `/tasks/{id}` for valid task ids.
+- The 404 came from the wrong application, not from missing data. Recovery required identifying the port owner, stopping only the conflicting non-image_agent process, and restarting the image_agent API from the repo root with `.env`.
+- See `references/operational-recovery.md` for the step-by-step procedure.
+
+### Container Lifecycle Assumption (2026-05-14)
+
+- Real QSIPrep task 65 continued running in Docker during an API restart. Do not assume an API restart means containers stopped.
+- Always inspect `docker ps`, container mounts, and task logs before declaring a task state.
+- Watcher scripts (e.g. `scripts_watch_qsirecon_*.sh`) depend on the API and may also need restart after API recovery.
+
+### Orphan Recovery and Labeling (2026-05-14)
+
+- Containers that complete while the API is down leave DB task state stuck in `running`/`queued`. The recovery module (`apps/api/app/workflows/recovery.py`) reconciles these orphans via `list`/`dry-run`/`recover` commands.
+- Recovery only acts on labeled, already-completed containers and requires output files plus valid DB state. It never stops or kills containers.
+- Future containers are labeled with `image_agent.app=image_agent` plus `task_id`, `project_id`, `workflow_type`. Labels contain no patient data.
+- Task 65 is unlabeled (started pre-patch) and handled by `scripts_monitor_task.sh`.
+
+### Mount Safety Enforcement (2026-05-14)
+
+- Writable mounts outside `PROJECTS_ROOT` are rejected. Read-only support mounts outside `PROJECTS_ROOT` (e.g., FreeSurfer license) require at least one project mount under `PROJECTS_ROOT`.
+
+### Watcher /health Verification (2026-05-14)
+
+- Watcher scripts now verify `/health` returns `app=image_agent` before trusting task data. Repeated 404/empty responses are treated as possible port conflicts, not immediate task loss.
+
 ## Acceptance Checklist
 
 - Agent role boundaries are clear.
@@ -28,4 +55,9 @@ Update skills when execution or review exposes a repeatable failure point that a
 - Final acceptance requires real container processing (not validate-only) with real data and registered outputs.
 - QSIPrep commands include `--eddy-config /eddy_cuda_config.json` with `use_cuda: true`.
 - QSIRecon commands include `--recon-spec`.
-- Tests run with `apps/api/.venv/bin/pytest -q apps/api/tests`.
+- Tests run with `apps/api/.venv/bin/pytest -q apps/api/tests` (currently 37 passed).
+- Operational recovery procedures cover API port conflicts, container continuity, orphan recovery, and mount safety.
+- Container labels (`image_agent.app=image_agent` + `task_id`, `project_id`, `workflow_type`) are documented and contain no patient data.
+- Mount safety rejects writable mounts outside `PROJECTS_ROOT`; read-only support mounts outside `PROJECTS_ROOT` require a project mount.
+- Watcher scripts verify `/health` app identity and treat repeated 404/empty responses as port conflicts.
+- No patient data, logs, DB files, credentials, or medical images are staged for commit.

@@ -18,6 +18,7 @@ from app.workflows.deepprep import run_mock_deepprep
 
 try:
     from app.workflows.pipeline import inspect_runtime, run_pipeline_task
+    from app.workflows.recovery import list_image_agent_containers as _list_agent_containers
 except ImportError:
     def run_pipeline_task(task_id: int, qsiprep_task_id: int | None = None) -> None:
         with connect() as conn:
@@ -28,6 +29,9 @@ except ImportError:
 
     def inspect_runtime() -> dict:
         return {"error": "pipeline runner missing", "workflows": {}}
+
+    def _list_agent_containers():
+        return []
 
 app = FastAPI(title="Brain Image Agent API", version="0.2.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -107,7 +111,7 @@ def save_upload(project_id: int, upload: UploadFile, file_type: str | None = Non
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "app": "image_agent", "version": "0.2.0"}
 
 @app.get("/workflows")
 def list_workflows():
@@ -121,6 +125,13 @@ def deployment():
 @app.get("/runtime/containers")
 def runtime_containers():
     return inspect_runtime()
+
+
+@app.get("/admin/containers")
+def admin_containers():
+    """List Docker containers launched by image_agent (label-filtered). Safe: read-only."""
+    containers = _list_agent_containers()
+    return {"containers": containers, "count": len(containers)}
 
 @app.post("/auth/login")
 def login(req: LoginRequest):
