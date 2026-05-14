@@ -21,6 +21,7 @@ DWI_QSIPREP_EDDY_NUM_THREADS = max(2, int(os.environ.get(
     "IMAGE_AGENT_EDDY_NUM_THREADS",
     str(DWI_QSIPREP_OMP_NTHREADS),
 )))
+DWI_QSIPREP_EDDY_NITER = max(1, int(os.environ.get("IMAGE_AGENT_DWI_QSIPREP_EDDY_NITER", "3")))
 DWI_QSIRECON_NPROCS = int(os.environ.get("IMAGE_AGENT_DWI_QSIRECON_NPROCS", "4"))
 DWI_QSIRECON_OMP_NTHREADS = int(os.environ.get("IMAGE_AGENT_DWI_QSIRECON_OMP_NTHREADS", "2"))
 DWI_QSIRECON_MEM_MB = int(os.environ.get("IMAGE_AGENT_DWI_QSIRECON_MEM_MB", "16000"))
@@ -209,9 +210,10 @@ def _write_qsiprep_eddy_cuda_config(dirs):
     affect core eddy correction quality and is a well-established production
     speed optimization for multi-shell data.
 
-    cnr_maps=false disables non-essential CNR map generation after repeated
-    long-running eddy_cuda runs on 129-volume test data. This preserves core
-    corrected DWI, motion/eddy parameters, and downstream QSIRecon inputs.
+    cnr_maps must remain true because this QSIPrep version rejects eddy config
+    files where cnr_maps is false. After repeated long-running eddy_cuda runs
+    on 129-volume test data, niter defaults to 3 as a speed-oriented first-pass
+    setting. Override via IMAGE_AGENT_DWI_QSIPREP_EDDY_NITER.
     """
     config_path = dirs["root"] / "eddy_cuda_config.json"
     config_path.write_text(
@@ -225,13 +227,13 @@ def _write_qsiprep_eddy_cuda_config(dirs):
                 "fudge_factor": 10,
                 "dont_sep_offs_move": False,
                 "dont_peas": True,
-                "niter": 5,
+                "niter": DWI_QSIPREP_EDDY_NITER,
                 "method": "jac",
                 "repol": True,
                 "num_threads": DWI_QSIPREP_EDDY_NUM_THREADS,
                 "is_shelled": True,
                 "use_cuda": True,
-                "cnr_maps": False,
+                "cnr_maps": True,
                 "residuals": False,
                 "output_type": "NIFTI_GZ",
                 "args": "",

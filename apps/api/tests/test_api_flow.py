@@ -150,7 +150,8 @@ def test_dwi_without_project_t1_uses_anat_modality_none(tmp_path, monkeypatch):
     assert config['use_cuda'] is True
     assert config['num_threads'] >= 2
     assert config['dont_peas'] is True
-    assert config['cnr_maps'] is False
+    assert config['cnr_maps'] is True
+    assert config['niter'] == 3
 
 
 def test_eddy_config_uses_default_omp_threads(tmp_path, monkeypatch):
@@ -168,7 +169,8 @@ def test_eddy_config_uses_default_omp_threads(tmp_path, monkeypatch):
     config = json.loads((tmp_path / "eddy_cuda_config.json").read_text(encoding="utf-8"))
     assert config["num_threads"] == 4
     assert config["use_cuda"] is True
-    assert config["cnr_maps"] is False
+    assert config["cnr_maps"] is True
+    assert config["niter"] == 3
 
 
 def test_eddy_config_env_override(tmp_path, monkeypatch):
@@ -185,7 +187,7 @@ def test_eddy_config_env_override(tmp_path, monkeypatch):
     assert config["num_threads"] == 4
     assert config["use_cuda"] is True
     assert config["dont_peas"] is True
-    assert config["cnr_maps"] is False
+    assert config["cnr_maps"] is True
 
 
 def test_eddy_config_floor_enforced(tmp_path, monkeypatch):
@@ -199,6 +201,19 @@ def test_eddy_config_floor_enforced(tmp_path, monkeypatch):
     p._write_qsiprep_eddy_cuda_config(dirs)
     config = json.loads((tmp_path / "eddy_cuda_config.json").read_text(encoding="utf-8"))
     assert config["num_threads"] == 2  # floor kicks in
+
+
+def test_eddy_config_niter_env_override(tmp_path, monkeypatch):
+    """IMAGE_AGENT_DWI_QSIPREP_EDDY_NITER controls eddy iteration count."""
+    monkeypatch.setenv("IMAGE_AGENT_DWI_QSIPREP_EDDY_NITER", "5")
+    import app.workflows.pipeline as p
+    import importlib
+    importlib.reload(p)
+    dirs = {"root": tmp_path, "bids": tmp_path / "bids", "output": tmp_path / "output", "work": tmp_path / "work"}
+    (dirs["bids"] / "sub-01" / "dwi").mkdir(parents=True)
+    p._write_qsiprep_eddy_cuda_config(dirs)
+    config = json.loads((tmp_path / "eddy_cuda_config.json").read_text(encoding="utf-8"))
+    assert config["niter"] == 5
 
 
 def test_bold_bids_includes_project_t1_when_available(tmp_path, monkeypatch):

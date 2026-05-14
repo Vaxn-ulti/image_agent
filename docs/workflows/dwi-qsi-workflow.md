@@ -48,7 +48,7 @@ Command pattern:
 docker run --rm --gpus all -v {bids}:/data:ro -v {output}:/output -v {work}:/work -v {fs_license}:/opt/freesurfer/license.txt:ro -v {eddy_cuda_config}:/eddy_cuda_config.json:ro pennlinc/qsiprep:latest /data /output participant --eddy-config /eddy_cuda_config.json
 ```
 
-`eddy_cuda_config.json` must contain `use_cuda: true`, `num_threads >= 4`, `dont_peas: true`, and `cnr_maps: false`. `dont_peas` skips post-eddy alignment QC estimation — this does not affect core eddy correction quality and is a well-established production speed optimization. `cnr_maps: false` disables non-essential CNR map generation while preserving corrected DWI and motion/eddy outputs for QSIRecon. QSIPrep source forces CUDA eddy to 1 thread regardless of the config `num_threads`; the config floor serves as a safety backstop should a future image change this behavior.
+`eddy_cuda_config.json` must contain `use_cuda: true`, `num_threads >= 4`, `dont_peas: true`, `cnr_maps: true`, and `niter: 3` by default. `dont_peas` skips post-eddy alignment QC estimation — this does not affect core eddy correction quality and is a well-established production speed optimization. This QSIPrep version requires `cnr_maps: true` during config validation. QSIPrep source forces CUDA eddy to 1 thread regardless of the config `num_threads`; the config floor serves as a safety backstop should a future image change this behavior.
 
 The backend wraps QSIPrep in a bash script that symlinks `eddy_cuda` → `eddy_cuda11.0` and `eddy_cuda10.2` → `eddy_cuda11.0` inside `/app/.pixi/envs/qsiprep/bin` before invoking qsiprep, so the QSIPrep process sees the expected binary names.
 
@@ -126,14 +126,15 @@ Task 65 (129 bvals, ~87 MB DWI) ran eddy_cuda10.2 for >3.5 hours at 100% CPU wit
 - `_write_qsiprep_eddy_cuda_config()` sets `num_threads` from `IMAGE_AGENT_EDDY_NUM_THREADS` env var, defaulting to `DWI_QSIPREP_OMP_NTHREADS` (4).
 - Floor of 2 enforced: `DWI_QSIPREP_EDDY_NUM_THREADS = max(2, ...)`.
 - `dont_peas: true` skips post-eddy alignment QC estimation for speed. This does not affect core eddy correction quality.
-- `cnr_maps: false` skips non-essential CNR map generation after task 69 repeated the long eddy runtime pattern with real CUDA eddy.
+- `cnr_maps: true` is mandatory in this QSIPrep version; `cnr_maps: false` fails validation before processing starts.
+- `niter: 3` is the speed-oriented first-pass default after task 69 repeated the long eddy runtime pattern with real CUDA eddy. Override with `IMAGE_AGENT_DWI_QSIPREP_EDDY_NITER=5` for default eddy convergence.
 - Override: `IMAGE_AGENT_EDDY_NUM_THREADS=4` for larger multi-shell datasets.
 - Do not set `num_threads: 1` in any eddy config unless a documented override protocol justifies it for a specific single-shell dataset.
 
 ### Verification
 
 - Existing test asserts `num_threads >= 4` and `dont_peas: true`.
-- Existing test asserts `cnr_maps: false`.
+- Existing test asserts `cnr_maps: true` and default `niter: 3`.
 - Env-override and floor-enforcement tests in `apps/api/tests/test_api_flow.py`.
 
 ## 2026-05-15 Controller Finding: CUDA Eddy Forced Single-Thread

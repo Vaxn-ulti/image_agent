@@ -4,7 +4,7 @@
 
 - Historical DWI QSIPrep tasks `46` and `47` used `eddy_cpu`, ran too long, were stopped, and are treated as `failed`.
 - Backend generates `eddy_cuda_config.json` for `dwi_qsiprep`, mounts it as `/eddy_cuda_config.json`, and passes `--eddy-config /eddy_cuda_config.json`.
-- The generated JSON must set `use_cuda: true`, `num_threads >= 4`, `dont_peas: true`, and `cnr_maps: false`.
+- The generated JSON must set `use_cuda: true`, `num_threads >= 4`, `dont_peas: true`, `cnr_maps: true`, and `niter: 3` by default.
 - Eddy `num_threads` defaults to `DWI_QSIPREP_OMP_NTHREADS` (4) with a floor of 2; override via `IMAGE_AGENT_EDDY_NUM_THREADS`.
 - QSIPrep source (`qsiprep/workflows/dwi/fsl.py`) forces CUDA eddy to 1 thread. Single-threaded CUDA eddy is expected, not a failure.
 - The `num_threads >= 4` floor in the config is a safety backstop for non-CUDA eddy or future QSIPrep versions that remove the override.
@@ -67,7 +67,7 @@ if eddy_args['use_cuda']:
 
 ## 2026-05-15 Long Eddy Runtime Lesson
 
-Task 69 used the required `--nthreads 8 --omp-nthreads 4 --mem 24000` command and real `eddy_cuda10.2`, but a 129-volume DWI remained in eddy for about three hours with only low GPU utilization and no new output after the early PE translation file. Future runs should keep CUDA and `dont_peas: true`, but disable non-essential CNR map generation with `cnr_maps: false`. This does not remove the corrected DWI or motion/eddy outputs needed by QSIRecon.
+Task 69 used the required `--nthreads 8 --omp-nthreads 4 --mem 24000` command and real `eddy_cuda10.2`, but a 129-volume DWI remained in eddy for about three hours with only low GPU utilization and no new output after the early PE translation file. An attempted `cnr_maps: false` optimization failed fast because this QSIPrep version requires `cnr_maps` to be present and true. Future runs should keep CUDA, `dont_peas: true`, `repol: true`, and `cnr_maps: true`, but default eddy `niter` to 3 for the first real-run pass. Use `IMAGE_AGENT_DWI_QSIPREP_EDDY_NITER=5` when prioritizing default eddy convergence over speed.
 
 ## 2026-05-14 DWI Stall Lesson
 
