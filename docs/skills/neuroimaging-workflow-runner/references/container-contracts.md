@@ -69,3 +69,21 @@ docker run --rm --gpus all -v {qsiprep_output}:/data:ro -v {output}:/output -v {
 `--recon-spec` selects the reconstruction pipeline (e.g. `dipy`, `mrtrix`, `dsi_studio`, or a custom JSON spec path). Validation must fail fast when `--recon-spec` is missing, undefined, or references an unsupported pipeline.
 
 QSIRecon has no confirmed CUDA-specific CLI switch in current documentation. Validation should record whether the GPU is visible inside the container, for example with `nvidia-smi` when available.
+
+## DWI Runtime Capacity Contract
+
+Real DWI processing is serialized per project backend with `data/projects/locks/dwi_qsiprep.lock`. This prevents multiple project-owned QSIPrep containers from consuming memory simultaneously while still allowing task 2 to queue and wait. The lock is part of the runtime contract and should be visible in task logs as `Waiting for workflow lock`, `Acquired workflow lock`, and `Released workflow lock`.
+
+Default QSIPrep command resources are intentionally conservative for this host:
+
+```text
+--nthreads 4 --omp-nthreads 2 --mem 16000
+```
+
+Default QSIRecon resources are also conservative:
+
+```text
+--nprocs 4 --omp-nthreads 2 --mem 16000
+```
+
+These defaults may be overridden with `IMAGE_AGENT_DWI_QSIPREP_*` and `IMAGE_AGENT_DWI_QSIRECON_*` environment variables, but acceptance runs should document any override in the task log or review report.

@@ -46,3 +46,15 @@ Validation must record:
 - The exact command and mounts, including the `--recon-spec` value.
 
 Do not add undocumented QSIRecon CUDA CLI flags. If a future image or documentation provides one, update this reference and `docs/workflows/dwi-qsi-workflow.md` in the same change.
+
+## 2026-05-14 DWI Stall Lesson
+
+Do not start multiple project-owned QSIPrep real runs concurrently on this server. Tasks 61 and 62 stalled while six QSIPrep containers were active, swap was full, and task 61 had a non-fatal SynthSeg OOM crash. Future development must preserve the DWI workflow lock and reduced default resources unless a capacity check proves the host can safely run more.
+
+Implementation guardrails:
+
+- QSIPrep defaults: `IMAGE_AGENT_DWI_QSIPREP_NTHREADS=4`, `IMAGE_AGENT_DWI_QSIPREP_OMP_NTHREADS=2`, `IMAGE_AGENT_DWI_QSIPREP_MEM_MB=16000`.
+- QSIRecon defaults: `IMAGE_AGENT_DWI_QSIRECON_NPROCS=4`, `IMAGE_AGENT_DWI_QSIRECON_OMP_NTHREADS=2`, `IMAGE_AGENT_DWI_QSIRECON_MEM_MB=16000`.
+- Real `dwi_qsiprep` and `dwi_qsi_full` runs must acquire `data/projects/locks/dwi_qsiprep.lock` before launching containers.
+- QSIRecon still uses Docker `--gpus all`; no undocumented CUDA-specific QSIRecon CLI flag should be added.
+- If a task log is stale while Docker is still alive, inspect mounts before stopping anything and never stop containers outside `/home/yyf/project/image_agent` without explicit approval.

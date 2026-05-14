@@ -646,3 +646,38 @@ def test_eddy_cuda_detection_rejects_missing_binary(monkeypatch):
 
     assert ok is False
     assert "eddy_cuda*" in detail
+
+
+def test_dwi_qsiprep_uses_reduced_resource_defaults(monkeypatch, tmp_path):
+    from app.workflows import pipeline
+
+    monkeypatch.setattr(pipeline, 'FS_LICENSE', tmp_path / 'license.txt')
+    dirs = {
+        'root': tmp_path,
+        'bids': tmp_path / 'bids',
+        'output': tmp_path / 'output',
+        'work': tmp_path / 'work',
+    }
+    (dirs['bids'] / 'sub-01' / 'dwi').mkdir(parents=True)
+
+    cmd = pipeline._commands('dwi_qsiprep', dirs)[0]
+    wrapper_script = cmd[cmd.index('-c') + 1]
+
+    assert '--nthreads 4' in wrapper_script
+    assert '--omp-nthreads 2' in wrapper_script
+    assert '--mem 16000' in wrapper_script
+
+
+def test_dwi_workflow_lock_uses_projects_root(monkeypatch, tmp_path):
+    from app.workflows import pipeline
+
+    monkeypatch.setattr(pipeline, 'PROJECTS_ROOT', tmp_path / 'projects')
+    log_path = tmp_path / 'task.log'
+
+    with pipeline._workflow_lock('dwi_qsiprep', str(log_path)) as lock_path:
+        assert lock_path == tmp_path / 'projects' / 'locks' / 'dwi_qsiprep.lock'
+        assert lock_path.exists()
+
+    log_text = log_path.read_text(encoding='utf-8')
+    assert 'Acquired workflow lock' in log_text
+    assert 'Released workflow lock' in log_text

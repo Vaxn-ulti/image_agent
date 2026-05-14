@@ -116,3 +116,21 @@ QSIRecon:
 4. QSIRecon without `--recon-spec` or with an unsupported spec value fails validation fast.
 5. Full chain skips QSIRecon after QSIPrep failure.
 6. Image exposing `eddy_cuda11.0` passes eddy_cuda* detection; image with no eddy_cuda* fails validation fast.
+
+## 2026-05-14 Recovery Policy: DWI Memory Pressure
+
+Real QSIPrep tasks 61 and 62 stalled under memory pressure while six QSIPrep containers were active on a 91 GiB RAM host. Evidence included stale task logs, full swap, low GPU utilization, and a SynthSeg `mri_synthseg --cpu` process killed by the OS. The project-owned task containers were mapped and stopped; unrelated user containers were not touched.
+
+Current backend policy for real DWI runs:
+
+- Use Docker `--gpus all` and require `eddy_cuda*` inside the QSIPrep image.
+- Default QSIPrep resources are `--nthreads 4 --omp-nthreads 2 --mem 16000` unless overridden by environment variables.
+- Serialize project-owned real `dwi_qsiprep` and `dwi_qsi_full` runs through `data/projects/locks/dwi_qsiprep.lock`.
+- Allow queued DWI tasks to wait on the lock instead of launching concurrent QSIPrep containers.
+- Treat validation-only success as insufficient for acceptance.
+
+Current recovery run:
+
+- Task 65 reruns series 24 with the reduced resource profile and CUDA eddy.
+- Task 66 reruns series 27 and waits on the DWI workflow lock until task 65 releases it.
+- Watcher `scripts_watch_qsirecon_65_66.sh` submits QSIRecon only after a real QSIPrep task completes.

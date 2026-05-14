@@ -3,12 +3,21 @@ import os
 import shutil
 import subprocess
 import gzip
+import fcntl
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 
 from app.core.config import FS_LICENSE, PROJECTS_ROOT
 from app.db.database import connect, now_iso
 
 SUBJECT = "01"
+
+DWI_QSIPREP_NTHREADS = int(os.environ.get("IMAGE_AGENT_DWI_QSIPREP_NTHREADS", "4"))
+DWI_QSIPREP_OMP_NTHREADS = int(os.environ.get("IMAGE_AGENT_DWI_QSIPREP_OMP_NTHREADS", "2"))
+DWI_QSIPREP_MEM_MB = int(os.environ.get("IMAGE_AGENT_DWI_QSIPREP_MEM_MB", "16000"))
+DWI_QSIRECON_NPROCS = int(os.environ.get("IMAGE_AGENT_DWI_QSIRECON_NPROCS", "4"))
+DWI_QSIRECON_OMP_NTHREADS = int(os.environ.get("IMAGE_AGENT_DWI_QSIRECON_OMP_NTHREADS", "2"))
+DWI_QSIRECON_MEM_MB = int(os.environ.get("IMAGE_AGENT_DWI_QSIRECON_MEM_MB", "16000"))
 
 IMAGES = {
     "t1_deepprep": "pbfslab/deepprep:25.1.0",
@@ -214,6 +223,25 @@ def _write_qsiprep_eddy_cuda_config(dirs):
     return config_path
 
 
+@contextmanager
+def _workflow_lock(name, log_path=None):
+    lock_dir = PROJECTS_ROOT / "locks"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    lock_path = lock_dir / f"{name}.lock"
+    with lock_path.open("w", encoding="utf-8") as lock_file:
+        if log_path:
+            _append(log_path, f"Waiting for workflow lock: {lock_path}")
+        fcntl.flock(lock_file, fcntl.LOCK_EX)
+        if log_path:
+            _append(log_path, f"Acquired workflow lock: {lock_path}")
+        try:
+            yield lock_path
+        finally:
+            fcntl.flock(lock_file, fcntl.LOCK_UN)
+            if log_path:
+                _append(log_path, f"Released workflow lock: {lock_path}")
+
+
 def _build_bids(task, series):
     dirs = _task_dirs(task)
     for p in dirs.values():
@@ -371,9 +399,9 @@ def _commands(workflow, dirs, qsiprep_output=None):
             f"--fs-license-file /opt/freesurfer/license.txt "
             f"--skip-bids-validation "
             f"--output-resolution 2 "
-            f"--nthreads 8 "
-            f"--omp-nthreads 4 "
-            f"--mem 24000 "
+            f"--nthreads {DWI_QSIPREP_NTHREADS} "
+            f"--omp-nthreads {DWI_QSIPREP_OMP_NTHREADS} "
+            f"--mem {DWI_QSIPREP_MEM_MB} "
             f"-w /work "
             f"--notrack "
             f"--eddy-config /eddy_cuda_config.json"
@@ -398,7 +426,7 @@ def _commands(workflow, dirs, qsiprep_output=None):
         return [[
             "docker", "run", "--rm", *gpu_args, "--network", "host", *common_env,
             "-v", f"{source}:/data:ro", "-v", f"{dirs['output']}:/out", "-v", f"{dirs['work']}:/work", "-v", license_mount,
-            IMAGES[workflow], "/data", "/out", "participant", "--participant-label", SUBJECT, "--input-type", "qsiprep", "--recon-spec", "dipy_dki", "--fs-license-file", "/opt/freesurfer/license.txt", "--skip-odf-reports", "--nprocs", "8", "--omp-nthreads", "4", "--mem", "24000", "-w", "/work", "--notrack",
+            IMAGES[workflow], "/data", "/out", "participant", "--participant-label", SUBJECT, "--input-type", "qsiprep", "--recon-spec", "dipy_dki", "--fs-license-file", "/opt/freesurfer/license.txt", "--skip-odf-reports", "--nprocs", str(DWI_QSIRECON_NPROCS), "--omp-nthreads", str(DWI_QSIRECON_OMP_NTHREADS), "--mem", str(DWI_QSIRECON_MEM_MB), "-w", "/work", "--notrack",
         ]]
     if workflow == "dwi_qsi_full":
         qsi_dirs = dict(dirs)
@@ -554,10 +582,13 @@ def run_pipeline_task(task_id: int, qsiprep_task_id: int | None = None) -> None:
             _write_bold_metric(task_id, workflow, dirs, log_path)
             _update(task_id, status="completed", progress=100, finished_at=now_iso())
             return
-        for i, cmd in enumerate(cmds, start=1):
-            _append(log_path, f"Starting container step {i}/{len(cmds)}")
-            _run_command(task, cmd, log_path)
-            _update(task_id, progress=20 + int(70 * i / len(cmds)))
+        lock_name = "dwi_qsiprep" if workflow in {"dwi_qsiprep", "dwi_qsi_full"} else None
+        lock_context = _workflow_lock(lock_name, log_path) if lock_name else nullcontext()
+        with lock_context:
+            for i, cmd in enumerate(cmds, start=1):
+                _append(log_path, f"Starting container step {i}/{len(cmds)}")
+                _run_command(task, cmd, log_path)
+                _update(task_id, progress=20 + int(70 * i / len(cmds)))
         count = _register_outputs(task_id, dirs["output"])
         _append(log_path, f"Registered outputs: {count}")
         _update(task_id, status="completed", progress=100, finished_at=now_iso())
