@@ -1,0 +1,39 @@
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+node_modules/
+dist/
+.vite/
+
+# Runtime data, real imaging inputs, generated derivatives, databases, and logs
+data/**
+!data/
+!data/.gitkeep
+*.db
+*.sqlite
+logs/
+
+# Neuroimaging data and archives must never be pushed to GitHub
+*.nii
+*.nii.gz
+*.dcm
+*.bval
+*.bvec
+*.mgz
+*.mgh
+*.trk
+*.tck
+*.zip
+*.tar
+*.tar.gz
+*.7z
+
+# Local/editor/system files
+.DS_Store
+*.log
+*.tmp
+=*

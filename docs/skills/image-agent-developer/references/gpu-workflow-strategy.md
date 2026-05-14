@@ -1,0 +1,48 @@
+# DWI/QSI GPU Strategy
+
+## Current State
+
+- Historical DWI QSIPrep tasks `46` and `47` used `eddy_cpu`, ran too long, were stopped, and are treated as `failed`.
+- Backend generates `eddy_cuda_config.json` for `dwi_qsiprep`, mounts it as `/eddy_cuda_config.json`, and passes `--eddy-config /eddy_cuda_config.json`.
+- The generated JSON must set `use_cuda: true`.
+- `pennlinc/qsiprep:latest` exposes `eddy_cuda11.0` at `/app/.pixi/envs/qsiprep/bin/eddy_cuda11.0`. Detection uses `eddy_cuda*` glob to accept versioned binaries (`eddy_cuda11.0`, `eddy_cuda10.2`, etc.), not only an exact `eddy_cuda` name.
+- Real DWI tasks 61 and 62 are running with GPU/CUDA eddy.
+- Backend creates symlinks `eddy_cuda` → `eddy_cuda11.0` and `eddy_cuda10.2` → `eddy_cuda11.0` inside `/app/.pixi/envs/qsiprep/bin` via a bash wrapper script.
+- QSIRecon documentation has no confirmed CUDA-only CLI switch. The current policy is to expose GPUs with Docker `--gpus all` and record whether the container can see them.
+- `dwi_qsi_full` enforces the same GPU safety checks as standalone `dwi_qsiprep` and `dwi_qsirecon` (eddy_cuda* probe for QSIPrep, GPU visibility for QSIRecon).
+
+## QSIPrep Policy
+
+Use this command shape for GPU-enabled QSIPrep work:
+
+```text
+docker run --rm --gpus all -v {bids}:/data:ro -v {output}:/output -v {work}:/work -v {fs_license}:/opt/freesurfer/license.txt:ro -v {eddy_cuda_config}:/eddy_cuda_config.json:ro pennlinc/qsiprep:latest /data /output participant --eddy-config /eddy_cuda_config.json
+```
+
+Validation must:
+
+- Check BIDS DWI, `.bval`, `.bvec`, license, output, and work mounts.
+- Confirm the config file exists and contains `use_cuda: true`.
+- Inspect image availability.
+- Run a fast capability probe using `eddy_cuda*` glob across known QSIPrep/FSL paths (not exact `eddy_cuda`).
+- Fail fast if no `eddy_cuda*` executable is found, naming the required CUDA-enabled QSIPrep/FSL image.
+- Never fall back to `eddy_cpu` for production DWI runs under the current strategy.
+
+## QSIRecon Policy
+
+Use Docker GPU exposure:
+
+```text
+docker run --rm --gpus all -v {qsiprep_output}:/data:ro -v {output}:/output -v {work}:/work -v {fs_license}:/opt/freesurfer/license.txt:ro pennlinc/qsirecon:latest /data /output participant --recon-spec {recon_spec}
+```
+
+`--recon-spec` selects the reconstruction pipeline. Validation must confirm a valid recon-spec value is provided and fail fast otherwise.
+
+Validation must record:
+
+- Completed QSIPrep task id and readable QSIPrep output path.
+- QSIRecon image availability.
+- Whether a GPU is visible inside the container, for example via `nvidia-smi` when present.
+- The exact command and mounts, including the `--recon-spec` value.
+
+Do not add undocumented QSIRecon CUDA CLI flags. If a future image or documentation provides one, update this reference and `docs/workflows/dwi-qsi-workflow.md` in the same change.
