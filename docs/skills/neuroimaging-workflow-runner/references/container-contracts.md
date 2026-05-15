@@ -80,10 +80,10 @@ Default QSIPrep command resources are intentionally conservative for this host:
 --nthreads 8 --omp-nthreads 4 --mem 24000
 ```
 
-Default QSIRecon resources are also conservative:
+Default QSIRecon resources follow the same user-approved resource profile:
 
 ```text
---nprocs 4 --omp-nthreads 2 --mem 24000
+--nprocs 8 --omp-nthreads 4 --mem 24000
 ```
 
 These defaults may be overridden with `IMAGE_AGENT_DWI_QSIPREP_*` and `IMAGE_AGENT_DWI_QSIRECON_*` environment variables, but acceptance runs should document any override in the task log or review report.

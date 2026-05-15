@@ -58,12 +58,12 @@ Docker containers launched by the image_agent API are independent processes. An 
 
 ## DWI Lock and Resource Policy
 
-Preserve the DWI workflow serialization and reduced resource defaults from commit `faf5930`:
+Preserve DWI workflow serialization and the current user-approved resource profile:
 
 - Real `dwi_qsiprep` and `dwi_qsi_full` runs acquire `data/projects/locks/dwi_qsiprep.lock` before launching containers.
-- Default QSIPrep resources: `--nthreads 4 --omp-nthreads 2 --mem 16000`.
-- Default QSIRecon resources: `--nprocs 4 --omp-nthreads 2 --mem 16000`.
-- Do not increase concurrency or resource limits without a host capacity check.
+- Default QSIPrep resources: `--nthreads 8 --omp-nthreads 4 --mem 24000`.
+- Default QSIRecon resources: `--nprocs 8 --omp-nthreads 4 --mem 24000`.
+- Do not increase concurrency without a host capacity check; keep these resource defaults unless the user explicitly changes them.
 
 See `references/gpu-workflow-strategy.md` and `docs/workflows/dwi-qsi-workflow.md` for full policy.
 
