@@ -152,6 +152,7 @@ def test_dwi_without_project_t1_uses_anat_modality_none(tmp_path, monkeypatch):
     assert config['dont_peas'] is True
     assert config['cnr_maps'] is True
     assert config['niter'] == 3
+    assert config['is_shelled'] is True
 
 
 def test_eddy_config_uses_default_omp_threads(tmp_path, monkeypatch):
@@ -171,6 +172,7 @@ def test_eddy_config_uses_default_omp_threads(tmp_path, monkeypatch):
     assert config["use_cuda"] is True
     assert config["cnr_maps"] is True
     assert config["niter"] == 3
+    assert config["is_shelled"] is True
 
 
 def test_eddy_config_env_override(tmp_path, monkeypatch):
@@ -214,6 +216,39 @@ def test_eddy_config_niter_env_override(tmp_path, monkeypatch):
     p._write_qsiprep_eddy_cuda_config(dirs)
     config = json.loads((tmp_path / "eddy_cuda_config.json").read_text(encoding="utf-8"))
     assert config["niter"] == 5
+
+
+def test_eddy_config_detects_qspace_as_not_shelled(tmp_path, monkeypatch):
+    """Many distinct non-b0 b values should not force eddy shell assignment."""
+    monkeypatch.delenv("IMAGE_AGENT_DWI_QSIPREP_IS_SHELLED", raising=False)
+    import app.workflows.pipeline as p
+    import importlib
+    importlib.reload(p)
+    dirs = {"root": tmp_path, "bids": tmp_path / "bids", "output": tmp_path / "output", "work": tmp_path / "work"}
+    dwi_dir = dirs["bids"] / "sub-01" / "dwi"
+    dwi_dir.mkdir(parents=True)
+    (dwi_dir / "sub-01_dwi.bval").write_text(
+        "0 200 400 550 750 950 1150 1500 1700 1900 2050 2100 2250 2450 2650 3000",
+        encoding="utf-8",
+    )
+    p._write_qsiprep_eddy_cuda_config(dirs)
+    config = json.loads((tmp_path / "eddy_cuda_config.json").read_text(encoding="utf-8"))
+    assert config["is_shelled"] is False
+
+
+def test_eddy_config_is_shelled_env_override(tmp_path, monkeypatch):
+    """Operator override can force shelled behavior when needed."""
+    monkeypatch.setenv("IMAGE_AGENT_DWI_QSIPREP_IS_SHELLED", "true")
+    import app.workflows.pipeline as p
+    import importlib
+    importlib.reload(p)
+    dirs = {"root": tmp_path, "bids": tmp_path / "bids", "output": tmp_path / "output", "work": tmp_path / "work"}
+    dwi_dir = dirs["bids"] / "sub-01" / "dwi"
+    dwi_dir.mkdir(parents=True)
+    (dwi_dir / "sub-01_dwi.bval").write_text("0 200 400 550 750 950", encoding="utf-8")
+    p._write_qsiprep_eddy_cuda_config(dirs)
+    config = json.loads((tmp_path / "eddy_cuda_config.json").read_text(encoding="utf-8"))
+    assert config["is_shelled"] is True
 
 
 def test_bold_bids_includes_project_t1_when_available(tmp_path, monkeypatch):

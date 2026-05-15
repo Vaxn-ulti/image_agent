@@ -64,10 +64,11 @@ if eddy_args['use_cuda']:
 - Global QSIPrep resources (`--nthreads 8 --omp-nthreads 4 --mem 24000`) control non-eddy parallelism and are the correct defaults.
 - Verify CUDA usage by `eddy_cuda*` binary presence, GPU-visible log lines, and Docker `--gpus all`. Do not assert a specific eddy `--nthr` value (>1) in CUDA runs.
 - The `num_threads >= 4` floor in `eddy_cuda_config.json` remains as a backstop for non-CUDA eddy or future QSIPrep versions.
+- Infer `is_shelled` from `.bval`. q-space/many-b-value data must use `is_shelled: false`; otherwise eddy receives `--data_is_shelled` and can spend hours in low-GPU-utilization correction.
 
 ## 2026-05-15 Long Eddy Runtime Lesson
 
-Task 69 used the required `--nthreads 8 --omp-nthreads 4 --mem 24000` command and real `eddy_cuda10.2`, but a 129-volume DWI remained in eddy for about three hours with only low GPU utilization and no new output after the early PE translation file. An attempted `cnr_maps: false` optimization failed fast because this QSIPrep version requires `cnr_maps` to be present and true. Future runs should keep CUDA, `dont_peas: true`, `repol: true`, and `cnr_maps: true`, but default eddy `niter` to 3 for the first real-run pass. Use `IMAGE_AGENT_DWI_QSIPREP_EDDY_NITER=5` when prioritizing default eddy convergence over speed.
+Task 69 used the required `--nthreads 8 --omp-nthreads 4 --mem 24000` command and real `eddy_cuda10.2`, but a 129-volume DWI remained in eddy for about three hours with only low GPU utilization and no new output after the early PE translation file. An attempted `cnr_maps: false` optimization failed fast because this QSIPrep version requires `cnr_maps` to be present and true. The later task 76 showed the same long eddy behavior with `niter: 3`; bval inspection showed 16-17 rounded b-values, so the data is q-space/many-b-value rather than standard few-shell DWI. Future runs should keep CUDA, `dont_peas: true`, `repol: true`, and `cnr_maps: true`, default eddy `niter` to 3, and infer `is_shelled: false` for many-b-value data. Use `IMAGE_AGENT_DWI_QSIPREP_EDDY_NITER=5` when prioritizing default eddy convergence over speed.
 
 ## 2026-05-14 DWI Stall Lesson
 

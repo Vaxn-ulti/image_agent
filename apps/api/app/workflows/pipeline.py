@@ -22,6 +22,7 @@ DWI_QSIPREP_EDDY_NUM_THREADS = max(2, int(os.environ.get(
     str(DWI_QSIPREP_OMP_NTHREADS),
 )))
 DWI_QSIPREP_EDDY_NITER = max(1, int(os.environ.get("IMAGE_AGENT_DWI_QSIPREP_EDDY_NITER", "3")))
+DWI_QSIPREP_IS_SHELLED = os.environ.get("IMAGE_AGENT_DWI_QSIPREP_IS_SHELLED", "auto").lower()
 DWI_QSIRECON_NPROCS = int(os.environ.get("IMAGE_AGENT_DWI_QSIRECON_NPROCS", "4"))
 DWI_QSIRECON_OMP_NTHREADS = int(os.environ.get("IMAGE_AGENT_DWI_QSIRECON_OMP_NTHREADS", "2"))
 DWI_QSIRECON_MEM_MB = int(os.environ.get("IMAGE_AGENT_DWI_QSIRECON_MEM_MB", "16000"))
@@ -198,6 +199,27 @@ def _has_staged_t1(dirs):
     return (dirs["bids"] / f"sub-{SUBJECT}" / "anat" / f"sub-{SUBJECT}_T1w.nii.gz").exists()
 
 
+def _infer_eddy_is_shelled(dirs):
+    if DWI_QSIPREP_IS_SHELLED in {"true", "1", "yes"}:
+        return True
+    if DWI_QSIPREP_IS_SHELLED in {"false", "0", "no"}:
+        return False
+    bval_path = dirs["bids"] / f"sub-{SUBJECT}" / "dwi" / f"sub-{SUBJECT}_dwi.bval"
+    if not bval_path.exists():
+        return True
+    try:
+        bvals = [float(v) for v in bval_path.read_text(encoding="utf-8").split()]
+    except ValueError:
+        return True
+    shells = []
+    for bval in bvals:
+        if bval <= 100:
+            continue
+        if not any(abs(bval - shell) <= 100 for shell in shells):
+            shells.append(bval)
+    return len(shells) <= 4
+
+
 def _write_qsiprep_eddy_cuda_config(dirs):
     """Write eddy CUDA config for production DWI runs.
 
@@ -216,6 +238,7 @@ def _write_qsiprep_eddy_cuda_config(dirs):
     setting. Override via IMAGE_AGENT_DWI_QSIPREP_EDDY_NITER.
     """
     config_path = dirs["root"] / "eddy_cuda_config.json"
+    is_shelled = _infer_eddy_is_shelled(dirs)
     config_path.write_text(
         json.dumps(
             {
@@ -231,7 +254,7 @@ def _write_qsiprep_eddy_cuda_config(dirs):
                 "method": "jac",
                 "repol": True,
                 "num_threads": DWI_QSIPREP_EDDY_NUM_THREADS,
-                "is_shelled": True,
+                "is_shelled": is_shelled,
                 "use_cuda": True,
                 "cnr_maps": True,
                 "residuals": False,

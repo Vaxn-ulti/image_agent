@@ -48,7 +48,7 @@ Command pattern:
 docker run --rm --gpus all -v {bids}:/data:ro -v {output}:/output -v {work}:/work -v {fs_license}:/opt/freesurfer/license.txt:ro -v {eddy_cuda_config}:/eddy_cuda_config.json:ro pennlinc/qsiprep:latest /data /output participant --eddy-config /eddy_cuda_config.json
 ```
 
-`eddy_cuda_config.json` must contain `use_cuda: true`, `num_threads >= 4`, `dont_peas: true`, `cnr_maps: true`, and `niter: 3` by default. `dont_peas` skips post-eddy alignment QC estimation — this does not affect core eddy correction quality and is a well-established production speed optimization. This QSIPrep version requires `cnr_maps: true` during config validation. QSIPrep source forces CUDA eddy to 1 thread regardless of the config `num_threads`; the config floor serves as a safety backstop should a future image change this behavior.
+`eddy_cuda_config.json` must contain `use_cuda: true`, `num_threads >= 4`, `dont_peas: true`, `cnr_maps: true`, and `niter: 3` by default. `dont_peas` skips post-eddy alignment QC estimation — this does not affect core eddy correction quality and is a well-established production speed optimization. This QSIPrep version requires `cnr_maps: true` during config validation. QSIPrep source forces CUDA eddy to 1 thread regardless of the config `num_threads`; the config floor serves as a safety backstop should a future image change this behavior. The backend must infer `is_shelled` from `.bval`: standard few-shell DWI can use `is_shelled: true`, but q-space/many-b-value data must use `is_shelled: false` so eddy does not receive `--data_is_shelled`.
 
 The backend wraps QSIPrep in a bash script that symlinks `eddy_cuda` → `eddy_cuda11.0` and `eddy_cuda10.2` → `eddy_cuda11.0` inside `/app/.pixi/envs/qsiprep/bin` before invoking qsiprep, so the QSIPrep process sees the expected binary names.
 
@@ -128,6 +128,7 @@ Task 65 (129 bvals, ~87 MB DWI) ran eddy_cuda10.2 for >3.5 hours at 100% CPU wit
 - `dont_peas: true` skips post-eddy alignment QC estimation for speed. This does not affect core eddy correction quality.
 - `cnr_maps: true` is mandatory in this QSIPrep version; `cnr_maps: false` fails validation before processing starts.
 - `niter: 3` is the speed-oriented first-pass default after task 69 repeated the long eddy runtime pattern with real CUDA eddy. Override with `IMAGE_AGENT_DWI_QSIPREP_EDDY_NITER=5` for default eddy convergence.
+- `is_shelled` is inferred from b-values. If more than four non-b0 shells are detected using a 100 b-value tolerance, set `is_shelled: false`. Override with `IMAGE_AGENT_DWI_QSIPREP_IS_SHELLED=true|false` only with a documented reason.
 - Override: `IMAGE_AGENT_EDDY_NUM_THREADS=4` for larger multi-shell datasets.
 - Do not set `num_threads: 1` in any eddy config unless a documented override protocol justifies it for a specific single-shell dataset.
 

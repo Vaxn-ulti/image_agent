@@ -25,7 +25,7 @@ Current known baseline:
 ## DWI/QSI GPU Validation
 
 - `dwi_qsiprep_validate` with DWI plus `.bval`/`.bvec` generates and mounts `eddy_cuda_config.json`.
-- Config JSON contains `use_cuda: true`, `num_threads >= 4`, `dont_peas: true`, `cnr_maps: true`, and default `niter: 3`.
+- Config JSON contains `use_cuda: true`, `num_threads >= 4`, `dont_peas: true`, `cnr_maps: true`, default `niter: 3`, and an `is_shelled` value inferred from b-values.
 - QSIPrep command includes `--gpus all` and `--eddy-config /eddy_cuda_config.json`.
 - Detection uses `eddy_cuda*` glob (accepts `eddy_cuda11.0`, `eddy_cuda10.2`, etc.); passes when `pennlinc/qsiprep:latest` exposes `eddy_cuda11.0` at `/app/.pixi/envs/qsiprep/bin/`.
 - Backend writes a bash wrapper that symlinks `eddy_cuda` → `eddy_cuda11.0` and `eddy_cuda10.2` → `eddy_cuda11.0` before calling qsiprep.
