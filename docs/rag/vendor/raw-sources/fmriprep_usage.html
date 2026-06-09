@@ -1,0 +1,876 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" />
+  <meta name="readthedocs-addons-api-version" content="1"><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Usage Notes &mdash; fmriprep version documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=03e43079" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/theme_overrides.css?v=0af3e540" />
+
+  
+    <link rel="canonical" href="https://fmriprep.org/en/stable/usage.html" />
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=553808b2"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="https://cdn.rawgit.com/chrisfilo/zenodo.js/v0.1/zenodo.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <script src="_static/js/versions.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Processing pipeline details" href="workflows.html" />
+    <link rel="prev" title="Installation" href="installation.html" /> 
+<script async type="text/javascript" src="/_/static/javascript/readthedocs-addons.js"></script><meta name="readthedocs-project-slug" content="fmriprep" /><meta name="readthedocs-version-slug" content="stable" /><meta name="readthedocs-resolver-filename" content="/usage.html" /><meta name="readthedocs-http-status" content="200" /></head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            fmriprep
+          </a>
+              <div class="switch-menus">
+                <div class="version-switch"></div>
+                <div class="language-switch"></div>
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Usage Notes</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#execution-and-the-bids-format">Execution and the BIDS format</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#command-line-arguments">Command-Line Arguments</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#fmriprep.cli.parser-_build_parser-positional-arguments">Positional Arguments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fmriprep.cli.parser-_build_parser-options-for-filtering-bids-queries">Options for filtering BIDS queries</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fmriprep.cli.parser-_build_parser-options-to-handle-performance">Options to handle performance</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fmriprep.cli.parser-_build_parser-options-for-performing-only-a-subset-of-the-workflow">Options for performing only a subset of the workflow</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fmriprep.cli.parser-_build_parser-workflow-configuration">Workflow configuration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fmriprep.cli.parser-_build_parser-options-for-modulating-outputs">Options for modulating outputs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fmriprep.cli.parser-_build_parser-options-relating-to-confounds">Options relating to confounds</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fmriprep.cli.parser-_build_parser-specific-options-for-ants-registrations">Specific options for ANTs registrations</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fmriprep.cli.parser-_build_parser-specific-options-for-handling-fieldmaps">Specific options for handling fieldmaps</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fmriprep.cli.parser-_build_parser-specific-options-for-syn-distortion-correction">Specific options for SyN distortion correction</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fmriprep.cli.parser-_build_parser-specific-options-for-freesurfer-preprocessing">Specific options for FreeSurfer preprocessing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fmriprep.cli.parser-_build_parser-options-for-carbon-usage-tracking">Options for carbon usage tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fmriprep.cli.parser-_build_parser-other-options">Other options</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#the-command-line-interface-of-the-docker-wrapper">The command-line interface of the docker wrapper</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#fmriprep_docker.__main__-get_parser-positional-arguments">Positional Arguments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fmriprep_docker.__main__-get_parser-named-arguments">Named Arguments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fmriprep_docker.__main__-get_parser-wrapper-options">Wrapper options</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fmriprep_docker.__main__-get_parser-developer-options">Developer options</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#limitations-and-reasons-not-to-use-fmriprep">Limitations and reasons not to use <em>fMRIPrep</em></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#the-freesurfer-license">The FreeSurfer license</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#reusing-precomputed-derivatives">Reusing precomputed derivatives</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#reusing-a-previous-partial-execution-of-fmriprep">Reusing a previous, partial execution of <em>fMRIPrep</em></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#using-a-previous-run-of-freesurfer">Using a previous run of <em>FreeSurfer</em></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#bids-derivatives-reuse">BIDS Derivatives reuse</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#troubleshooting">Troubleshooting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#about-the-nipreps-framework-licensing">About the <em>NiPreps</em> framework licensing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#license-information">License information</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#the-fmriprep-wrapper-for-docker">The <code class="docutils literal notranslate"><span class="pre">fmriprep-wrapper</span></code> for Docker</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="workflows.html">Processing pipeline details</a></li>
+<li class="toctree-l1"><a class="reference internal" href="outputs.html">Outputs of <em>fMRIPrep</em></a></li>
+<li class="toctree-l1"><a class="reference internal" href="benchmarks.html">Performance benchmarks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="spaces.html">Defining standard and nonstandard spaces where data will be resampled</a></li>
+<li class="toctree-l1"><a class="reference internal" href="faq.html">FAQ - Frequently Asked Questions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">Developers - API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="changes.html">What’s new</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">fmriprep</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Usage Notes</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/usage.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="usage-notes">
+<span id="usage"></span><h1>Usage Notes<a class="headerlink" href="#usage-notes" title="Link to this heading"></a></h1>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>As of <em>fMRIPrep</em> 1.0.12, the software includes a tracking system
+to report usage statistics and errors. Users can opt-out using
+the <code class="docutils literal notranslate"><span class="pre">--notrack</span></code> command line argument.</p>
+</div>
+<section id="execution-and-the-bids-format">
+<h2>Execution and the BIDS format<a class="headerlink" href="#execution-and-the-bids-format" title="Link to this heading"></a></h2>
+<p>The <em>fMRIPrep</em> workflow takes as principal input the path of the dataset
+that is to be processed.
+The input dataset is required to be in valid <abbr title="Brain Imaging Data Structure">BIDS</abbr> format, and it must include at least one T1w structural image and
+(unless disabled with a flag) a BOLD series.
+We highly recommend that you validate your dataset with the free, online
+<a class="reference external" href="https://bids-standard.github.io/bids-validator/">BIDS Validator</a>.</p>
+<p>The exact command to run <em>fMRIPRep</em> depends on the <a class="reference external" href="installation.html">Installation</a> method.
+The common parts of the command follow the <a class="reference external" href="https://github.com/BIDS-Apps">BIDS-Apps</a> definition.
+Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">fmriprep</span> <span class="n">data</span><span class="o">/</span><span class="n">bids_root</span><span class="o">/</span> <span class="n">out</span><span class="o">/</span> <span class="n">participant</span> <span class="o">-</span><span class="n">w</span> <span class="n">work</span><span class="o">/</span>
+</pre></div>
+</div>
+<p>Further information about BIDS and BIDS-Apps can be found at the
+<a class="reference external" href="https://www.nipreps.org/apps/framework/">NiPreps portal</a>.</p>
+</section>
+<section id="command-line-arguments">
+<h2>Command-Line Arguments<a class="headerlink" href="#command-line-arguments" title="Link to this heading"></a></h2>
+<p><p>fMRIPrep: fMRI PREProcessing workflows v25.2.5</p>
+</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">usage</span><span class="p">:</span> <span class="n">fmriprep</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">skip_bids_validation</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">participant</span><span class="o">-</span><span class="n">label</span> <span class="n">PARTICIPANT_LABEL</span> <span class="p">[</span><span class="n">PARTICIPANT_LABEL</span> <span class="o">...</span><span class="p">]]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">session</span><span class="o">-</span><span class="n">label</span> <span class="n">SESSION_LABEL</span> <span class="p">[</span><span class="n">SESSION_LABEL</span> <span class="o">...</span><span class="p">]]</span>
+                <span class="p">[</span><span class="o">-</span><span class="n">t</span> <span class="n">TASK_ID</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">echo</span><span class="o">-</span><span class="n">idx</span> <span class="n">ECHO_IDX</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">subject</span><span class="o">-</span><span class="n">anatomical</span><span class="o">-</span><span class="n">reference</span> <span class="p">{</span><span class="n">first</span><span class="o">-</span><span class="n">lex</span><span class="p">,</span><span class="n">unbiased</span><span class="p">,</span><span class="n">sessionwise</span><span class="p">}]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">track</span><span class="o">-</span><span class="n">sessions</span> <span class="o">|</span> <span class="o">--</span><span class="n">no</span><span class="o">-</span><span class="n">track</span><span class="o">-</span><span class="n">sessions</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">bids</span><span class="o">-</span><span class="nb">filter</span><span class="o">-</span><span class="n">file</span> <span class="n">FILE</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">d</span> <span class="n">PACKAGE</span><span class="o">=</span><span class="n">PATH</span> <span class="p">[</span><span class="n">PACKAGE</span><span class="o">=</span><span class="n">PATH</span> <span class="o">...</span><span class="p">]]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">bids</span><span class="o">-</span><span class="n">database</span><span class="o">-</span><span class="nb">dir</span> <span class="n">PATH</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">nprocs</span> <span class="n">NPROCS</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">omp</span><span class="o">-</span><span class="n">nthreads</span> <span class="n">OMP_NTHREADS</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">mem</span> <span class="n">MEMORY_MB</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">low</span><span class="o">-</span><span class="n">mem</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">use</span><span class="o">-</span><span class="n">plugin</span> <span class="n">FILE</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">sloppy</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">anat</span><span class="o">-</span><span class="n">only</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">level</span> <span class="p">{</span><span class="n">minimal</span><span class="p">,</span><span class="n">resampling</span><span class="p">,</span><span class="n">full</span><span class="p">}]</span> <span class="p">[</span><span class="o">--</span><span class="n">boilerplate</span><span class="o">-</span><span class="n">only</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">reports</span><span class="o">-</span><span class="n">only</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">ignore</span> <span class="p">{</span><span class="n">fieldmaps</span><span class="p">,</span><span class="n">slicetiming</span><span class="p">,</span><span class="n">sbref</span><span class="p">,</span><span class="n">t2w</span><span class="p">,</span><span class="n">flair</span><span class="p">,</span><span class="n">fmap</span><span class="o">-</span><span class="n">jacobian</span><span class="p">}</span> <span class="p">[{</span><span class="n">fieldmaps</span><span class="p">,</span><span class="n">slicetiming</span><span class="p">,</span><span class="n">sbref</span><span class="p">,</span><span class="n">t2w</span><span class="p">,</span><span class="n">flair</span><span class="p">,</span><span class="n">fmap</span><span class="o">-</span><span class="n">jacobian</span><span class="p">}</span> <span class="o">...</span><span class="p">]]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">force</span> <span class="p">{</span><span class="n">bbr</span><span class="p">,</span><span class="n">no</span><span class="o">-</span><span class="n">bbr</span><span class="p">,</span><span class="n">syn</span><span class="o">-</span><span class="n">sdc</span><span class="p">,</span><span class="n">fmap</span><span class="o">-</span><span class="n">jacobian</span><span class="p">}</span> <span class="p">[{</span><span class="n">bbr</span><span class="p">,</span><span class="n">no</span><span class="o">-</span><span class="n">bbr</span><span class="p">,</span><span class="n">syn</span><span class="o">-</span><span class="n">sdc</span><span class="p">,</span><span class="n">fmap</span><span class="o">-</span><span class="n">jacobian</span><span class="p">}</span> <span class="o">...</span><span class="p">]]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">output</span><span class="o">-</span><span class="n">spaces</span> <span class="p">[</span><span class="n">OUTPUT_SPACES</span> <span class="o">...</span><span class="p">]]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">longitudinal</span> <span class="n">LONGITUDINAL</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">bold2anat</span><span class="o">-</span><span class="n">init</span> <span class="p">{</span><span class="n">auto</span><span class="p">,</span><span class="n">t1w</span><span class="p">,</span><span class="n">t2w</span><span class="p">,</span><span class="n">header</span><span class="p">}]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">bold2anat</span><span class="o">-</span><span class="n">dof</span> <span class="p">{</span><span class="mi">6</span><span class="p">,</span><span class="mi">9</span><span class="p">,</span><span class="mi">12</span><span class="p">}]</span> <span class="p">[</span><span class="o">--</span><span class="n">force</span><span class="o">-</span><span class="n">bbr</span> <span class="n">FORCE_BBR</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">force</span><span class="o">-</span><span class="n">no</span><span class="o">-</span><span class="n">bbr</span> <span class="n">FORCE_NO_BBR</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="nb">slice</span><span class="o">-</span><span class="n">time</span><span class="o">-</span><span class="n">ref</span> <span class="n">SLICE_TIME_REF</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">dummy</span><span class="o">-</span><span class="n">scans</span> <span class="n">DUMMY_SCANS</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">fallback</span><span class="o">-</span><span class="n">total</span><span class="o">-</span><span class="n">readout</span><span class="o">-</span><span class="n">time</span> <span class="n">FALLBACK_TOTAL_READOUT_TIME</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">random</span><span class="o">-</span><span class="n">seed</span> <span class="n">_RANDOM_SEED</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">me</span><span class="o">-</span><span class="n">t2s</span><span class="o">-</span><span class="n">fit</span><span class="o">-</span><span class="n">method</span> <span class="p">{</span><span class="n">curvefit</span><span class="p">,</span><span class="n">loglin</span><span class="p">}]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">output</span><span class="o">-</span><span class="n">layout</span> <span class="p">{</span><span class="n">bids</span><span class="p">,</span><span class="n">legacy</span><span class="p">}]</span> <span class="p">[</span><span class="o">--</span><span class="n">me</span><span class="o">-</span><span class="n">output</span><span class="o">-</span><span class="n">echos</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">aggregate</span><span class="o">-</span><span class="n">session</span><span class="o">-</span><span class="n">reports</span> <span class="n">AGGR_SES_REPORTS</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">medial</span><span class="o">-</span><span class="n">surface</span><span class="o">-</span><span class="n">nan</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">project</span><span class="o">-</span><span class="n">goodvoxels</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">md</span><span class="o">-</span><span class="n">only</span><span class="o">-</span><span class="n">boilerplate</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">cifti</span><span class="o">-</span><span class="n">output</span> <span class="p">[{</span><span class="mi">91</span><span class="n">k</span><span class="p">,</span><span class="mi">170</span><span class="n">k</span><span class="p">}]]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">msm</span> <span class="o">|</span> <span class="o">--</span><span class="n">no</span><span class="o">-</span><span class="n">msm</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="k">return</span><span class="o">-</span><span class="nb">all</span><span class="o">-</span><span class="n">components</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">fd</span><span class="o">-</span><span class="n">spike</span><span class="o">-</span><span class="n">threshold</span> <span class="n">REGRESSORS_FD_TH</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">dvars</span><span class="o">-</span><span class="n">spike</span><span class="o">-</span><span class="n">threshold</span> <span class="n">REGRESSORS_DVARS_TH</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">skull</span><span class="o">-</span><span class="n">strip</span><span class="o">-</span><span class="n">template</span> <span class="n">SKULL_STRIP_TEMPLATE</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">skull</span><span class="o">-</span><span class="n">strip</span><span class="o">-</span><span class="n">fixed</span><span class="o">-</span><span class="n">seed</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">skull</span><span class="o">-</span><span class="n">strip</span><span class="o">-</span><span class="n">t1w</span> <span class="p">{</span><span class="n">auto</span><span class="p">,</span><span class="n">skip</span><span class="p">,</span><span class="n">force</span><span class="p">}]</span> <span class="p">[</span><span class="o">--</span><span class="n">fmap</span><span class="o">-</span><span class="n">bspline</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">fmap</span><span class="o">-</span><span class="n">no</span><span class="o">-</span><span class="n">demean</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">use</span><span class="o">-</span><span class="n">syn</span><span class="o">-</span><span class="n">sdc</span> <span class="p">[{</span><span class="n">warn</span><span class="p">,</span><span class="n">error</span><span class="p">}]]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">force</span><span class="o">-</span><span class="n">syn</span> <span class="n">FORCE_SYN</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">fs</span><span class="o">-</span><span class="n">license</span><span class="o">-</span><span class="n">file</span> <span class="n">FILE</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">fs</span><span class="o">-</span><span class="n">subjects</span><span class="o">-</span><span class="nb">dir</span> <span class="n">PATH</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">submm</span><span class="o">-</span><span class="n">recon</span> <span class="o">|</span> <span class="o">--</span><span class="n">no</span><span class="o">-</span><span class="n">submm</span><span class="o">-</span><span class="n">recon</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">fs</span><span class="o">-</span><span class="n">no</span><span class="o">-</span><span class="n">reconall</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">fs</span><span class="o">-</span><span class="n">no</span><span class="o">-</span><span class="n">resume</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">track</span><span class="o">-</span><span class="n">carbon</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">country</span><span class="o">-</span><span class="n">code</span> <span class="n">COUNTRY_CODE</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">version</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">v</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">w</span> <span class="n">WORK_DIR</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">clean</span><span class="o">-</span><span class="n">workdir</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">resource</span><span class="o">-</span><span class="n">monitor</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">config</span><span class="o">-</span><span class="n">file</span> <span class="n">FILE</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">write</span><span class="o">-</span><span class="n">graph</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">stop</span><span class="o">-</span><span class="n">on</span><span class="o">-</span><span class="n">first</span><span class="o">-</span><span class="n">crash</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">notrack</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">debug</span> <span class="p">{</span><span class="n">compcor</span><span class="p">,</span><span class="n">fieldmaps</span><span class="p">,</span><span class="n">pdb</span><span class="p">,</span><span class="nb">all</span><span class="p">}</span> <span class="p">[{</span><span class="n">compcor</span><span class="p">,</span><span class="n">fieldmaps</span><span class="p">,</span><span class="n">pdb</span><span class="p">,</span><span class="nb">all</span><span class="p">}</span> <span class="o">...</span><span class="p">]]</span>
+                <span class="n">bids_dir</span> <span class="n">output_dir</span> <span class="p">{</span><span class="n">participant</span><span class="p">}</span>
+</pre></div>
+</div>
+<section id="fmriprep.cli.parser-_build_parser-positional-arguments">
+<h3>Positional Arguments<a class="headerlink" href="#fmriprep.cli.parser-_build_parser-positional-arguments" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>bids_dir</kbd></dt>
+<dd><p>The root folder of a BIDS valid dataset (sub-XXXXX folders should be found at the top level in this folder).</p>
+</dd>
+<dt><kbd>output_dir</kbd></dt>
+<dd><p>The output path for the outcomes of preprocessing and visual reports</p>
+</dd>
+<dt><kbd>analysis_level</kbd></dt>
+<dd><p>Possible choices: participant</p>
+<p>Processing stage to be run, only “participant” in the case of fMRIPrep (see BIDS-Apps specification).</p>
+</dd>
+</dl>
+</section>
+<section id="fmriprep.cli.parser-_build_parser-options-for-filtering-bids-queries">
+<h3>Options for filtering BIDS queries<a class="headerlink" href="#fmriprep.cli.parser-_build_parser-options-for-filtering-bids-queries" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>--skip_bids_validation, --skip-bids-validation</kbd></dt>
+<dd><p>Assume the input dataset is BIDS compliant and skip the validation</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--participant-label, --participant_label</kbd></dt>
+<dd><p>A space delimited list of participant identifiers or a single identifier (the sub- prefix can be removed)</p>
+</dd>
+<dt><kbd>--session-label</kbd></dt>
+<dd><p>A space delimited list of session identifiers or a single identifier (the ses- prefix can be removed)</p>
+</dd>
+<dt><kbd>-t, --task-id</kbd></dt>
+<dd><p>Select a specific task to be processed</p>
+</dd>
+<dt><kbd>--echo-idx</kbd></dt>
+<dd><p>Select a specific echo to be processed in a multiecho series</p>
+</dd>
+<dt><kbd>--subject-anatomical-reference</kbd></dt>
+<dd><p>Possible choices: first-lex, unbiased, sessionwise</p>
+<dl class="simple">
+<dt>Method to produce the reference anatomical space:</dt><dd><p>“first-lex” will use the first image in lexicographical order
+“unbiased” will construct an unbiased template from all images (previously “–longitudinal”)
+“sessionwise” will independently process each session. If multiple runs are found, the behavior will be similar to “first-lex” for each session.</p>
+</dd>
+</dl>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">'first-lex'</span></code></p>
+</dd>
+<dt><kbd>--track-sessions, --no-track-sessions</kbd></dt>
+<dd><p>Track and append session IDs. If disabled, sessions will not be tracked nor appended to FreeSurfer subject ID.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">True</span></code></p>
+</dd>
+<dt><kbd>--bids-filter-file</kbd></dt>
+<dd><p>A JSON file describing custom BIDS input filters using PyBIDS. For further details, please check out <a class="reference external" href="https://fmriprep.readthedocs.io/en/25.2.5/faq.html#how-do-I-select-only-certain-files-to-be-input-to-fMRIPrep">https://fmriprep.readthedocs.io/en/25.2.5/faq.html#how-do-I-select-only-certain-files-to-be-input-to-fMRIPrep</a></p>
+</dd>
+<dt><kbd>-d, --derivatives</kbd></dt>
+<dd><p>Search PATH(s) for pre-computed derivatives. These may be provided as named folders (e.g., <cite>–derivatives smriprep=/path/to/smriprep</cite>).</p>
+</dd>
+<dt><kbd>--bids-database-dir</kbd></dt>
+<dd><p>Path to a PyBIDS database folder, for faster indexing (especially useful for large datasets). Will be created if not present.</p>
+</dd>
+</dl>
+</section>
+<section id="fmriprep.cli.parser-_build_parser-options-to-handle-performance">
+<h3>Options to handle performance<a class="headerlink" href="#fmriprep.cli.parser-_build_parser-options-to-handle-performance" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>--nprocs, --nthreads, --n_cpus, --n-cpus</kbd></dt>
+<dd><p>Maximum number of threads across all processes</p>
+</dd>
+<dt><kbd>--omp-nthreads</kbd></dt>
+<dd><p>Maximum number of threads per-process</p>
+</dd>
+<dt><kbd>--mem, --mem_mb, --mem-mb</kbd></dt>
+<dd><p>Upper bound memory limit for fMRIPrep processes</p>
+</dd>
+<dt><kbd>--low-mem</kbd></dt>
+<dd><p>Attempt to reduce memory usage (will increase disk usage in working directory)</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--use-plugin, --nipype-plugin-file</kbd></dt>
+<dd><p>Nipype plugin configuration file</p>
+</dd>
+<dt><kbd>--sloppy</kbd></dt>
+<dd><p>Use low-quality tools for speed - TESTING ONLY</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+</dl>
+</section>
+<section id="fmriprep.cli.parser-_build_parser-options-for-performing-only-a-subset-of-the-workflow">
+<h3>Options for performing only a subset of the workflow<a class="headerlink" href="#fmriprep.cli.parser-_build_parser-options-for-performing-only-a-subset-of-the-workflow" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>--anat-only</kbd></dt>
+<dd><p>Run anatomical workflows only</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--level</kbd></dt>
+<dd><p>Possible choices: minimal, resampling, full</p>
+<p>Processing level; may be ‘minimal’ (nothing that can be recomputed), ‘resampling’ (recomputable targets that aid in resampling) or ‘full’ (all target outputs).</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">'full'</span></code></p>
+</dd>
+<dt><kbd>--boilerplate-only, --boilerplate_only</kbd></dt>
+<dd><p>Generate boilerplate only</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--reports-only</kbd></dt>
+<dd><p>Only generate reports, don’t run workflows. This will only rerun report aggregation, not reportlet generation for specific nodes.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+</dl>
+</section>
+<section id="fmriprep.cli.parser-_build_parser-workflow-configuration">
+<h3>Workflow configuration<a class="headerlink" href="#fmriprep.cli.parser-_build_parser-workflow-configuration" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>--ignore</kbd></dt>
+<dd><p>Possible choices: fieldmaps, slicetiming, sbref, t2w, flair, fmap-jacobian</p>
+<p>Ignore selected aspects of the input dataset to disable corresponding parts of the workflow (a space delimited list)</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">[]</span></code></p>
+</dd>
+<dt><kbd>--force</kbd></dt>
+<dd><p>Possible choices: bbr, no-bbr, syn-sdc, fmap-jacobian</p>
+<dl class="simple">
+<dt>Force selected processing choices, overriding automatic selections (a space delimited list).</dt><dd><ul class="simple">
+<li><dl class="simple">
+<dt>[no-]bbr: Use/disable boundary-based registration for BOLD-to-T1w coregistration</dt><dd><p>(No goodness-of-fit checks)</p>
+</dd>
+</dl>
+</li>
+<li><p>syn-sdc: Calculate SyN-SDC correction <em>in addition</em> to other fieldmaps</p></li>
+</ul>
+</dd>
+</dl>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">[]</span></code></p>
+</dd>
+<dt><kbd>--output-spaces</kbd></dt>
+<dd><p>Standard and non-standard spaces to resample anatomical and functional images to. Standard spaces may be specified by the form <code class="docutils literal notranslate"><span class="pre">&lt;SPACE&gt;[:cohort-&lt;label&gt;][:res-&lt;resolution&gt;][...]</span></code>, where <code class="docutils literal notranslate"><span class="pre">&lt;SPACE&gt;</span></code> is a keyword designating a spatial reference, and may be followed by optional, colon-separated parameters. Non-standard spaces imply specific orientations and sampling grids. Important to note, the <code class="docutils literal notranslate"><span class="pre">res-*</span></code> modifier does not define the resolution used for the spatial normalization. To generate no BOLD outputs, use this option without specifying any spatial references. For further details, please check out <a class="reference external" href="https://fmriprep.readthedocs.io/en/25.2.5/spaces.html">https://fmriprep.readthedocs.io/en/25.2.5/spaces.html</a></p>
+</dd>
+<dt><kbd>--longitudinal</kbd></dt>
+<dd><p>Deprecated - use <cite>–subject-anatomical-reference unbiased</cite> instead</p>
+</dd>
+<dt><kbd>--bold2anat-init</kbd></dt>
+<dd><p>Possible choices: auto, t1w, t2w, header</p>
+<p>Method of initial BOLD to anatomical coregistration. If <cite>auto</cite>, a T2w image is used if available, otherwise the T1w image. <cite>t1w</cite> forces use of the T1w, <cite>t2w</cite> forces use of the T2w, and <cite>header</cite> uses the BOLD header information without an initial registration.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">'auto'</span></code></p>
+</dd>
+<dt><kbd>--bold2anat-dof</kbd></dt>
+<dd><p>Possible choices: 6, 9, 12</p>
+<p>Degrees of freedom when registering BOLD to anatomical images. 6 degrees (rotation and translation) are used by default.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">6</span></code></p>
+</dd>
+<dt><kbd>--force-bbr</kbd></dt>
+<dd><p>Deprecated - use <cite>–force bbr</cite> instead.</p>
+</dd>
+<dt><kbd>--force-no-bbr</kbd></dt>
+<dd><p>Deprecated - use <cite>–force no-bbr</cite> instead.</p>
+</dd>
+<dt><kbd>--slice-time-ref</kbd></dt>
+<dd><p>The time of the reference slice to correct BOLD values to, as a fraction acquisition time. 0 indicates the start, 0.5 the midpoint, and 1 the end of acquisition. The alias <cite>start</cite> corresponds to 0, and <cite>middle</cite> to 0.5. The default value is 0.5.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">0.5</span></code></p>
+</dd>
+<dt><kbd>--dummy-scans</kbd></dt>
+<dd><p>Number of nonsteady-state volumes. Overrides automatic detection.</p>
+</dd>
+<dt><kbd>--fallback-total-readout-time</kbd></dt>
+<dd><p>Fallback value for Total Readout Time (TRT) calculation. May be a number or “estimated”.</p>
+</dd>
+<dt><kbd>--random-seed</kbd></dt>
+<dd><p>Initialize the random seed for the workflow</p>
+</dd>
+<dt><kbd>--me-t2s-fit-method</kbd></dt>
+<dd><p>Possible choices: curvefit, loglin</p>
+<p>The method by which to estimate T2* and S0 for multi-echo data. ‘curvefit’ uses nonlinear regression. It is more memory intensive, but also may be more accurate, than ‘loglin’. ‘loglin’ uses log-linear regression. It is faster and less memory intensive, but may be less accurate.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">'curvefit'</span></code></p>
+</dd>
+<dt><kbd>--project-goodvoxels</kbd></dt>
+<dd><p>Exclude voxels whose timeseries have locally high coefficient of variation from surface resampling. Only performed for GIFTI files mapped to a freesurfer subject (fsaverage or fsnative).</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+</dl>
+</section>
+<section id="fmriprep.cli.parser-_build_parser-options-for-modulating-outputs">
+<h3>Options for modulating outputs<a class="headerlink" href="#fmriprep.cli.parser-_build_parser-options-for-modulating-outputs" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>--output-layout</kbd></dt>
+<dd><p>Possible choices: bids, legacy</p>
+<p>Organization of outputs. “bids” (default) places fMRIPrep derivatives directly in the output directory, and defaults to placing FreeSurfer derivatives in &lt;output-dir&gt;/sourcedata/freesurfer. “legacy” creates derivative datasets as subdirectories of outputs.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">'bids'</span></code></p>
+</dd>
+<dt><kbd>--me-output-echos</kbd></dt>
+<dd><p>Output individual echo time series with slice, motion and susceptibility correction. Useful for further Tedana processing post-fMRIPrep.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--aggregate-session-reports</kbd></dt>
+<dd><p>Maximum number of sessions aggregated in one subject’s visual report. If exceeded, visual reports are split by session.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">4</span></code></p>
+</dd>
+<dt><kbd>--medial-surface-nan</kbd></dt>
+<dd><p>Replace medial wall values with NaNs on functional GIFTI files. Only performed for GIFTI files mapped to a freesurfer subject (fsaverage or fsnative).</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--md-only-boilerplate</kbd></dt>
+<dd><p>Skip generation of HTML and LaTeX formatted citation with pandoc</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--cifti-output</kbd></dt>
+<dd><p>Possible choices: 91k, 170k</p>
+<p>Output preprocessed BOLD as a CIFTI dense timeseries. Optionally, the number of grayordinate can be specified (default is 91k, which equates to 2mm resolution)</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--msm, --no-msm</kbd></dt>
+<dd><p>Enable or disable Multimodal Surface Matching surface registration.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">True</span></code></p>
+</dd>
+</dl>
+</section>
+<section id="fmriprep.cli.parser-_build_parser-options-relating-to-confounds">
+<h3>Options relating to confounds<a class="headerlink" href="#fmriprep.cli.parser-_build_parser-options-relating-to-confounds" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>--return-all-components</kbd></dt>
+<dd><p>Include all components estimated in CompCor decomposition in the confounds file instead of only the components sufficient to explain 50 percent of BOLD variance in each CompCor mask</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--fd-spike-threshold</kbd></dt>
+<dd><p>Threshold for flagging a frame as an outlier on the basis of framewise displacement</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">0.5</span></code></p>
+</dd>
+<dt><kbd>--dvars-spike-threshold</kbd></dt>
+<dd><p>Threshold for flagging a frame as an outlier on the basis of standardised DVARS</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">1.5</span></code></p>
+</dd>
+</dl>
+</section>
+<section id="fmriprep.cli.parser-_build_parser-specific-options-for-ants-registrations">
+<h3>Specific options for ANTs registrations<a class="headerlink" href="#fmriprep.cli.parser-_build_parser-specific-options-for-ants-registrations" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>--skull-strip-template</kbd></dt>
+<dd><p>Select a template for skull-stripping with antsBrainExtraction (OASIS30ANTs, by default)</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">OASIS30ANTs</span></code></p>
+</dd>
+<dt><kbd>--skull-strip-fixed-seed</kbd></dt>
+<dd><p>Do not use a random seed for skull-stripping - will ensure run-to-run replicability when used with –omp-nthreads 1 and matching –random-seed &lt;int&gt;</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--skull-strip-t1w</kbd></dt>
+<dd><p>Possible choices: auto, skip, force</p>
+<p>Perform T1-weighted skull stripping (‘force’ ensures skull stripping, ‘skip’ ignores skull stripping, and ‘auto’ applies brain extraction based on the outcome of a heuristic to check whether the brain is already masked).</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">'force'</span></code></p>
+</dd>
+</dl>
+</section>
+<section id="fmriprep.cli.parser-_build_parser-specific-options-for-handling-fieldmaps">
+<h3>Specific options for handling fieldmaps<a class="headerlink" href="#fmriprep.cli.parser-_build_parser-specific-options-for-handling-fieldmaps" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>--fmap-bspline</kbd></dt>
+<dd><p>Fit a B-Spline field using least-squares (experimental)</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--fmap-no-demean</kbd></dt>
+<dd><p>Do not remove median (within mask) from fieldmap</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">True</span></code></p>
+</dd>
+</dl>
+</section>
+<section id="fmriprep.cli.parser-_build_parser-specific-options-for-syn-distortion-correction">
+<h3>Specific options for SyN distortion correction<a class="headerlink" href="#fmriprep.cli.parser-_build_parser-specific-options-for-syn-distortion-correction" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>--use-syn-sdc</kbd></dt>
+<dd><p>Possible choices: warn, error</p>
+<p>Use fieldmap-less distortion correction based on anatomical image; if unable, error (default) or warn based on optional argument.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--force-syn</kbd></dt>
+<dd><p>Deprecated - use <cite>–force syn-sdc</cite> instead.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+</dl>
+</section>
+<section id="fmriprep.cli.parser-_build_parser-specific-options-for-freesurfer-preprocessing">
+<h3>Specific options for FreeSurfer preprocessing<a class="headerlink" href="#fmriprep.cli.parser-_build_parser-specific-options-for-freesurfer-preprocessing" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>--fs-license-file</kbd></dt>
+<dd><p>Path to FreeSurfer license key file. Get it (for free) by registering at <a class="reference external" href="https://surfer.nmr.mgh.harvard.edu/registration.html">https://surfer.nmr.mgh.harvard.edu/registration.html</a></p>
+</dd>
+<dt><kbd>--fs-subjects-dir</kbd></dt>
+<dd><p>Path to existing FreeSurfer subjects directory to reuse. (default: OUTPUT_DIR/freesurfer)</p>
+</dd>
+<dt><kbd>--submm-recon, --no-submm-recon</kbd></dt>
+<dd><p>Enable or disable sub-millimeter (hi-res) reconstruction.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">True</span></code></p>
+</dd>
+<dt><kbd>--fs-no-reconall</kbd></dt>
+<dd><p>Disable FreeSurfer surface preprocessing.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">True</span></code></p>
+</dd>
+<dt><kbd>--fs-no-resume</kbd></dt>
+<dd><p>EXPERT: Import pre-computed FreeSurfer reconstruction without resuming. The user is responsible for ensuring that all necessary files are present.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+</dl>
+</section>
+<section id="fmriprep.cli.parser-_build_parser-options-for-carbon-usage-tracking">
+<h3>Options for carbon usage tracking<a class="headerlink" href="#fmriprep.cli.parser-_build_parser-options-for-carbon-usage-tracking" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>--track-carbon</kbd></dt>
+<dd><p>Tracks power draws using CodeCarbon package</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--country-code</kbd></dt>
+<dd><p>Country ISO code used by carbon trackers</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">'CAN'</span></code></p>
+</dd>
+</dl>
+</section>
+<section id="fmriprep.cli.parser-_build_parser-other-options">
+<h3>Other options<a class="headerlink" href="#fmriprep.cli.parser-_build_parser-other-options" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>--version</kbd></dt>
+<dd><p>show program’s version number and exit</p>
+</dd>
+<dt><kbd>-v, --verbose</kbd></dt>
+<dd><p>Increases log verbosity for each occurrence, debug level is -vvv</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">0</span></code></p>
+</dd>
+<dt><kbd>-w, --work-dir</kbd></dt>
+<dd><p>Path where intermediate results should be stored</p>
+</dd>
+<dt><kbd>--clean-workdir</kbd></dt>
+<dd><p>Clears working directory of contents. Use of this flag is not recommended when running concurrent processes of fMRIPrep.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--resource-monitor</kbd></dt>
+<dd><p>Enable Nipype’s resource monitoring to keep track of memory and CPU usage</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--config-file</kbd></dt>
+<dd><p>Use pre-generated configuration file. Values in file will be overridden by command-line arguments.</p>
+</dd>
+<dt><kbd>--write-graph</kbd></dt>
+<dd><p>Write workflow graph.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--stop-on-first-crash</kbd></dt>
+<dd><p>Force stopping on first crash, even if a work directory was specified.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--notrack</kbd></dt>
+<dd><p>Opt-out of sending tracking information of this run to the FMRIPREP developers. This information helps to improve FMRIPREP and provides an indicator of real world usage crucial for obtaining funding.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--debug</kbd></dt>
+<dd><p>Possible choices: compcor, fieldmaps, pdb, all</p>
+<p>Debug mode(s) to enable. ‘all’ is alias for all available modes.</p>
+</dd>
+</dl>
+</section>
+</section>
+<section id="the-command-line-interface-of-the-docker-wrapper">
+<h2>The command-line interface of the docker wrapper<a class="headerlink" href="#the-command-line-interface-of-the-docker-wrapper" title="Link to this heading"></a></h2>
+<p><p>The <em>fMRIPrep</em> on Docker wrapper</p>
+<p>This is a lightweight Python wrapper to run <em>fMRIPrep</em>.
+Docker must be installed and running. This can be checked
+running</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">docker</span> <span class="n">info</span>
+</pre></div>
+</div>
+<p>Please acknowledge this work using the citation boilerplate that <em>fMRIPrep</em> includes
+in the visual report generated for every subject processed.
+For a more detailed description of the citation boilerplate and its relevance,
+please check out the
+<a class="reference external" href="https://www.nipreps.org/intro/transparency/#citation-boilerplates">NiPreps documentation</a>.
+Please report any feedback to our <a class="reference external" href="https://github.com/nipreps/fmriprep">GitHub repository</a>.</p>
+</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">usage</span><span class="p">:</span> <span class="n">fmriprep</span><span class="o">-</span><span class="n">docker</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">version</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">i</span> <span class="n">IMG</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">w</span> <span class="n">WORK_DIR</span><span class="p">]</span>
+                       <span class="p">[</span><span class="o">--</span><span class="n">output</span><span class="o">-</span><span class="n">spaces</span> <span class="p">[</span><span class="n">OUTPUT_SPACES</span> <span class="o">...</span><span class="p">]]</span>
+                       <span class="p">[</span><span class="o">--</span><span class="n">fs</span><span class="o">-</span><span class="n">license</span><span class="o">-</span><span class="n">file</span> <span class="n">PATH</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">fs</span><span class="o">-</span><span class="n">subjects</span><span class="o">-</span><span class="nb">dir</span> <span class="n">PATH</span><span class="p">]</span>
+                       <span class="p">[</span><span class="o">--</span><span class="n">config</span><span class="o">-</span><span class="n">file</span> <span class="n">PATH</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">d</span> <span class="n">PATH</span> <span class="p">[</span><span class="n">PATH</span> <span class="o">...</span><span class="p">]]</span>
+                       <span class="p">[</span><span class="o">--</span><span class="n">use</span><span class="o">-</span><span class="n">plugin</span> <span class="n">PATH</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">bids</span><span class="o">-</span><span class="n">database</span><span class="o">-</span><span class="nb">dir</span> <span class="n">PATH</span><span class="p">]</span>
+                       <span class="p">[</span><span class="o">--</span><span class="n">bids</span><span class="o">-</span><span class="nb">filter</span><span class="o">-</span><span class="n">file</span> <span class="n">PATH</span><span class="p">]</span>
+                       <span class="p">[</span><span class="o">--</span><span class="n">patch</span> <span class="n">PACKAGE</span><span class="o">=</span><span class="n">PATH</span> <span class="p">[</span><span class="n">PACKAGE</span><span class="o">=</span><span class="n">PATH</span> <span class="o">...</span><span class="p">]]</span> <span class="p">[</span><span class="o">--</span><span class="n">shell</span><span class="p">]</span>
+                       <span class="p">[</span><span class="o">--</span><span class="n">config</span> <span class="n">PATH</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">e</span> <span class="n">ENV_VAR</span> <span class="n">value</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">u</span> <span class="n">USER</span><span class="p">]</span>
+                       <span class="p">[</span><span class="o">--</span><span class="n">network</span> <span class="n">NETWORK</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">no</span><span class="o">-</span><span class="n">tty</span><span class="p">]</span>
+                       <span class="p">[</span><span class="n">bids_dir</span><span class="p">]</span> <span class="p">[</span><span class="n">output_dir</span><span class="p">]</span> <span class="p">[{</span><span class="n">participant</span><span class="p">}]</span>
+</pre></div>
+</div>
+<section id="fmriprep_docker.__main__-get_parser-positional-arguments">
+<h3>Positional Arguments<a class="headerlink" href="#fmriprep_docker.__main__-get_parser-positional-arguments" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>bids_dir</kbd></dt>
+<dd></dd>
+<dt><kbd>output_dir</kbd></dt>
+<dd></dd>
+<dt><kbd>analysis_level</kbd></dt>
+<dd><p>Possible choices: participant</p>
+</dd>
+</dl>
+</section>
+<section id="fmriprep_docker.__main__-get_parser-named-arguments">
+<h3>Named Arguments<a class="headerlink" href="#fmriprep_docker.__main__-get_parser-named-arguments" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>-h, --help</kbd></dt>
+<dd><p>show this help message and exit</p>
+</dd>
+<dt><kbd>--version</kbd></dt>
+<dd><p>show program’s version number and exit</p>
+</dd>
+<dt><kbd>-i, --image</kbd></dt>
+<dd><p>image name</p>
+</dd>
+</dl>
+</section>
+<section id="fmriprep_docker.__main__-get_parser-wrapper-options">
+<h3>Wrapper options<a class="headerlink" href="#fmriprep_docker.__main__-get_parser-wrapper-options" title="Link to this heading"></a></h3>
+<p>Standard options that require mapping files into the container; see fmriprep usage for complete descriptions</p>
+<dl class="option-list">
+<dt><kbd>-w, --work-dir</kbd></dt>
+<dd></dd>
+<dt><kbd>--output-spaces</kbd></dt>
+<dd></dd>
+<dt><kbd>--fs-license-file</kbd></dt>
+<dd></dd>
+<dt><kbd>--fs-subjects-dir</kbd></dt>
+<dd></dd>
+<dt><kbd>--config-file</kbd></dt>
+<dd></dd>
+<dt><kbd>-d, --derivatives</kbd></dt>
+<dd><p>Search PATH(s) for pre-computed derivatives.</p>
+</dd>
+<dt><kbd>--use-plugin</kbd></dt>
+<dd></dd>
+<dt><kbd>--bids-database-dir</kbd></dt>
+<dd></dd>
+<dt><kbd>--bids-filter-file</kbd></dt>
+<dd></dd>
+</dl>
+</section>
+<section id="fmriprep_docker.__main__-get_parser-developer-options">
+<h3>Developer options<a class="headerlink" href="#fmriprep_docker.__main__-get_parser-developer-options" title="Link to this heading"></a></h3>
+<p>Tools for testing and debugging FMRIPREP</p>
+<dl class="option-list">
+<dt><kbd>--patch</kbd></dt>
+<dd><p>Sequence of PACKAGE=PATH specifications to patch a Python package into the container Python environment.</p>
+</dd>
+<dt><kbd>--shell</kbd></dt>
+<dd><p>Open shell in image instead of running FMRIPREP</p>
+</dd>
+<dt><kbd>--config</kbd></dt>
+<dd><p>Use custom nipype.cfg file</p>
+</dd>
+<dt><kbd>-e, --env</kbd></dt>
+<dd><p>Set custom environment variables within container</p>
+</dd>
+<dt><kbd>-u, --user</kbd></dt>
+<dd><p>Run container as a given user/uid. Additionally, group/gid can beassigned, (i.e., –user &lt;UID&gt;:&lt;GID&gt;)</p>
+</dd>
+<dt><kbd>--network</kbd></dt>
+<dd><p>Run container with a different network driver (“none” to simulate no internet connection)</p>
+</dd>
+<dt><kbd>--no-tty</kbd></dt>
+<dd><p>Run docker without TTY flag -it</p>
+</dd>
+</dl>
+</section>
+</section>
+<section id="limitations-and-reasons-not-to-use-fmriprep">
+<h2>Limitations and reasons not to use <em>fMRIPrep</em><a class="headerlink" href="#limitations-and-reasons-not-to-use-fmriprep" title="Link to this heading"></a></h2>
+<ol class="arabic simple">
+<li><p>Very narrow <abbr title="field-of-view">FoV</abbr> images oftentimes do not contain
+enough information for standard image registration methods to work correctly.
+Also, problems may arise when extracting the brain from these data.
+fMRIPrep supports pre-aligned BOLD series, and accepting pre-computed
+derivatives such as brain masks is a target of future effort.</p></li>
+<li><p><em>fMRIPrep</em> may also underperform for particular populations (e.g., infants) and
+non-human brains, although appropriate templates can be provided to overcome the
+issue.</p></li>
+<li><p>The “EPInorm” approach is currently not supported, although we plan to implement
+this feature (see <a class="reference external" href="https://github.com/nipreps/fmriprep/issues/620">#620</a>).</p></li>
+<li><p>If you really want unlimited flexibility (which is obviously a double-edged sword).</p></li>
+<li><p>If you want students to suffer through implementing each step for didactic purposes,
+or to learn shell-scripting or Python along the way.</p></li>
+<li><p>If you are trying to reproduce some <em>in-house</em> lab pipeline.</p></li>
+</ol>
+<p>(Reasons 4-6 were kindly provided by S. Nastase in his
+<a class="reference external" href="https://pubpeer.com/publications/6B3E024EAEBF2C80085FDF644C2085">open review</a>
+of our <a class="reference external" href="https://doi.org/10.1101/306951">pre-print</a>).</p>
+</section>
+<section id="the-freesurfer-license">
+<span id="fs-license"></span><h2>The FreeSurfer license<a class="headerlink" href="#the-freesurfer-license" title="Link to this heading"></a></h2>
+<p><em>fMRIPRep</em> uses FreeSurfer tools, which require a license to run.</p>
+<p>To obtain a FreeSurfer license, simply register for free at
+<a class="reference external" href="https://surfer.nmr.mgh.harvard.edu/registration.html">https://surfer.nmr.mgh.harvard.edu/registration.html</a>.</p>
+<p>When using manually-prepared environments or singularity, FreeSurfer will search
+for a license key file first using the <code class="docutils literal notranslate"><span class="pre">$FS_LICENSE</span></code> environment variable and then
+in the default path to the license key file (<code class="docutils literal notranslate"><span class="pre">$FREESURFER_HOME/license.txt</span></code>).
+If using the <code class="docutils literal notranslate"><span class="pre">--cleanenv</span></code> flag and <code class="docutils literal notranslate"><span class="pre">$FS_LICENSE</span></code> is set, use <code class="docutils literal notranslate"><span class="pre">--fs-license-file</span> <span class="pre">$FS_LICENSE</span></code>
+to pass the license file location to <em>fMRIPRep</em>.</p>
+<p>It is possible to run the docker container pointing the image to a local path
+where a valid license file is stored.
+For example, if the license is stored in the <code class="docutils literal notranslate"><span class="pre">$HOME/.licenses/freesurfer/license.txt</span></code>
+file on the host system:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ docker run -ti --rm \
+    -v $HOME/fullds005:/data:ro \
+    -v $HOME/dockerout:/out \
+    -v $HOME/.licenses/freesurfer/license.txt:/opt/freesurfer/license.txt \
+    nipreps/fmriprep:latest \
+    /data /out/out \
+    participant \
+    --ignore fieldmaps
+</pre></div>
+</div>
+<p>Using FreeSurfer can also be enabled when using <code class="docutils literal notranslate"><span class="pre">fmriprep-docker</span></code>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ fmriprep-docker --fs-license-file $HOME/.licenses/freesurfer/license.txt \
+    /path/to/data/dir /path/to/output/dir participant
+RUNNING: docker run --rm -it -v /path/to/data/dir:/data:ro \
+    -v /home/user/.licenses/freesurfer/license.txt:/opt/freesurfer/license.txt \
+    -v /path/to_output/dir:/out nipreps/fmriprep:1.0.0 \
+    /data /out participant
+...
+</pre></div>
+</div>
+<p>If the environment variable <code class="docutils literal notranslate"><span class="pre">$FS_LICENSE</span></code> is set in the host system, then
+it will automatically used by <code class="docutils literal notranslate"><span class="pre">fmriprep-docker</span></code>. For instance, the following
+would be equivalent to the latest example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ export FS_LICENSE=$HOME/.licenses/freesurfer/license.txt
+$ fmriprep-docker /path/to/data/dir /path/to/output/dir participant
+RUNNING: docker run --rm -it -v /path/to/data/dir:/data:ro \
+    -v /home/user/.licenses/freesurfer/license.txt:/opt/freesurfer/license.txt \
+    -v /path/to_output/dir:/out nipreps/fmriprep:1.0.0 \
+    /data /out participant
+...
+</pre></div>
+</div>
+</section>
+<section id="reusing-precomputed-derivatives">
+<span id="prev-derivs"></span><h2>Reusing precomputed derivatives<a class="headerlink" href="#reusing-precomputed-derivatives" title="Link to this heading"></a></h2>
+<section id="reusing-a-previous-partial-execution-of-fmriprep">
+<h3>Reusing a previous, partial execution of <em>fMRIPrep</em><a class="headerlink" href="#reusing-a-previous-partial-execution-of-fmriprep" title="Link to this heading"></a></h3>
+<p><em>fMRIPrep</em> will pick up where it left off a previous execution, so long as the work directory
+points to the same location, and this directory has not been changed/manipulated.
+Some workflow nodes will rerun unconditionally, so there will always be some amount of
+reprocessing.</p>
+</section>
+<section id="using-a-previous-run-of-freesurfer">
+<h3>Using a previous run of <em>FreeSurfer</em><a class="headerlink" href="#using-a-previous-run-of-freesurfer" title="Link to this heading"></a></h3>
+<p><em>fMRIPrep</em> will automatically reuse previous runs of <em>FreeSurfer</em> if a subject directory
+named <code class="docutils literal notranslate"><span class="pre">freesurfer/</span></code> is found in the output directory (<code class="docutils literal notranslate"><span class="pre">&lt;output_dir&gt;/freesurfer</span></code>).
+Reconstructions for each participant will be checked for completeness, and any missing
+components will be recomputed.
+You can use the <code class="docutils literal notranslate"><span class="pre">--fs-subjects-dir</span></code> flag to specify a different location to save
+FreeSurfer outputs.
+If precomputed results are found, they will be reused.</p>
+</section>
+<section id="bids-derivatives-reuse">
+<h3>BIDS Derivatives reuse<a class="headerlink" href="#bids-derivatives-reuse" title="Link to this heading"></a></h3>
+<p>As of version 23.2.0, <em>fMRIPrep</em> can reuse precomputed derivatives that follow BIDS Derivatives
+conventions. To provide derivatives to <em>fMRIPrep</em>, use the <code class="docutils literal notranslate"><span class="pre">--derivatives</span></code> (<code class="docutils literal notranslate"><span class="pre">-d</span></code>) flag one
+or more times.</p>
+<p>This mechanism replaces the earlier, more limited <code class="docutils literal notranslate"><span class="pre">--anat-derivatives</span></code> flag.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Derivatives reuse is considered <em>experimental</em>.</p>
+</div>
+<p>This feature has several intended use-cases:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>To enable fMRIPrep to be run in a “minimal” mode, where only the most essential
+derivatives are generated. This can be useful for large datasets where disk space
+is a concern, or for users who only need a subset of the derivatives. Further
+derivatives may be generated later, or by a different tool.</p></li>
+<li><p>To enable fMRIPrep to be integrated into a larger processing pipeline, where
+other tools may generate derivatives that fMRIPrep can use in place of its own
+steps.</p></li>
+<li><p>To enable users to substitute their own custom derivatives for those generated
+by fMRIPrep. For example, a user may wish to use a different brain extraction
+tool, or a different registration tool, and then use fMRIPrep to generate the
+remaining derivatives.</p></li>
+<li><p>To enable complicated meta-workflows, where fMRIPrep is run multiple times
+with different options, and the results are combined. For example, the
+<a class="reference external" href="https://openneuro.org/datasets/ds000031/">My Connectome</a> dataset contains
+107 sessions for a single-subject. Processing of all sessions simultaneously
+would be impractical, but the anatomical processing can be done once, and
+then the functional processing can be done separately for each session.</p></li>
+</ul>
+</div></blockquote>
+<p>See also the <code class="docutils literal notranslate"><span class="pre">--level</span></code> flag, which can be used to control which derivatives are
+generated.</p>
+</section>
+</section>
+<section id="troubleshooting">
+<h2>Troubleshooting<a class="headerlink" href="#troubleshooting" title="Link to this heading"></a></h2>
+<p>Logs and crashfiles are output into the
+<code class="docutils literal notranslate"><span class="pre">&lt;output</span> <span class="pre">dir&gt;/fmriprep/sub-&lt;participant_label&gt;/log</span></code> directory.
+Information on how to customize and understand these files can be found on the
+<a class="reference external" href="https://miykael.github.io/nipype_tutorial/notebooks/basic_debug.html">Debugging Nipype Workflows</a>
+page.</p>
+<p><strong>Support and communication</strong>.
+The documentation of this project is found here: <a class="reference external" href="https://fmriprep.org/en/latest/">https://fmriprep.org/en/latest/</a>.</p>
+<p>All bugs, concerns and enhancement requests for this software can be submitted here:
+<a class="reference external" href="https://github.com/nipreps/fmriprep/issues">https://github.com/nipreps/fmriprep/issues</a>.</p>
+<p>If you have a problem or would like to ask a question about how to use <em>fMRIPRep</em>,
+please submit a question to <a class="reference external" href="https://neurostars.org/tag/fmriprep">NeuroStars.org</a> with an <code class="docutils literal notranslate"><span class="pre">fmriprep</span></code> tag.
+NeuroStars.org is a platform similar to StackOverflow but dedicated to neuroinformatics.</p>
+<p>Previous questions about <em>fMRIPRep</em> are available here:
+<a class="reference external" href="https://neurostars.org/tag/fmriprep/">https://neurostars.org/tag/fmriprep/</a></p>
+<p>To participate in the <em>fMRIPRep</em> development-related discussions please use the
+following mailing list: <a class="reference external" href="https://mail.python.org/mailman/listinfo/neuroimaging">https://mail.python.org/mailman/listinfo/neuroimaging</a>
+Please add <em>[fmriprep]</em> to the subject line when posting on the mailing list.</p>
+</section>
+<section id="about-the-nipreps-framework-licensing">
+<h2>About the <em>NiPreps</em> framework licensing<a class="headerlink" href="#about-the-nipreps-framework-licensing" title="Link to this heading"></a></h2>
+<p>Please check <a class="reference external" href="https://www.nipreps.org/community/licensing/">https://www.nipreps.org/community/licensing/</a> for detailed
+information on the criteria we use to license <em>fMRIPrep</em> and other
+projects of the framework.</p>
+</section>
+<section id="license-information">
+<h2>License information<a class="headerlink" href="#license-information" title="Link to this heading"></a></h2>
+<p>Copyright (c) 2023, the <em>NiPreps</em> Developers.</p>
+<p>As of the 21.0.x pre-release and release series, <em>fMRIPrep</em> is
+licensed under the Apache License, Version 2.0 (the “License”);
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+<a class="reference external" href="http://www.apache.org/licenses/LICENSE-2.0">http://www.apache.org/licenses/LICENSE-2.0</a></p>
+<p>Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an “AS IS” BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.</p>
+<p>Copyright (c) 2015-2023, the <em>fMRIPrep</em> developers and the CRN.
+All rights reserved.</p>
+<p><em>fMRIPrep</em> 20.2 series and earlier are
+licensed under the BSD 3-clause license.
+You may obtain a copy of the License at
+<a class="reference external" href="https://opensource.org/licenses/BSD-3-Clause">https://opensource.org/licenses/BSD-3-Clause</a></p>
+<p>All trademarks referenced herein are property of their respective holders.</p>
+<section id="the-fmriprep-wrapper-for-docker">
+<h3>The <code class="docutils literal notranslate"><span class="pre">fmriprep-wrapper</span></code> for Docker<a class="headerlink" href="#the-fmriprep-wrapper-for-docker" title="Link to this heading"></a></h3>
+<p>Copyright (c) 2020-2023, the <em>NiPreps</em> Developers.
+Copyright (c) 2015-2020, the <em>fMRIPrep</em> developers and the CRN.
+All rights reserved.</p>
+<p><em>fMRIPrep-wrapper</em> is
+licensed under the BSD 3-clause license.
+You may obtain a copy of the License at
+<a class="reference external" href="https://opensource.org/licenses/BSD-3-Clause">https://opensource.org/licenses/BSD-3-Clause</a></p>
+<p>All trademarks referenced herein are property of their respective holders.</p>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="installation.html" class="btn btn-neutral float-left" title="Installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="workflows.html" class="btn btn-neutral float-right" title="Processing pipeline details" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2016-, The fMRIPrep developers.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

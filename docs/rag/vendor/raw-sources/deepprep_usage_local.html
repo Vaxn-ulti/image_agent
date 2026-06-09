@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Usage Notes (Local) &mdash; DeepPrep  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=19f00094" />
+      <link rel="stylesheet" type="text/css" href="_static/custom.css?v=7a5c7406" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="_static/jquery.js?v=5d32c60e"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script src="_static/documentation_options.js?v=7f41d439"></script>
+        <script src="_static/doctools.js?v=9a2dae69"></script>
+        <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+        
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Usage Notes (Cluster)" href="usage_cluster.html" />
+    <link rel="prev" title="Installation" href="installation.html" /> 
+
+<!-- RTD Extra Head -->
+
+
+
+<script type="application/json" id="READTHEDOCS_DATA">{"ad_free": false, "api_host": "https://readthedocs.org", "builder": "sphinx", "canonical_url": null, "docroot": "/docs/source/", "features": {"docsearch_disabled": false}, "global_analytics_code": "UA-17997319-1", "language": "en", "page": "usage_local", "programming_language": "words", "project": "deepprep", "proxied_api_host": "/_", "source_suffix": ".rst", "subprojects": {}, "theme": "sphinx_rtd_theme", "user_analytics_code": "", "version": "24.1.0"}</script>
+
+<!--
+Using this variable directly instead of using `JSON.parse` is deprecated.
+The READTHEDOCS_DATA global variable will be removed in the future.
+-->
+<script type="text/javascript">
+READTHEDOCS_DATA = JSON.parse(document.getElementById('READTHEDOCS_DATA').innerHTML);
+</script>
+
+
+
+<!-- end RTD <extrahead> -->
+<script async type="text/javascript" src="/_/static/javascript/readthedocs-addons.js"></script><meta name="readthedocs-project-slug" content="deepprep" /><meta name="readthedocs-version-slug" content="24.1.0" /><meta name="readthedocs-resolver-filename" content="/usage_local.html" /><meta name="readthedocs-http-status" content="200" /></head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html">
+            
+              <img src="_static/logo_title4.svg" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Usage Notes (Local)</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#the-bids-format">The BIDS Format</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#command-line-arguments">Command-Line Arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#the-freesurfer-license">The FreeSurfer License</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#sample-docker-command">Sample Docker Command</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#quick-start">Quick Start</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="usage_cluster.html">Usage Notes (Cluster)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="processing.html">Processing pipeline details</a></li>
+<li class="toctree-l1"><a class="reference internal" href="outputs.html">Outputs of DeepPrep</a></li>
+<li class="toctree-l1"><a class="reference internal" href="faq.html">FAQ - Frequently Asked Questions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">Developers - API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="changes.html">What’s new</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">DeepPrep</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Usage Notes (Local)</li>
+      <li class="wy-breadcrumbs-aside">
+              <a href="https://github.com/pBFSLab/DeepPrep/blob/24.1.0/docs/source/usage_local.rst" class="fa fa-github"> Edit on GitHub</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="usage-notes-local">
+<h1>Usage Notes (Local)<a class="headerlink" href="#usage-notes-local" title="Link to this heading"></a></h1>
+<section id="the-bids-format">
+<h2>The BIDS Format<a class="headerlink" href="#the-bids-format" title="Link to this heading"></a></h2>
+<p>DeepPrep is able to end-to-end preprocess anatomical and functional MRI data for different data size ranging
+from a single participant to a HUGE dataset. It is also flexible to run the anatomical part or functional part
+that requires a complete Recon folder to be specified. The DeepPrep workflow takes the directory of the dataset
+that is to be processed as the input, which is required to be in the valid BIDS format.
+It is highly recommended that you validate your dataset with this free, online <a class="reference external" href="http://bids-standard.github.io/bids-validator/">BIDS Validator</a>.</p>
+<p>For more information about BIDS and BIDS-Apps, please check the <a class="reference external" href="https://www.nipreps.org/apps/framework/">NiPreps portal</a>.</p>
+</section>
+<section id="command-line-arguments">
+<h2>Command-Line Arguments<a class="headerlink" href="#command-line-arguments" title="Link to this heading"></a></h2>
+<p>DeepPrep: Deep learning empowered preprocessing workflow 24.1.0:</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>usage: deepprep-docker [bids_dir] [output_dir] [{participant}] [--bold_task_type &#39;[task1 task2 task3 ...]&#39;]
+                       [--fs_license_file PATH] [--participant_label &#39;[001 002 003 ...]&#39;]
+                       [--subjects_dir PATH] [--skip_bids_validation]
+                       [--anat_only] [--bold_only] [--bold_sdc] [--bold_confounds]
+                       [--bold_surface_spaces &#39;[None fsnative fsaverage fsaverage6 ...]&#39;]
+                       [--bold_volume_space {None MNI152NLin6Asym MNI152NLin2009cAsym}] [--bold_volume_res {02 03...}]
+                       [--device { {auto 0 1 2...} cpu}]
+                       [--cpus 10] [--memory 20]
+                       [--ignore_error] [--resume]
+</pre></div>
+</div>
+</section>
+<section id="the-freesurfer-license">
+<h2>The FreeSurfer License<a class="headerlink" href="#the-freesurfer-license" title="Link to this heading"></a></h2>
+<p>DeepPrep uses FreeSurfer tools and thus requires a valid license.</p>
+<blockquote>
+<div><p>To obtain a FreeSurfer license, simply register for free at
+<a class="reference external" href="https://surfer.nmr.mgh.harvard.edu/registration.html">https://surfer.nmr.mgh.harvard.edu/registration.html</a>.</p>
+</div></blockquote>
+<p>Please make sure that a valid license file is passed into DeepPrep.
+For example, if the license is stored in the <code class="docutils literal notranslate"><span class="pre">$HOME/freesurfer/license.txt</span></code> file on
+the host system, the <code class="docutils literal notranslate"><span class="pre">&lt;fs_license_file&gt;</span></code> in command <code class="docutils literal notranslate"><span class="pre">-v</span> <span class="pre">&lt;fs_license_file&gt;:/fs_license.txt</span></code> should be replaced with the valid path:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ -v $HOME/freesurfer/license.txt:/fs_license.txt
+</pre></div>
+</div>
+</section>
+<section id="sample-docker-command">
+<h2>Sample Docker Command<a class="headerlink" href="#sample-docker-command" title="Link to this heading"></a></h2>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span>$ docker run -it --rm --gpus all \
+<span class="linenos"> 2</span>             -v &lt;bids_dir&gt;:/input \
+<span class="linenos"> 3</span>             -v &lt;output_dir&gt;:/output \
+<span class="linenos"> 4</span>             -v &lt;fs_license_file&gt;:/fs_license.txt \
+<span class="linenos"> 5</span>             pbfslab/deepprep:24.1.0 \
+<span class="linenos"> 6</span>             /input \
+<span class="linenos"> 7</span>             /output \
+<span class="linenos"> 8</span>             participant \
+<span class="linenos"> 9</span>             --bold_task_type rest \
+<span class="linenos">10</span>             --fs_license_file /fs_license.txt
+</pre></div>
+</div>
+<dl class="simple">
+<dt><strong>Let’s dig into the mandatory commands</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&lt;bids_dir&gt;</span></code> - refers to the directory of the input dataset, which should be in <a class="reference external" href="https://bids-specification.readthedocs.io/en/stable/index.html">BIDS format</a>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&lt;output_dir&gt;</span></code> - refers to the directory for the outputs of DeepPrep.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&lt;fs_license_file&gt;</span></code> - the directory of a valid FreeSurfer License.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">deepprep:24.1.0</span></code> - the latest version of the Docker image. You can specify the version by <code class="docutils literal notranslate"><span class="pre">deepprep:&lt;version&gt;</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">participant</span></code> - refers to the analysis level.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--bold_task_type</span></code> - the task label of BOLD images (i.e. <code class="docutils literal notranslate"><span class="pre">rest</span></code>, <code class="docutils literal notranslate"><span class="pre">motor</span></code>).</p></li>
+</ul>
+</dd>
+<dt><strong>Dig further (optional commands)</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--participant_label</span></code> - the subject ID you want to process, i.e. <code class="docutils literal notranslate"><span class="pre">'sub-001</span> <span class="pre">sub-002'</span></code>. Otherwise, all the subjects in the <code class="docutils literal notranslate"><span class="pre">&lt;bids_dir&gt;</span></code> will be processed by default.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--subjects_dir</span></code> - the output directory of <em>Recon</em> files, default is <code class="docutils literal notranslate"><span class="pre">&lt;output_dir&gt;/Recon</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--skip_bids_validation</span></code> - with this flag, the BIDS format validation of the input dataset will be skipped.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--anat_only</span></code> - with this flag, only the <em>anatomical</em> images will be processed.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--bold_only</span></code> - with this flag, only the <em>functional</em> images will be processed, where <em>Recon</em> files are pre-requested.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--bold_sdc</span></code> - applies susceptibility distortion correction (SDC), default is <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--bold_confounds</span></code> - generates confounds derived from BOLD fMRI, such as head motion variables and global signals; the default is <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--bold_surface_spaces</span></code> - specifies surface template spaces, i.e. <code class="docutils literal notranslate"><span class="pre">'fsnative</span> <span class="pre">fsaverage</span> <span class="pre">fsaverage[3-6]'</span></code>, default is <code class="docutils literal notranslate"><span class="pre">'fsaverage6'</span></code>. (<em>Note:</em> the space names must be quoted using single quotation marks)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--bold_volume_space</span></code> - specifies an available volumetric space from <a class="reference external" href="https://www.templateflow.org/browse/">TemplateFlow</a>, default is <code class="docutils literal notranslate"><span class="pre">MNI152NLin6Asym</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--bold_volume_res</span></code> - specifies the spatial resolution of the corresponding template space from <a class="reference external" href="https://www.templateflow.org/browse/">TemplateFlow</a>, default is <code class="docutils literal notranslate"><span class="pre">02</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--device</span></code> - specifies the device. The default is <code class="docutils literal notranslate"><span class="pre">auto</span></code>, which automatically selects a GPU device; <code class="docutils literal notranslate"><span class="pre">0</span></code> specifies the first GPU device; <code class="docutils literal notranslate"><span class="pre">cpu</span></code> refers to CPU only.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--cpus</span></code> - refers to the maximum CPUs for usage, which should be integer values &gt; 0.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--memory</span></code> - refers to the maximum memory resources for usage, which should be integer values &gt; 0.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--ignore_error</span></code> - ignores the errors that occurred during processing.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--resume</span></code> - allows the DeepPrep pipeline to start from the last exit point.</p></li>
+</ul>
+</dd>
+</dl>
+<section id="quick-start">
+<h3>Quick Start<a class="headerlink" href="#quick-start" title="Link to this heading"></a></h3>
+<p>Get started with a <code class="docutils literal notranslate"><span class="pre">test_sample</span></code>, <a class="reference external" href="https://drive.google.com/drive/folders/13txuhCNW_nHG4NX3cl7HehlBJ1ZVB5CV?usp=drive_link">download here</a>.</p>
+<p>The BIDS formatted sample contains one subject with one anatomical image and two functional images.</p>
+<ol class="arabic simple">
+<li><p>Run with GPU (<strong>recommended</strong>)</p></li>
+</ol>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span>$ docker run -it --rm --gpus all \
+<span class="linenos"> 2</span>             -v ~/test_sample:/input \
+<span class="linenos"> 3</span>             -v ~/deepprep_output:/output \
+<span class="linenos"> 4</span>             -v ~/license.txt:/fs_license.txt \
+<span class="linenos"> 5</span>             pbfslab/deepprep:24.1.0 \
+<span class="linenos"> 6</span>             /input \
+<span class="linenos"> 7</span>             /output \
+<span class="linenos"> 8</span>             participant \
+<span class="linenos"> 9</span>             --bold_task_type 6cat \
+<span class="linenos">10</span>             --fs_license_file /fs_license.txt
+</pre></div>
+</div>
+<dl class="simple">
+<dt><strong>Docker arguments</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">-it</span></code> - (optional) starts the container in an interactive mode.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--rm</span></code> - (optional) the container will be removed upon exit.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--gpus</span> <span class="pre">all</span></code> - (optional) assign all the available GPUs on the local host to the container. <em>This flag is highly recommended</em>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">-v</span></code> - mounts your local directories to the directories inside the container. The input directories should be in <em>absolute path</em> to avoid any mistakes.</p></li>
+</ul>
+</dd>
+</dl>
+<ol class="arabic simple" start="2">
+<li><p>Run with CPU only</p></li>
+</ol>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span>$ docker run -it --rm \
+<span class="linenos"> 2</span>             -v ~/test_sample:/input \
+<span class="linenos"> 3</span>             -v ~/deepprep_output:/output \
+<span class="linenos"> 4</span>             -v ~/license.txt:/fs_license.txt \
+<span class="linenos"> 5</span>             pbfslab/deepprep:24.1.0 \
+<span class="linenos"> 6</span>             /input \
+<span class="linenos"> 7</span>             /output \
+<span class="linenos"> 8</span>             participant \
+<span class="linenos"> 9</span>             --bold_task_type 6cat \
+<span class="linenos">10</span>             --fs_license_file /fs_license.txt \
+<span class="linenos">11</span>             --device cpu
+</pre></div>
+</div>
+<dl class="simple">
+<dt><strong>DeepPrep arguments</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--device</span> <span class="pre">cpu</span></code> - refers to CPU only.</p></li>
+</ul>
+</dd>
+</dl>
+<div class="congratulation docutils container">
+<p><strong>Congratulations! You are all set!</strong></p>
+</div>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="installation.html" class="btn btn-neutral float-left" title="Installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="usage_cluster.html" class="btn btn-neutral float-right" title="Usage Notes (Cluster)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, deep.
+      <span class="commit">Revision <code>3e58509a</code>.
+      </span></p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  
+
+  
+<script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

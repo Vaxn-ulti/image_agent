@@ -1,6 +1,24 @@
 # DWI/QSI GPU Strategy
 
-## Current State
+## Production DWI Lightweight Toolbox Policy
+
+- `dwi_fast_gpu_dti` is the production DWI workflow.
+- It is based on `/home/yyf/project/MCI_project/scripts/run_fast_gpu_dti_features.sh`, but the backend should own the steps rather than shelling to an opaque external script forever.
+- Use host FSL from `/home/yyf/project/MCI_project/tools/fsl` for GPU `eddy_cuda`, `flirt`, `applywarp`, and related FSL utilities.
+- Use `pennlinc/qsiprep:latest` only as an MRtrix toolbox image for `dwi2mask`, `mrconvert`, `dwi2tensor`, `tensor2metric`, `mrstats`, and `mrcalc`.
+- Do not run full QSIPrep or full QSIRecon for production `dwi_fast_gpu_dti`.
+- Require DWI NIfTI, `.bval`, `.bvec`, and JSON sidecar fields `PhaseEncodingDirection` and `TotalReadoutTime`.
+- The runner should write FA/MD/AD/RD native DWI maps, MNI152 maps, QC/provenance, and atlas regional TSV tables.
+- The runtime target is `2100` seconds / 35 minutes. If a real run exceeds this, record the exact step and log evidence before changing the workflow.
+
+Validation for production DWI must verify:
+
+- host FSL command availability under `/home/yyf/project/MCI_project/tools/fsl`;
+- GPU visibility with `nvidia-smi`;
+- MRtrix command availability inside the QSIPrep toolbox image;
+- `full_qsiprep_run: false` and `full_qsirecon_run: false` in details/provenance where this helps prevent future confusion.
+
+## Legacy QSIPrep/QSI Current State
 
 - Historical DWI QSIPrep tasks `46` and `47` used `eddy_cpu`, ran too long, were stopped, and are treated as `failed`.
 - Backend generates `eddy_cuda_config.json` for `dwi_qsiprep`, mounts it as `/eddy_cuda_config.json`, and passes `--eddy-config /eddy_cuda_config.json`.
@@ -9,7 +27,6 @@
 - QSIPrep source (`qsiprep/workflows/dwi/fsl.py`) forces CUDA eddy to 1 thread. Single-threaded CUDA eddy is expected, not a failure.
 - The `num_threads >= 4` floor in the config is a safety backstop for non-CUDA eddy or future QSIPrep versions that remove the override.
 - `pennlinc/qsiprep:latest` exposes `eddy_cuda11.0` at `/app/.pixi/envs/qsiprep/bin/eddy_cuda11.0`. Detection uses `eddy_cuda*` glob to accept versioned binaries (`eddy_cuda11.0`, `eddy_cuda10.2`, etc.), not only an exact `eddy_cuda` name.
-- Real DWI tasks 61 and 62 are running with GPU/CUDA eddy.
 - Backend creates symlinks `eddy_cuda` → `eddy_cuda11.0` and `eddy_cuda10.2` → `eddy_cuda11.0` inside `/app/.pixi/envs/qsiprep/bin` via a bash wrapper script.
 - QSIRecon documentation has no confirmed CUDA-only CLI switch. The current policy is to expose GPUs with Docker `--gpus all` and record whether the container can see them.
 - `dwi_qsi_full` enforces the same GPU safety checks as standalone `dwi_qsiprep` and `dwi_qsirecon` (eddy_cuda* probe for QSIPrep, GPU visibility for QSIRecon).
@@ -42,12 +59,27 @@ docker run --rm --gpus all -v {qsiprep_output}:/data:ro -v {output}:/output -v {
 
 `--recon-spec` selects the reconstruction pipeline. Validation must confirm a valid recon-spec value is provided and fail fast otherwise.
 
+Current backend profile policy:
+
+- `IMAGE_AGENT_QSIRECON_PROFILE=dki`
+  Uses `--recon-spec dipy_dki --skip-odf-reports --notrack`
+  This is the historical default and should remain the fallback for scalar-only reconstruction.
+
+- `IMAGE_AGENT_QSIRECON_PROFILE=tractography`
+  Uses `--recon-spec mrtrix_multishell_msmt_noACT`
+  This is the first tractography-capable profile because it avoids T1-based ACT requirements and better matches the current project dependency chain.
+
+Every `dwi_qsirecon` and `dwi_qsi_full` task should also save a legacy command snapshot to:
+
+- `derivatives/<task_id>/knowledge_base/qsirecon/qsirecon_legacy_dipy_dki_command.json`
+
 Validation must record:
 
 - Completed QSIPrep task id and readable QSIPrep output path.
 - QSIRecon image availability.
 - Whether a GPU is visible inside the container, for example via `nvidia-smi` when present.
 - The exact command and mounts, including the `--recon-spec` value.
+- The active QSIRecon profile and whether it is tractography-capable.
 
 Do not add undocumented QSIRecon CUDA CLI flags. If a future image or documentation provides one, update this reference and `docs/workflows/dwi-qsi-workflow.md` in the same change.
 
@@ -72,7 +104,7 @@ Task 69 used the required `--nthreads 8 --omp-nthreads 4 --mem 24000` command an
 
 ## 2026-05-14 DWI Stall Lesson
 
-Do not start multiple project-owned QSIPrep real runs concurrently on this server. Tasks 61 and 62 stalled while six QSIPrep containers were active, swap was full, and task 61 had a non-fatal SynthSeg OOM crash. Future development must preserve the DWI workflow lock and reduced default resources unless a capacity check proves the host can safely run more.
+Do not start multiple project-owned legacy QSIPrep real runs concurrently on this server. Tasks 61 and 62 stalled while six QSIPrep containers were active, swap was full, and task 61 had a non-fatal SynthSeg OOM crash. Future legacy QSIPrep development must preserve the QSIPrep workflow lock and reduced default resources unless a capacity check proves the host can safely run more. Production `dwi_fast_gpu_dti` should stay on the lightweight host-FSL/MRtrix-toolbox path unless code explicitly documents a resource conflict reason.
 
 Implementation guardrails:
 

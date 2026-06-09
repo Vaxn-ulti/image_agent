@@ -9,6 +9,7 @@ from pathlib import Path
 from app.core.config import PROJECTS_ROOT
 from app.db.database import connect, now_iso
 from app.imaging.detect import UNSUPPORTED_SEQUENCE_MESSAGE, detect_series, sequence_support
+from app.workflows.eligibility import build_workflow_eligibility
 
 
 def is_dicom_file(path: Path) -> bool:
@@ -166,7 +167,13 @@ def extract_archive(archive: Path, extracted: Path) -> None:
 def convert_dicom_dir(dicom_root: Path, output_dir: Path) -> dict:
     output_dir.mkdir(parents=True, exist_ok=True)
     cmd = ["dcm2niix", "-z", "y", "-ba", "y", "-o", str(output_dir), str(dicom_root)]
-    proc = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=600)
+    try:
+        proc = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=600)
+    except FileNotFoundError:
+        return {"returncode": 127, "command": cmd, "log_tail": "dcm2niix executable not found"}
+    except subprocess.TimeoutExpired as exc:
+        output = exc.stdout or ""
+        return {"returncode": 124, "command": cmd, "log_tail": (output + "\ndcm2niix conversion timed out")[-4000:]}
     return {"returncode": proc.returncode, "command": cmd, "log_tail": proc.stdout[-4000:]}
 
 
@@ -224,7 +231,7 @@ def process_upload_session(project_id: int, upload_session_id: int, archive_path
             row = normalize_nifti(project_id, upload_session_id, nifti)
             if row:
                 md = json.loads(row["metadata_json"])
-                series_rows.append({
+                series_payload = {
                     "series_id": row["id"],
                     "source_format": "DICOM" if str(nifti).startswith(str(conversion_out)) else "NIFTI",
                     "normalized_format": "NIFTI",
@@ -233,7 +240,16 @@ def process_upload_session(project_id: int, upload_session_id: int, archive_path
                     "sequence_label": row["sequence_label"] or md.get("sequence_label", "unknown"),
                     "supported_for_processing": bool(row["supported_for_processing"]),
                     "unsupported_reason": row["unsupported_reason"] or "",
-                })
+                }
+                series_payload["workflow_eligibility"] = build_workflow_eligibility(
+                    {
+                        "metadata": md,
+                        "file_storage_path": str(PROJECTS_ROOT / str(project_id) / row["bids_path"]),
+                        "file_type": "NIFTI_BIDS",
+                        **dict(row),
+                    }
+                )
+                series_rows.append(series_payload)
         by_modality = Counter(s["modality"] for s in series_rows)
         by_sequence = Counter(s["sequence_label"] for s in series_rows)
         unsupported = []

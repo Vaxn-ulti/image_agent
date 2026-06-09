@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en">
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Installing MRIQC &mdash; mriqc 26.0.0.dev93+gc030ac191 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/sphinx_highlight.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="author" title="About these documents" href="about.html" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Running MRIQC" href="usage.html" />
+    <link rel="prev" title="Introduction" href="about.html" /> 
+<script async type="text/javascript" src="/_/static/javascript/readthedocs-addons.js"></script><meta name="readthedocs-project-slug" content="mriqc" /><meta name="readthedocs-version-slug" content="latest" /><meta name="readthedocs-resolver-filename" content="/install.html" /><meta name="readthedocs-http-status" content="200" /></head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            mriqc
+          </a>
+              <div class="version">
+                26.0.0.dev93
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="about.html">Introduction</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Installing <em>MRIQC</em></a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#bare-metal-installation">“Bare-metal” installation</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#execution-system-dependencies">Execution system dependencies</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Running <em>MRIQC</em></a></li>
+<li class="toctree-l1"><a class="reference internal" href="measures.html">Image Quality Metrics (IQMs)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reports.html">Visual Reports</a></li>
+<li class="toctree-l1"><a class="reference internal" href="workflows.html">Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="dsa.html">Data Sharing Agreement</a></li>
+<li class="toctree-l1"><a class="reference internal" href="license.html">About the <em>NiPreps</em> framework licensing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="changes.html">What’s new</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">mriqc</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Installing <em>MRIQC</em></li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/install.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="installing-mriqc">
+<h1>Installing <em>MRIQC</em><a class="headerlink" href="#installing-mriqc" title="Permalink to this heading"></a></h1>
+<p><em>MRIQC</em> is a <em>NiPreps</em> (<a class="reference external" href="https://nipreps.org">www.nipreps.org</a>)
+<em>BIDS App</em> <a class="reference internal" href="usage.html#bidsapps" id="id1"><span>[BIDSApps]</span></a>.
+As such, <em>MRIQC</em> can be installed manually (<em>Bare-metal installation</em>,
+see below) or containerized.
+For containerized execution with <em>Docker</em> or <em>Singularity</em>, please
+follow the documentation on the <em>NiPreps</em> site
+(<a class="reference external" href="https://www.nipreps.org/apps/framework/">introduction</a>).</p>
+<section id="bare-metal-installation">
+<h2>“Bare-metal” installation<a class="headerlink" href="#bare-metal-installation" title="Permalink to this heading"></a></h2>
+<p>If, for some reason, you really need a custom installation,
+<em>MRIQC</em> can be installed as follows.
+First, please make sure you have the execution system dependencies
+installed (see below).
+Second, the latest development version of MRIQC can be installed from
+github using <code class="docutils literal notranslate"><span class="pre">pip</span></code> on a Python 3 environment:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">python</span> <span class="o">-</span><span class="n">m</span> <span class="n">pip</span> <span class="n">install</span> <span class="o">-</span><span class="n">U</span> <span class="n">mriqc</span>
+</pre></div>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>As of MRIQC 0.9.4, Python 2 is no longer supported.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>MRIQC uses matplotlib to create graphics. By default, matplotlib is configured to
+plot through an interactive Tcl/tk interface, which requires a functional display to be available.
+In <em>head-less</em> settings (for example, when running under tmux),
+you may see an error:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">_tkinter</span><span class="o">.</span><span class="n">TclError</span><span class="p">:</span> <span class="n">couldn</span><span class="s1">&#39;t connect to display &quot;localhost:10.0&quot;</span>
+</pre></div>
+</div>
+<p>There are two pathways to fix this issue.
+One is setting up a virtual display with a tool like XVfb.
+Alternatively, you can configure your matplotlib distribution to perform on
+head-less mode by default.
+That is achieved by uncommenting the <code class="docutils literal notranslate"><span class="pre">backend</span> <span class="pre">:</span> <span class="pre">Agg</span></code> line in the matplotlib’s
+configuration file.
+The location of the configuration file can be retrieved with Python:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">matplotlib</span><span class="o">.</span><span class="n">matplotlib_fname</span><span class="p">())</span>
+</pre></div>
+</div>
+<p>Alternatively, you can issue the following shell command-line to edit this setting:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ sed -i &#39;s/\(backend *: \).*$/\1Agg/g&#39; $( python -c &quot;import matplotlib; print(matplotlib.matplotlib_fname())&quot; )
+</pre></div>
+</div>
+</div>
+<section id="execution-system-dependencies">
+<h3>Execution system dependencies<a class="headerlink" href="#execution-system-dependencies" title="Permalink to this heading"></a></h3>
+<p>If you are using a a <a class="reference external" href="http://neuro.debian.net/">Neurodebian</a> Linux distribution,
+installation should be as easy as:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sudo</span> <span class="n">apt</span><span class="o">-</span><span class="n">get</span> <span class="n">install</span> <span class="n">afni</span> <span class="n">ants</span>
+<span class="n">sudo</span> <span class="n">ln</span> <span class="o">-</span><span class="n">sf</span> <span class="o">/</span><span class="n">usr</span><span class="o">/</span><span class="n">lib</span><span class="o">/</span><span class="n">ants</span><span class="o">/</span><span class="n">N4BiasFieldCorrection</span> <span class="o">/</span><span class="n">usr</span><span class="o">/</span><span class="n">local</span><span class="o">/</span><span class="nb">bin</span><span class="o">/</span>
+</pre></div>
+</div>
+<p>After installation, make sure that all the necessary binaries are added to the <code class="docutils literal notranslate"><span class="pre">$PATH</span></code> environment
+variable, for the user that will run <code class="docutils literal notranslate"><span class="pre">mriqc</span></code>.</p>
+<p>Otherwise, you can follow each software installation guide:
+<a class="reference external" href="https://afni.nimh.nih.gov/afni/doc/howto/0">AFNI</a>,
+and <a class="reference external" href="http://stnava.github.io/ANTs/">ANTs</a>.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Please note that <em>MRIQC</em> 22.0.0 and later requires Freesurfer’s <em>SynthStrip</em> tool.</p>
+</div>
+<p>Please also install <em>FreeSurfer</em> (above 7.2) using <a class="reference external" href="https://surfer.nmr.mgh.harvard.edu/fswiki/DownloadAndInstall">their guidelines</a>.
+If your <em>FreeSurfer</em> version is older than 7.2, then you can get <em>MRIQC</em>’s requirements with:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>wget https://github.com/freesurfer/freesurfer/blob/dev/mri_synthstrip/synthstrip.1.pt -P ${FREESURFER_HOME}/models/
+</pre></div>
+</div>
+<div class="admonition danger">
+<p class="admonition-title">Danger</p>
+<p>You will get the following error if you do not install <em>SynthStrip</em>’s requirement:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>The &#39;model&#39; trait of a _SynthStripInputSpec instance must be a pathlike object or string representing an existing file, but a value of &#39;&lt;undefined&gt;&#39; &lt;class &#39;str&#39;&gt; was specified.`
+</pre></div>
+</div>
+<p>If the <em>SynthStrip</em> requirement was downloaded, please make sure your environment has defined the variable <code class="docutils literal notranslate"><span class="pre">$FREESURFER_HOME</span></code> and that it is pointing at the right directory:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>echo $FREESURFER_HOME
+</pre></div>
+</div>
+<p>If the <code class="docutils literal notranslate"><span class="pre">$FREESURFER_HOME</span></code> environment variable is defined, check whether the model file is available at the expected path:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ stat $FREESURFER_HOME/models/synthstrip.1.pt
+  File: /opt/freesurfer/models/synthstrip.1.pt
+  Size: 30851709    Blocks: 60264      IO Block: 4096   regular file
+Device: fd00h/64768d  Inode: 12583379    Links: 1
+Access: (0644/-rw-r--r--)  Uid: (    0/    root)   Gid: (    0/    root)
+Access: 2024-04-09 11:13:29.091893354 +0200
+Modify: 2023-01-20 09:39:54.284056264 +0100
+Change: 2023-01-20 09:39:54.284056264 +0100
+ Birth: 2023-01-20 09:39:54.224056213 +0100
+</pre></div>
+</div>
+<p>If <em>SynthStrip</em>’s model file is not present, the output will look like:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ stat $FREESURFER_HOME/models/synthstrip.1.pt
+stat: cannot statx &#39;/opt/freesurfer/models/synthstrip.1.pt&#39;: No such file or directory
+</pre></div>
+</div>
+</div>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="about.html" class="btn btn-neutral float-left" title="Introduction" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="usage.html" class="btn btn-neutral float-right" title="Running MRIQC" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Copyright 2016-2024, The NiPreps Developers.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

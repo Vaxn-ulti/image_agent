@@ -1,0 +1,5990 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://fsl.fmrib.ox.ac.uk/fsl/docs/diffusion/eddy/users_guide/index.html">
+      
+      
+        <link rel="prev" href="../index.html">
+      
+      
+        <link rel="next" href="../FAQ/index.html">
+      
+      
+      <link rel="icon" href="../../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.23">
+    
+    
+      
+        <title>Users guide - FSL - FMRIB Software Library</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.84d31ad4.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../css/custom.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="grey" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#users-guide-for-eddy" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../../index.html" title="FSL - FMRIB Software Library" class="md-header__button md-logo" aria-label="FSL - FMRIB Software Library" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21.33 12.91c.09 1.55-.62 3.04-1.89 3.95l.77 1.49c.23.45.26.98.06 1.45-.19.47-.58.84-1.06 1l-.79.25a1.687 1.687 0 0 1-1.86-.55L14.44 18c-.89-.15-1.73-.53-2.44-1.1-.5.15-1 .23-1.5.23-.88 0-1.76-.27-2.5-.79-.53.16-1.07.23-1.62.22-.79.01-1.57-.15-2.3-.45a4.1 4.1 0 0 1-2.43-3.61c-.08-.72.04-1.45.35-2.11-.29-.75-.32-1.57-.07-2.33C2.3 7.11 3 6.32 3.87 5.82c.58-1.69 2.21-2.82 4-2.7 1.6-1.5 4.05-1.66 5.83-.37.42-.11.86-.17 1.3-.17 1.36-.03 2.65.57 3.5 1.64 2.04.53 3.5 2.35 3.58 4.47.05 1.11-.25 2.2-.86 3.13.07.36.11.72.11 1.09m-5-1.41c.57.07 1.02.5 1.02 1.07a1 1 0 0 1-1 1h-.63c-.32.9-.88 1.69-1.62 2.29.25.09.51.14.77.21 5.13-.07 4.53-3.2 4.53-3.25a2.59 2.59 0 0 0-2.69-2.49 1 1 0 0 1-1-1 1 1 0 0 1 1-1c1.23.03 2.41.49 3.33 1.3.05-.29.08-.59.08-.89-.06-1.24-.62-2.32-2.87-2.53-1.25-2.96-4.4-1.32-4.4-.4-.03.23.21.72.25.75a1 1 0 0 1 1 1c0 .55-.45 1-1 1-.53-.02-1.03-.22-1.43-.56-.48.31-1.03.5-1.6.56-.57.05-1.04-.35-1.07-.9a.97.97 0 0 1 .88-1.1c.16-.02.94-.14.94-.77 0-.66.25-1.29.68-1.79-.92-.25-1.91.08-2.91 1.29C6.75 5 6 5.25 5.45 7.2 4.5 7.67 4 8 3.78 9c1.08-.22 2.19-.13 3.22.25.5.19.78.75.59 1.29-.19.52-.77.78-1.29.59-.73-.32-1.55-.34-2.3-.06-.32.27-.32.83-.32 1.27 0 .74.37 1.43 1 1.83.53.27 1.12.41 1.71.4q-.225-.39-.39-.81a1.038 1.038 0 0 1 1.96-.68c.4 1.14 1.42 1.92 2.62 2.05 1.37-.07 2.59-.88 3.19-2.13.23-1.38 1.34-1.5 2.56-1.5m2 7.47-.62-1.3-.71.16 1 1.25zm-4.65-8.61a1 1 0 0 0-.91-1.03c-.71-.04-1.4.2-1.93.67-.57.58-.87 1.38-.84 2.19a1 1 0 0 0 1 1c.57 0 1-.45 1-1 0-.27.07-.54.23-.76.12-.1.27-.15.43-.15.55.03 1.02-.38 1.02-.92"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            FSL - FMRIB Software Library
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Users guide
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="grey" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14zM20.65 7l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15zm-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29zM12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="grey" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3zm3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95zm-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../../index.html" title="FSL - FMRIB Software Library" class="md-nav__button md-logo" aria-label="FSL - FMRIB Software Library" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21.33 12.91c.09 1.55-.62 3.04-1.89 3.95l.77 1.49c.23.45.26.98.06 1.45-.19.47-.58.84-1.06 1l-.79.25a1.687 1.687 0 0 1-1.86-.55L14.44 18c-.89-.15-1.73-.53-2.44-1.1-.5.15-1 .23-1.5.23-.88 0-1.76-.27-2.5-.79-.53.16-1.07.23-1.62.22-.79.01-1.57-.15-2.3-.45a4.1 4.1 0 0 1-2.43-3.61c-.08-.72.04-1.45.35-2.11-.29-.75-.32-1.57-.07-2.33C2.3 7.11 3 6.32 3.87 5.82c.58-1.69 2.21-2.82 4-2.7 1.6-1.5 4.05-1.66 5.83-.37.42-.11.86-.17 1.3-.17 1.36-.03 2.65.57 3.5 1.64 2.04.53 3.5 2.35 3.58 4.47.05 1.11-.25 2.2-.86 3.13.07.36.11.72.11 1.09m-5-1.41c.57.07 1.02.5 1.02 1.07a1 1 0 0 1-1 1h-.63c-.32.9-.88 1.69-1.62 2.29.25.09.51.14.77.21 5.13-.07 4.53-3.2 4.53-3.25a2.59 2.59 0 0 0-2.69-2.49 1 1 0 0 1-1-1 1 1 0 0 1 1-1c1.23.03 2.41.49 3.33 1.3.05-.29.08-.59.08-.89-.06-1.24-.62-2.32-2.87-2.53-1.25-2.96-4.4-1.32-4.4-.4-.03.23.21.72.25.75a1 1 0 0 1 1 1c0 .55-.45 1-1 1-.53-.02-1.03-.22-1.43-.56-.48.31-1.03.5-1.6.56-.57.05-1.04-.35-1.07-.9a.97.97 0 0 1 .88-1.1c.16-.02.94-.14.94-.77 0-.66.25-1.29.68-1.79-.92-.25-1.91.08-2.91 1.29C6.75 5 6 5.25 5.45 7.2 4.5 7.67 4 8 3.78 9c1.08-.22 2.19-.13 3.22.25.5.19.78.75.59 1.29-.19.52-.77.78-1.29.59-.73-.32-1.55-.34-2.3-.06-.32.27-.32.83-.32 1.27 0 .74.37 1.43 1 1.83.53.27 1.12.41 1.71.4q-.225-.39-.39-.81a1.038 1.038 0 0 1 1.96-.68c.4 1.14 1.42 1.92 2.62 2.05 1.37-.07 2.59-.88 3.19-2.13.23-1.38 1.34-1.5 2.56-1.5m2 7.47-.62-1.3-.71.16 1 1.25zm-4.65-8.61a1 1 0 0 0-.91-1.03c-.71-.04-1.4.2-1.93.67-.57.58-.87 1.38-.84 2.19a1 1 0 0 0 1 1c.57 0 1-.45 1-1 0-.27.07-.54.23-.76.12-.1.27-.15.43-.15.55.03 1.02-.38 1.02-.92"/></svg>
+
+    </a>
+  </label>
+  
+    <ul class="md-nav__list" data-md-scrollfix>
+      <li><a href="../../../index.html">
+          <img src="../../../logo.jpg">
+      </a></li>
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../index.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    FSL - FMRIB Software Library
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../install/index.html" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    Installation
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Installation
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../install/linux.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Linux
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../install/macos.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    macOS
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../install/windows.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Windows
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../install/verify_install.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Verify your installation
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../install/container.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Use FSL with Docker/Singularity
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../install/conda.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Use FSL with conda
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../install/fromsource.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Installing from source
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../install/configuration.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    System configuration
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../install/troubleshooting.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Troubleshooting
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../task_fmri/index.html" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    Task fMRI
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Task fMRI
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../task_fmri/fabber.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    FABBER
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../task_fmri/feat/index.html" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    FEAT
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3_2" id="__nav_3_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_2">
+            <span class="md-nav__icon md-icon"></span>
+            FEAT
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../task_fmri/feat/user_guide.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    User guide
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../task_fmri/feat/feat_output.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Output directory format
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../task_fmri/feat/featquery.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Featquery
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../task_fmri/feat/perfusion.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Perfusion FMRI analysis
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../task_fmri/feat/overview_of_glm_analysis.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Appendix A: Brief overview of GLM analysis
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../task_fmri/feat/design_matrix_rules.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Appendix B: Design matrix rules
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../task_fmri/feat/group_statistics_theory.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Appendix C: Group statistics
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../task_fmri/feat/faq.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    FAQ
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../task_fmri/flobs.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    FLOBS
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../task_fmri/pnm.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Physiological noise modelling (PNM)
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../task_fmri/ppi.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Psychophysiological interaction (PPI)
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../task_fmri/pnm_fix.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Combining PNM and FIX in FEAT
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../resting_state/index.html" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    Resting state fMRI
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Resting state fMRI
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../resting_state/melodic.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    MELODIC
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../resting_state/dualregression.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Dual Regression
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../resting_state/fslnets.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    FSLNets
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../resting_state/fix.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    FIX
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../resting_state/fix_matlab.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    FIX (old R/MATLAB version)
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../structural/index.html" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    Structural MRI
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Structural MRI
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../structural/bet.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    BET
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../structural/bianca.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    BIANCA
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../structural/fast.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    FAST
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../structural/first.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    FIRST
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../structural/fsl_anat.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    fsl_anat
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../structural/fslvbm.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    FSL-VBM
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../structural/lesion_filling.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    lesion_filling
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../structural/mist.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    MIST
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_9" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../structural/siena/index.html" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    SIENA
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5_9" id="__nav_5_9_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_9">
+            <span class="md-nav__icon md-icon"></span>
+            SIENA
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../structural/siena/user_guide.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    User Guide
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../structural/siena/faq.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    FAQ
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../structural/truenet.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    TRUENET
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../index.html" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    Diffusion MRI
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            Diffusion MRI
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_1" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../topup/index.html" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    TOPUP
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6_1" id="__nav_6_1_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_1">
+            <span class="md-nav__icon md-icon"></span>
+            TOPUP
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_1_1" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../topup/users_guide/index.html" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    Users guide
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6_1_1" id="__nav_6_1_1_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_6_1_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_1_1">
+            <span class="md-nav__icon md-icon"></span>
+            Users guide
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topup/users_guide/config_files.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Configuration files
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../topup/FAQ/index.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Frequently asked questions
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_2" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../index.html" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    EDDY
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6_2" id="__nav_6_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6_2">
+            <span class="md-nav__icon md-icon"></span>
+            EDDY
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Users guide
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="index.html" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    Users guide
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-eddy-executables" class="md-nav__link">
+    <span class="md-ellipsis">
+      The eddy executables
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#running-eddy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Running eddy
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Running eddy">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      The data
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#running-topup-on-the-b0-volumes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Running topup on the b=0 volumes
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#next-running-eddy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Next, Running eddy
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#eddy-with-outlier-replacement" class="md-nav__link">
+    <span class="md-ellipsis">
+      eddy with outlier replacement
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcting-slice-to-volume-intra-volume-movement-with-eddy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Correcting slice-to-volume (intra-volume) movement with eddy
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcting-susceptibility-by-movement-interactions-with-eddy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Correcting susceptibility-by-movement interactions with eddy
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#understanding-eddy-output" class="md-nav__link">
+    <span class="md-ellipsis">
+      Understanding eddy output
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Understanding eddy output">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#files-that-are-always-written" class="md-nav__link">
+    <span class="md-ellipsis">
+      Files that are always written
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#file-that-is-only-written-if-the-repol-flag-was-set" class="md-nav__link">
+    <span class="md-ellipsis">
+      File that is only written if the --repol flag was set.
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#file-that-is-only-written-if-the-mporder-option-has-been-set-to-a-value-greater-than-zero" class="md-nav__link">
+    <span class="md-ellipsis">
+      File that is only written if the --mporder option has been set to a value greater than zero.
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#file-that-is-only-written-if-the-estimate_move_by_susceptibility-was-set" class="md-nav__link">
+    <span class="md-ellipsis">
+      File that is only written if the --estimate_move_by_susceptibility was set.
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#other-files-only-written-if-the-corresponding-flags-are-set" class="md-nav__link">
+    <span class="md-ellipsis">
+      Other files only written if the corresponding flags are set.
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#categorised-list-of-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Categorised list of parameters
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Categorised list of parameters">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#parameters-that-specify-input-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters that specify input files
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parameter-specifying-names-of-output-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameter specifying names of output-files
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parameters-specifying-how-eddy-should-be-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters specifying how eddy should be run
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parameters-pertaining-to-outlier-replacement" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters pertaining to outlier replacement
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parameters-pertaining-to-intra-volume-slice-to-vol-movement-correction" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters pertaining to intra-volume (slice-to-vol) movement correction
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parameters-pertaining-to-susceptibility-by-movement-correction" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters pertaining to susceptibility-by-movement correction
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#miscellaneous-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Miscellaneous parameters
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#commonly-used-parameters-explained" class="md-nav__link">
+    <span class="md-ellipsis">
+      Commonly used parameters explained
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Commonly used parameters explained">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#parameters-specifying-input-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters specifying input files
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parameter-specifying-names-of-output-files_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameter specifying names of output-files
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parameters-specifying-how-eddy-should-be-run_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters specifying how eddy should be run
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parameters-pertaining-to-outlier-replacement_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters pertaining to outlier replacement
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parameters-pertaining-to-intra-volume-slice-to-vol-movement-correction_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters pertaining to intra-volume (slice-to-vol) movement correction
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parameters-pertaining-to-susceptibility-by-movement-correction_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters pertaining to susceptibility-by-movement correction
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#miscellaneous-parameters_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Miscellaneous parameters
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FAQ/index.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Frequently asked questions
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../eddyqc.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    EDDY QC
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dtifit.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    DTIFIT
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tbss.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    TBSS
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../bedpostx.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    BedpostX
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../probtrackx.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    ProbtrackX
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../xtract.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    XTRACT
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../streamlines.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    fsl_streamlines
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../autoptx.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    AutoPTX
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../utils.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Utilities
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../faq.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    FAQ
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../physiological/index.html" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    Physiological MRI
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            Physiological MRI
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../physiological/basil.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    BASIL
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../physiological/verbena.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    VERBENA
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../physiological/baycest.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    BayCEST
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../registration/index.html" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    Registration and preprocessing
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8" id="__nav_8_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            Registration and preprocessing
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../registration/fugue.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    FUGUE
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../registration/flirt/index.html" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    FLIRT
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8_2" id="__nav_8_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_8_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8_2">
+            <span class="md-nav__icon md-icon"></span>
+            FLIRT
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../registration/flirt/user_guide.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    User Guide
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../registration/flirt/bbr.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    BBR
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../registration/flirt/faq.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    FAQ
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../registration/flirt/step_by_step.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    StepByStep
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../registration/flirt/schedule.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Schedule
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../registration/fnirt/index.html" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    FNIRT
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8_3" id="__nav_8_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_8_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8_3">
+            <span class="md-nav__icon md-icon"></span>
+            FNIRT
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../registration/fnirt/user_guide.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    User Guide
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../registration/mmorf.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    MMORF
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../registration/mcflirt.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    MCFLIRT
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../registration/epi_reg.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    epi_reg
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../registration/motion_outliers.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Motion outliers
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../registration/msm.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    MSM
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8_9" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../registration/newmsm/index.html" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    newMSM
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8_9" id="__nav_8_9_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_8_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8_9">
+            <span class="md-nav__icon md-icon"></span>
+            newMSM
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../registration/newmsm/install.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Installation
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../registration/newmsm/guide.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    User Guide
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../registration/newmsm/tutorials.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Tutorials
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../registration/susan.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    SUSAN
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../statistics/index.html" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    Statistics
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_9" id="__nav_9_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            Statistics
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../statistics/glm.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Common GLM design patterns
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../statistics/randomise.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Randomise
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../statistics/palm/index.html" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    PALM
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_9_3" id="__nav_9_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_9_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9_3">
+            <span class="md-nav__icon md-icon"></span>
+            PALM
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../statistics/palm/user_guide.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    User Guide
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../statistics/palm/exchangeability_blocks.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Exchangeability Blocks
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../statistics/palm/joint_inference.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Joint Inference
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../statistics/palm/masks_and_voxelwise_regressors.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Masks and Voxelwise regressors
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../statistics/palm/faster_inference.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Faster Inference
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../statistics/palm/view_results.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    View Results
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../statistics/palm/examples.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Examples
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../statistics/palm/faq.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    FAQ
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../statistics/cluster.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Cluster
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../statistics/fdr.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    FDR
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../statistics/mm.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    mm
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../statistics/swe.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    SWE
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../utilities/index.html" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    Other tools
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_10" id="__nav_10_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10">
+            <span class="md-nav__icon md-icon"></span>
+            Other tools
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../utilities/flica.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    FLICA
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../utilities/fsl_mrs.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    FSL-MRS
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../utilities/fsl_sub.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    fsl_sub
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../utilities/possum.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    POSSUM
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../utilities/dataset_clitools.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Command-line tools for FSL data sets
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../utilities/fsleyes.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    FSLeyes
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../utilities/fslutils.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    FSL utilities
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../utilities/fsl_python_libraries.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    FSL Python libraries
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_11" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../other/index.html" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    Other topics
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_11" id="__nav_11_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_11">
+            <span class="md-nav__icon md-icon"></span>
+            Other topics
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../other/orientation.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Notes on image orientation
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../other/datasets.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Standard templates and atlases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../other/atlas_xml.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    FSL XML atlas description file format
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../other/fsl_blas.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    FSL and BLAS
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../other/other_software.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Related Software
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_12" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../development/index.html" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    FSL development
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_12" id="__nav_12_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_12_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_12">
+            <span class="md-nav__icon md-icon"></span>
+            FSL development
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_12_1" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../development/history/index.html" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    FSL release history
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_12_1" id="__nav_12_1_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_12_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_12_1">
+            <span class="md-nav__icon md-icon"></span>
+            FSL release history
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/history/changelog-6.0.7.22.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    6.0.7.22
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/history/changelog-6.0.7.21.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    6.0.7.21
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/history/changelog-6.0.7.20.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    6.0.7.20
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/history/changelog-6.0.7.19.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    6.0.7.19
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/history/changelog-6.0.7.18.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    6.0.7.18
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/history/changelog-6.0.7.17.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    6.0.7.17
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/history/changelog-6.0.7.16.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    6.0.7.16
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/history/changelog-6.0.7.15.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    6.0.7.15
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/history/changelog-6.0.7.14.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    6.0.7.14
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/history/changelog-6.0.7.13.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    6.0.7.13
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/history/changelog-6.0.7.12.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    6.0.7.12
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/history/changelog-6.0.7.11.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    6.0.7.11
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/history/changelog-6.0.7.10.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    6.0.7.10
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/history/changelog-6.0.7.9.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    6.0.7.9
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/history/changelog-6.0.7.8.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    6.0.7.8
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/history/changelog-6.0.7.6.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    6.0.7.6
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/history/changelog-6.0.7.5.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    6.0.7.5
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/history/changelog-6.0.7.4.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    6.0.7.4
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/history/changelog-6.0.7.3.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    6.0.7.3
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/history/changelog-6.0.7.2.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    6.0.7.2
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/history/changelog-6.0.7.1.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    6.0.7.1
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/history/changelog-6.0.7.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    6.0.7
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/history/changelog-6.0.6.5.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    6.0.6.5
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/history/changelog-6.0.6.4.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    6.0.6.4
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/history/changelog-6.0.6.3.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    6.0.6.3
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/history/changelog-6.0.6.1.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    6.0.6.1
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/history/changelog-6.0.6.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    6.0.6
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/history/changelog-6.0.5.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    6.0.5
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/history/changelog-6.0.4.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    6.0.4
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/history/changelog-6.0.3.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    6.0.3
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/history/changelog-6.0.2.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    6.0.2
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/local.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Local development
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_12_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../development/management/index.html" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    Management
+    
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_12_3" id="__nav_12_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_12_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_12_3">
+            <span class="md-nav__icon md-icon"></span>
+            Management
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/management/fsl_releases.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    FSL releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/management/project_releases.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    FSL project releases
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/management/build_system.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    The FSL build system
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/management/conda_recipes.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    FSL conda recipes
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/management/ci_infrastructure.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    CI infrastructure
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/contributors.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Contributors
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../support.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Support
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../license.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    License
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-eddy-executables" class="md-nav__link">
+    <span class="md-ellipsis">
+      The eddy executables
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#running-eddy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Running eddy
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Running eddy">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      The data
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#running-topup-on-the-b0-volumes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Running topup on the b=0 volumes
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#next-running-eddy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Next, Running eddy
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#eddy-with-outlier-replacement" class="md-nav__link">
+    <span class="md-ellipsis">
+      eddy with outlier replacement
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcting-slice-to-volume-intra-volume-movement-with-eddy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Correcting slice-to-volume (intra-volume) movement with eddy
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcting-susceptibility-by-movement-interactions-with-eddy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Correcting susceptibility-by-movement interactions with eddy
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#understanding-eddy-output" class="md-nav__link">
+    <span class="md-ellipsis">
+      Understanding eddy output
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Understanding eddy output">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#files-that-are-always-written" class="md-nav__link">
+    <span class="md-ellipsis">
+      Files that are always written
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#file-that-is-only-written-if-the-repol-flag-was-set" class="md-nav__link">
+    <span class="md-ellipsis">
+      File that is only written if the --repol flag was set.
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#file-that-is-only-written-if-the-mporder-option-has-been-set-to-a-value-greater-than-zero" class="md-nav__link">
+    <span class="md-ellipsis">
+      File that is only written if the --mporder option has been set to a value greater than zero.
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#file-that-is-only-written-if-the-estimate_move_by_susceptibility-was-set" class="md-nav__link">
+    <span class="md-ellipsis">
+      File that is only written if the --estimate_move_by_susceptibility was set.
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#other-files-only-written-if-the-corresponding-flags-are-set" class="md-nav__link">
+    <span class="md-ellipsis">
+      Other files only written if the corresponding flags are set.
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#categorised-list-of-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Categorised list of parameters
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Categorised list of parameters">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#parameters-that-specify-input-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters that specify input files
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parameter-specifying-names-of-output-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameter specifying names of output-files
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parameters-specifying-how-eddy-should-be-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters specifying how eddy should be run
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parameters-pertaining-to-outlier-replacement" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters pertaining to outlier replacement
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parameters-pertaining-to-intra-volume-slice-to-vol-movement-correction" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters pertaining to intra-volume (slice-to-vol) movement correction
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parameters-pertaining-to-susceptibility-by-movement-correction" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters pertaining to susceptibility-by-movement correction
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#miscellaneous-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Miscellaneous parameters
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#commonly-used-parameters-explained" class="md-nav__link">
+    <span class="md-ellipsis">
+      Commonly used parameters explained
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Commonly used parameters explained">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#parameters-specifying-input-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters specifying input files
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parameter-specifying-names-of-output-files_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameter specifying names of output-files
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parameters-specifying-how-eddy-should-be-run_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters specifying how eddy should be run
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parameters-pertaining-to-outlier-replacement_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters pertaining to outlier replacement
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parameters-pertaining-to-intra-volume-slice-to-vol-movement-correction_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters pertaining to intra-volume (slice-to-vol) movement correction
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parameters-pertaining-to-susceptibility-by-movement-correction_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters pertaining to susceptibility-by-movement correction
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#miscellaneous-parameters_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Miscellaneous parameters
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="users-guide-for-eddy">User's guide for eddy</h1>
+<div class="admonition note">
+<p class="admonition-title">Documentation in progress</p>
+<p>We have migrated the FSL documentation from the old Wiki format to markdown. These pages are part of that migration. I think that is is pretty much done now, and much better than the old documentation. But if you prefer to use the old documentation meanwhile it is still available <a href="https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/eddy">here</a>.</p>
+</div>
+<h2 id="the-eddy-executables">The <code>eddy</code> executables</h2>
+<p><code>eddy</code> is a very computationally intense application, so in order to speed things up it has been parallelised. This has been done in two ways, resulting in two different executables</p>
+<ul>
+<li><a id="eddy_cpu" href="#eddy_cpu"></a><code>eddy_cpu</code>: This has been parallelised using the C++ threads library, and allows <code>eddy</code> to use more than one CPU core when running. The maximum number of cores used is determined by the <code>--nthr=n</code> parameter, where <code>n</code> is the desired number of cores. If the user requests more threads than there are hardware cores the number will be restricted to the latter.</li>
+<li><code>eddy_cuda</code>: This has been parallelised with CUDA, which allows <code>eddy</code> to use an Nvidia GPU if one is available on the system.</li>
+</ul>
+<p>Both of the executables have exactly the same functionality, though <code>eddy_cpu</code> will be noticeably slower unless a very large number of cores are used.</p>
+<p>In addition to those there is also a Python script called <code>eddy</code>, which will call one of the executables above depending on if it can detect an Nvidia GPU on the system or not.</p>
+<p>In the past there was a need to match the Cuda version of <code>eddy</code> with the version of the Cuda library that was installed on one's machine. That is no longer neccessary. There are still some requirements, but it is very unlikely that you would not fulfill those. See the <a href="../FAQ/index.html#what-are-the-gpu-requirements">FAQ</a> section if your are interested in the details.</p>
+<h2 id="running-eddy">Running <code>eddy</code></h2>
+<p>Over the years <code>eddy</code> has grown in capabilities and complexity, which means that an <code>eddy</code> command line can now look quite intimidating. Here we will introdce you to your first "plain vanilla" <code>eddy</code> command line. The example includes running <a href="../../topup/index.html"><code>topup</code></a> prior to <code>eddy</code>, as this would be the most typical use case.</p>
+<h3 id="the-data">The data</h3>
+<p>The data for this example consists of one set of volumes acquired with phase-encoding A&gt;&gt;P consisting of 5 b=0 volumes and 59 diffusion weighted volumes</p>
+<table>
+  <tr>
+    <th style="word-break:break-word; text-align:center">`data.nii.gz`</th>
+  </tr>
+  <tr>
+    <th><img src="A2P_five_volumes.jpg" alt="Example of b0 and four dwis" height=150></th>
+  </tr>
+  <tr>
+    <td style="word-break:break-word; text-align:center">First b=0 volume and the first four dwis of the A>>P data.</td>
+  </tr>
+</table>
+
+<p>and one single b=0 volume with phase-encoding P&gt;&gt;A.</p>
+<table>
+  <tr>
+    <th style="word-break:break-word; text-align:center">`P2A_b0.nii.gz`</th>
+  </tr>
+  <tr>
+    <th><img src="P2A_b0.jpg" alt="Example of b0 with reversed PE." height=150></th>
+  </tr>
+  <tr>
+    <td style="word-break:break-word; text-align:center">The P>>A data.</td>
+  </tr>
+</table>
+
+<p>Note how the shape of the b=0 scan is different for the two different acquisitions. This is what topup will use in order to calculate the susceptibility induced off-resonance field.</p>
+<h3 id="running-topup-on-the-b0-volumes">Running topup on the b=0 volumes</h3>
+<p>The first thing we do is to run <a href="../../topup/index.html"><code>topup</code></a> to estimate the susceptibility induced off-resonance field. In order to prepare the data for topup we issue the following commands</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>fslroi<span class="w"> </span>data<span class="w"> </span>A2P_b0<span class="w"> </span><span class="m">0</span><span class="w"> </span><span class="m">1</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>fslmerge<span class="w"> </span>-t<span class="w"> </span>A2P_P2A_b0<span class="w"> </span>A2P_b0<span class="w"> </span>P2A_b0
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nb">printf</span><span class="w"> </span><span class="s2">&quot;0 -1 0 0.0646\n0 1 0 0.0646&quot;</span><span class="w"> </span>&gt;<span class="w"> </span>acqparams.txt
+</span></code></pre></div>
+<p>The first two commands will produce a file called <code>A2P_P2A_b0.nii.gz</code> containing the two b=0 volume, and the third command will create a file (named <code>acqparams.txt</code>) that informs topup/eddy of how the data was collected. This file is described <a href="../../topup/users_guide/index.html#-acqp-datain">here</a>, <a href="#-acqpfilename">here</a> and in more detail <a href="../../topup/FAQ/index.html#how-do-i-know-what-to-put-into-my-acqp-datain-text-file">here</a>.</p>
+<p>Now it is time to run topup which we do with the command</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>topup<span class="w"> </span>--imain<span class="o">=</span>A2P_P2A_b0<span class="w"> </span>--datain<span class="o">=</span>acqparams.txt<span class="w"> </span>--config<span class="o">=</span>b02b0.cnf<span class="w"> </span>--out<span class="o">=</span>my_topup_results<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>--iout<span class="o">=</span>my_hifi_b0
+</span></code></pre></div>
+<p>which will give us as our main result two files named <a href="../../topup/users_guide/index.html#-out"><code>my_topup_results_fieldcoef.nii.gz</code></a> and <a href="../../topup/users_guide/index.html#-out"><code>my_topup_results_movpar.txt</code></a>. The first of these contains an estimate of the susceptibility induced off-resonance field (or rather the spline coefficients from which it can be generated). The second contains the rigid body movement parameters between the 3D volumes in the 4D file specified as <a href="../../topup/users_guide/index.html#-imain"><code>--imain</code></a>. In the example above we have also specified the optional parameter <a href="../../topup/users_guide/index.html#-iout"><code>--iout</code></a> that results in the additional output <code>my_hifi_b0.nii.gz</code> containing the input images after correction.</p>
+<h3 id="next-running-eddy">Next, Running <code>eddy</code></h3>
+<p>Before we can run <code>eddy</code> we need to do a couple of more preparations. First of all we need a mask that separates brain from non-brain. This is no different from for example the mask that <a href="../../dtifit.html"><code>dtifit</code></a> needs. Since eddy will work in a non-distorted space we will base the mask on <code>my_hifi_b0.nii.gz</code> (the secondary output from our topup command above). We generate this mask with the commands</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>fslmaths<span class="w"> </span>my_hifi_b0<span class="w"> </span>-Tmean<span class="w"> </span>my_hifi_b0
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>bet<span class="w"> </span>my_hifi_b0<span class="w"> </span>my_hifi_b0_brain<span class="w"> </span>-m
+</span></code></pre></div>
+<p>which results in the file <code>my_hifi_b0_brain_mask.nii.gz</code>. It will be a good idea to check this stage to ensure <a href="../../../structural/bet.html"><code>bet</code></a> has done a good job of extracting the brain.</p>
+<p>The final thing we need to do is to create an index file that tells <code>eddy</code> which line/of the lines in the acqparams.txt file that are relevant for the data passed into eddy. In this case all the volumes in <code>data.nii.gz</code> are acquired A-&gt;P which means that the first line of <code>acqparams.txt</code> describes the acquisition for all the volume. We specify that by passing a text file with as many ones as there are volumes in <code>data.nii.gz</code>. One way of creating such a file would be to type the following commands</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nv">indx</span><span class="o">=</span><span class="s2">&quot;&quot;</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="k">for</span><span class="w"> </span><span class="o">((</span><span class="nv">i</span><span class="o">=</span><span class="m">1</span><span class="p">;</span><span class="w"> </span>i&lt;<span class="o">=</span><span class="m">64</span><span class="p">;</span><span class="w"> </span><span class="nv">i</span><span class="o">+=</span><span class="m">1</span><span class="o">))</span><span class="p">;</span><span class="w"> </span><span class="k">do</span><span class="w"> </span><span class="nv">indx</span><span class="o">=</span><span class="s2">&quot;</span><span class="nv">$indx</span><span class="s2"> 1&quot;</span><span class="p">;</span><span class="w"> </span><span class="k">done</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="nb">echo</span><span class="w"> </span><span class="nv">$indx</span><span class="w"> </span>&gt;<span class="w"> </span>index.txt
+</span></code></pre></div>
+<p>where 64 is the total number of volumes in data.nii.gz and needs to be replaced by the number of volumes in your data.</p>
+<p>We are now in a position to run eddy using the command</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>eddy<span class="w"> </span>--imain<span class="o">=</span>data<span class="w"> </span>--mask<span class="o">=</span>my_hifi_b0_brain_mask<span class="w"> </span>--acqp<span class="o">=</span>acqparams.txt<span class="w"> </span>--index<span class="o">=</span>index.txt<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>--bvecs<span class="o">=</span>bvecs<span class="w"> </span>--bvals<span class="o">=</span>bvals<span class="w"> </span>--topup<span class="o">=</span>my_topup_results<span class="w"> </span>--out<span class="o">=</span>eddy_corrected_data
+</span></code></pre></div>
+<h3 id="eddy-with-outlier-replacement"><code>eddy</code> with outlier replacement</h3>
+<p>When (not if) a subject makes a movement that coincides in time with the diffusion encoding part of the sequence, there will be partial or complete signal dropout. The dropout will affect the whole (the most common case) or parts of a slice. In the presence of out-of-plane rotations these slices will turn into diagonal bands when eddy rotates the volume back. If uncorrected this will affect any measures derived from the data. A more in depth explanation can be found <a href="../index.html#movement-related-signal-drop-out">here</a> and <a href="https://doi.org/10.1016/j.neuroimage.2016.06.058">here</a>.</p>
+<p>All that is needed to add outlier replacement to the example above is to add <a href="#-repol"><code>--repol</code></a> to the command line. If the data was acquired with multi-band (also known as Simultaneous Multi Slice (SMS)) you also need to inform eddy about the multi-bans structure, which you can do with <a href="#-jsonfilename-or-slspecfilename"><code>--json=my_json_file.json</code></a>.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>eddy<span class="w"> </span>--imain<span class="o">=</span>data<span class="w"> </span>--mask<span class="o">=</span>my_hifi_b0_brain_mask<span class="w"> </span>--acqp<span class="o">=</span>acqparams.txt<span class="w"> </span>--index<span class="o">=</span>index.txt<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>--bvecs<span class="o">=</span>bvecs<span class="w"> </span>--bvals<span class="o">=</span>bvals<span class="w"> </span>--topup<span class="o">=</span>my_topup_results<span class="w"> </span>--repol<span class="w"> </span>--json<span class="o">=</span>my_json_file.json<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>--out<span class="o">=</span>eddy_corrected_data
+</span></code></pre></div>
+<p>The exact details of how the outlier replacement is performed can be specified by the user, and in particular if ones data has been acquired with multi-band it can be worth taking a look <a href="#parameters-pertaining-to-outlier-replacement_1">here</a>.</p>
+<h3 id="correcting-slice-to-volume-intra-volume-movement-with-eddy">Correcting slice-to-volume (intra-volume) movement with <code>eddy</code></h3>
+<p>A common assumption for movement correction methods is that the subject remains still during the time is takes to acquire a volume (TR, typically 2-8 seconds for diffusion) and that any movement occurs between volumes. This is of course not true, but as long as the movement is slow relative the TR, it is a surprisingly good approximation.</p>
+<p>However, for some subjects (for example small children) that assumption no longer holds. The result is a "corrupted" volume where the individual slices no longer stacks up to a "valid" volume. The leads to a telltale zig-zag pattern in a coronal or sagittal view when the slices are acquired in an interleaved fashion (that is the typical way to acquire diffusion data). A more in depth explanation can be found <a href="../index.html#intra-volume-subject-movement">here</a> and <a href="https://doi.org/10.1016/j.neuroimage.2017.02.085">here</a>.</p>
+<p>So, let us now pretend that our data set suffers from problems with <em>lots</em> of subject movement, including intra-volume movement. The "lots of subject movement part" means that we might need to make <code>eddy</code> more robust to large initial differences in location. We can do that by running more iterations, and also by smoothing the data for the first iterations (N.B. that this does <strong>not</strong> affect the smoothness of the output). That is done by adding for example <a href="#-niternumber-of-iterations"><code>--niter=8</code></a> and <a href="#-fwhmfwhm-in-mm"><code>--fwhm=10,8,4,2,0,0,0,0</code></a>.<br>
+Then we need to tell <code>eddy</code> to also run slice-to-volume registration, which we do by adding the parameter <a href="#-mpordernumber-of-basis-functions"><code>--mporder=n</code></a>, where <code>n</code> is some integer greater than 0. There is an in-depth description of <code>--mporder</code> <a href="#-mpordernumber-of-basis-functions">here</a>, but as a general rule we recommend setting it to somewhere in the interval <span class="arithmatex">\(N_{sl}/8\)</span> to <span class="arithmatex">\(N_{sl}/2\)</span>, where <span class="arithmatex">\(N_{sl}\)</span> is the number of slices in your data. Our data has 64 slices, so we set <a href="#-mpordernumber-of-basis-functions"><code>--mporder=16</code></a>.<br></p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>eddy<span class="w"> </span>--imain<span class="o">=</span>data<span class="w"> </span>--mask<span class="o">=</span>my_hifi_b0_brain_mask<span class="w"> </span>--acqp<span class="o">=</span>acqparams.txt<span class="w"> </span>--index<span class="o">=</span>index.txt<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>--bvecs<span class="o">=</span>bvecs<span class="w"> </span>--bvals<span class="o">=</span>bvals<span class="w"> </span>--topup<span class="o">=</span>my_topup_results<span class="w"> </span>--niter<span class="o">=</span><span class="m">8</span><span class="w"> </span>--fwhm<span class="o">=</span><span class="m">10</span>,8,4,2,0,0,0,0<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>--repol<span class="w"> </span>--json<span class="o">=</span>my_json_file.json<span class="w"> </span>--out<span class="o">=</span>eddy_corrected_data<span class="w"> </span>--mporder<span class="o">=</span><span class="m">16</span>
+</span></code></pre></div>
+<p>N.B. that for multi-band data we need to supply the multi-band structure also for slice-to-volume registration. But in this case we added it already for the outlier replacement.</p>
+<h3 id="correcting-susceptibility-by-movement-interactions-with-eddy">Correcting susceptibility-by-movement interactions with <code>eddy</code></h3>
+<p>The off-resonance field that is caused by the subject head itself disrupting the main field in the scanner is referred to as the susceptibility induced field. This is the field that we estimate from blip-up-blip-down data using topup, or measure using a dual echo-time gradient echo sequence.</p>
+<p>If/when the subject moves the field will, as a first approximation, move with the subject. To make it concrete, let us say we acquired blip-up-blip-down data and estimated the field with the subject in one location, and that the subject subsequently move 5mm in the z-direction. To a first approximation the new field is identical to the measured field, but translated 5mm in the z-direction.</p>
+<p>However, if the movement includes a rotation around an axis that is non-parallel to the magnetic flux (z-axis) the field will change such that it is no longer sufficient to rotate the measured field to the new position. There is an option in <code>eddy</code> to estimate how the field changes as the subject moves. It uses, as default, a first order Taylor expansion with respect to pitch and roll (rotation around <span class="arithmatex">\(x\)</span> and <span class="arithmatex">\(y\)</span>). More detail can be found <a href="../index.html#susceptibility-by-movement-interaction">here</a> and <a href="https://doi.org/10.1016/j.neuroimage.2017.12.040">here</a>.</p>
+<p>All we need to do in order to add this to our <code>eddy</code> run is to add <a href="#-estimate_move_by_susceptibility"><code>--estimate_move_by_susceptibility</code></a>. Hence, our <code>eddy</code> command line now becomes</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>eddy<span class="w"> </span>--imain<span class="o">=</span>data<span class="w"> </span>--mask<span class="o">=</span>my_hifi_b0_brain_mask<span class="w"> </span>--acqp<span class="o">=</span>acqparams.txt<span class="w"> </span>--index<span class="o">=</span>index.txt<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>--bvecs<span class="o">=</span>bvecs<span class="w"> </span>--bvals<span class="o">=</span>bvals<span class="w"> </span>--topup<span class="o">=</span>my_topup_results<span class="w"> </span>--niter<span class="o">=</span><span class="m">8</span><span class="w"> </span>--fwhm<span class="o">=</span><span class="m">10</span>,8,4,2,0,0,0,0<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>--repol<span class="w"> </span>--json<span class="o">=</span>my_json_file.json<span class="w"> </span>--out<span class="o">=</span>eddy_corrected_data<span class="w"> </span>--mporder<span class="o">=</span><span class="m">16</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>--estimate_move_by_susceptibility
+</span></code></pre></div>
+<p>And that is pretty much as advanced as it ever gets with <code>eddy</code>.</p>
+<h2 id="understanding-eddy-output">Understanding eddy output</h2>
+<p>The --out parameter specifies the basename for all output files of eddy. It is used as the name for all eddy output files, but with different extensions.</p>
+<p>| :warning: Work in progress  |
+|:----------------------------|
+There is currently (April 2024) a re-write in process so that in the future <code>eddy</code> will stop writing multiple text-files, and instead output a single <code>.json</code> file which will subsume all the text-files, and also offer much more detailed information of how eddy was run. If you are using a recent version of <code>eddy</code> you will already have seen <code>.json</code> output files. However, at the present time the format is still in flux. When we have completed the change to a <code>.json</code> file there will still be the option to write the "old style" output described below.</p>
+<p>In the following we assume that user specified <a href="#-outbasename"><code>--out=my_eddy_output</code></a>.</p>
+<h3 id="files-that-are-always-written">Files that are always written</h3>
+<ul>
+<li>
+<p><a id="my_eddy_output_nii_gz" href="#my_eddy_output_nii_gz"></a><code>my_eddy_output.nii.gz</code><br>
+This is the main output and consists of the input data after correction for eddy currents and subject movement, and for susceptibility if <a href="#-topupbasename"><code>--topup</code></a> or <a href="#-fieldfilename"><code>--field</code></a> was specified. It may also have been corrected for signal dropout, intra-volume movement and susceptibility-by-movement interaction depending on if <a href="#-repol"><code>--repol</code></a>, <a href="#-mpordernumber-of-basis-functions"><code>--mporder</code></a> and <a href="#-estimate_move_by_susceptibility"><code>--estimate_move_by_susceptibility</code></a> were set. Chances are this is the only output file you will be interested in (in the context of <code>eddy</code>).</p>
+</li>
+<li>
+<p><a id="my_eddy_output_eddy_parameters" href="#my_eddy_output_eddy_parameters"></a><code>my_eddy_output.eddy_parameters</code><br>
+This is a text file with one row for each volume in <a href="#-imainfilename"><code>--imain</code></a> and one column for each parameter. The first six columns correspond to subject movement starting with three translations followed by three rotations. The remaining columns pertain to the EC-induced fields and the number and interpretation of them will depend of which EC model was specified.</p>
+</li>
+<li>
+<p><a id="my_eddy_output_eddy_rotated_bvecs" href="#my_eddy_output_eddy_rotated_bvecs"></a><code>my_eddy_output.eddy_rotated_bvecs</code><br>
+When a subject moves such that it constitutes a rotation around some axis and this is subsequently reoriented, it will create an inconsistency in the relationship between the data and the "bvecs" (directions of diffusion weighting). This can be remedied by using the <code>my_eddy_output.eddy_rotated_bvecs</code> file for subsequent analysis. For the rotation to work correctly the bvecs need to be "correct" for FSL before being fed into <code>eddy</code>. The easiest way to check that this is the case for your data is to run FDT and display the <code>_V1</code> files in <code>fslview</code> or <a href="../../../utilities/fsleyes.html"><code>FSLeyes</code></a> to make sure that the eigenvectors line up across voxels.</p>
+<ul>
+<li><a id="my_eddy_output_eddy_rotated_bvecs_for_SLR" href="#my_eddy_output_eddy_rotated_bvecs_for_SLR"></a><code>my_eddy_output.eddy_rotated_bvecs_for_SLR</code><br>
+Is generated when <a href="#-resampjaclsr"><code>--resamp=lsr</code></a> is specified. When performing a "least-squares reconstruction" each pair (with the same diffusion gradient) of input images is combined into a single corrected output images. That means that the <a href="#-bvecsfilename"><code>--bvecs</code></a> file should contain only half as many diffusion gradient as the original file. The <code>.eddy_rotated_bvecs_for_SLR</code> is generated by rotating the individual gradients within the pair and taking the geometric average of the two.</li>
+</ul>
+</li>
+<li>
+<p><code>my_eddy_output.eddy_command_txt</code> and <code>my_eddy_output.eddy_values_of_all_input_parameters</code><br>
+These are files that "document" how <code>eddy</code> was run on a given data set (though there is no formal link to the other output files apart from the name).</p>
+<ul>
+<li><code>.eddy_command_txt</code><br>
+Is a copy of the <code>eddy</code> command line.</li>
+<li><code>.eddy_values_of_all_input_parameters</code><br>
+Is a list of the values of all the parameters that was used by <code>eddy</code>. These include also all the parameters that weren't explicitly set on the command line.</li>
+</ul>
+</li>
+<li>
+<p><code>my_eddy_output.eddy_movement_rms</code><br>
+A summary of the "total movement" in each volume is created by calculating the displacement of each voxel and then averaging the squares of those displacements across all intracerebral voxels (as determined by --mask) and finally taking the square root of that. The file has two columns where the first contains the RMS movement relative the first volume and the second column the RMS relative the previous volume.</p>
+</li>
+<li>
+<p><code>my_eddy_output.eddy_restricted_movement_rms</code><br>
+There is an inherent ambiguity between any EC component that has a non-zero mean across the FOV and subject movement (translation) in the PE direction. They will affect the data in identical (or close to identical if a susceptibility field is specified) ways. That means that both these parameters are estimated by eddy with large uncertainty. This doesn't matter for the correction of the images, it makes no difference if we estimate a large constant EC components and small movement or if we estimate a small EC component and large movement. The corrected images will be (close to) identical. But it matters if one wants to know how much the subject moved. We therefore supplies this file that estimates the movement RMS as above, but which disregards translation in the PE direction.</p>
+</li>
+<li>
+<p><code>my_eddy_output.eddy_post_eddy_shell_alignment_parameters</code><br>
+This is a text file with the rigid body movement parameters between the different shells as estimated by a mutual information based registration (see <a href="#-dont_peas"><code>--dont_peas</code></a> for details). These parameters will be estimated even if <a href="#-dont_peas"><code>--dont_peas</code></a> has been set, but in that case they have not been applied to the corrected images in <a href="#my_eddy_output_nii_gz"><code>my_eddy_output.nii.gz</code></a>.</p>
+</li>
+<li>
+<p><code>my_eddy_output.eddy_post_eddy_shell_PE_translation_parameters</code><br>
+This is a text file with the translation along the PE-direction between the different shells as estimated by a post-hoc mutual information based registration (see <a href="#-dont_sep_offs_move"><code>--dont_sep_offs_move</code></a> for details). These parameters will be estimated even if <a href="#-dont_sep_offs_move"><code>--dont_sep_offs_move</code></a> has been set, but in that case they have not been applied to the corrected images in <a href="#my_eddy_output_nii_gz"><code>my_eddy_output.nii.gz</code></a>.</p>
+</li>
+<li>
+<p><code>my_eddy_output.eddy_outlier_report</code><br>
+This is a text-file with a plain language report on what outlier slices eddy has found. This file is always created, as are the other my_eddy_output.eddy_outlier_* files described below, even if the <a href="#-repol"><code>--repol</code></a> flag has not been set. Internally eddy will always detect and replace outliers to make sure they don't affect the estimation of EC/movement, and if <a href="#-repol"><code>--repol</code></a> has not been set it will re-introduce the original slices before writing <a href="#my_eddy_output_nii_gz"><code>my_eddy_output.nii.gz</code></a>.</p>
+</li>
+<li>
+<p><code>my_eddy_output.eddy_outlier_map</code>, <code>my_eddy_output.eddy_outlier_n_stdev_map</code> and <code>my_eddy_output.eddy_outlier_n_sqr_stdev_map</code><br>
+These are numeric matrices in ASCII format that all have the same general layout. They consist of an initial line of text, after which there is one row for each volume and one column for each slice. Each row corresponding to a b=0 volume is all zeros since eddy don't consider outliers in these. The meaning of the numbers is different for the three files.</p>
+<ul>
+<li>
+<p><code>.eddy_outlier_map</code><br>
+All numbers are either 0, meaning that scan-slice is not an outliers, or 1 meaning that is is.</p>
+</li>
+<li>
+<p><code>.eddy_outlier_n_stdev_map</code><br>
+The numbers denote how many standard deviations off the mean difference between observation and prediction is.</p>
+</li>
+<li>
+<p><code>.eddy_outlier_n_sqr_stdev_map</code><br>
+The numbers denote how many standard deviations off the square root of the mean squared difference between observation and prediction is.</p>
+</li>
+</ul>
+</li>
+</ul>
+<h3 id="file-that-is-only-written-if-the-repol-flag-was-set">File that is only written if the <a href="#-repol"><code>--repol</code></a> flag was set.</h3>
+<ul>
+<li><code>my_eddy_output.eddy_outlier_free_data.nii.gz</code><br>
+This is the original data given by --imain not corrected for susceptibility or EC-induced distortions or subject movement, but with outlier slices replaced by the Gaussian Process predictions. This file is generated for anyone who might want to use eddy for outlier correction but who want to use some other method to correct for distortions and movement. Though why anyone would want to do that is not clear to us.</li>
+</ul>
+<h3 id="file-that-is-only-written-if-the-mporder-option-has-been-set-to-a-value-greater-than-zero">File that is only written if the <a href="#-mpordernumber-of-basis-functions"><code>--mporder</code></a> option has been set to a value greater than zero.</h3>
+<ul>
+<li><code>my_eddy_output.eddy_movement_over_time</code><br>
+This is a text files with one row of six values for each excitation. The values in a row are translation (mm) in the x-, y- and z-directions followed by rotations (radians) around the x-, y- and z-axes. If one for example has a data set of 36 volumes with 66 slices each and an MB-factor (Multi Band) of 2 the <code>.eddy_movement_over_time</code> file will have 36*66/2=1188 lines.</li>
+</ul>
+<h3 id="file-that-is-only-written-if-the-estimate_move_by_susceptibility-was-set">File that is only written if the <a href="#-estimate_move_by_susceptibility"><code>--estimate_move_by_susceptibility</code></a> was set.</h3>
+<ul>
+<li><code>my_eddy_output.eddy_mbs_first_order_fields.nii.gz</code><br>
+This is a 4D image file containing the partial derivative fields with respect to pitch (rotation around the <span class="arithmatex">\(x\)</span>-axis) and roll (rotation around the <span class="arithmatex">\(y\)</span>-axis).</li>
+</ul>
+<h3 id="other-files-only-written-if-the-corresponding-flags-are-set">Other files only written if the corresponding flags are set.</h3>
+<ul>
+<li>
+<p><code>my_eddy_output.eddy_cnr_maps</code><br>
+Written if <a href="#miscellaneous-parameters"><code>--cnr_maps</code></a> is set. This is a 4D image file with N+1 volumes where N is the number of non-zero b-value shells. The first volume contains the voxelwise SNR for the b=0 shell and the remaining volumes contain the voxelwise CNR (Contrast to Noise Ratio) for the non-zero b-shells in order of ascending b-value. For example if your data consists of 5 b=0, 48 b=1000 and 64 b=2000 volumes, <code>my_eddy_output.eddy_cnr_maps</code> will have three volumes where the first is the SNR for the b=0 volumes, followed by CNR maps for b=1000 and b=2000. The SNR for the b=0 shell is defined as mean(b0)/std(b0). The CNR for the DWI shells is defined as std(GP)/std(res) where std is the standard deviation of the Gaussian Process (GP) predictions and std(res) is the standard deviation of the residuals (the difference between the observations and the GP predictions). The <code>my_eddy_output.eddy_cnr_maps</code> can be useful for assessing the overall quality of the data.</p>
+</li>
+<li>
+<p><code>my_eddy_output.eddy_residuals</code><br>
+Written if <a href="#miscellaneous-parameters"><code>--residuals</code></a> is set. This is a 4D image file with the same number of volumes as the input (<a href="#-imainfilename"><code>--imain</code></a>) data. The order of the volumes is the same as for the input data and each voxel contains the difference between the observation and the prediction.</p>
+</li>
+</ul>
+<h2 id="categorised-list-of-parameters">Categorised list of parameters</h2>
+<h3 id="parameters-that-specify-input-files">Parameters that specify input files</h3>
+<ul>
+<li>
+<p><a href="#-imainfilename"><code>--imain=filename</code></a><br>
+Name of a file with input images. E.g. <code>all_my_images.nii</code>. Compulsory.</p>
+</li>
+<li>
+<p><a href="#-maskfilename"><code>--mask=filename</code></a><br>
+Name of a file with mask specifying brain vs no-brain. E.g. <code>my_brain_mask.nii</code>. Compulsory.</p>
+</li>
+<li>
+<p><a href="#-acqpfilename"><code>--acqp=filename</code></a><br>
+Name of text file with information about the acquisition of the images in <a href="#-imainfilename"><code>--imain</code></a>. E.g. <code>my_scan_pars.txt</code>. Compulsory.</p>
+</li>
+<li>
+<p><a href="#-indexfilename"><code>--index=filename</code></a><br>
+Name of text file specifying the relationship between the images in <a href="#-imainfilename"><code>--imain</code></a> and the information in <a href="#-acqpfilename"><code>--acqp</code></a> and <a href="#-topupbasename"><code>--topup</code></a>. E.g. <code>index.txt</code>. Compulsory.</p>
+</li>
+<li>
+<p><a href="#-bvecsfilename"><code>--bvecs=filename</code></a><br>
+Name of text-file with normalised diffusion gradients. Compulsory.</p>
+</li>
+<li>
+<p><a href="#-bvalsfilename"><code>--bvals=filename</code></a><br>
+Name of text-file with b-values. Compulsory.</p>
+<ul>
+<li><a href="#-b_range"><code>--b_range</code></a><br>
+Determines maximum range of b-values within the shells.</li>
+</ul>
+</li>
+<li>
+<p><a href="#-topupbasename"><code>--topup=basename</code></a><br>
+Name of output from a previous topup run. Should be the same as the argument given to topup's <a href="../../topup/users_guide/index.html#-out"><code>--out</code></a>. Optional.</p>
+</li>
+<li>
+<p><a href="#-jsonfilename-or-slspecfilename"><code>--json=filename</code></a> or <a href="#-jsonfilename-or-slspecfilename"><code>--slspec=filename</code></a><br>
+Text-files describing slice acquisition order. Mutually exclusive and semi-optional. They are neccessary if for example performing intra-volume motion correction, or if performing outlier-replacement with <a href="#-ol_typeswgwboth"><code>--ol_type=gw</code></a> or <a href="#-ol_typeswgwboth"><code>--ol_type=both</code></a>.</p>
+<ul>
+<li><a href="#-json"><code>--json=filename</code></a><br>
+.json file produced by Dicom to Nifti converter, for example <a href="https://www.nitrc.org/plugins/mwiki/index.php/dcm2nii:MainPage"><code>dcm2niix</code></a>. It is strongly recommended to use a <code>--json</code> file instead of an <code>--slspec</code> file.</li>
+<li><a href="#-slspec"><code>--slspec=filename</code></a><br>
+Bespoke text file specifying slice acquisition order.</li>
+</ul>
+</li>
+<li>
+<p><a href="#-fieldfilename"><code>--field=filename</code></a><br>
+Name of image volume representing the susceptibility field. Should be in Hz. Optional.</p>
+<ul>
+<li><a href="#-field_matfilename"><code>--field_mat=filename</code></a><br>
+Name of rigid body matrix specifying the relative positions of <a href="#-fieldfilename"><code>--field</code></a> and <a href="#-imainfilename"><code>--imain</code></a>. Optional.</li>
+</ul>
+</li>
+</ul>
+<h3 id="parameter-specifying-names-of-output-files">Parameter specifying names of output-files</h3>
+<ul>
+<li><a href="#-outbasename"><code>--out=basename</code></a><br>
+Basename for output-files. The corrected images will be named <code>"basename".nii.gz</code>. Other output files will be named <code>"basename".eddy_*</code> where the * specifies the specific type of output. Compulsory.</li>
+</ul>
+<h3 id="parameters-specifying-how-eddy-should-be-run">Parameters specifying how eddy should be run</h3>
+<ul>
+<li>
+<p><a href="#-flmlinearquadraticcubic"><code>--flm=linear/quadratic/cubic</code></a><br>
+Spatial model for the field generated by eddy currents. Default quadratic.</p>
+</li>
+<li>
+<p><a href="#-slmnonelinearquadratic"><code>--slm=none/linear/quadratic</code></a><br>
+Model for how diffusion gradients generate eddy currents. Default none.</p>
+</li>
+<li>
+<p><a href="#-fwhmfwhm-in-mm"><code>--fwhm="fwhm in mm"</code></a><br>
+Filter width to use for pre-filtering of data for the estimation process. Default 0.</p>
+</li>
+<li>
+<p><a href="#-niternumber-of-iterations"><code>--niter="required number of iterations"</code></a><br>
+Specifies how many iterations should be run. Default 5.</p>
+</li>
+<li>
+<p><a href="#-interpsplinetrilinear"><code>--interp=spline/trilinear</code></a><br>
+Specifies interpolation model during estimation. Default spline.</p>
+</li>
+<li>
+<p><a href="#-resampjaclsr"><code>--resamp=jac/lsr</code></a><br>
+Specifies final resampling strategy. Default jac.</p>
+<ul>
+<li><a href="#-fep"><code>--fep</code></a><br>
+Fill Empty Planes. Default false. Only meaningful in conjunction with <code>--resamp=lsr</code>. Interpolates across any "empty planes" orthogonal to the phase-encode direction. It is unclear why they are there (empty), but for many vendors/sequences they are.</li>
+</ul>
+</li>
+<li>
+<p><a href="#-nvoxhpnumber-of-voxels"><code>--nvoxhp="number of voxels"</code></a><br>
+Specifies number of voxels to use for GP hyperparameter estimation. Default 1000.</p>
+</li>
+<li>
+<p><a href="#-ffnumber-between-1-and-10"><code>--ff="number between 1 and 10"</code></a><br>
+Fudge factor that imposes Q-space smoothing during estimation. Default 10.</p>
+</li>
+<li>
+<p><a href="#-dont_sep_offs_move"><code>--dont_sep_offs_move</code></a><br>
+Do not attempt to separate subject movement from field DC component. Default false.</p>
+</li>
+<li>
+<p><a href="#-dont_peas"><code>--dont_peas</code></a><br>
+Do not end with an alignment of shells to each other. Default false.</p>
+</li>
+</ul>
+<h3 id="parameters-pertaining-to-outlier-replacement">Parameters pertaining to outlier replacement</h3>
+<ul>
+<li>
+<p><a href="#-repol"><code>--repol</code></a><br>
+Replace outliers. Default false. Likely to become default, and parameter deprecated soon.</p>
+</li>
+<li>
+<p><a href="#-ol_nstdnumber-of-standard-deviations"><code>--ol_nstd="number of standard deviations"</code></a><br>
+Number of standard deviations away a slice must be to qualify as an outlier. Default 4.</p>
+</li>
+<li>
+<p><a href="#-ol_nvoxnumber-of-voxels"><code>--ol_nvox="number of voxels"</code></a><br>
+The minimum number of intracerebral voxels in a slice to consider it as an outlier. Default 250.</p>
+</li>
+<li>
+<p><a href="#-ol_typeswgwboth"><code>--ol_type=sw/gw/both</code></a><br>
+Base outlier detection on slices (sw) multi-band groups (gw) or both (both). Default sw.</p>
+</li>
+<li>
+<p><a href="#-ol_ssswpooled"><code>--ol_ss=sw/pooled</code></a><br>
+Calculate outlier statistics separately for different shells (sw) or pooled across shells (pooled). Default sw.</p>
+</li>
+<li>
+<p><a href="#-ol_pos"><code>--ol_pos</code></a><br>
+Consider both positive and negative outliers. Default false.</p>
+</li>
+<li>
+<p><a href="#-ol_sqr"><code>--ol_sqr</code></a><br>
+Consider outliers in sum-of-squared distribution. Default false.</p>
+</li>
+<li>
+<p><a href="#-mbmulti-band-factor"><code>--mb="multi-band factor"</code></a><br>
+Specifies multi-band factor (number of simultaneous slices). Default 1. Likely to be deprecated soon.</p>
+</li>
+</ul>
+<h3 id="parameters-pertaining-to-intra-volume-slice-to-vol-movement-correction">Parameters pertaining to intra-volume (slice-to-vol) movement correction</h3>
+<ul>
+<li>
+<p><a href="#-mpordernumber-of-basis-functions"><code>--mporder="number of basis functions"</code></a><br>
+Temporal order of movement. Default 0.</p>
+</li>
+<li>
+<p><a href="#-s2v_niternumber-of-iterations"><code>--s2v_niter="number of iterations"</code></a><br>
+Number of iterations for estimating slice-to-vol movement. Default 5, if <a href="#-mpordernumber-of-basis-functions"><code>--mporder</code></a> &gt; 0.</p>
+</li>
+<li>
+<p><a href="#-s2v_lambdaweight-of-regularisation"><code>--s2v_lambda="weight of regularisation"</code></a>
+Strength of temporal regularisation of slice-to-vol movement. Default 1.</p>
+</li>
+<li>
+<p><a href="#-s2v_interptrilinearspline"><code>--s2v_interp=trilinear/spline</code></a>
+Interpolation model for estimation of slice-to-vol movement. Default 'trilinear'.</p>
+</li>
+</ul>
+<h3 id="parameters-pertaining-to-susceptibility-by-movement-correction">Parameters pertaining to susceptibility-by-movement correction</h3>
+<ul>
+<li>
+<p><a href="#-estimate_move_by_susceptibility"><code>--estimate_move_by_susceptibility</code></a>
+When specified eddy estimates how the susceptibility field changes with subject movement. Default false.</p>
+</li>
+<li>
+<p><a href="#-mbs_niternumber-of-iterations"><code>--mbs_niter="number of iterations"</code></a>
+Number of iterations for susceptibility-by-movement estimation. Default 10.</p>
+</li>
+<li>
+<p><a href="#-mbs_lambdaweight-of-regularisation"><code>--mbs_lambda="weight of regularisation"</code></a>
+Specifies the balance between data and smoothness for the susceptibility rate-of-change fields. Default 10.</p>
+</li>
+<li>
+<p><a href="#-mbs_kspknot-spacing-in-mm"><code>--mbs_ksp="knot spacing in mm"</code></a>
+Specifies the spline knot-spacing of the susceptibility rate-of-change fields. Default 10 (mm).</p>
+</li>
+</ul>
+<h3 id="miscellaneous-parameters">Miscellaneous parameters</h3>
+<ul>
+<li>
+<p><code>--cnr_maps</code><br>
+Specifies that shell-wise CNR maps shall be written. Default false.</p>
+</li>
+<li>
+<p><code>--residuals</code><br>
+Specifies that a full 4D data set of residuals shall be written. Default false.</p>
+</li>
+<li>
+<p><a href="#-data_is_shelled"><code>--data_is_shelled</code></a><br>
+Do not check that data is shelled. Trust the user. Default false.</p>
+</li>
+<li>
+<p><a href="#eddy_cpu"><code>--nthr="Number of CPU threads"</code></a><br>
+Specifies the number of CPU threads that <code>eddy</code> should use. It is only relevant for the <a href="#eddy_cpu">CPU version</a>.</p>
+</li>
+<li>
+<p><code>--verbose</code><br>
+Print progress information to the screen while running. Can be useful to pipe into file before reporting problems</p>
+</li>
+<li>
+<p><a href="#-very_verbose"><code>--very_verbose</code></a><br>
+Print very rich progress information to the screen while running. Can be useful to pipe into file before reporting problems</p>
+</li>
+<li>
+<p><code>--help</code><br>
+Take a wild stab.</p>
+</li>
+</ul>
+<h2 id="commonly-used-parameters-explained">Commonly used parameters explained</h2>
+<h3 id="parameters-specifying-input-files">Parameters specifying input files</h3>
+<h4 id="-imainfilename">--imain=filename</h4>
+<p>Should specify a 4D image file with all your images acquired as part of a diffusion protocol. I.e. it should contain both your dwis and your b=0 images. If you have collected your data with reversed phase-encode blips, data for both blip-directions should be in this file. If you have acquired your data over multiple runs (but with the subject remaining in the scanner) they should be concatenated into one file.</p>
+<h4 id="-maskfilename">--mask=filename</h4>
+<p>Single volume image file with ones and zeros specifying brain (one) and no-brain (zero). Typically obtained by running BET on the average of the volumes in the <a href="../../topup/users_guide/index.html#-iout"><code>--iout</code></a> output of <a href="../../topup/index.html"><code>topup</code></a>. If, for whatever reason, you have <em>not</em> previously run <a href="../../topup/index.html"><code>topup</code></a> on your data we suggest you run BET on the first volume b0 volume of your <a href="#-imainfilename"><code>--imain</code></a> input.</p>
+<h4 id="-acqpfilename">--acqp=filename</h4>
+<p>A text-file describing the acquisition parameters for the different images in <a href="#-imainfilename"><code>--imain</code></a>. The format of this file is identical to that used by <a href="../../topup/index.html"><code>topup</code></a> (note that this parameter is also called <a href="../../topup/users_guide/index.html#-acqp-datain"><code>--datain</code></a> there) and described in detail <a href="../../topup/users_guide/index.html#-acqp-datain">here</a> and <a href="../../topup/FAQ/index.html#how-do-i-know-what-to-put-into-my-acqp-datain-text-file">here</a>.</p>
+<h4 id="-indexfilename">--index=filename</h4>
+<p>A text-file that determines the relationship between on the one hand the images in <a href="#-imainfilename"><code>--imain</code></a> and on the other hand the acquisition parameters in <a href="#-acqpfilename"><code>--acqp</code></a> and (optionally) the subject movement information in <a href="#-topupbasename"><code>--topup</code></a>. It should be a single column (or row) with one entry per volume in <a href="#-imainfilename"><code>--imain</code></a>. We will use a small (simplified) example to make it clear.</p>
+<p><img src="eight_original_images.png" alt="Eight images, four L->R and four R-&gt;L" width=700&gt;</p>
+<p>The image above shows a selected slice from each of the eight volumes in --imain. The associated <a href="#-acqpfilename"><code>--acqp</code></a> file is
+<div class="language-text highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>-1 0 0 0.051
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>1 0 0 0.051
+</span></code></pre></div>
+which specifies that phase-encoding is performed in the x-direction, sometimes traversing k-space left-&gt;right (-1) and sometimes right-&gt;left (1). Finally the --index file is
+<div class="language-text highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>1 1 1 1 2 2 2 2
+</span></code></pre></div>
+which specifies that the first four volumes in <a href="#-imainfilename"><code>--imain</code></a> were acquired using the acquisition parameters on the first row (index 1) of the <a href="#-acqpfilename"><code>--acqp</code></a> file, and that volumes 5--8 were acquired according to the second row (index 2).</p>
+<h4 id="-bvecsfilename">--bvecs=filename</h4>
+<p>A text file with normalised vectors describing the direction of the diffusion weighting. This is the same file that you would use for FDT.</p>
+<h4 id="-bvalsfilename">--bvals=filename</h4>
+<p>A text file with b-values, describing the "amount of" diffusion weighting. This is the same file that you would use for FDT.
+- <a id="-b_range" href="#-b_range"></a><strong>--b_range="max range of b-values within shell"</strong><br>
+  <code>eddy</code> needs to be able to divide the data into shells, i.e. sets of volumes that have all been acquired with the same b-value. That is complicated by the fact that some manufacturers/sequences will calculate also the "incidental" diffusion weighting from the image encoding gradients and add that to the b-values. Hence it is not enough to sort the volumes on identical b-values. The default <code>--b_range</code> is 50, which means that b-values that fall <strong>within</strong> a range of 50 will all be included in the same shell. If the range of b-values in your data is greater than that you may need to set it to a higher value. Conversely, if you have several low b-value shell with a small separation you might need to use a lowe value.</p>
+<h4 id="-topupbasename">--topup=basename</h4>
+<p>This should only be specified if you have previously run topup on your data and should be the same name that you gave as an argument to the <a href="../../topup/users_guide/index.html#-out"><code>--out</code></a> parameter when you ran topup.</p>
+<h4 id="-jsonfilename-or-slspecfilename">--json=filename or --slspec=filename</h4>
+<p>These are two different options for specifying how the slices/MB-groups were acquired.
+- <a id="-json" href="#-json"></a><strong>--json=filename</strong><br>
+Specifies a .json file created for example by dcm2niix as part of the DICOM to Nifti conversion. That file is <em>likely</em> (it depends on the scanner vendor) to contain detailed information about the exact time at which each slice were acquired. If this file is available, and contain slice timing information, we strongly recommend using it since it will help avoid any mistakes. If your .json file contains the attribute "SliceTiming" it most likely has the correct information.
+- <a id="-slspec" href="#-slspec"></a><strong>--slspec=filename</strong><br>
+Specifies a text-file that describes how the slices/MB-groups were acquired. This information is necessary for eddy to know how a temporally continuous movement translates into location of individual slices/MB-groups. Let us say a given acquisition has N slices and that m is the MB-factor (also known as Simultaneous Multi-Slice (SMS)). Then the file pointed to be --slspec will have N/m rows and m columns. Let us for example assume that we have a data-set which has been acquired with an MB-factor of 3, 15 slices and interleaved slice order. The file would then be
+<div class="language-text highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>0 5 10
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>2 7 12
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>4 9 14
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>1 6 11
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>3 8 13
+</span></code></pre></div>
+where the first row "0 5 10" specifies that the first, sixth and 11th slice are acquired first and together, followed by the third, eighth and 13th slice etc. For single-band data and for multi-band data with an odd number of excitations/MB-groups it is trivial to work out the --slspec file using the logic of the example. For an even number of excitations/MB-groups it is considerably more difficult and we recommend using a DICOM-&gt;niftii converter that writes the exact slice timings into a .JSON file, and then to use the <code>--json</code> option instead.</p>
+<h4 id="-fieldfilename">--field=filename</h4>
+<p>If there is no topup output available for your study you may alternatively use a "traditional" fieldmap in its place. This can for example be a dual echo-time fieldmap that has been prepared using PRELUDE. Note that in contrast to for example FUGUE it expects the fieldmap to be scaled in Hz. For boring reasons the filename has to be given without an extension. For example <code>--field=my_field</code>, not <code>--field=my_field.nii.gz</code>.</p>
+<p>| :warning: We do <em>not</em> recommend using the --field option  |
+|:--------------------------------------------------------|
+There are several important caveats with --field, which is why we strongly recommend using a topup derived field if at all possible. These are</p>
+<ul>
+<li>If one uses the same <a href="#-acqpfilename"><code>--acqp</code></a> file for both topup and eddy it doesn't matter if one get the total acquisition time or the PE-polarity wrong. The errors in topup and eddy will cancel out and the end results will still be correct.</li>
+<li>If the first volume input to topup is the same as the first volume in <a href="#-imainfilename"><code>--imain</code></a> to <code>eddy</code>, the fieldmap will automatically be in the reference space of <code>eddy</code>. <em>I.e.</em> it will be in perfect alignment with the data it is used to correct. When using the <code>--field</code> option the user is responsible for making sure the fieldmap is registered to the eddy data.</li>
+<li><code>eddy</code> assumes that the resulting displacement field (the off-resonance field is a scaled displacement field) i invertible (that it doesn't fold back on itself). Because of the way that <a href="../../../registration/fugue.html"><code>FUGUE</code></a> deals with the edges of the fieldmap that is often not the case for fieldmaps processed with FSL. One option in such a case is to instead use the <a href="https://www.fil.ion.ucl.ac.uk/spm/toolbox/fieldmap/">SPM fieldmap toolbox</a> to process the fieldmap.</li>
+</ul>
+<p>Another option for avoiding to use the <code>--field</code> option is to use the <a href="https://github.com/MASILab/Synb0-DISCO">Synb0-DISCO</a>, which is a toolbox that can synthesize a distortion free b=0 volume from a structural scan (<em>i.e.</em> a T1-weighted scan). The synthetic b=0 volume can then be used together with a b=0 volume from the diffusion data set to run <a href="../../topup/index.html"><code>topup</code></a>.</p>
+<ul>
+<li><a id="-field_matfilename" href="#-field_matfilename"></a>--field_mat=filename<br>
+Specifies a flirt style rigid body matrix that specifies the relative locations of the field specified by <a href="#-fieldfilename"><code>--field</code></a> and the first volume in the file specified by --imain. If <code>my_field</code> is the field specified by <a href="#-fieldfilename"><code>--field</code></a>, <code>my_ima</code> is the first volume of <a href="#-imainfilename"><code>--imain</code></a> and <code>my_mat</code> is the matrix specified by <code>--field_mat</code>. Then the command <code>flirt -ref my_ima -in my_field -init my_mat -applyxfm</code> should be the command that puts <code>my_field</code> in the space of <code>my_ima</code>.</li>
+</ul>
+<h3 id="parameter-specifying-names-of-output-files_1">Parameter specifying names of output-files</h3>
+<h4 id="-outbasename">--out=basename</h4>
+<p>Specifies the basename of the output. Let us say <code>--out="basename"</code>. The output will then consist of a 4D image file named <a href="#my_eddy_output_nii_gz"><code>&lt;basename&gt;.nii.gz</code></a> containing all the corrected volumes and a text-file named <a href="#my_eddy_output_eddy_parameters"><code>&lt;basename&gt;.eddy_parameters</code></a> with parameters defining the field and movement for each scan and <a href="#understanding-eddy-output">several other files starting with "basename"</a>.</p>
+<h3 id="parameters-specifying-how-eddy-should-be-run_1">Parameters specifying how eddy should be run</h3>
+<h4 id="-flmlinearquadraticcubic">--flm=linear/quadratic/cubic</h4>
+<p>This parameter takes the values linear, quadratic or cubic. It specifies how "complicated" we believe the eddy current-induced fields may be.</p>
+<p>Setting it to linear implies that we think that the field caused be eddy currents will be some combination of linear gradients in the <span class="arithmatex">\(x\)</span>-, <span class="arithmatex">\(y\)</span>- and <span class="arithmatex">\(z\)</span>-directions. It is this model that is the basis for the claim "eddy current distortions is a combination of shears, a zoom and a translation". It is interesting (and surprising) how successful this model has been in describing (and correcting) eddy current distortions since not even the fields we intend to be linear (i.e. our gradients) are particularly linear on modern scanners.</p>
+<p>The next model in order of "complication" is quadratic which assumes that the eddy current induced field can be modelled as some combination of linear and quadratic terms (<span class="arithmatex">\(x\)</span>, <span class="arithmatex">\(y\)</span>, <span class="arithmatex">\(z\)</span>, <span class="arithmatex">\(x^2\)</span>, <span class="arithmatex">\(y^2\)</span>, <span class="arithmatex">\(z^2\)</span>, <span class="arithmatex">\(xy\)</span>, <span class="arithmatex">\(xz\)</span> and <span class="arithmatex">\(yz\)</span>). This is almost certainly also a vast oversimplification but our practical experience has been that this model successfully corrects for example the HCP data (which is not well corrected by the linear model).</p>
+<p>The final model is cubic which in addition to the terms in the quadratic model also has cubic terms (<span class="arithmatex">\(x^3\)</span>, <span class="arithmatex">\(x^2y\)</span>, etc). We have yet to find a data set where the cubic model performs meaningfully better than the quadratic one. Note also that the more complicated the model the longer will eddy take to run.</p>
+<h4 id="-slmnonelinearquadratic">--slm=none/linear/quadratic</h4>
+<p>"Second level model" that specifies the mathematical form for how the diffusion gradients cause eddy currents. For high quality data with 60 directions, or more, sampled on the whole sphere we have not found any advantage of performing second level modelling. Hence our recommendation for such data is to use none, and that is also the default.</p>
+<p>If the data has quite few directions and/or is has not been sampled on the whole sphere it can be advantageous to specify <code>--slm=linear</code>.</p>
+<h4 id="-fwhmfwhm-in-mm">--fwhm="fwhm in mm"</h4>
+<p>Specifies the FWHM of a gaussian filter that is used to pre-condition the data before using it to estimate the distortions. In general the accuracy of the correction is not strongly dependent on the FWHM. Empirical tests have shown that ~1-2mm might be best, but by so little that the default has been left at 0.</p>
+<p>One exception is when there is substantial subject movement, which may mean that eddy fails to converge in 5 iterations if run with <code>fwhm=0</code>. In such cases we have found that <code>--fwhm=10,0,0,0,0</code>, works well. It means that the first iteration is run with a FWHM of 10mm, which helps that algorithm to take a big step towards the true solution. The remaining iterations are run with a FWHM of 0mm, which offers high accuracy. Another schedule we have used successfully on subjects who move a lot is <code>--niter=8 --fwhm=10,8,4,2,0,0,0,0</code>.</p>
+<h4 id="-niternumber-of-iterations">--niter="number of iterations"</h4>
+<p><code>eddy</code> does not check for convergence. Instead it runs a fixed number of iterations given by <code>--niter</code>. This is not unusual for registration algorithms where each iteration is expensive (i.e. takes long time). Instead we run it for a fixed number of iterations, 5 as default.</p>
+<p>If, on visual inspection, one finds residual movement or EC-induced distortions it is possible that <code>eddy</code> has not fully converged. In that case we primarily recommend that one uses <code>--fwhm=10,0,0,0,0</code>, as described above, to speed up convergence. If that too fails we recommend increasing the number of iterations to something like <code>--niter=8 --fwhm=10,8,4,2,0,0,0,0</code>.</p>
+<h4 id="-interpsplinetrilinear">--interp=spline/trilinear</h4>
+<p>Specifies the interpolation model used during the estimation phase, and during the final resampling if <a href="#-resampjaclsr"><code>--resamp=jac</code></a> is used. We strongly recommend <code>spline</code>, which is also the default.</p>
+<h4 id="-resampjaclsr">--resamp=jac/lsr</h4>
+<p>Specifies how the final resampling is performed. The options are</p>
+<ul>
+<li><code>jac</code>: Stands for Jacobian modulation. This is a "traditional" type of interpolation (spline or trilinear depending on the --interp parameter) combined with Jacobian modulation to account for signal pile-up/dilution caused by local stretching/compression. However, in areas of compression (resulting in signal pile-up) there is a loss of resolution that this type of resampling cannot resolve. If acquisitions have not been repeated with opposed PE-directions, this is the only option that can be used.</li>
+<li>
+<p><code>lsr</code>: Stands for Least-Squares Reconstruction. This method attempts to use the complimentary information in images acquired with opposing PE-directions, where a compressed area in one of the images will be stretched in the other image. This method can only be used if all acquisitions have been repeated with opposing PE-directions.</p>
+</li>
+<li>
+<p><a id="-fep" href="#-fep"></a>--fep<br>
+Stands for "Fill Empty Planes" and is only relevant when <code>--resamp=lsr</code>. For reasons that are not completely clear to us the reconstructed EPI images from some manufacturers contain one or more empty "planes". A "plane" in this context do not necessarily mean a "slice". Instead it can be for example the "plane" that constitutes the last voxel along the PE-direction for each "PE-direction column". The presence/absence of these "empty planes" seems to depend on the exact details of image encoding part of the sequence.<br>
+IF --fep is set eddy will attempt to identify the empty planes and "fill them in". The filling will consist of duplicating the previous plane if the plane is perpendicular to the frequency-encode direction and by interpolation between the previous and the "wrap-around plane" if the plane is perpendicular to the PE-direction .</p>
+</li>
+</ul>
+<h4 id="-nvoxhpnumber-of-voxels">--nvoxhp="number of voxels"</h4>
+<p>Specifies how many (randomly selected within the brain mask) voxels that are used when estimating the hyperparameters of the Gaussian Process used to make predictions. The default is 1000 voxels, and that is more than sufficient for typical data with resolution of 2x2x2mm or lower. For very high resolution data, such as for example the HCP 7T data, with relatively low voxel-wise SNR one may need to increase this number. The only "adverse" effect of increasing this number is an increase in execution time.</p>
+<h4 id="-ffnumber-between-1-and-10">--ff="number between 1 and 10"</h4>
+<p>This should be a number between 1 and 10 and determines the level of Q-space smoothing that is used by the prediction maker during the estimation of the movement/distortions. Empirical testing has indicated that any number above 5 gives best results. We have set the default to 10 to be on the safe side.</p>
+<h4 id="-dont_sep_offs_move">--dont_sep_offs_move</h4>
+<p>All our models for the EC-field contains a component that is constant across the field and that results in a translation of the object in the PE-direction. Depending on how the data has been acquired it can be more or less difficult to distinguish between this constant component and subject movement. It matters because it affects how the diffusion weighted images are aligned with the b=0 images. Therefore eddy attempts to distinguish the two by fitting a second level model to the estimated constant component, and everything that is not explained by that model will be attributed to subject movement. As of release 5.0.11 it will also perform a Mutual Information based alignment along the PE-direction.</p>
+<p>If you set this flag eddy will not do that estimation. The option to turn this off is a remnant from when we did not know how well it would work and it is very unlikely you will ever use this flag. It will eventually be deprecated.</p>
+<h4 id="-dont_peas">--dont_peas</h4>
+<p>The motion correction within eddy has greatest precision within a shell and has a bigger uncertainty between shells. There is no estimation of movement between the first b=0 volume and the first diffusion weighted volume. Instead is is assumed that these have been acquired very close in time and that there were no movement between them.</p>
+<p>If there are multiple shells or if the assumption of no movement between the first b=0 and the first diffusion weighted volume is not fulfilled it can be advantageous to perform a "Post Eddy Alignment of Shells" (peas). Our testing indicates that the peas has an accuracy of ~0.2-0.3mm, i.e. it is associated with some uncertainty. This precision is still such that peas is performed as default.</p>
+<p>But, if one has a data set with a single shell (i.e. a single non-zero shell) and the assumption of no movement between the first b=0 and the first diffusion weighted image is true it can be better to avoid that uncertainty. And in that case it may be better to turn off peas by setting the --dont_peas flag.</p>
+<h3 id="parameters-pertaining-to-outlier-replacement_1">Parameters pertaining to outlier replacement</h3>
+<h4 id="-repol">--repol</h4>
+<p>When set this flag instructs eddy to remove any slices deemed as outliers and replace them with predictions made by the Gaussian Process. Exactly what constitutes an outlier is affected by the parameters <a href="#-ol_nstdnumber-of-standard-deviations"><code>--ol_nstd</code></a>, <a href="#-ol_nvoxnumber-of-voxels"><code>--ol_nvox</code></a>, <a href="#-ol_typeswgwboth"><code>--ol_type</code></a>, <a href="#-ol_ssswpooled"><code>--ol_ss</code></a>, <a href="#-ol_pos"><code>--ol_pos</code></a> and <a href="#-ol_sqr"><code>--ol_sqr</code></a>. If the defaults are used for all those parameters an outlier is defined as a slice whose average intensity is at least four standard deviations lower than the expected intensity, where the expectation is given by the Gaussian Process prediction.</p>
+<p>The default, for now, is to not do outlier replacement since we didn't want to risk people using it "unawares". However, our experience and tests indicate that it is always a good idea to use <code>--repol</code>.</p>
+<div class="admonition warning">
+<p class="admonition-title">Is likely to change in future</p>
+<p>We now have so much evidence that <code>--repol</code> is a good idea that it is likely to become default in a near future. The <code>--repol</code> flag will then gradually be deprecated and replaced by a <code>--no_repol</code> flag.</p>
+</div>
+<h4 id="-ol_nstdnumber-of-standard-deviations">--ol_nstd="number of standard deviations"</h4>
+<p>This parameter determines how many standard deviations away a slice need to be in order to be considered an outlier. The default value of 4 is a good compromise between type 1 and 2 errors for a "standard" data set of 50-100 directions. Our tests also indicate that the parameter is not terribly critical and that any value between 3 and 5 is good for such data. For data of very high quality, such as for example HCP data with 576 dwi volumes, one can use a higher value (for example 5). Conversely, for data with few directions a lower threshold can be used.</p>
+<h4 id="-ol_nvoxnumber-of-voxels">--ol_nvox="number of voxels"</h4>
+<p>This parameter determines the minimum number of intracerebral voxels a slice need to have in order to be considered in the outliers estimation. Consider for example a slice at the very top of the brain with only ten brain voxels. The average (based on only ten voxels) difference from the prediction will be very poorly estimated and to try to determine if it was an outlier or not on that basis would be very uncertain. For that reason there is a minimum number of brain voxels (as determined by the <a href="#-maskfilename"><code>--mask</code></a>) for a slice to be considered. The default is 250.</p>
+<h4 id="-ol_typeswgwboth">--ol_type=sw/gw/both</h4>
+<p>The default behaviour for eddy is to consider each slice in isolation when assessing outliers. When acquiring multi-band (mb) data each slice in the group will have a similar signal dropout when it is caused by gross subject movement (as opposed to pulsatile movement of e.g. the brain stem). It therefore makes sense to consider an mb-group as the unit when assessing outliers. There are therefore three options for the unit of outliers.</p>
+<ul>
+<li>Slice-wise (sw) is the default and most basic way of estimating outliers.</li>
+<li>Group-wise (gw) considers an mb-group as the outlier unit.</li>
+<li>Both (both) considers an mb-group as the unit, but additionally looks for slice-wise outliers. This is to find single slices within a group that has been affected by pulsatile movement not affecting the other slices.</li>
+</ul>
+<h4 id="-ol_ssswpooled">--ol_ss=sw/pooled</h4>
+<p>Determines if the outlier statistics (mean and standard deviation) are calculated separately for each shell (<code>sw</code>), or if they are pooled (<code>pooled</code>) across all shells. The default is to calculate them separately for each shell (<code>sw</code>). In the past the only option was to pool them across shells, but that turned out to create several unexpected problems (foremost among them the inability to find reference volumes in low b-value shells). In fact, there are several reasons why pooling was a bad idea, which is why we not only introduced the <code>sw</code> option, but also made it the default behaviour.<br>
+That means that the behaviour of "default eddy" has changed. If one wants to ensure a consistent behaviour in an ongoing project one needs to use <code>--ol_ss=pooled</code>.</p>
+<h4 id="-ol_pos">--ol_pos</h4>
+<p>By default eddy only considers signal dropout, i.e. the negative end of the distribution of differences. One could conceivably also have positive outliers, i.e. slices where the signal is greater than expected. This could for example be caused by spiking or other acquisition related problems. If one wants to detect and remove this type of outliers one can use the <code>--ol_pos</code> flag.</p>
+<p>In general we don't encourage its use since we believe that type of artefacts should be detected and corrected at source. We have looked a large number of FMRIB and HCP data sets and not found a single believable positive outlier.</p>
+<h4 id="-ol_sqr">--ol_sqr</h4>
+<p>Similarly to the <a href="#-ol_pos"><code>--ol_pos</code></a> flag above it extends the scope of outliers that eddy considers. If the <code>--ol_sqr</code> flag is set <code>eddy</code> will look for outliers also in the distribution of "sums of squared differences between observations and predictions". This means it will detect also artefacts that doesn't cause a change in mean intensity.</p>
+<p>Similarly to <a href="#-ol_pos"><code>--ol_pos</code></a> we don't encourage the use of <code>--ol_sqr</code>. Artefacts that fall into this category should be identified and the causes corrected at the acquisition stage.</p>
+<h4 id="-mbmulti-band-factor">--mb="multi-band factor"</h4>
+<p>If <a href="#-ol_typeswgwboth"><code>--ol_type=gw</code></a> or <a href="#-ol_typeswgwboth"><code>--ol_type=both</code></a> <code>eddy</code> needs to know how the multi-band groups were acquired and to that end <code>--mb</code> has to be set. If for example the total number of slices is 15 and mb=3 it will be assumed that slices 0,5,10 were acquired as one group, 1,6,11 as another group etc (slices numbered 0,1,...14).</p>
+<p>| :warning: Is likely to change in future  |
+|:-----------------------------------------|
+The current version of <code>eddy</code> allows for a more detailed description of the multi-band structure (see <a href="#-jsonfilename-or-slspecfilename"><code>--json</code></a> and/or <a href="#-jsonfilename-or-slspecfilename"><code>--slspec</code></a> above), and if one wants to do slice-to-volume motion correction it is necessary to use that description. It is still possible to use <code>--mb</code>, but it is discouraged and it will be deprecated in a future release.</p>
+<ul>
+<li>--mb_offs=-1/1</li>
+</ul>
+<p>If a slice has been removed at the top or bottom of the volumes in --imain the group structure given by --mb will no longer hold. If the bottom slice has been removed --mb_offs should be set to --mb_offs=-1. For the example above it would mean that the first group of slices would consist of slices 4,9 and the second group of 0,5,10 where the slice numbering refers to the new (with missing slice) volume numbered 0,1,13. Correspondingly, if the top slice was removed it should be set to 1.</p>
+<p>| :warning: Do not use!  |
+|:-----------------------|
+The <code>--mb_offs</code> option was (stupidly) introduced to allow for the removal of one slice to ensure an even number of slices so that a specific <a href="../../topup/users_guide/index.html#configuration-files">configuration file</a> could be used for <a href="../../topup/index.html"><code>topup</code></a>. That was a very bad idea, and we now strongly discourage from removing slices. Instead we recommend using a pertinent config file depending on wether the number of slices are an integer multiple of <a href="../../topup/users_guide/index.html#supplied-configuration-files">1, 2 or 4</a>.</p>
+<h3 id="parameters-pertaining-to-intra-volume-slice-to-vol-movement-correction_1">Parameters pertaining to intra-volume (slice-to-vol) movement correction</h3>
+<h4 id="-mpordernumber-of-basis-functions">--mporder="number of basis-functions"</h4>
+<p>If one wants to do slice-to-vol motion correction <code>--mporder</code> should be set to an integer value greater than 0 and less than the number of excitations in a volume. Only when <code>--mporder</code> &gt; 0 will any of the parameters prefixed by <code>--s2v_</code> be considered. The larger the value of <code>--mporder</code>, the more degrees of freedom for modelling movement. If <code>--mporder</code> is set to <span class="arithmatex">\(N-1\)</span>, where <span class="arithmatex">\(N\)</span> is the number of excitations in a volume, the location of each slice/MB-group is individually estimated. We don't recommend going that high and in our tests we have used values of <span class="arithmatex">\(N/4\)</span>--<span class="arithmatex">\(N/2\)</span>. The underlying temporal model of movement is a DCT (Discrete Cosine Transform) basis-set of order <span class="arithmatex">\(N\)</span>.</p>
+<h4 id="-s2v_niternumber-of-iterations">--s2v_niter="number of iterations"</h4>
+<p>Specifies the number of iterations to run when estimating the slice-to-vol movement parameters. In our tests we have used 5--10 iterations with good results, and possibly a small advantage of 10 over 5. The slice-to-volume alignment is computationally expensive so expect <span class="arithmatex">\(N\)</span> iterations of slice-to-volume movement estimation to take a lot longer than <span class="arithmatex">\(N\)</span> iterations of volumetric movement estimation.</p>
+<h4 id="-s2v_lambdaweight-of-regularisation">--s2v_lambda="weight of regularisation"</h4>
+<p>Determines the strength of temporal regularisation of the estimated movement parameters. This is especially important for single-band data with "empty" slices at the top/bottom of the FOV. We have used values in the range 1--10 with good results.</p>
+<h4 id="-s2v_interptrilinearspline">--s2v_interp=trilinear/spline</h4>
+<p>Determines the interpolation model in the slice-direction for the estimation of the slice-to-volume movement parameters. In theory spline is a better interpolation method, but in this particular context (interpolation of irregularly spaced data) the computational cost of using spline is very large. In our tests we have not been able to see any actual advantage of using spline, so we recommend using trilinear. For the final re-sampling spline is always used regardless of how <code>--s2v_interp</code> is set.</p>
+<h3 id="parameters-pertaining-to-susceptibility-by-movement-correction_1">Parameters pertaining to susceptibility-by-movement correction</h3>
+<h4 id="-estimate_move_by_susceptibility">--estimate_move_by_susceptibility</h4>
+<p>Specifies that eddy shall attempt to estimate how the susceptibility-induced field changes when the subject moves in the scanner. The default is not to do it (i.e. the <code>--estimate_move_by_susceptibility</code> flag is not set). This is because it increases the execution time, especially when combined with slice-to-volume motion correction. We recommend it is used when scanning populations that move "more than average", such as babies, children or other subjects that have difficulty remaining still. It can also be needed for studies with long total scan times, such that even in corporative subjects the total range of movement can become big.</p>
+<p>The estimation is based on a first order Taylor expansion of the static field with respect to changes in pitch (rotation around x-axis) and roll (rotation around y-axis). Theoretically the field should only depend on those parameters, and our experiments with modelling it as a Taylor expansion with respect to all six movement parameters have shown no additional benefits. We have also tested using a second order Taylor expansion with respect to pitch and roll, and not found any additional advantages of that either.</p>
+<h4 id="-mbs_niternumber-of-iterations">--mbs_niter="number of iterations"</h4>
+<p>Specifies the total number of iterations used for estimating the susceptibility rate-of-change fields.</p>
+<p>Uncorrected susceptibility-by-movement effects may cause a bias when estimating movement parameters. Likewise, poorly estimated movement parameters may cause a bias when estimating the susceptibility rate-of-change fields. For this reason eddy interleaves the estimation of subject movement and susceptibility-by-movement effects. The number of interleaves are always three, and the <code>--mbs_niter</code> and <a href="#-niternumber-of-iterations"><code>--niter</code></a> number of iterations for susceptibility-by-movement and movement respectively are divided evenly across the interleaves while rounding the number of iterations upwards. So if for example <code>--mbs_niter=10</code> and <a href="#-niternumber-of-iterations"><code>--niter=5</code></a> there will be 4-2-4-2-4-2 iterations where the 4s pertain to susceptibility-by-movement and the 2s to movement.</p>
+<h4 id="-mbs_lambdaweight-of-regularisation">--mbs_lambda="weight of regularisation"</h4>
+<p>Specifies the relative weight of the spatial regularisation term of the estimated susceptibility rate-of-change field. A larger value will result in a smoother field. Default is 10, and that is probably about right for most data.</p>
+<h4 id="-mbs_kspknot-spacing-in-mm">--mbs_ksp="knot-spacing in mm"</h4>
+<p>Knot-spacing (in mm) of the cubic spline field used to represent the susceptibility rate-of-change fields. The default is 10mm. In practice it is always an integer multiple of of the voxel size, and eddy will chose the nearest spacing that ensures that the knot-spacing is not larger than the requested. For example of the voxel size is 2.2mm, and a knot spacing of 10mm is requested the "actual" knot-spacing will be 4x2.2=8.8mm. Our experiment indicates that for scanners with a field of 3T or lower there is no need for higher resolution than 10mm.</p>
+<h3 id="miscellaneous-parameters_1">Miscellaneous parameters</h3>
+<h4 id="-data_is_shelled">--data_is_shelled</h4>
+<p>At the moment eddy works for single- or multi-shell diffusion data, i.e. it <strong>does not</strong> work for DSI data. In order to ensure that the data is shelled `eddy "checks it", and only proceeds if it is happy that it is indeed shelled. The checking is performed through a set of heuristics such as i) how many shells are there? ii) what are the absolute numbers of directions for each shell? iii) what are the relative numbers of directions for each shell? etc. It will for example be suspicious of too many shells, too few directions for one of the shells etc.</p>
+<p>It has emerged that some popular schemes get caught in this test. Some groups will for example acquire a "mini shell" with low b-value and few directions and that has failed to pass the "check", even though it turns out eddy works perfectly well on the data. For that reason we have introduced the --data_is_shelled flag.</p>
+<p>If set, it will bypass any checking and eddy will proceed as if data was shelled. Please be aware that if you have to use this flag you may be in untested territory and that it is a good idea to check your data extra carefully after having run eddy on it.</p>
+<h4 id="-very_verbose">--very_verbose</h4>
+<p>Turns on printing of <strong>lots</strong> of information about the algorithms progress to the screen. Too much information to be helpful for most users, but can be useful to pipe into a file if we (the developers) ask for additional debug information. If you use the following command you will get the output to your screen <em>and</em> to a file with the name <code>my_detailed_eddy_diagnostics.txt</code>.
+<div class="language-text highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>eddy --imain=my_data ... --very_verbose 2&gt;&amp;1 | tee my_detailed_eddy_diagnostics.txt
+</span></code></pre></div></p>
+<!--
+Dead letters
+    eddy attempts to combine the correction for susceptibility and eddy currents/movements so that there is only one single resampling. This means we need to "inform" eddy of the results from topup (which is used to calculate the susceptibility distortions).
+.
+    Unlike eddy_correct, eddy attempts to model the diffusion signal. This means that eddy needs to be informed of the diffusion direction/weighting that was used for each volume.
+.
+    eddy can utilise the information from different acquisitions that modulate how off-resonance translates into distortions. An example of this would be acquisitions with different polarity of the phase-encoding. Hence we need to inform eddy about how each volume was acquired.
+.
+    Some of the options in eddy, like for example the outlier detection and the slice-to-volume movement model, needs to know which slices were acquired together (in the case of multi-band) and the order in which this occurred.
+.
+.
+eddy with outlier replacement
+.
+When (not if) a subject makes a movement that coincides in time with the diffusion encoding part of the sequence, there will be partial or complete signal dropout. The dropout will affect the whole (the most common case) or parts of a slice. In the presence of out-of-plane rotations these slices will turn into diagonal bands when eddy rotates the volume back. If uncorrected this will affect any measures derived from the data.
+.
+As of version 5.0.10 (or the 5.0.9 eddy-patch) eddy has a mechanism for detecting these dropout-slices and replacing them with Gaussian Process predictions. All one needs to do for example in the example above is to add --repol to the command line.
+.
+eddy --imain=data --mask=my_hifi_b0_brain_mask --acqp=acqparams.txt --index=index.txt --bvecs=bvecs --bvals=bvals --topup=my_topup_results --repol --out=eddy_corrected_data
+.
+The exact details of how the outlier replacement is performed can be specified by the user, and in particular if ones data has been acquired with multi-band it can be worth taking a look here.
+.
+The pertinent reference for when using the --repol functionality is at the main eddy page.
+.
+Example of before and after outlier replacement
+.
+OLR_before_after.gif
+.
+This mini-movie flips between before and after outlier replacement
+for two consecutive planes. In the before case one can
+clearly see the telltale diagonal bands caused by "missing" slices
+being rotated out of plane. The after case shows how the
+missing slices were replaced in the native space before being
+rotated into the reference space (the first volume of --imain).
+.
+Correcting slice-to-volume movement with eddy
+.
+A common assumption for movement correction methods is that the subject remains still during the time is takes to acquire a volume (TR, typically 2-8 seconds for diffusion) and that any movement occurs between volumes. This is of course not true, but as long as the movement is slow relative the TR, it is a surprisingly good approximation.
+.
+However, for some subjects (for example small children) that assumption no longer holds. The result is a "corrupted" volume where the individual slices no longer stacks up to a "valid" volume. The leads to a telltale zig-zag pattern in a coronal or sagittal view when the slices are acquired in an interleaved fashion (that is the typical way to acquire diffusion data).
+.
+Example of zig-zag pattern from within-volume movement
+.
+ExampleOfS2VZigZagPattern.001.jpeg
+.
+This sagittal slice along the midline demonstrates
+the typical zig-zag pattern associated with
+within-plane movement and interleaved acquisition.
+Note that this is not signal dropout
+(except for one of the slices), but a case
+of signal being rotated in or out of the mid-sagittal plane.
+Hence, the signal is not lost and only needs to be
+relocated to its "proper" location.
+.
+Version 5.0.11 of eddy has the ability to correct for such within-volume (or "slice-to-volume") movement. This is done by setting the --mporder option to a value greater than 0. If one for example specifies --mporder=4 the movement during each volume is modelled by the 5 first terms of a DCT basis-set (and is hence defined by 6*5=30 parameters instead of the usual 6 rigid-body parameters). Note that the DCT-set is a function of time rather than slice, which means that the user needs to specify the relation between time and slice. A command line for correcting intra-volume movement in a data set with lots of movement can look something like
+.
+eddy --imain=data --mask=my_hifi_b0_brain_mask --acqp=acqparams.txt --index=index.txt --bvecs=bvecs --bvals=bvals --topup=my_topup_results --niter=8 --fwhm=10,8,4,2,0,0,0,0 --repol --out=eddy_corrected_data --mporder=6 --slspec=my_slspec.txt --s2v_niter=5 --s2v_lambda=1 --s2v_interp=trilinear
+.
+where the 5 last options are all related to the intra-volume correction.
+.
+Example of before and after intra-volume movement correction
+.
+olr_vs_s2v_movie.gif
+.
+This example shows a sagittal plane of a volume that was either
+corrected for "everything" (susceptibility, eddy currents,
+inter-volume movement and outliers) except intra-volume movement
+or corrected for "everything" including intra-volume movement.
+The little movie flips back and forth between the two cases.
+.
+The pertinent reference for when using the slice-to-volume functionality is at the main eddy page.
+.
+Correcting susceptibility-by-movement interactions with eddy
+.
+The off-resonance field that is caused by the subject head itself disrupting the main field in the scanner is referred to as the susceptibility induced field. This is the field that we estimate from blip-up-blip-down data using topup, or measure using a dual echo-time gradient echo sequence.
+.
+If/when the subject moves the field will, as a first approximation, move with the subject. To make it concrete, let us say we acquired blip-up-blip-down data and estimated the field with the subject in one location, and that the subject subsequently move 5mm in the z-direction. To a first approximation the new field is identical to the measured field, but translated 5mm in the z-direction.
+.
+However, if the movement includes a rotation around an axis that is non-parallel to the magnetic flux (z-axis) the field will change such that it is no longer sufficient to rotate the measured field to the new position. To estimate the field as a function of these rotations (pitch and roll) may seem like an intractable problem. But it has been shown that in all parts of the brain the field dependence on pitch and roll is linear, or very close to linear, over a range of tens of degrees of rotation.
+.
+That means that the field as a function of pitch and roll can be very well approximated by a Taylor expansion around the measured field. The unknowns in such an expansion are two "derivative fields", one representing the rate of change of the field with respect to pitch and one the rate of change of field with respect to roll. Both these fields can be scaled to Hz/degree.
+.
+eddy uses the observed variance in all scans, after correcting for gross movement and eddy currents, along with the estimated movement parameters to estimate the rate-of-change fields. Hence no additional measurements are needed. The estimated rate-of-change fields are then multiplied by the movement parameters to obtain a unique susceptibility induced field for each volume.
+.
+When combined with the slice-to-volume functionality eddy only uses volumes with "little" intra-volume movement for the estimation of the rate-of-change fields, assuming a single "position" for each of these volumes. For the application of these fields it will then use the slice-to-volume estimates to calculate a unique field for each slice/MB-group.
+.
+The pertinent reference for when using the susceptibility-by-movement functionality is at the main eddy page.
+-->
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright" style="flex: 1 1 100%">
+  <div style="float: right; text-align: right">
+    Maintained by the <a href="https://www.oxcin.ox.ac.uk/research/analysis-research/analysis-research">Analysis group</a> at the <a href="https://www.oxcin.ox.ac.uk/">Oxford Centre for Integrative Neuroimaging</a>.
+    <br>
+    See a problem? <a href="../../../support.html#fsl-mailing-list">Get in touch</a> (or <a href="../../../contribute.html">fix it</a> if you are in the OxCIN)!
+  </div>
+  
+  Made with
+  <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+    Material for MkDocs
+  </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../../..", "features": ["content.code.copy", "search.suggest", "search.highlight"], "search": "../../../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.f55a23d4.min.js"></script>
+      
+        <script src="../../../js/niivue-canvas.js"></script>
+      
+        <script src="../../../js/mathjax-config.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

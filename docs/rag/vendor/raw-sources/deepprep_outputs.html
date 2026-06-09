@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Outputs of DeepPrep &mdash; DeepPrep  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=19f00094" />
+      <link rel="stylesheet" type="text/css" href="_static/custom.css?v=7a5c7406" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="_static/jquery.js?v=5d32c60e"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script src="_static/documentation_options.js?v=7f41d439"></script>
+        <script src="_static/doctools.js?v=9a2dae69"></script>
+        <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="What’s new" href="changes.html" />
+    <link rel="prev" title="Processing pipeline details" href="processing.html" /> 
+<script async type="text/javascript" src="/_/static/javascript/readthedocs-addons.js"></script><meta name="readthedocs-project-slug" content="deepprep" /><meta name="readthedocs-version-slug" content="latest" /><meta name="readthedocs-resolver-filename" content="/outputs.html" /><meta name="readthedocs-http-status" content="200" /></head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html">
+            
+              <img src="_static/logo_title4.svg" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Installation</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="usage_local.html">Usage Notes (Local)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage_cluster.html">Usage Notes (Cluster)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage_GUI.html">Usage Notes (GUI)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Process and Outputs</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="processing.html">Processing pipeline details</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Outputs of DeepPrep</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#anatomical-derivatives">Anatomical derivatives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#functional-derivatives">Functional derivatives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#visual-reports">Visual Reports</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#confounds">Confounds</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Other Info</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="changes.html">What’s new</a></li>
+<li class="toctree-l1"><a class="reference internal" href="faq.html">FAQ - Frequently Asked Questions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about_us.html">About Us</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">DeepPrep</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Outputs of DeepPrep</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="outputs-of-deepprep">
+<h1>Outputs of DeepPrep<a class="headerlink" href="#outputs-of-deepprep" title="Link to this heading"></a></h1>
+<p>The outputs of DeepPrep have three categories:</p>
+<ol class="arabic simple">
+<li><p><strong>Anatomical derivatives</strong>: The anatomical images are preprocessed through motion correction, tissue segmentation, cortical surface reconstruction, volume and cortical surface registration, and etc.</p></li>
+<li><p><strong>Functional derivatives</strong>: The functional images are preprocessed through motion correction, slice timing correction, susceptibility distortion correction, confounds estimation, and registration to both standard and non-standard spaces.</p></li>
+<li><p><strong>Visual reports</strong>: For better visualization and understanding of the entire process, DeepPrep generates a visual report for each subject.</p></li>
+</ol>
+<section id="anatomical-derivatives">
+<h2>Anatomical derivatives<a class="headerlink" href="#anatomical-derivatives" title="Link to this heading"></a></h2>
+<p>FreeSurfer carries out preprocessed anatomical derivatives store in <code class="docutils literal notranslate"><span class="pre">&lt;output_dir&gt;/Recon</span></code> by default:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>&lt;output_dir&gt;/
+├── Recon/
+    ├── fsaverage/
+    ├── fsaverage6/
+    ├── sub-&lt;subject_label&gt;/
+        ├── label/
+        ├── mri/
+        ├── scripts/
+        └── ...
+└── ...
+</pre></div>
+</div>
+<p>The preprocessed structural MRI data are organized to align with the results of FreeSurfer, encompassing the normalized
+and skull-stripped brain, reconstructed cortical surfaces and morphometrics, volumetric segmentation, cortical surface
+parcellation, and their corresponding statistics. Additionally, transformation files for surface spherical registration are included.</p>
+</section>
+<section id="functional-derivatives">
+<h2>Functional derivatives<a class="headerlink" href="#functional-derivatives" title="Link to this heading"></a></h2>
+<p>The preprocessed functional derivatives are stored under the <code class="docutils literal notranslate"><span class="pre">&lt;output_dir&gt;/BOLD</span></code> in BIDS structure. All entities are shown in the file names, where <code class="docutils literal notranslate"><span class="pre">sub-&lt;subject_label&gt;</span></code> is mandatory, and the rest are optional:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>&lt;output_dir&gt;/
+├── BOLD/
+    ├── sub-&lt;subject_label&gt;/
+        ├── anat/
+            ├── sub-&lt;subject_label&gt;_space-&lt;space_label&gt;_res-&lt;resolution&gt;_desc-skull_T1w.nii.gz
+            ├── sub-&lt;subject_label&gt;_space-&lt;space_label&gt;_res-&lt;resolution&gt;_desc-noskull_T1w.nii.gz
+            └── ...
+        ├── figures/
+            ├── sub-&lt;subject_label&gt;_task-&lt;task_label&gt;_run-&lt;run_idx&gt;_desc-summary_bold.html
+            └── ...
+        └── func/
+            ├── sub-&lt;subject_label&gt;_task-&lt;task_label&gt;_run-&lt;run_idx&gt;_from-orig_to-boldref_mode-image_desc-hmc_xfm.txt
+            ├── sub-&lt;subject_label&gt;_task-&lt;task_label&gt;_run-&lt;run_idx&gt;_space-&lt;space_label&gt;_res-&lt;resolution&gt;_desc-preproc_bold.nii.gz
+            └── ...
+    ├── ...
+    └── dataset_description.json
+</pre></div>
+</div>
+<p>The default output spaces for the preprocessed functional MRI consist of three options: 1. the native BOLD fMRI space, 2. the MNI152NLin6Asym space, and 3. the fsaverage6 surfaces space.
+However, users have the flexibility to specify other output spaces, including the native T1w space and various volumetric and surface templates available on TemplateFlow.
+The main outputs of the preprocessed data include:</p>
+<blockquote>
+<div><div class="line-block">
+<div class="line">1.Preprocessed fMRI data.</div>
+<div class="line">2.Reference volume for motion correction.</div>
+<div class="line">3.Brain masks in the BOLD native space, include the nuisance masks, such as the ventricle and white-matter masks.</div>
+<div class="line">4.Transformation files for between T1w and the fMRI reference and between T1w and the standard templates.</div>
+<div class="line">5.Head motion parameters and the temporal SNR map.</div>
+<div class="line">6.Confound matrix.</div>
+</div>
+</div></blockquote>
+<p><em>Preprocessed fMRI data</em> are stored in the <code class="docutils literal notranslate"><span class="pre">&lt;output_dir&gt;/func</span></code> and <code class="docutils literal notranslate"><span class="pre">&lt;output_dir&gt;/anat</span></code> along with their reference files and json files:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>sub-&lt;subject_label&gt;/
+├── anat/
+    ├── sub-&lt;subject_label&gt;_desc-brain_mask.nii.gz
+    ├── sub-&lt;subject_label&gt;_desc-preproc_T1w.nii.gz
+├── func/
+    ├── sub-&lt;subject_label&gt;_task-&lt;task_label&gt;_run-&lt;run_idx&gt;_space-&lt;space_label&gt;_res-&lt;resolution&gt;_desc-preproc_bold.nii.gz
+    ├── sub-&lt;subject_label&gt;_task-&lt;task_label&gt;_run-&lt;run_idx&gt;_space-&lt;space_label&gt;_res-&lt;resolution&gt;_desc-preproc_bold.json
+    ├── sub-&lt;subject_label&gt;_task-&lt;task_label&gt;_run-&lt;run_idx&gt;_space-&lt;space_label&gt;_desc-brain_mask.nii.gz
+    ├── sub-&lt;subject_label&gt;_task-&lt;task_label&gt;_run-&lt;run_idx&gt;_space-&lt;space_label&gt;_res-&lt;resolution&gt;_desc-preproc_boldref.nii.gz
+</pre></div>
+</div>
+<p><em>Motion correction outputs</em> include motion corrected BOLD, reference frame to align with, and transformation matrices:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>sub-&lt;subject_label&gt;/
+├── func/
+    ├── sub-&lt;subject_label&gt;_task-&lt;task_label&gt;_run-&lt;run_idx&gt;_desc-hmc_boldref.nii.gz
+    ├── sub-&lt;subject_label&gt;_task-&lt;task_label&gt;_run-&lt;run_idx&gt;_desc-hmc_boldref.json
+    ├── sub-&lt;subject_label&gt;_task-&lt;task_label&gt;_run-&lt;run_idx&gt;_bold_mcf.nii.gz_abs.rms
+    ├── sub-&lt;subject_label&gt;_task-&lt;task_label&gt;_run-&lt;run_idx&gt;_bold_mcf.nii.gz_rel.rms
+    ├── sub-&lt;subject_label&gt;_task-&lt;task_label&gt;_run-&lt;run_idx&gt;_bold_mcf.nii.gz.par
+    ├── sub-&lt;subject_label&gt;_task-&lt;task_label&gt;_run-&lt;run_idx&gt;_from-orig_to-boldref_mode-image_desc-hmc_xfm.txt
+    ├── sub-&lt;subject_label&gt;_task-&lt;task_label&gt;_run-&lt;run_idx&gt;_from-orig_to-boldref_mode-image_desc-hmc_xfm.json
+</pre></div>
+</div>
+<p><em>Fieldmap registration</em>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>sub-&lt;subject_label&gt;/
+├── func/
+    ├── sub-&lt;subject_label&gt;_task-&lt;task_label&gt;_run-&lt;run_idx&gt;_from-boldref_to-auto000XX_mode-image_xfm.txt
+    ├── sub-&lt;subject_label&gt;_task-&lt;task_label&gt;_run-&lt;run_idx&gt;_from-boldref_to-auto000XX_mode-image_xfm.json
+</pre></div>
+</div>
+<p><em>Coregistration outputs</em>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>sub-&lt;subject_label&gt;/
+├── func/
+    ├── sub-&lt;subject_label&gt;_task-&lt;task_label&gt;_run-&lt;run_idx&gt;_desc-coreg_boldref.nii.gz
+    ├── sub-&lt;subject_label&gt;_task-&lt;task_label&gt;_run-&lt;run_idx&gt;_desc-coreg_boldref.json
+    ├── sub-&lt;subject_label&gt;_task-&lt;task_label&gt;_run-&lt;run_idx&gt;_from-boldref_to-T1w_mode-image_desc-coreg_xfm.txt
+    ├── sub-&lt;subject_label&gt;_task-&lt;task_label&gt;_run-&lt;run_idx&gt;_from-boldref_to-T1w_mode-image_desc-coreg_xfm.json
+</pre></div>
+</div>
+<p><em>Volume registration outputs</em>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>sub-&lt;subject_label&gt;/
+├── anat/
+    ├── sub-&lt;subject_label&gt;_from-T1w_to-&lt;space_label&gt;_desc-joint_trans.nii.gz
+</pre></div>
+</div>
+<p><em>Time series confounds</em>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>sub-&lt;subject_label&gt;/
+├── func/
+    ├── sub-&lt;subject_label&gt;_task-&lt;task_label&gt;_run-&lt;run_idx&gt;_desc-confounds_timeseries.json
+    ├── sub-&lt;subject_label&gt;_task-&lt;task_label&gt;_run-&lt;run_idx&gt;_desc-confounds_timeseries.tsv
+</pre></div>
+</div>
+<p><em>Surface outputs</em>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>sub-&lt;subject_label&gt;/
+├── func/
+    ├── sub-&lt;subject_label&gt;_task-&lt;task_label&gt;_run-&lt;run_idx&gt;_hemi-&lt;hemi&gt;_space-&lt;space_label&gt;_bold.func.gii
+    ├── sub-&lt;subject_label&gt;_task-&lt;task_label&gt;_run-&lt;run_idx&gt;_hemi-&lt;hemi&gt;_space-&lt;space_label&gt;_bold.json
+</pre></div>
+</div>
+<p><em>Outputs with and without skull</em>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>sub-&lt;subject_label&gt;/
+├── anat/
+    ├── sub-&lt;subject_label&gt;_space-&lt;space_label&gt;_res-&lt;resolution&gt;_desc-noskull_T1w.nii.gz
+    ├── sub-&lt;subject_label&gt;_space-&lt;space_label&gt;_res-&lt;resolution&gt;_desc-skull_T1w.nii.gz
+    ├── sub-&lt;subject_label&gt;_space-T1w_res-2mm_desc-noskull_T1w.nii.gz
+    ├── sub-&lt;subject_label&gt;_space-T1w_res-2mm_desc-skull_T1w.nii.gz
+</pre></div>
+</div>
+<p><em>Volume segmentation outputs</em>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>sub-&lt;subject_label&gt;/
+├── anat/
+    ├── sub-&lt;subject_label&gt;_dseg.nii.gz
+    ├── sub-&lt;subject_label&gt;_label-&lt;seg_label&gt;_probseg.nii.gz
+</pre></div>
+</div>
+<p>If CIFTI outputs are requested (with the –bold_cifti argument), cortical thickness, curvature, and sulcal depth maps are converted to GIFTI and CIFTI:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>sub-&lt;subject_label&gt;/
+├── anat/
+    ├── sub-&lt;subject_label&gt;_hemi-&lt;hemi&gt;_thickness.shape.gii
+    ├── sub-&lt;subject_label&gt;_hemi-&lt;hemi&gt;_curv.shape.gii
+    ├── sub-&lt;subject_label&gt;_hemi-&lt;hemi&gt;_sulc.shape.gii
+    ├── sub-&lt;subject_label&gt;_space-fsLR_den-91k_thickness.dscalar.nii
+    ├── sub-&lt;subject_label&gt;_space-fsLR_den-91k_curv.dscalar.nii
+    ├── sub-&lt;subject_label&gt;_space-fsLR_den-91k_sulc.dscalar.nii
+</pre></div>
+</div>
+<p>And the BOLD series are also saved as dtseries.nii CIFTI files:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>sub-&lt;subject_label&gt;/
+├── func/
+    ├── sub-&lt;subject_label&gt;_task-&lt;task_label&gt;_run-&lt;run_idx&gt;_space-fsLR_den-91k_bold.dtseries.nii
+</pre></div>
+</div>
+</section>
+<section id="visual-reports">
+<h2>Visual Reports<a class="headerlink" href="#visual-reports" title="Link to this heading"></a></h2>
+<p>DeepPrep outputs summary reports, written to <code class="docutils literal notranslate"><span class="pre">&lt;output</span> <span class="pre">dir&gt;/QC</span></code>. These reports provide a quick way to make visual inspection of the results easy.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>&lt;output_dir&gt;/
+├── QC/
+    ├── sub-&lt;subject_label&gt;/
+    ├── sub-&lt;subject_label&gt;/
+      ├── figures/
+      ├── logs/
+      └── sub-&lt;subject_label&gt;.html
+    ├── ...
+    ├── dataset_description.json
+    ├── nextflow.run.command
+    ├── nextflow.run.config
+    ├── report.html
+    └── timeline.html
+</pre></div>
+</div>
+<p>DeepPrep automatically generates a descriptive HTML report for each participant and session. <a class="reference external" href="https://download.anning.info/ninganme-public/DeepPrep/docs/source/24.1.1/_static/qc_report/sub-01.html">View a sample report</a>.
+The report commences with a concise summary of key imaging parameters extracted from the BIDS meta information.
+Subsequently, the report provides an overview of the overall CPU and GPU processing times for the data preprocessing.
+Key processing steps and results for structural images are visually presented, including segmentation, parcellation,
+spatial normalization, and coregistration. The normalization and coregistration outcomes are demonstrated through dynamic
+‘before’ versus ‘after’ animations. Additionally, the report includes a carpet plot, showcasing both the raw and preprocessed fMRI data,
+along with a temporal signal-to-noise ratio (tSNR) map. Finally, the report concludes with comprehensive boilerplate methods text,
+offering a clear and consistent description of all preprocessing steps employed, accompanied by appropriate citations. Some examples are shown below:</p>
+<img alt="https://download.anning.info/ninganme-public/DeepPrep/docs/source/24.1.1/_static/outputs/report_timeline.png" class="align-center" src="https://download.anning.info/ninganme-public/DeepPrep/docs/source/24.1.1/_static/outputs/report_timeline.png" />
+<p>The visual reports provide several sections per task and run to aid designing a denoising strategy for subsequent analysis.
+Some of the estimated confounds are plotted with a “carpet” visualization of the BOLD time series. An example is shown below:</p>
+<img alt="https://download.anning.info/ninganme-public/DeepPrep/docs/source/24.1.1/_static/outputs/desc-carpet_bold.svg" class="align-center" src="https://download.anning.info/ninganme-public/DeepPrep/docs/source/24.1.1/_static/outputs/desc-carpet_bold.svg" /><p>Summary statistics are plotted, which may reveal trends or artifacts in the BOLD data.
+Global signals (GS) were calculated within the whole-brain, and the white-matter (GSWM) and the cerebro-spinal fluid (GSCSF)
+were calculated with their corresponding masks. The standardized DVARS, framewise-displacement measures (FD),
+and relative head motion (RHM) were calculated. A carpet plot shows time series for all voxels within the brain mask,
+including cortical gray matter (Ctx GM), deep (subcortical) gray matter (dGM), white-matter and CSF (WM+CSF),
+and the rest of the brain (The rest).</p>
+</section>
+<section id="confounds">
+<span id="outputs-confounds"></span><h2>Confounds<a class="headerlink" href="#confounds" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt>The output confounds include:</dt><dd><ul class="simple">
+<li><p><strong>24HMP</strong>: 3 translations and 3 rotation (6HMP), their temporal derivatives (12HMP), and their quadratic terms (24HMP).</p></li>
+<li><p><strong>12 Global signals</strong>: csf, white_matter, global_signal their temporal derivatives, and their quadratic terms.</p></li>
+<li><p><strong>Outlier detection</strong>:  framewise_displacement, rmsd, dvars, std_dvars, non_steadv_state_outlier, motion_outlier.</p></li>
+<li><p><strong>Discrete cosine-basis regressors</strong>: cosine</p></li>
+<li><p><strong>CompCor confounds</strong>:  PCA regressors, saves top 10 components for b_comp_cor and saves 50% of explained variance of the rest, i.e. anatomical CompCor (a_comp_cor), temporal CompCor (t_comp_cor), outside brainmask CompCor (b_comp_cor). CompCor estimates from WM, CSF, and their union region is a_comp_cor, CompCor estimates from each of WM, csf are w_comp_cor, and c_comp_cor. bCompCor is a complementary extension of aCompCor and tCompCor. Its noise mask is assigned as the background of the field of view. Regressing out these components improves test-retest reliability. We will publish a paper to elucidate the method and its performance.</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="processing.html" class="btn btn-neutral float-left" title="Processing pipeline details" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="changes.html" class="btn btn-neutral float-right" title="What’s new" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023-2025 pBFS lab, Changping Laboratory All rights reserved.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

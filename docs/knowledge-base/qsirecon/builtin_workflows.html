@@ -1,0 +1,2320 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" />
+  <meta name="readthedocs-addons-api-version" content="1"><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Built-In Reconstruction Workflows &mdash; qsirecon 26.1.0.dev1+g79953f538 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/theme_overrides.css?v=c2e89e5a" />
+      <link rel="stylesheet" type="text/css" href="_static/sphinx-design.min.css?v=95c83b7e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=814afc9d"></script>
+      <script src="_static/doctools.js?v=9a2dae69"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="https://cdn.rawgit.com/chrisfilo/zenodo.js/v0.1/zenodo.js"></script>
+      <script src="_static/design-tabs.js?v=f930bc37"></script>
+    <script src="_static/js/theme.js"></script>
+    <script src="_static/js/versions.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Custom Reconstruction Workflows" href="building_workflows.html" />
+    <link rel="prev" title="Neurite Orientation Dispersion and Density Imaging (NODDI)" href="models/noddi.html" /> 
+<script async type="text/javascript" src="/_/static/javascript/readthedocs-addons.js"></script><meta name="readthedocs-project-slug" content="qsirecon" /><meta name="readthedocs-version-slug" content="latest" /><meta name="readthedocs-resolver-filename" content="/builtin_workflows.html" /><meta name="readthedocs-http-status" content="200" /></head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            qsirecon
+          </a>
+              <div class="switch-menus">
+                <div class="version-switch"></div>
+                <div class="language-switch"></div>
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="models.html">Available Models in <em>QSIRecon</em></a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Built-In Reconstruction Workflows</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#id2">Workflows</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#mrtrix3-based-workflows">MRtrix3-based Workflows</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#mrtrix3-dwi-outputs">MRtrix3 DWI Outputs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#mrtrix3-anatomical-outputs">MRtrix3 Anatomical Outputs</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#mrtrix-multishell-msmt-act-hsvs"><code class="docutils literal notranslate"><span class="pre">mrtrix_multishell_msmt_ACT-hsvs</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#mrtrix-multishell-msmt-act-fast"><code class="docutils literal notranslate"><span class="pre">mrtrix_multishell_msmt_ACT-fast</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#mrtrix-multishell-msmt-noact"><code class="docutils literal notranslate"><span class="pre">mrtrix_multishell_msmt_noACT</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#mrtrix-singleshell-ss3t-act-hsvs"><code class="docutils literal notranslate"><span class="pre">mrtrix_singleshell_ss3t_ACT-hsvs</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#mrtrix-singleshell-ss3t-act-fast"><code class="docutils literal notranslate"><span class="pre">mrtrix_singleshell_ss3t_ACT-fast</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#mrtrix-singleshell-ss3t-noact"><code class="docutils literal notranslate"><span class="pre">mrtrix_singleshell_ss3t_noACT</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pyafq-tractometry"><code class="docutils literal notranslate"><span class="pre">pyafq_tractometry</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#pyafq-outputs">PyAFQ Outputs</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#mrtrix-multishell-msmt-pyafq-tractometry"><code class="docutils literal notranslate"><span class="pre">mrtrix_multishell_msmt_pyafq_tractometry</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#id23">PyAFQ Outputs</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#amico-noddi"><code class="docutils literal notranslate"><span class="pre">amico_noddi</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#scalar-maps">Scalar Maps</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#other-outputs">Other Outputs</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#dsi-studio-gqi"><code class="docutils literal notranslate"><span class="pre">dsi_studio_gqi</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#id31">Scalar Maps</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#id32">Other Outputs</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#dsi-studio-autotrack"><code class="docutils literal notranslate"><span class="pre">dsi_studio_autotrack</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#id36">Scalar Maps</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#id37">Other Outputs</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#ss3t-fod-autotrack"><code class="docutils literal notranslate"><span class="pre">ss3t_fod_autotrack</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#id40">Scalar Maps</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#id41">Other Outputs</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#tortoise"><code class="docutils literal notranslate"><span class="pre">TORTOISE</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#id44">Scalar Maps</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#id45">Other Outputs</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#dipy-mapmri"><code class="docutils literal notranslate"><span class="pre">dipy_mapmri</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#id47">Scalar Maps</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#id48">Other Outputs</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#dipy-dki"><code class="docutils literal notranslate"><span class="pre">dipy_dki</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#id50">Scalar Maps</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#id51">Other Outputs</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#dipy-3dshore"><code class="docutils literal notranslate"><span class="pre">dipy_3dshore</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#id53">Scalar Maps</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#reorient-fslstd"><code class="docutils literal notranslate"><span class="pre">reorient_fslstd</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#csdsi-3dshore"><code class="docutils literal notranslate"><span class="pre">csdsi_3dshore</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#id56">Scalar Maps</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#id57">Other Outputs</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#hbcd-scalar-maps"><code class="docutils literal notranslate"><span class="pre">hbcd_scalar_maps</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#id59">Scalar Maps</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#id60">Other Outputs</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#multishell-scalarfest"><code class="docutils literal notranslate"><span class="pre">multishell_scalarfest</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#id62">Scalar Maps</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#id63">Other Outputs</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#which-workflows-are-appropriate-for-your-dmri-data">Which workflows are appropriate for your dMRI data?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#connectivity-matrices">Connectivity matrices</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#atlases">Atlases</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#using-custom-atlases">Using custom atlases</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#connectivity-measures">Connectivity Measures</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#mrtrix3-connectivity-measures">MRtrix3 Connectivity Measures</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dsi-studio-connectivity-measures">DSI Studio Connectivity Measures</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#references">References</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="building_workflows.html">Custom Reconstruction Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="outputs.html">Outputs of <em>QSIRecon</em></a></li>
+<li class="toctree-l1"><a class="reference internal" href="contributors.html">Contributing to <em>QSIRecon</em></a></li>
+<li class="toctree-l1"><a class="reference internal" href="changes.html">What’s New</a></li>
+<li class="toctree-l1"><a class="reference internal" href="comparisons.html">Comparisons to other pipelines</a></li>
+<li class="toctree-l1"><a class="reference internal" href="help.html">Getting help</a></li>
+<li class="toctree-l1"><a class="reference internal" href="license.html">License information</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api_reference.html">API Documentation</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">qsirecon</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Built-In Reconstruction Workflows</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/builtin_workflows.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="built-in-reconstruction-workflows">
+<span id="builtin-workflows"></span><h1>Built-In Reconstruction Workflows<a class="headerlink" href="#built-in-reconstruction-workflows" title="Link to this heading"></a></h1>
+<p>The Built-In recon workflows can be easily selected by specifying their name
+after the <code class="docutils literal notranslate"><span class="pre">--recon-spec</span></code> flag (e.g. <code class="docutils literal notranslate"><span class="pre">--recon-spec</span> <span class="pre">amico_noddi</span></code>).
+Many of these workflows were originally described in Cieslak <em>et al.</em><a class="footnote-reference brackets" href="#footcite-cieslak2021qsiprep" id="id1" role="doc-noteref"><span class="fn-bracket">[</span>1<span class="fn-bracket">]</span></a>.
+Not all workflows are suitable for all kinds of dMRI data.
+Be sure to check <a class="reference internal" href="#appropriate-schemes"><span class="std std-ref">Which workflows are appropriate for your dMRI data?</span></a>.</p>
+<p>By specifying just a name for <code class="docutils literal notranslate"><span class="pre">--recon_spec</span></code>, you will be using all the default arguments
+for the various steps in that workflow. Workflows can be customized
+(see <a class="reference internal" href="building_workflows.html#building-workflows"><span class="std std-ref">Custom Reconstruction Workflows</span></a>).</p>
+<section id="id2">
+<h2>Workflows<a class="headerlink" href="#id2" title="Link to this heading"></a></h2>
+<section id="mrtrix3-based-workflows">
+<h3>MRtrix3-based Workflows<a class="headerlink" href="#mrtrix3-based-workflows" title="Link to this heading"></a></h3>
+<p>The MRtrix workflows are identical up to the FOD estimation. In each case the fiber response
+function is estimated using <code class="docutils literal notranslate"><span class="pre">dwi2response</span> <span class="pre">dhollander</span></code> <a class="footnote-reference brackets" href="#footcite-dhollander2019response" id="id3" role="doc-noteref"><span class="fn-bracket">[</span>2<span class="fn-bracket">]</span></a>
+with a mask based on the T1w.
+The main differences are in</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>the CSD algorithm used in dwi2fod (msmt_csd or ss3t_csd)</p></li>
+<li><p>whether a T1w-based tissue segmentation is used during tractography</p></li>
+</ul>
+</div></blockquote>
+<p>In the <code class="docutils literal notranslate"><span class="pre">*_noACT</span></code> versions of the pipelines, no T1w-based segmentation is used during
+tractography. Otherwise, cropping is performed at the GM/WM interface, along with backtracking.</p>
+<p>In all pipelines, tractography is performed using
+<a class="reference external" href="https://mrtrix.readthedocs.io/en/latest/reference/commands/tckgen.html">tckgen</a>, which uses the iFOD2 probabilistic tracking method to generate 1e7 streamlines with a
+maximum length of 250mm, minimum length of 30mm, FOD power of 0.33. Weights for each streamline
+were calculated using <a class="reference external" href="https://mrtrix.readthedocs.io/en/latest/reference/commands/tcksift2.html">SIFT2</a> <a class="footnote-reference brackets" href="#footcite-smith2015sift2" id="id4" role="doc-noteref"><span class="fn-bracket">[</span>3<span class="fn-bracket">]</span></a> and were included for while estimating the
+structural connectivity matrix.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>We don’t recommend using ACT with FAST segmentations. The full benefits of ACT
+require very precise tissue boundaries and FAST just doesn’t do this reliably
+enough. We strongly recommend the <code class="docutils literal notranslate"><span class="pre">hsvs</span></code> segmentation if you’re going to
+use ACT. Note that this requires <code class="docutils literal notranslate"><span class="pre">--fs-subjects-dir</span></code></p>
+</div>
+<section id="mrtrix3-dwi-outputs">
+<span id="mrtrix-dwi-outputs"></span><h4>MRtrix3 DWI Outputs<a class="headerlink" href="#mrtrix3-dwi-outputs" title="Link to this heading"></a></h4>
+<p>These files are located in the <code class="docutils literal notranslate"><span class="pre">dwi/</span></code> directories.</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 33.3%" />
+<col style="width: 66.7%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>File Name</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>*_connectivity.mat</p></td>
+<td><p>MATLAB format mat file containing connectivity matrices for all the selected atlases. This is an hdf5-format file and can be read using <code class="docutils literal notranslate"><span class="pre">scipy.io.matlab.loadmat</span></code> in Python.</p></td>
+</tr>
+<tr class="row-odd"><td><p>*_exemplarbundles.zip</p></td>
+<td><p>A zip archive containing the output directory from <code class="docutils literal notranslate"><span class="pre">connectome2tck</span></code>. Unzip this directory and view the exemplar connections (one is created for each nonzero edge in the connectivity matrix) using <code class="docutils literal notranslate"><span class="pre">mrview</span></code> to ensure that you’re seeing the expected shapes of connections.</p></td>
+</tr>
+<tr class="row-even"><td><p>*_streamlines.tck.gz</p></td>
+<td><p>Streamlines produced by <code class="docutils literal notranslate"><span class="pre">tckgen</span></code>. NOTE: these are not saved to the output directory by default.</p></td>
+</tr>
+<tr class="row-odd"><td><p>*model-mtnorm*param-inliermask*_dwimap.nii.gz</p></td>
+<td><p>Inlier mask created by <code class="docutils literal notranslate"><span class="pre">mtnormalize</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>*model-mtnorm*param-norm*_dwimap.nii.gz</p></td>
+<td><p>Inlier mask created by <code class="docutils literal notranslate"><span class="pre">mtnormalize</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>*model-sift2*_mu.txt</p></td>
+<td><p>The $mu$ value that should be used to adjust SIFT2 weights to account for different response functions.</p></td>
+</tr>
+<tr class="row-even"><td><p>*model-sift2*_streamlineweights.csv</p></td>
+<td><p>Per-streamline SIFT2 weight for each streamline in <code class="docutils literal notranslate"><span class="pre">streamlines.tck.gz</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p>*param-fod*label-CSF*_dwimap.mif.gz</p></td>
+<td><p>FOD for cerebrospinal fluid.</p></td>
+</tr>
+<tr class="row-even"><td><p>*param-fod*label-CSF*_dwimap.txt</p></td>
+<td><p>SH response function for cerebrospinal fluid.</p></td>
+</tr>
+<tr class="row-odd"><td><p>*param-fod*label-GM*_dwimap.mif.gz</p></td>
+<td><p>FOD for gray matter.</p></td>
+</tr>
+<tr class="row-even"><td><p>*param-fod*label-GM*_dwimap.txt</p></td>
+<td><p>SH response function for gray matter.</p></td>
+</tr>
+<tr class="row-odd"><td><p>*param-fod*label-WM*_dwimap.mif.gz</p></td>
+<td><p>FOD for white matter. These FODs are used as inputs to <code class="docutils literal notranslate"><span class="pre">tckgen</span></code> for tractograpy.</p></td>
+</tr>
+<tr class="row-even"><td><p>*param-fod*label-WM*_dwimap.txt</p></td>
+<td><p>SH response function for white matter.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="mrtrix3-anatomical-outputs">
+<span id="mrtrix-anatomical-outputs"></span><h4>MRtrix3 Anatomical Outputs<a class="headerlink" href="#mrtrix3-anatomical-outputs" title="Link to this heading"></a></h4>
+<p>These files are located <code class="docutils literal notranslate"><span class="pre">anat/</span></code> directories.</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 33.3%" />
+<col style="width: 66.7%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>File Name</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>*space-ACPC|T1w*seg-hsvs*_dseg.nii.gz</p></td>
+<td><p>Hybrid Surface/Voume Segmentation in MRtrix3 5tt format. Aligned in coordinate space to <code class="docutils literal notranslate"><span class="pre">space-ACPC</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p>*space-fsnative*seg-hsvs*_dseg.nii.gz</p></td>
+<td><p>Hybrid Surface/Volume Segmentation in MRtrix3 5tt format. Aligned to the FreeSurfer <code class="docutils literal notranslate"><span class="pre">orig.mgz</span></code> image.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="mrtrix-multishell-msmt-act-hsvs">
+<span id="id5"></span><h3><code class="docutils literal notranslate"><span class="pre">mrtrix_multishell_msmt_ACT-hsvs</span></code><a class="headerlink" href="#mrtrix-multishell-msmt-act-hsvs" title="Link to this heading"></a></h3>
+<p>This workflow uses the <code class="docutils literal notranslate"><span class="pre">msmt_csd</span></code> algorithm <a class="footnote-reference brackets" href="#footcite-msmt5tt" id="id6" role="doc-noteref"><span class="fn-bracket">[</span>4<span class="fn-bracket">]</span></a> to estimate FODs for white matter,
+gray matter and cerebrospinal fluid using <em>multi-shell acquisitions</em>. The white matter FODs are
+used for tractography and the T1w segmentation is used for anatomical constraints <a class="footnote-reference brackets" href="#footcite-smith2012anatomically" id="id7" role="doc-noteref"><span class="fn-bracket">[</span>5<span class="fn-bracket">]</span></a>.
+The T1w segmentation uses the hybrid surface volume segmentation (hsvs) <a class="footnote-reference brackets" href="#footcite-smith2020hybrid" id="id8" role="doc-noteref"><span class="fn-bracket">[</span>6<span class="fn-bracket">]</span></a> and
+requires <code class="docutils literal notranslate"><span class="pre">--fs-subjects-dir</span></code>.
+This workflow produces <a class="reference internal" href="#mrtrix-dwi-outputs"><span class="std std-ref">MRtrix3 DWI Outputs</span></a> and <a class="reference internal" href="#mrtrix-anatomical-outputs"><span class="std std-ref">MRtrix3 Anatomical Outputs</span></a>.</p>
+</section>
+<section id="mrtrix-multishell-msmt-act-fast">
+<span id="id9"></span><h3><code class="docutils literal notranslate"><span class="pre">mrtrix_multishell_msmt_ACT-fast</span></code><a class="headerlink" href="#mrtrix-multishell-msmt-act-fast" title="Link to this heading"></a></h3>
+<p>Identical to <a class="reference internal" href="#mrtrix-multishell-msmt-act-hsvs"><span class="std std-ref">mrtrix_multishell_msmt_ACT-hsvs</span></a> except FSL’s FAST is used for
+tissue segmentation. This workflow is not recommended.
+This workflow produces <a class="reference internal" href="#mrtrix-dwi-outputs"><span class="std std-ref">MRtrix3 DWI Outputs</span></a>.</p>
+</section>
+<section id="mrtrix-multishell-msmt-noact">
+<span id="id10"></span><h3><code class="docutils literal notranslate"><span class="pre">mrtrix_multishell_msmt_noACT</span></code><a class="headerlink" href="#mrtrix-multishell-msmt-noact" title="Link to this heading"></a></h3>
+<p>This workflow uses the <code class="docutils literal notranslate"><span class="pre">msmt_csd</span></code> algorithm <a class="footnote-reference brackets" href="#footcite-msmt5tt" id="id11" role="doc-noteref"><span class="fn-bracket">[</span>4<span class="fn-bracket">]</span></a> to estimate FODs for white matter,
+gray matter and cerebrospinal fluid using <em>multi-shell acquisitions</em>. The white matter FODs are
+used for tractography with no T1w-based anatomical constraints.
+This workflow produces <a class="reference internal" href="#mrtrix-dwi-outputs"><span class="std std-ref">MRtrix3 DWI Outputs</span></a>.</p>
+</section>
+<section id="mrtrix-singleshell-ss3t-act-hsvs">
+<span id="id12"></span><h3><code class="docutils literal notranslate"><span class="pre">mrtrix_singleshell_ss3t_ACT-hsvs</span></code><a class="headerlink" href="#mrtrix-singleshell-ss3t-act-hsvs" title="Link to this heading"></a></h3>
+<p>This workflow uses the <code class="docutils literal notranslate"><span class="pre">ss3t_csd_beta1</span></code> algorithm <a class="footnote-reference brackets" href="#footcite-dhollander2016novel" id="id13" role="doc-noteref"><span class="fn-bracket">[</span>7<span class="fn-bracket">]</span></a>
+to estimate FODs for white matter,
+and cerebrospinal fluid using <em>single shell (DTI) acquisitions</em>. The white matter FODs are
+used for tractography and the T1w segmentation is used for anatomical constraints <a class="footnote-reference brackets" href="#footcite-smith2012anatomically" id="id14" role="doc-noteref"><span class="fn-bracket">[</span>5<span class="fn-bracket">]</span></a>.
+The T1w segmentation uses the hybrid surface volume segmentation (hsvs) <a class="footnote-reference brackets" href="#footcite-smith2020hybrid" id="id15" role="doc-noteref"><span class="fn-bracket">[</span>6<span class="fn-bracket">]</span></a> and
+requires <code class="docutils literal notranslate"><span class="pre">--fs-subjects-dir</span></code>.
+This workflow produces <a class="reference internal" href="#mrtrix-dwi-outputs"><span class="std std-ref">MRtrix3 DWI Outputs</span></a> and <a class="reference internal" href="#mrtrix-anatomical-outputs"><span class="std std-ref">MRtrix3 Anatomical Outputs</span></a>.</p>
+</section>
+<section id="mrtrix-singleshell-ss3t-act-fast">
+<span id="id16"></span><h3><code class="docutils literal notranslate"><span class="pre">mrtrix_singleshell_ss3t_ACT-fast</span></code><a class="headerlink" href="#mrtrix-singleshell-ss3t-act-fast" title="Link to this heading"></a></h3>
+<p>Identical to <a class="reference internal" href="#mrtrix-singleshell-ss3t-act-hsvs"><span class="std std-ref">mrtrix_singleshell_ss3t_ACT-hsvs</span></a> except FSL’s FAST is used for
+tissue segmentation. This workflow is not recommended.
+This workflow produces <a class="reference internal" href="#mrtrix-dwi-outputs"><span class="std std-ref">MRtrix3 DWI Outputs</span></a>.</p>
+</section>
+<section id="mrtrix-singleshell-ss3t-noact">
+<span id="id17"></span><h3><code class="docutils literal notranslate"><span class="pre">mrtrix_singleshell_ss3t_noACT</span></code><a class="headerlink" href="#mrtrix-singleshell-ss3t-noact" title="Link to this heading"></a></h3>
+<p>This workflow uses the <code class="docutils literal notranslate"><span class="pre">ss3t_csd_beta1</span></code> algorithm <a class="footnote-reference brackets" href="#footcite-dhollander2016novel" id="id18" role="doc-noteref"><span class="fn-bracket">[</span>7<span class="fn-bracket">]</span></a>
+to estimate FODs for white matter,
+and cerebrospinal fluid using <em>single shell (DTI) acquisitions</em>. The white matter FODs are
+used for tractography with no T1w-based anatomical constraints.
+This workflow produces <a class="reference internal" href="#mrtrix-dwi-outputs"><span class="std std-ref">MRtrix3 DWI Outputs</span></a>.</p>
+</section>
+<section id="pyafq-tractometry">
+<span id="pyafq-input-trk"></span><span id="id19"></span><h3><code class="docutils literal notranslate"><span class="pre">pyafq_tractometry</span></code><a class="headerlink" href="#pyafq-tractometry" title="Link to this heading"></a></h3>
+<p>This workflow uses the AFQ <a class="footnote-reference brackets" href="#footcite-pyafq2" id="id20" role="doc-noteref"><span class="fn-bracket">[</span>8<span class="fn-bracket">]</span></a> implemented in Python <a class="footnote-reference brackets" href="#footcite-pyafq" id="id21" role="doc-noteref"><span class="fn-bracket">[</span>9<span class="fn-bracket">]</span></a> to recognize
+major white matter pathways within the tractography, and then extract tissue properties along
+those pathways. See the <a class="reference external" href="https://yeatmanlab.github.io/pyAFQ/">pyAFQ documentation</a> .</p>
+<section id="pyafq-outputs">
+<h4>PyAFQ Outputs<a class="headerlink" href="#pyafq-outputs" title="Link to this heading"></a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>File Name</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>sub-* (directory)</p></td>
+<td><p>PyAFQ results direcrory for each subject</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="mrtrix-multishell-msmt-pyafq-tractometry">
+<span id="id22"></span><h3><code class="docutils literal notranslate"><span class="pre">mrtrix_multishell_msmt_pyafq_tractometry</span></code><a class="headerlink" href="#mrtrix-multishell-msmt-pyafq-tractometry" title="Link to this heading"></a></h3>
+<p>Identical to <a class="reference internal" href="#pyafq-tractometry"><span class="std std-ref">pyafq_tractometry</span></a> except that tractography generated using IFOD2 from MRTrix3,
+instead of using pyAFQ’s default DIPY tractography.
+This can also be used as an example for how to import tractographies from other
+reconstruciton pipelines to pyAFQ.
+This workflow produces <a class="reference internal" href="#mrtrix-dwi-outputs"><span class="std std-ref">MRtrix3 DWI Outputs</span></a>.</p>
+<section id="id23">
+<h4>PyAFQ Outputs<a class="headerlink" href="#id23" title="Link to this heading"></a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>File Name</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>sub-* (directory)</p></td>
+<td><p>PyAFQ results direcrory for each subject</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="amico-noddi">
+<span id="id24"></span><h3><code class="docutils literal notranslate"><span class="pre">amico_noddi</span></code><a class="headerlink" href="#amico-noddi" title="Link to this heading"></a></h3>
+<p>This workflow estimates the NODDI <a class="footnote-reference brackets" href="#footcite-noddi" id="id25" role="doc-noteref"><span class="fn-bracket">[</span>10<span class="fn-bracket">]</span></a> model using the implementation from
+AMICO <a class="footnote-reference brackets" href="#footcite-amico" id="id26" role="doc-noteref"><span class="fn-bracket">[</span>11<span class="fn-bracket">]</span></a> and tissue fraction modulation described in <a class="footnote-reference brackets" href="#footcite-parker2021not" id="id27" role="doc-noteref"><span class="fn-bracket">[</span>12<span class="fn-bracket">]</span></a>.
+Images with (modulated) intra-cellular volume fraction (ICVF), isotropic volume fraction (ISOVF),
+(modulated) orientation dispersion (OD), root mean square error (RMSE) and normalized RMSE are written to outputs.
+Additionally, a DSI Studio fib file is created using the peak directions and ICVF as a stand-in for QA to be
+used for tractography.</p>
+<p>Please see Parker 2021 <a class="footnote-reference brackets" href="#footcite-parker2021not" id="id28" role="doc-noteref"><span class="fn-bracket">[</span>12<span class="fn-bracket">]</span></a> for a detailed description of use and application of the
+tissue fraction modulated outputs.</p>
+<section id="scalar-maps">
+<h4>Scalar Maps<a class="headerlink" href="#scalar-maps" title="Link to this heading"></a></h4>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 27.3%" />
+<col style="width: 18.2%" />
+<col style="width: 54.5%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Model</p></th>
+<th class="head"><p>Parameter</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>noddi</p></td>
+<td><p>direction</p></td>
+<td><p>Peak directions from NODDI</p></td>
+</tr>
+<tr class="row-odd"><td><p>noddi</p></td>
+<td><p>icvf</p></td>
+<td><p>Intracellular volume fraction from NODDI</p></td>
+</tr>
+<tr class="row-even"><td><p>noddi</p></td>
+<td><p>isovf</p></td>
+<td><p>Isotropic volume fraction from NODDI</p></td>
+</tr>
+<tr class="row-odd"><td><p>noddi</p></td>
+<td><p>od</p></td>
+<td><p>Orientation dispersion index from NODDI</p></td>
+</tr>
+<tr class="row-even"><td><p>noddi</p></td>
+<td><p>modulated icvf</p></td>
+<td><p>Tissue fraction modulated intracellular volume fraction from NODDI</p></td>
+</tr>
+<tr class="row-odd"><td><p>noddi</p></td>
+<td><p>modulated od</p></td>
+<td><p>Tissue fraction modulated orientation dispersion from NODDI</p></td>
+</tr>
+<tr class="row-even"><td><p>noddi</p></td>
+<td><p>rmse</p></td>
+<td><p>Root mean square error between predicted and observed signal from NODDI</p></td>
+</tr>
+<tr class="row-odd"><td><p>noddi</p></td>
+<td><p>rmse</p></td>
+<td><p>Normalized RMSE between predicted and observed signal from NODDI</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="other-outputs">
+<h4>Other Outputs<a class="headerlink" href="#other-outputs" title="Link to this heading"></a></h4>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 33.3%" />
+<col style="width: 66.7%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>File Name</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>*model-noddi*_config.pickle.gz</p></td>
+<td><p>A config file internally used by AMICO.</p></td>
+</tr>
+<tr class="row-odd"><td><p>*model-noddi*param-direction*_dwimap.fib.gz</p></td>
+<td><p>DSI Studio fib format file where the peak directions come from the NODDI fit. The “qa” variable is actually ICVF.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="dsi-studio-gqi">
+<span id="id29"></span><h3><code class="docutils literal notranslate"><span class="pre">dsi_studio_gqi</span></code><a class="headerlink" href="#dsi-studio-gqi" title="Link to this heading"></a></h3>
+<p>Here the standard GQI plus deterministic tractography pipeline is used <a class="footnote-reference brackets" href="#footcite-yeh2013" id="id30" role="doc-noteref"><span class="fn-bracket">[</span>13<span class="fn-bracket">]</span></a>.
+GQI works on
+almost any imaginable sampling scheme because DSI Studio will internally interpolate the q-space
+data so  symmetry requirements are met. GQI models the water diffusion ODF, so ODF peaks are much
+smaller  than you see with CSD. This results in a rather conservative peak detection, which greatly
+benefits from having more diffusion data than a typical DTI.</p>
+<p>5 million streamlines are created with a maximum length of 250mm, minimum length of 30mm,
+random seeding, a step size of 1mm and an automatically calculated QA threshold.</p>
+<p>Additionally, a number of anisotropy scalar images are produced such as QA, GFA and ISO.</p>
+<section id="id31">
+<h4>Scalar Maps<a class="headerlink" href="#id31" title="Link to this heading"></a></h4>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 20.0%" />
+<col style="width: 13.3%" />
+<col style="width: 13.3%" />
+<col style="width: 13.3%" />
+<col style="width: 40.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Model</p></th>
+<th class="head"><p>Parameter</p></th>
+<th class="head"><p>Single Shell</p></th>
+<th class="head"><p>Multi Shell</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>gqi</p></td>
+<td><p>gfa</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Generalized Fractional Anisotropy from a GQI fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>gqi</p></td>
+<td><p>iso</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Isotropic Diffusion from a GQI fit</p></td>
+</tr>
+<tr class="row-even"><td><p>gqi</p></td>
+<td><p>qa</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Quantitative Anisotropy from a GQI fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>gqi</p></td>
+<td><p>rdi</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Restricted diffusion imagimg from a GQI fit</p></td>
+</tr>
+<tr class="row-even"><td><p>gqi</p></td>
+<td><p>nrdi02L</p></td>
+<td><p>No</p></td>
+<td><p>Yes</p></td>
+<td><p>Non-restricted diffusion at 0.2 diffusion sampling length from a GQI fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>gqi</p></td>
+<td><p>nrdi04L</p></td>
+<td><p>No</p></td>
+<td><p>Yes</p></td>
+<td><p>Non-restricted diffusion at 0.4 diffusion sampling length from a GQI fit</p></td>
+</tr>
+<tr class="row-even"><td><p>gqi</p></td>
+<td><p>nrdi06L</p></td>
+<td><p>No</p></td>
+<td><p>Yes</p></td>
+<td><p>Non-restricted diffusion at 0.6 diffusion sampling length from a GQI fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>ad</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Axial Diffusivity (first eigenvalue) from a tensor fit</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>fa</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Radial Diffusivity from a tensor fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>ha</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Helix Angle from a tensor fit</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>md</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Mean Diffusivity from a tensor fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>rd</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Radial Diffusivity from a tensor fit</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>rd1</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Lambda 2 (second eigenvalue) from a tensor fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>rd2</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Lambda 3 (third eigenvalue) from a tensor fit</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>txx</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Tensor fit txx</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>txy</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Tensor fit txy</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>txz</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Tensor fit txz</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>tyy</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Tensor fit tyy</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>tyz</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Tensor fit tyz</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>tzz</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Tensor fit tzz</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id32">
+<h4>Other Outputs<a class="headerlink" href="#id32" title="Link to this heading"></a></h4>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 33.3%" />
+<col style="width: 66.7%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>File Name</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>*_connectivity.mat</p></td>
+<td><p>MATLAB format mat file containing connectivity matrices for all the selected atlases. This is an hdf5-format file and can be read using <code class="docutils literal notranslate"><span class="pre">scipy.io.matlab.loadmat</span></code> in Python.</p></td>
+</tr>
+<tr class="row-odd"><td><p>*space-ACPC|T1w*_dwimap.fib.gz</p></td>
+<td><p>DSI Studio fib format containing the GQI ODFs used for AutoTrack. This also contains all of the scalar maps for use with tracking.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="dsi-studio-autotrack">
+<span id="id33"></span><h3><code class="docutils literal notranslate"><span class="pre">dsi_studio_autotrack</span></code><a class="headerlink" href="#dsi-studio-autotrack" title="Link to this heading"></a></h3>
+<p>This workflow implements DSI Studio’s q-space diffeomorphic reconstruction (QSDR), the MNI space
+(ICBM-152) version of GQI, followed by automatic fiber tracking (autotrack) <a class="footnote-reference brackets" href="#footcite-autotrack" id="id34" role="doc-noteref"><span class="fn-bracket">[</span>14<span class="fn-bracket">]</span></a><a class="footnote-reference brackets" href="#footcite-yeh2022population" id="id35" role="doc-noteref"><span class="fn-bracket">[</span>15<span class="fn-bracket">]</span></a>
+of 56 white matter pathways. Autotrack uses a population-averaged tractography atlas
+(based on HCP-Young Adult data) to identify tracts of interest in individual subject’s data.
+The autotrack procedure seeds deterministic fiber tracking with randomized parameter saturation
+within voxels that correspondto each tract in the tractography atlas and determines whether
+generated streamlines belong to the target tract based on the Hausdorff distance between
+subject and atlas streamlines.</p>
+<p>Reconstructed subject-specific tracts are written out as .tck files that are aligned to the
+<em>QSIRecon</em>-generated _dwiref.nii.gz and preproc_T1w.nii.gz volumes; .tck files can be visualized
+overlaid on these volumes in mrview or MI-brain. Note, .tck files will not appear in alignment
+with the dwiref/T1w volumes in DSI Studio due to how the .tck files are read in.</p>
+<p>Diffusion metrics (e.g., dti_fa, gfa, iso,rdi, nrdi02) and shape statistics (e.g., mean_length,
+span, curl, volume, endpoint_radius) are calculated for subject-specific tracts and written out in
+an AutoTrackGQI.csv file.</p>
+<section id="id36">
+<h4>Scalar Maps<a class="headerlink" href="#id36" title="Link to this heading"></a></h4>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 20.0%" />
+<col style="width: 13.3%" />
+<col style="width: 13.3%" />
+<col style="width: 13.3%" />
+<col style="width: 40.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Model</p></th>
+<th class="head"><p>Parameter</p></th>
+<th class="head"><p>Single Shell</p></th>
+<th class="head"><p>Multi Shell</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>gqi</p></td>
+<td><p>gfa</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Generalized Fractional Anisotropy from a GQI fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>gqi</p></td>
+<td><p>iso</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Isotropic Diffusion from a GQI fit</p></td>
+</tr>
+<tr class="row-even"><td><p>gqi</p></td>
+<td><p>qa</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Quantitative Anisotropy from a GQI fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>gqi</p></td>
+<td><p>rdi</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Restricted diffusion imagimg from a GQI fit</p></td>
+</tr>
+<tr class="row-even"><td><p>gqi</p></td>
+<td><p>nrdi02L</p></td>
+<td><p>No</p></td>
+<td><p>Yes</p></td>
+<td><p>Non-restricted diffusion at 0.2 diffusion sampling length from a GQI fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>gqi</p></td>
+<td><p>nrdi04L</p></td>
+<td><p>No</p></td>
+<td><p>Yes</p></td>
+<td><p>Non-restricted diffusion at 0.4 diffusion sampling length from a GQI fit</p></td>
+</tr>
+<tr class="row-even"><td><p>gqi</p></td>
+<td><p>nrdi06L</p></td>
+<td><p>No</p></td>
+<td><p>Yes</p></td>
+<td><p>Non-restricted diffusion at 0.6 diffusion sampling length from a GQI fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>ad</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Axial Diffusivity (first eigenvalue) from a tensor fit</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>fa</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Radial Diffusivity from a tensor fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>ha</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Helix Angle from a tensor fit</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>md</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Mean Diffusivity from a tensor fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>rd</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Radial Diffusivity from a tensor fit</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>rd1</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Lambda 2 (second eigenvalue) from a tensor fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>rd2</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Lambda 3 (third eigenvalue) from a tensor fit</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>txx</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Tensor fit txx</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>txy</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Tensor fit txy</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>txz</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Tensor fit txz</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>tyy</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Tensor fit tyy</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>tyz</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Tensor fit tyz</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>tzz</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Tensor fit tzz</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id37">
+<h4>Other Outputs<a class="headerlink" href="#id37" title="Link to this heading"></a></h4>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 33.3%" />
+<col style="width: 66.7%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>File Name</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>*_streamlines.tck.gz</p></td>
+<td><p>One tck.gz per bundle. The bundle represented by this file is specified in the <code class="docutils literal notranslate"><span class="pre">bundle-</span></code> tag.</p></td>
+</tr>
+<tr class="row-odd"><td><p>*bundles-DSIStudio*_scalarstats.tsv</p></td>
+<td><p>Statistics on scalars produced by this workflow</p></td>
+</tr>
+<tr class="row-even"><td><p>*bundles-DSIStudio*_tdistats.tsv</p></td>
+<td><p>Statistics on streamline density in voxels</p></td>
+</tr>
+<tr class="row-odd"><td><p>*space-ACPC|T1w*_dwimap.fib.gz</p></td>
+<td><p>DSI Studio fib format containing the GQI ODFs used for AutoTrack.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="ss3t-fod-autotrack">
+<span id="id38"></span><h3><code class="docutils literal notranslate"><span class="pre">ss3t_fod_autotrack</span></code><a class="headerlink" href="#ss3t-fod-autotrack" title="Link to this heading"></a></h3>
+<p>This workflow is identical to <a class="reference internal" href="#dsi-studio-autotrack"><span class="std std-ref">dsi_studio_autotrack</span></a>, except it substitutes
+the GQI fit with the <code class="docutils literal notranslate"><span class="pre">ss3t_csd_beta1</span></code> algorithm <a class="footnote-reference brackets" href="#footcite-dhollander2016novel" id="id39" role="doc-noteref"><span class="fn-bracket">[</span>7<span class="fn-bracket">]</span></a>
+to estimate FODs for white matter.</p>
+<p>A GQI reconstruction is performed first based on the entire input data.
+The QA and ISO images from GQI are used to register the ACPC data to DSI Studio’s ICBM 152 template.
+The GQI-based registration is used to transform the template bundles to subject ACPC space,
+where the SS3T-based FODs are used for tractography.</p>
+<p>This is a good workflow for doing tractometry on low-quality single shell data.
+If more than one shell is present in the input data, only the highest b-value shell is used.</p>
+<section id="id40">
+<h4>Scalar Maps<a class="headerlink" href="#id40" title="Link to this heading"></a></h4>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 20.0%" />
+<col style="width: 13.3%" />
+<col style="width: 13.3%" />
+<col style="width: 13.3%" />
+<col style="width: 40.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Model</p></th>
+<th class="head"><p>Parameter</p></th>
+<th class="head"><p>Single Shell</p></th>
+<th class="head"><p>Multi Shell</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>gqi</p></td>
+<td><p>gfa</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Generalized Fractional Anisotropy from a GQI fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>gqi</p></td>
+<td><p>iso</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Isotropic Diffusion from a GQI fit</p></td>
+</tr>
+<tr class="row-even"><td><p>gqi</p></td>
+<td><p>qa</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Quantitative Anisotropy from a GQI fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>gqi</p></td>
+<td><p>rdi</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Restricted diffusion imagimg from a GQI fit</p></td>
+</tr>
+<tr class="row-even"><td><p>gqi</p></td>
+<td><p>nrdi02L</p></td>
+<td><p>No</p></td>
+<td><p>Yes</p></td>
+<td><p>Non-restricted diffusion at 0.2 diffusion sampling length from a GQI fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>gqi</p></td>
+<td><p>nrdi04L</p></td>
+<td><p>No</p></td>
+<td><p>Yes</p></td>
+<td><p>Non-restricted diffusion at 0.4 diffusion sampling length from a GQI fit</p></td>
+</tr>
+<tr class="row-even"><td><p>gqi</p></td>
+<td><p>nrdi06L</p></td>
+<td><p>No</p></td>
+<td><p>Yes</p></td>
+<td><p>Non-restricted diffusion at 0.6 diffusion sampling length from a GQI fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>ad</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Axial Diffusivity (first eigenvalue) from a tensor fit</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>fa</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Radial Diffusivity from a tensor fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>ha</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Helix Angle from a tensor fit</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>md</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Mean Diffusivity from a tensor fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>rd</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Radial Diffusivity from a tensor fit</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>rd1</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Lambda 2 (second eigenvalue) from a tensor fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>rd2</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Lambda 3 (third eigenvalue) from a tensor fit</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>txx</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Tensor fit txx</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>txy</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Tensor fit txy</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>txz</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Tensor fit txz</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>tyy</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Tensor fit tyy</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>tyz</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Tensor fit tyz</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>tzz</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Tensor fit tzz</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id41">
+<h4>Other Outputs<a class="headerlink" href="#id41" title="Link to this heading"></a></h4>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 33.3%" />
+<col style="width: 66.7%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>File Name</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>*bundles-DSIStudio*_scalarstats.csv</p></td>
+<td><p>Statistics on scalars produced by this workflow.</p></td>
+</tr>
+<tr class="row-odd"><td><p>*bundles-DSIStudio*_tdistats.tsv</p></td>
+<td><p>Statistics on streamline density in voxels.</p></td>
+</tr>
+<tr class="row-even"><td><p>*model-ss3t*_streamlines.tck.gz</p></td>
+<td><p>One tck.gz per bundle. The bundle represented by this file is specified in the <code class="docutils literal notranslate"><span class="pre">bundle-</span></code> tag. Bundles were tracked using the SS3t FODs.</p></td>
+</tr>
+<tr class="row-odd"><td><p>*space-ACPC|T1w*model-gqi*_dwimap.fib.gz</p></td>
+<td><p>DSI Studio fib format containing the GQI ODFs used for AutoTrack registration.</p></td>
+</tr>
+<tr class="row-even"><td><p>*space-ACPC|T1w*model-ss3t*_dwimap.fib.gz</p></td>
+<td><p>DSI Studio fib format containing the SS3T FODs used for AutoTrack.</p></td>
+</tr>
+<tr class="row-odd"><td><p>*space-ACPC|T1w*model-ss3t*_dwimap.map.gz</p></td>
+<td><p>Mapping file produced by DSI Studio. Here the model entity specifies ss3t so that DSI Studio associates the mapping with the model-ss3t fib.gz file. Be aware that this mapping was created using the model-gqi fib.gz file.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="tortoise">
+<span id="id42"></span><h3><code class="docutils literal notranslate"><span class="pre">TORTOISE</span></code><a class="headerlink" href="#tortoise" title="Link to this heading"></a></h3>
+<p>The TORTOISE <a class="footnote-reference brackets" href="#footcite-tortoisev3" id="id43" role="doc-noteref"><span class="fn-bracket">[</span>16<span class="fn-bracket">]</span></a> software can calculate Tensor and MAPMRI fits,
+along with their many associated scalar maps. This workflow only produces scalar maps.</p>
+<section id="id44">
+<h4>Scalar Maps<a class="headerlink" href="#id44" title="Link to this heading"></a></h4>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 27.3%" />
+<col style="width: 18.2%" />
+<col style="width: 54.5%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Model</p></th>
+<th class="head"><p>Parameter</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>mapmri</p></td>
+<td><p>ng</p></td>
+<td><p>Non-Gaussianity from MAPMRI</p></td>
+</tr>
+<tr class="row-odd"><td><p>mapmri</p></td>
+<td><p>ngpar</p></td>
+<td><p>Non-Gaussianity parallel from MAPMRI</p></td>
+</tr>
+<tr class="row-even"><td><p>mapmri</p></td>
+<td><p>ngperp</p></td>
+<td><p>Non-Gaussianity perpendicular from MAPMRI</p></td>
+</tr>
+<tr class="row-odd"><td><p>mapmri</p></td>
+<td><p>pa</p></td>
+<td><p>PA from MAPMRI</p></td>
+</tr>
+<tr class="row-even"><td><p>mapmri</p></td>
+<td><p>path</p></td>
+<td><p>PAth from MAPMRI</p></td>
+</tr>
+<tr class="row-odd"><td><p>mapmri</p></td>
+<td><p>rtap</p></td>
+<td><p>Return to axis probability from MAPMRI</p></td>
+</tr>
+<tr class="row-even"><td><p>mapmri</p></td>
+<td><p>rtop</p></td>
+<td><p>Return to origin probability from MAPMRI</p></td>
+</tr>
+<tr class="row-odd"><td><p>mapmri</p></td>
+<td><p>rtpp</p></td>
+<td><p>Return to plane probability from MAPMRI</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>ad</p></td>
+<td><p>Axial Diffusivity (first eigenvalue) from a tensor fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>am</p></td>
+<td><p>A0 from a tensor fit</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>fa</p></td>
+<td><p>Fractional Anisotropy from a tensor fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>li</p></td>
+<td><p>LI from a tensor fit</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>rd</p></td>
+<td><p>Radial Diffusivity from a tensor fit</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id45">
+<h4>Other Outputs<a class="headerlink" href="#id45" title="Link to this heading"></a></h4>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 33.3%" />
+<col style="width: 66.7%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>File Name</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>*_scalarstats.tsv</p></td>
+<td><p>TORTOISE scalars (tensors and MAPMRI) summarized within WM bundles. The name of the method used to create the bundles is specified after <code class="docutils literal notranslate"><span class="pre">bundles-</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="dipy-mapmri">
+<span id="id46"></span><h3><code class="docutils literal notranslate"><span class="pre">dipy_mapmri</span></code><a class="headerlink" href="#dipy-mapmri" title="Link to this heading"></a></h3>
+<p>The MAPMRI method is used to estimate EAPs from which ODFs are calculated analytically. This
+method produces scalars like RTOP, RTAP, QIV, MSD, etc.</p>
+<p>The ODFs are saved in DSI Studio format and tractography is run identically to that in
+<a class="reference internal" href="#dsi-studio-gqi"><span class="std std-ref">dsi_studio_gqi</span></a>.</p>
+<section id="id47">
+<h4>Scalar Maps<a class="headerlink" href="#id47" title="Link to this heading"></a></h4>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 27.3%" />
+<col style="width: 18.2%" />
+<col style="width: 54.5%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Model</p></th>
+<th class="head"><p>Parameter</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>mapmri</p></td>
+<td><p>lapnorm</p></td>
+<td><p>Laplacian norm from regularized MAPMRI (MAPL)</p></td>
+</tr>
+<tr class="row-odd"><td><p>mapmri</p></td>
+<td><p>mapcoeffs</p></td>
+<td><p>MAPMRI coefficients</p></td>
+</tr>
+<tr class="row-even"><td><p>mapmri</p></td>
+<td><p>msd</p></td>
+<td><p>mean square displacement from MAPMRI</p></td>
+</tr>
+<tr class="row-odd"><td><p>mapmri</p></td>
+<td><p>ng</p></td>
+<td><p>Non-Gaussianity from MAPMRI</p></td>
+</tr>
+<tr class="row-even"><td><p>mapmri</p></td>
+<td><p>ngpar</p></td>
+<td><p>Non-Gaussianity parallel from MAPMRI</p></td>
+</tr>
+<tr class="row-odd"><td><p>mapmri</p></td>
+<td><p>ngperp</p></td>
+<td><p>Non-Gaussianity perpendicular from MAPMRI</p></td>
+</tr>
+<tr class="row-even"><td><p>mapmri</p></td>
+<td><p>qiv</p></td>
+<td><p>q-space inverse variance from MAPMRI</p></td>
+</tr>
+<tr class="row-odd"><td><p>mapmri</p></td>
+<td><p>rtap</p></td>
+<td><p>Return to axis probability from MAPMRI</p></td>
+</tr>
+<tr class="row-even"><td><p>mapmri</p></td>
+<td><p>rtop</p></td>
+<td><p>Return to origin probability from MAPMRI</p></td>
+</tr>
+<tr class="row-odd"><td><p>mapmri</p></td>
+<td><p>rtpp</p></td>
+<td><p>Return to plane probability from MAPMRI</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id48">
+<h4>Other Outputs<a class="headerlink" href="#id48" title="Link to this heading"></a></h4>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 33.3%" />
+<col style="width: 66.7%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>File Name</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>*_scalarstats.tsv</p></td>
+<td><p>MAPMRI scalars summarized within WM bundles. The name of the method used to create the bundles is specified after <code class="docutils literal notranslate"><span class="pre">bundles-</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="dipy-dki">
+<span id="id49"></span><h3><code class="docutils literal notranslate"><span class="pre">dipy_dki</span></code><a class="headerlink" href="#dipy-dki" title="Link to this heading"></a></h3>
+<p>A DKI model is fit to the dMRI signal and multiple scalar maps are produced.</p>
+<section id="id50">
+<h4>Scalar Maps<a class="headerlink" href="#id50" title="Link to this heading"></a></h4>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 27.3%" />
+<col style="width: 18.2%" />
+<col style="width: 54.5%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Model</p></th>
+<th class="head"><p>Parameter</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>dki</p></td>
+<td><p>ad</p></td>
+<td><p>DKI Axial Diffusivity</p></td>
+</tr>
+<tr class="row-odd"><td><p>dki</p></td>
+<td><p>ak</p></td>
+<td><p>DKI Axial Kurtosis</p></td>
+</tr>
+<tr class="row-even"><td><p>dki</p></td>
+<td><p>kfa</p></td>
+<td><p>DKI Kurtosis Fractional Anisotropy</p></td>
+</tr>
+<tr class="row-odd"><td><p>dki</p></td>
+<td><p>linearity</p></td>
+<td><p>DKI Linearity</p></td>
+</tr>
+<tr class="row-even"><td><p>dki</p></td>
+<td><p>md</p></td>
+<td><p>DKI Mean Diffusivity</p></td>
+</tr>
+<tr class="row-odd"><td><p>dki</p></td>
+<td><p>mk</p></td>
+<td><p>DKI Mean Kurtosis</p></td>
+</tr>
+<tr class="row-even"><td><p>dki</p></td>
+<td><p>mkt</p></td>
+<td><p>DKI Mean Kurtosis Tensor</p></td>
+</tr>
+<tr class="row-odd"><td><p>dki</p></td>
+<td><p>planarity</p></td>
+<td><p>DKI Planarity</p></td>
+</tr>
+<tr class="row-even"><td><p>dki</p></td>
+<td><p>rd</p></td>
+<td><p>DKI Radial Diffusivity</p></td>
+</tr>
+<tr class="row-odd"><td><p>dki</p></td>
+<td><p>rk</p></td>
+<td><p>DKI Radial Kurtosis</p></td>
+</tr>
+<tr class="row-even"><td><p>dki</p></td>
+<td><p>sphericity</p></td>
+<td><p>DKI Sphericity</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>fa</p></td>
+<td><p>DKI Fractional Anisotropy</p></td>
+</tr>
+<tr class="row-even"><td><p>dkimicro</p></td>
+<td><p>ad</p></td>
+<td><p>DKI Microstructural Axial Diffusivity</p></td>
+</tr>
+<tr class="row-odd"><td><p>dkimicro</p></td>
+<td><p>ade</p></td>
+<td><p>DKI Microstructural Axial Diffusivity of the Extra-Cellular Compartment</p></td>
+</tr>
+<tr class="row-even"><td><p>dkimicro</p></td>
+<td><p>ak</p></td>
+<td><p>DKI Microstructural Axial Kurtosis</p></td>
+</tr>
+<tr class="row-odd"><td><p>dkimicro</p></td>
+<td><p>awf</p></td>
+<td><p>DKI Microstructural Axonal Water Fraction</p></td>
+</tr>
+<tr class="row-even"><td><p>dkimicro</p></td>
+<td><p>axonald</p></td>
+<td><p>DKI Microstructural Axonal Diffusivity</p></td>
+</tr>
+<tr class="row-odd"><td><p>dkimicro</p></td>
+<td><p>kfa</p></td>
+<td><p>DKI Microstructural Kurtosis Fractional Anisotropy</p></td>
+</tr>
+<tr class="row-even"><td><p>dkimicro</p></td>
+<td><p>md</p></td>
+<td><p>DKI Microstructural Mean Diffusivity</p></td>
+</tr>
+<tr class="row-odd"><td><p>dkimicro</p></td>
+<td><p>rd</p></td>
+<td><p>DKI Microstructural Radial Diffusivity</p></td>
+</tr>
+<tr class="row-even"><td><p>dkimicro</p></td>
+<td><p>rde</p></td>
+<td><p>DKI Microstructural Radial Diffusivity of the Extra-Cellular Compartment</p></td>
+</tr>
+<tr class="row-odd"><td><p>dkimicro</p></td>
+<td><p>tortuosity</p></td>
+<td><p>DKI Microstructural Tortuosity</p></td>
+</tr>
+<tr class="row-even"><td><p>dkimicro</p></td>
+<td><p>trace</p></td>
+<td><p>DKI Microstructural Trace</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id51">
+<h4>Other Outputs<a class="headerlink" href="#id51" title="Link to this heading"></a></h4>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 33.3%" />
+<col style="width: 66.7%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>File Name</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>*_scalarstats.tsv</p></td>
+<td><p>DKI scalars summarized within WM bundles. The name of the method used to create the bundles is specified after <code class="docutils literal notranslate"><span class="pre">bundles-</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="dipy-3dshore">
+<span id="id52"></span><h3><code class="docutils literal notranslate"><span class="pre">dipy_3dshore</span></code><a class="headerlink" href="#dipy-3dshore" title="Link to this heading"></a></h3>
+<p>This uses the BrainSuite 3dSHORE basis in a Dipy reconstruction. Much like <a class="reference internal" href="#dipy-mapmri"><span class="std std-ref">dipy_mapmri</span></a>,
+a slew of anisotropy scalars are estimated. Here the <a class="reference internal" href="#dsi-studio-gqi"><span class="std std-ref">dsi_studio_gqi</span></a> fiber tracking is
+again run on the 3dSHORE-estimated ODFs.</p>
+<section id="id53">
+<h4>Scalar Maps<a class="headerlink" href="#id53" title="Link to this heading"></a></h4>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 27.3%" />
+<col style="width: 18.2%" />
+<col style="width: 54.5%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Model</p></th>
+<th class="head"><p>Parameter</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>3dshore</p></td>
+<td><p>CNR</p></td>
+<td><p>Contrast to noise ratio for 3dshore fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>3dshore</p></td>
+<td><p>alpha</p></td>
+<td><p>alpha used when fitting in each voxel</p></td>
+</tr>
+<tr class="row-even"><td><p>3dshore</p></td>
+<td><p>lapnorm</p></td>
+<td><p>Laplacian norm from regularized MAPMRI (MAPL)</p></td>
+</tr>
+<tr class="row-odd"><td><p>3dshore</p></td>
+<td><p>mapcoeffs</p></td>
+<td><p>MAPMRI coefficients</p></td>
+</tr>
+<tr class="row-even"><td><p>3dshore</p></td>
+<td><p>msd</p></td>
+<td><p>mean square displacement from MAPMRI</p></td>
+</tr>
+<tr class="row-odd"><td><p>3dshore</p></td>
+<td><p>ng</p></td>
+<td><p>Non-Gaussianity from MAPMRI</p></td>
+</tr>
+<tr class="row-even"><td><p>3dshore</p></td>
+<td><p>ngpar</p></td>
+<td><p>Non-Gaussianity parallel from MAPMRI</p></td>
+</tr>
+<tr class="row-odd"><td><p>3dshore</p></td>
+<td><p>ngperp</p></td>
+<td><p>Non-Gaussianity perpendicular from MAPMRI</p></td>
+</tr>
+<tr class="row-even"><td><p>3dshore</p></td>
+<td><p>qiv</p></td>
+<td><p>q-space inverse variance from MAPMRI</p></td>
+</tr>
+<tr class="row-odd"><td><p>3dshore</p></td>
+<td><p>r2</p></td>
+<td><p>r^2 of the 3dshore fit</p></td>
+</tr>
+<tr class="row-even"><td><p>3dshore</p></td>
+<td><p>regularization</p></td>
+<td><p>regularization of the 3dshore fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>3dshore</p></td>
+<td><p>rtap</p></td>
+<td><p>Return to axis probability from MAPMRI</p></td>
+</tr>
+<tr class="row-even"><td><p>3dshore</p></td>
+<td><p>rtop</p></td>
+<td><p>Return to origin probability from MAPMRI</p></td>
+</tr>
+<tr class="row-odd"><td><p>3dshore</p></td>
+<td><p>rtpp</p></td>
+<td><p>Return to plane probability from MAPMRI</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="reorient-fslstd">
+<span id="id54"></span><h3><code class="docutils literal notranslate"><span class="pre">reorient_fslstd</span></code><a class="headerlink" href="#reorient-fslstd" title="Link to this heading"></a></h3>
+<p>Reorients the <em>QSIRecon</em> preprocessed DWI and bval/bvec to the standard FSL orientation.
+This can be useful if FSL tools will be applied outside of <em>QSIRecon</em>.</p>
+</section>
+<section id="csdsi-3dshore">
+<span id="id55"></span><h3><code class="docutils literal notranslate"><span class="pre">csdsi_3dshore</span></code><a class="headerlink" href="#csdsi-3dshore" title="Link to this heading"></a></h3>
+<p><strong>[EXPERIMENTAL]</strong> This pipeline is for DSI or compressed-sensing DSI. The first step is a
+L2-regularized 3dSHORE reconstruction of the ensemble average propagator in each voxel. These EAPs
+are then used for two purposes</p>
+<blockquote>
+<div><ol class="arabic simple">
+<li><p>To calculate ODFs, which are then sent to DSI Studio for tractography</p></li>
+<li><p>To estimate signal for a multishell (specifically HCP) sampling scheme, which is run
+through the  pipeline</p></li>
+</ol>
+</div></blockquote>
+<p>All outputs, including the imputed HCP sequence are saved in the outputs directory.</p>
+<section id="id56">
+<h4>Scalar Maps<a class="headerlink" href="#id56" title="Link to this heading"></a></h4>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 27.3%" />
+<col style="width: 18.2%" />
+<col style="width: 54.5%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Model</p></th>
+<th class="head"><p>Parameter</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>3dshore</p></td>
+<td><p>CNR</p></td>
+<td><p>Contrast to noise ratio for 3dshore fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>3dshore</p></td>
+<td><p>alpha</p></td>
+<td><p>alpha used when fitting in each voxel</p></td>
+</tr>
+<tr class="row-even"><td><p>3dshore</p></td>
+<td><p>lapnorm</p></td>
+<td><p>Laplacian norm from regularized MAPMRI (MAPL)</p></td>
+</tr>
+<tr class="row-odd"><td><p>3dshore</p></td>
+<td><p>mapcoeffs</p></td>
+<td><p>MAPMRI coefficients</p></td>
+</tr>
+<tr class="row-even"><td><p>3dshore</p></td>
+<td><p>msd</p></td>
+<td><p>mean square displacement from MAPMRI</p></td>
+</tr>
+<tr class="row-odd"><td><p>3dshore</p></td>
+<td><p>ng</p></td>
+<td><p>Non-Gaussianity from MAPMRI</p></td>
+</tr>
+<tr class="row-even"><td><p>3dshore</p></td>
+<td><p>ngpar</p></td>
+<td><p>Non-Gaussianity parallel from MAPMRI</p></td>
+</tr>
+<tr class="row-odd"><td><p>3dshore</p></td>
+<td><p>ngperp</p></td>
+<td><p>Non-Gaussianity perpendicular from MAPMRI</p></td>
+</tr>
+<tr class="row-even"><td><p>3dshore</p></td>
+<td><p>qiv</p></td>
+<td><p>q-space inverse variance from MAPMRI</p></td>
+</tr>
+<tr class="row-odd"><td><p>3dshore</p></td>
+<td><p>r2</p></td>
+<td><p>r^2 of the 3dshore fit</p></td>
+</tr>
+<tr class="row-even"><td><p>3dshore</p></td>
+<td><p>regularization</p></td>
+<td><p>regularization of the 3dshore fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>3dshore</p></td>
+<td><p>rtap</p></td>
+<td><p>Return to axis probability from MAPMRI</p></td>
+</tr>
+<tr class="row-even"><td><p>3dshore</p></td>
+<td><p>rtop</p></td>
+<td><p>Return to origin probability from MAPMRI</p></td>
+</tr>
+<tr class="row-odd"><td><p>3dshore</p></td>
+<td><p>rtpp</p></td>
+<td><p>Return to plane probability from MAPMRI</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id57">
+<h4>Other Outputs<a class="headerlink" href="#id57" title="Link to this heading"></a></h4>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 33.3%" />
+<col style="width: 66.7%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>File Name</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>*_scalarstats.tsv</p></td>
+<td><p>MAPMRI scalars summarized within WM bundles. The name of the method used to create the bundles is specified after <code class="docutils literal notranslate"><span class="pre">bundles-</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="hbcd-scalar-maps">
+<span id="id58"></span><h3><code class="docutils literal notranslate"><span class="pre">hbcd_scalar_maps</span></code><a class="headerlink" href="#hbcd-scalar-maps" title="Link to this heading"></a></h3>
+<p>Designed to run on <a class="reference external" href="https://hbcdstudy.org/">HBCD</a> data, this is also a general-purpose
+way to get many multishell-supported fitting methods, including</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><a class="reference internal" href="#dipy-dki"><span class="std std-ref">dipy_dki</span></a></p></li>
+<li><p><a class="reference internal" href="#tortoise"><span class="std std-ref">TORTOISE</span></a> (model-MAPMRI)</p></li>
+<li><p><a class="reference internal" href="#tortoise"><span class="std std-ref">TORTOISE</span></a> (model-tensor using only b&lt;4000)</p></li>
+<li><p><a class="reference internal" href="#dsi-studio-gqi"><span class="std std-ref">dsi_studio_gqi</span></a></p></li>
+</ul>
+</div></blockquote>
+<p>Bundles are generated using <a class="reference internal" href="#dsi-studio-autotrack"><span class="std std-ref">dsi_studio_autotrack</span></a>.
+All the scalars generated by these models are then mapped</p>
+<blockquote>
+<div><ol class="arabic simple">
+<li><p>Into template space</p></li>
+<li><p>On to the bundles from <a class="reference internal" href="#dsi-studio-autotrack"><span class="std std-ref">dsi_studio_autotrack</span></a></p></li>
+</ol>
+</div></blockquote>
+<p>In total, the scalars estimated by this workflow are:</p>
+<section id="id59">
+<h4>Scalar Maps<a class="headerlink" href="#id59" title="Link to this heading"></a></h4>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 27.3%" />
+<col style="width: 18.2%" />
+<col style="width: 54.5%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Model</p></th>
+<th class="head"><p>Parameter</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>dki</p></td>
+<td><p>ad</p></td>
+<td><p>DKI Axial Diffusivity</p></td>
+</tr>
+<tr class="row-odd"><td><p>dki</p></td>
+<td><p>ak</p></td>
+<td><p>DKI Axial Kurtosis</p></td>
+</tr>
+<tr class="row-even"><td><p>dki</p></td>
+<td><p>kfa</p></td>
+<td><p>DKI Kurtosis Fractional Anisotropy</p></td>
+</tr>
+<tr class="row-odd"><td><p>dki</p></td>
+<td><p>md</p></td>
+<td><p>DKI Mean Diffusivity</p></td>
+</tr>
+<tr class="row-even"><td><p>dki</p></td>
+<td><p>mk</p></td>
+<td><p>DKI Mean Kurtosis</p></td>
+</tr>
+<tr class="row-odd"><td><p>dki</p></td>
+<td><p>mkt</p></td>
+<td><p>DKI Mean Kurtosis Tensor</p></td>
+</tr>
+<tr class="row-even"><td><p>dki</p></td>
+<td><p>rd</p></td>
+<td><p>DKI Radial Diffusivity</p></td>
+</tr>
+<tr class="row-odd"><td><p>dki</p></td>
+<td><p>rk</p></td>
+<td><p>DKI Radial Kurtosis</p></td>
+</tr>
+<tr class="row-even"><td><p>gqi</p></td>
+<td><p>gfa</p></td>
+<td><p>Generalized Fractional Anisotropy</p></td>
+</tr>
+<tr class="row-odd"><td><p>gqi</p></td>
+<td><p>iso</p></td>
+<td><p>Isotropic Diffusion from GQI</p></td>
+</tr>
+<tr class="row-even"><td><p>gqi</p></td>
+<td><p>qa</p></td>
+<td><p>Quantitative Anisotropy from a GQI fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>mapmri</p></td>
+<td><p>ng</p></td>
+<td><p>Non-Gaussianity from MAPMRI</p></td>
+</tr>
+<tr class="row-even"><td><p>mapmri</p></td>
+<td><p>ngpar</p></td>
+<td><p>Non-Gaussianity parallel from MAPMRI</p></td>
+</tr>
+<tr class="row-odd"><td><p>mapmri</p></td>
+<td><p>ngperp</p></td>
+<td><p>Non-Gaussianity perpendicular from MAPMRI</p></td>
+</tr>
+<tr class="row-even"><td><p>mapmri</p></td>
+<td><p>pa</p></td>
+<td><p>PA from MAPMRI</p></td>
+</tr>
+<tr class="row-odd"><td><p>mapmri</p></td>
+<td><p>path</p></td>
+<td><p>PAth from MAPMRI</p></td>
+</tr>
+<tr class="row-even"><td><p>mapmri</p></td>
+<td><p>rtap</p></td>
+<td><p>Return to axis probability from MAPMRI</p></td>
+</tr>
+<tr class="row-odd"><td><p>mapmri</p></td>
+<td><p>rtop</p></td>
+<td><p>Return to origin probability from MAPMRI</p></td>
+</tr>
+<tr class="row-even"><td><p>mapmri</p></td>
+<td><p>rtpp</p></td>
+<td><p>Return to plane probability from MAPMRI</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>ad</p></td>
+<td><p>Axial Diffusivity (first eigenvalue) from a tensor fit</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>am</p></td>
+<td><p>A0 from a tensor fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>fa</p></td>
+<td><p>Fractional Anisotropy from a tensor fit</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>ha</p></td>
+<td><p>Helix Angle from tensor fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>li</p></td>
+<td><p>LI from a tensor fit</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>md</p></td>
+<td><p>Mean Diffusivity from a tensor fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>rd</p></td>
+<td><p>Radial Diffusivity from a tensor fit</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>rd1</p></td>
+<td><p>Lambda 2 (second eigenvalue) from a tensor fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>tesnor</p></td>
+<td><p>rd2</p></td>
+<td><p>Lambda 3 (third eigenvalue) from a tensor fit</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>txx</p></td>
+<td><p>Tensor fit txx</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>txy</p></td>
+<td><p>Tensor fit txy</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>txz</p></td>
+<td><p>Tensor fit txz</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>tyy</p></td>
+<td><p>Tensor fit tyy</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>tyz</p></td>
+<td><p>Tensor fit tyz</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>tzz</p></td>
+<td><p>Tensor fit tzz</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id60">
+<h4>Other Outputs<a class="headerlink" href="#id60" title="Link to this heading"></a></h4>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 33.3%" />
+<col style="width: 66.7%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>File Name</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>*_streamlines.tck.gz</p></td>
+<td><p>One tck.gz per bundle. The bundle represented by this file is specified in the <code class="docutils literal notranslate"><span class="pre">bundle-</span></code> tag.</p></td>
+</tr>
+<tr class="row-odd"><td><p>*bundles-DSIStudio*_scalarstats.csv</p></td>
+<td><p>Statistics on scalars produced by this workflow</p></td>
+</tr>
+<tr class="row-even"><td><p>*bundles-DSIStudio*_tdistats.tsv</p></td>
+<td><p>Statistics on streamline density in voxels</p></td>
+</tr>
+<tr class="row-odd"><td><p>*space-ACPC|T1w*_dwimap.fib.gz</p></td>
+<td><p>DSI Studio fib format containing the GQI ODFs used for AutoTrack.</p></td>
+</tr>
+<tr class="row-even"><td><p>*space-ACPC|T1w*_dwimap.map.gz</p></td>
+<td><p>Mapping file produced by DSI Studio.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="multishell-scalarfest">
+<span id="id61"></span><h3><code class="docutils literal notranslate"><span class="pre">multishell_scalarfest</span></code><a class="headerlink" href="#multishell-scalarfest" title="Link to this heading"></a></h3>
+<p>This is a general-purpose way to get scalar maps from many multishell-supported fitting methods,
+including:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><a class="reference internal" href="#dipy-dki"><span class="std std-ref">dipy_dki</span></a></p></li>
+<li><p><a class="reference internal" href="#tortoise"><span class="std std-ref">TORTOISE</span></a> (model-MAPMRI)</p></li>
+<li><p><a class="reference internal" href="#tortoise"><span class="std std-ref">TORTOISE</span></a> (model-tensor using only b&lt;4000)</p></li>
+<li><p><a class="reference internal" href="#dsi-studio-gqi"><span class="std std-ref">dsi_studio_gqi</span></a></p></li>
+<li><p><a class="reference internal" href="#amico-noddi"><span class="std std-ref">amico_noddi</span></a></p></li>
+</ul>
+</div></blockquote>
+<section id="id62">
+<h4>Scalar Maps<a class="headerlink" href="#id62" title="Link to this heading"></a></h4>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 27.3%" />
+<col style="width: 18.2%" />
+<col style="width: 54.5%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Model</p></th>
+<th class="head"><p>Parameter</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>dki</p></td>
+<td><p>ad</p></td>
+<td><p>DKI Axial Diffusivity</p></td>
+</tr>
+<tr class="row-odd"><td><p>dki</p></td>
+<td><p>ak</p></td>
+<td><p>DKI Axial Kurtosis</p></td>
+</tr>
+<tr class="row-even"><td><p>dki</p></td>
+<td><p>kfa</p></td>
+<td><p>DKI Kurtosis Fractional Anisotropy</p></td>
+</tr>
+<tr class="row-odd"><td><p>dki</p></td>
+<td><p>md</p></td>
+<td><p>DKI Mean Diffusivity</p></td>
+</tr>
+<tr class="row-even"><td><p>dki</p></td>
+<td><p>mk</p></td>
+<td><p>DKI Mean Kurtosis</p></td>
+</tr>
+<tr class="row-odd"><td><p>dki</p></td>
+<td><p>mkt</p></td>
+<td><p>DKI Mean Kurtosis Tensor</p></td>
+</tr>
+<tr class="row-even"><td><p>dki</p></td>
+<td><p>rd</p></td>
+<td><p>DKI Radial Diffusivity</p></td>
+</tr>
+<tr class="row-odd"><td><p>dki</p></td>
+<td><p>rk</p></td>
+<td><p>DKI Radial Kurtosis</p></td>
+</tr>
+<tr class="row-even"><td><p>gqi</p></td>
+<td><p>gfa</p></td>
+<td><p>Generalized Fractional Anisotropy</p></td>
+</tr>
+<tr class="row-odd"><td><p>gqi</p></td>
+<td><p>iso</p></td>
+<td><p>Isotropic Diffusion from GQI</p></td>
+</tr>
+<tr class="row-even"><td><p>gqi</p></td>
+<td><p>qa</p></td>
+<td><p>Quantitative Anisotropy from a GQI fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>mapmri</p></td>
+<td><p>ng</p></td>
+<td><p>Non-Gaussianity from MAPMRI</p></td>
+</tr>
+<tr class="row-even"><td><p>mapmri</p></td>
+<td><p>ngpar</p></td>
+<td><p>Non-Gaussianity parallel from MAPMRI</p></td>
+</tr>
+<tr class="row-odd"><td><p>mapmri</p></td>
+<td><p>ngperp</p></td>
+<td><p>Non-Gaussianity perpendicular from MAPMRI</p></td>
+</tr>
+<tr class="row-even"><td><p>mapmri</p></td>
+<td><p>pa</p></td>
+<td><p>PA from MAPMRI</p></td>
+</tr>
+<tr class="row-odd"><td><p>mapmri</p></td>
+<td><p>path</p></td>
+<td><p>PAth from MAPMRI</p></td>
+</tr>
+<tr class="row-even"><td><p>mapmri</p></td>
+<td><p>rtap</p></td>
+<td><p>Return to axis probability from MAPMRI</p></td>
+</tr>
+<tr class="row-odd"><td><p>mapmri</p></td>
+<td><p>rtop</p></td>
+<td><p>Return to origin probability from MAPMRI</p></td>
+</tr>
+<tr class="row-even"><td><p>mapmri</p></td>
+<td><p>rtpp</p></td>
+<td><p>Return to plane probability from MAPMRI</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>ad</p></td>
+<td><p>Axial Diffusivity (first eigenvalue) from a tensor fit</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>am</p></td>
+<td><p>A0 from a tensor fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>fa</p></td>
+<td><p>Fractional Anisotropy from a tensor fit</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>ha</p></td>
+<td><p>Helix Angle from tensor fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>li</p></td>
+<td><p>LI from a tensor fit</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>md</p></td>
+<td><p>Mean Diffusivity from a tensor fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>rd</p></td>
+<td><p>Radial Diffusivity from a tensor fit</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>rd1</p></td>
+<td><p>Lambda 2 (second eigenvalue) from a tensor fit</p></td>
+</tr>
+<tr class="row-odd"><td><p>tesnor</p></td>
+<td><p>rd2</p></td>
+<td><p>Lambda 3 (third eigenvalue) from a tensor fit</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>txx</p></td>
+<td><p>Tensor fit txx</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>txy</p></td>
+<td><p>Tensor fit txy</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>txz</p></td>
+<td><p>Tensor fit txz</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>tyy</p></td>
+<td><p>Tensor fit tyy</p></td>
+</tr>
+<tr class="row-even"><td><p>tensor</p></td>
+<td><p>tyz</p></td>
+<td><p>Tensor fit tyz</p></td>
+</tr>
+<tr class="row-odd"><td><p>tensor</p></td>
+<td><p>tzz</p></td>
+<td><p>Tensor fit tzz</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id63">
+<h4>Other Outputs<a class="headerlink" href="#id63" title="Link to this heading"></a></h4>
+<p>No other outputs are produced.</p>
+</section>
+</section>
+</section>
+<section id="which-workflows-are-appropriate-for-your-dmri-data">
+<span id="appropriate-schemes"></span><h2>Which workflows are appropriate for your dMRI data?<a class="headerlink" href="#which-workflows-are-appropriate-for-your-dmri-data" title="Link to this heading"></a></h2>
+<p>Most reconstruction workflows will fit a model to the dMRI data. Listed below are
+the model-fitting workflows and which sampling schemes work with them.</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Name</p></th>
+<th class="head"><p>MultiShell</p></th>
+<th class="head"><p>Cartesian</p></th>
+<th class="head"><p>SingleShell</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><a class="reference internal" href="#amico-noddi"><span class="std std-ref">amico_noddi</span></a></p></td>
+<td><p>Yes</p></td>
+<td><p>No</p></td>
+<td><p>No</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#csdsi-3dshore"><span class="std std-ref">csdsi_3dshore</span></a></p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>No</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#dipy-3dshore"><span class="std std-ref">dipy_3dshore</span></a></p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>No</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#dipy-dki"><span class="std std-ref">dipy_dki</span></a></p></td>
+<td><p>Yes</p></td>
+<td><p>No</p></td>
+<td><p>No</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#dipy-mapmri"><span class="std std-ref">dipy_mapmri</span></a></p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>No</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#dsi-studio-autotrack"><span class="std std-ref">dsi_studio_autotrack</span></a></p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#dsi-studio-gqi"><span class="std std-ref">dsi_studio_gqi</span></a></p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes*</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#hbcd-scalar-maps"><span class="std std-ref">hbcd_scalar_maps</span></a></p></td>
+<td><p>Yes</p></td>
+<td><p>No</p></td>
+<td><p>No</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#mrtrix-multishell-msmt-act-fast"><span class="std std-ref">mrtrix_multishell_msmt_ACT-fast</span></a>*</p></td>
+<td><p>Yes</p></td>
+<td><p>No</p></td>
+<td><p>No</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#mrtrix-multishell-msmt-act-hsvs"><span class="std std-ref">mrtrix_multishell_msmt_ACT-hsvs</span></a></p></td>
+<td><p>Yes</p></td>
+<td><p>No</p></td>
+<td><p>No</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#mrtrix-multishell-msmt-noact"><span class="std std-ref">mrtrix_multishell_msmt_noACT</span></a></p></td>
+<td><p>Yes</p></td>
+<td><p>No</p></td>
+<td><p>No</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#mrtrix-multishell-msmt-pyafq-tractometry"><span class="std std-ref">mrtrix_multishell_msmt_pyafq_tractometry</span></a></p></td>
+<td><p>Yes</p></td>
+<td><p>No</p></td>
+<td><p>Yes</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#mrtrix-singleshell-ss3t-act-fast"><span class="std std-ref">mrtrix_singleshell_ss3t_ACT-fast</span></a>*</p></td>
+<td><p>No</p></td>
+<td><p>No</p></td>
+<td><p>Yes</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#mrtrix-singleshell-ss3t-act-hsvs"><span class="std std-ref">mrtrix_singleshell_ss3t_ACT-hsvs</span></a></p></td>
+<td><p>No</p></td>
+<td><p>No</p></td>
+<td><p>Yes</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#mrtrix-singleshell-ss3t-noact"><span class="std std-ref">mrtrix_singleshell_ss3t_noACT</span></a></p></td>
+<td><p>No</p></td>
+<td><p>No</p></td>
+<td><p>Yes</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#multishell-scalarfest"><span class="std std-ref">multishell_scalarfest</span></a></p></td>
+<td><p>Yes</p></td>
+<td><p>No</p></td>
+<td><p>No</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#pyafq-tractometry"><span class="std std-ref">pyafq_tractometry</span></a></p></td>
+<td><p>Yes</p></td>
+<td><p>No</p></td>
+<td><p>Yes</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#reorient-fslstd"><span class="std std-ref">reorient_fslstd</span></a></p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+<td><p>Yes</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#ss3t-fod-autotrack"><span class="std std-ref">ss3t_fod_autotrack</span></a></p></td>
+<td><p>Yes</p></td>
+<td><p>No</p></td>
+<td><p>Yes</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#tortoise"><span class="std std-ref">TORTOISE</span></a></p></td>
+<td><p>Yes</p></td>
+<td><p>No</p></td>
+<td><p>No</p></td>
+</tr>
+</tbody>
+</table>
+<p>* Not recommended</p>
+</section>
+<section id="connectivity-matrices">
+<span id="id64"></span><h2>Connectivity matrices<a class="headerlink" href="#connectivity-matrices" title="Link to this heading"></a></h2>
+<p>Instead of offering a bewildering number of options for constructing connectivity matrices,
+<em>QSIRecon</em> will construct as many connectivity matrices as it can given the reconstruction
+methods.
+It is <strong>highly</strong> recommended that you pick a weighting scheme before you run
+these pipelines and only look at those numbers.
+If you look at more than one weighting method be sure to adjust your statistics for the
+additional comparisons.</p>
+<p>To skip this step in your workflow, you can modify an existing recon pipeline by removing the
+<code class="docutils literal notranslate"><span class="pre">action:</span> <span class="pre">connectivity</span></code> section from the yaml file.</p>
+<section id="atlases">
+<span id="connectivity-atlases"></span><h3>Atlases<a class="headerlink" href="#atlases" title="Link to this heading"></a></h3>
+<p>The following atlases are included in <em>QSIRecon</em>.
+This means you do not need to add a <code class="docutils literal notranslate"><span class="pre">--datasets</span></code> argument to your command line,
+and can instead select them just with <code class="docutils literal notranslate"><span class="pre">--atlases</span></code>.</p>
+<p>If you previously were using the default atlases in a “connectivity matrix” workflow,
+you can match the previous behavior by adding</p>
+<p><code class="docutils literal notranslate"><span class="pre">--atlases</span> <span class="pre">4S156Parcels</span> <span class="pre">4S256Parcels</span> <span class="pre">4S456Parcels</span> <span class="pre">Brainnetome246Ext</span> <span class="pre">AICHA384Ext</span> <span class="pre">Gordon333Ext</span> <span class="pre">AAL116</span></code></p>
+<p>If you use one of them please be sure to cite the relevant publication.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">Brainnetome246Ext</span></code>: Fan <em>et al.</em><a class="footnote-reference brackets" href="#footcite-fan2016human" id="id65" role="doc-noteref"><span class="fn-bracket">[</span>17<span class="fn-bracket">]</span></a>, extended with subcortical parcels.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">AICHA384Ext</span></code>: Joliot <em>et al.</em><a class="footnote-reference brackets" href="#footcite-joliot2015aicha" id="id66" role="doc-noteref"><span class="fn-bracket">[</span>18<span class="fn-bracket">]</span></a>, extended with subcortical parcels.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Gordon333Ext</span></code>: Gordon <em>et al.</em><a class="footnote-reference brackets" href="#footcite-gordon2016generation" id="id67" role="doc-noteref"><span class="fn-bracket">[</span>19<span class="fn-bracket">]</span></a>, extended with subcortical parcels.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">AAL116</span></code>: Tzourio-Mazoyer <em>et al.</em><a class="footnote-reference brackets" href="#footcite-tzourio2002automated" id="id68" role="doc-noteref"><span class="fn-bracket">[</span>20<span class="fn-bracket">]</span></a></p></li>
+</ul>
+</div></blockquote>
+<p>The <em>QSIRecon</em> atlas set can be downloaded directly from
+<a class="reference external" href="https://upenn.box.com/shared/static/5k1tvg6soelxdhi9nvrkry6w0z49ctne.xz">box</a>.</p>
+<p>The 4S atlas combines the Schaefer 2018 cortical atlas (version v0143) <a class="footnote-reference brackets" href="#footcite-schaefer-2017" id="id69" role="doc-noteref"><span class="fn-bracket">[</span>21<span class="fn-bracket">]</span></a>
+at 10 different resolutions (100, 200, 300, 400, 500, 600, 700, 800, 900, and 1000 parcels) with
+the CIT168 subcortical atlas <a class="footnote-reference brackets" href="#footcite-pauli2018high" id="id70" role="doc-noteref"><span class="fn-bracket">[</span>22<span class="fn-bracket">]</span></a>,
+the Diedrichson cerebellar atlas <a class="footnote-reference brackets" href="#footcite-king2019functional" id="id71" role="doc-noteref"><span class="fn-bracket">[</span>23<span class="fn-bracket">]</span></a>,
+the HCP thalamic atlas <a class="footnote-reference brackets" href="#footcite-najdenovska2018vivo" id="id72" role="doc-noteref"><span class="fn-bracket">[</span>24<span class="fn-bracket">]</span></a>,
+and the amygdala and hippocampus parcels from the HCP CIFTI subcortical parcellation
+<a class="footnote-reference brackets" href="#footcite-glasser2013minimal" id="id73" role="doc-noteref"><span class="fn-bracket">[</span>25<span class="fn-bracket">]</span></a>.
+The 4S atlas is used in the same manner across three PennLINC BIDS Apps:
+<em>QSIRecon</em>, <em>XCP-D</em>, and <em>ASLPrep</em>, to produce synchronized outputs across modalities.
+For more information about the 4S atlas, please see <a class="reference external" href="https://github.com/PennLINC/AtlasPack">https://github.com/PennLINC/AtlasPack</a>.</p>
+<p>Atlases are written out to the <code class="docutils literal notranslate"><span class="pre">atlases</span></code> subfolder, following
+<a class="reference external" href="https://docs.google.com/document/d/1RxW4cARr3-EiBEcXjLpSIVidvnUSHE7yJCUY91i5TfM/edit?usp=sharing">BEP038</a>.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">qsirecon</span><span class="o">/</span>
+   <span class="n">atlases</span><span class="o">/</span>
+      <span class="n">dataset_description</span><span class="o">.</span><span class="n">json</span>
+      <span class="n">atlas</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span>
+         <span class="n">atlas</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_res</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_dseg</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>
+         <span class="n">atlas</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_res</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_dseg</span><span class="o">.</span><span class="n">json</span>
+         <span class="n">atlas</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_dseg</span><span class="o">.</span><span class="n">tsv</span>
+</pre></div>
+</div>
+<p>Additionally, each atlas is warped to the subject’s anatomical space and written out in the
+associated reconstruction workflows dataset.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">qsirecon</span><span class="o">/</span>
+   <span class="n">derivatives</span><span class="o">/</span>
+      <span class="n">qsirecon</span><span class="o">-&lt;</span><span class="n">suffix</span><span class="o">&gt;/</span>
+         <span class="n">sub</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span>
+            <span class="n">dwi</span><span class="o">/</span>
+               <span class="n">sub</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">ACPC_seg</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_dseg</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>
+               <span class="n">sub</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">ACPC_seg</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_dseg</span><span class="o">.</span><span class="n">mif</span><span class="o">.</span><span class="n">gz</span>
+               <span class="n">sub</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">ACPC_seg</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_dseg</span><span class="o">.</span><span class="n">json</span>
+               <span class="n">sub</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">ACPC_seg</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_dseg</span><span class="o">.</span><span class="n">tsv</span>
+</pre></div>
+</div>
+<section id="using-custom-atlases">
+<span id="custom-atlases"></span><h4>Using custom atlases<a class="headerlink" href="#using-custom-atlases" title="Link to this heading"></a></h4>
+<p>It’s possible to use your own atlases provided you organize the atlases into BIDS-Atlas datasets.
+Users can control which atlases are used with the <code class="docutils literal notranslate"><span class="pre">--atlases</span></code> and <code class="docutils literal notranslate"><span class="pre">--datasets</span></code> parameters.</p>
+<p>The nifti images should be registered to the
+<a class="reference external" href="https://github.com/PennLINC/qsirecon/blob/main/qsirecon/data/mni_1mm_t1w_lps.nii.gz">MNI152NLin2009cAsym</a>
+included in <em>QSIRecon</em>.
+It is essential that your images are in the LPS+ orientation and have the sform zeroed-out in the header.
+<strong>Be sure to check for alignment and orientation</strong> in your outputs.</p>
+</section>
+</section>
+<section id="connectivity-measures">
+<h3>Connectivity Measures<a class="headerlink" href="#connectivity-measures" title="Link to this heading"></a></h3>
+<p>Connectivity measures are bundled together in binary <code class="docutils literal notranslate"><span class="pre">.mat</span></code> files,
+rather than as atlas- and measure-specific tabular files.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>We ultimately plan to organize the connectivity matrices according to the BIDS-Connectivity BEP,
+wherein each measure from each atlas is stored in a separate file.</p>
+<p>Therefore, this organization will change in the future.</p>
+</div>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">qsirecon</span><span class="o">/</span>
+   <span class="n">derivatives</span><span class="o">/</span>
+      <span class="n">qsirecon</span><span class="o">-&lt;</span><span class="n">suffix</span><span class="o">&gt;/</span>
+         <span class="n">sub</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span><span class="p">[</span><span class="n">ses</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span><span class="p">]</span>
+            <span class="n">dwi</span><span class="o">/</span>
+               <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_connectivity</span><span class="o">.</span><span class="n">mat</span>
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">.mat</span></code> file contains a dictionary with all of the connectivity measures specified
+by the recon spec for all of the different atlases specified by the user.</p>
+<p>For example, in the case where a user has selected a single atlas (<code class="docutils literal notranslate"><span class="pre">&lt;atlas&gt;</span></code>) and
+the recon spec specifies a single connectivity measure (<code class="docutils literal notranslate"><span class="pre">&lt;measure&gt;</span></code>),
+the <code class="docutils literal notranslate"><span class="pre">.mat</span></code> file will contain the following keys:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">command</span>                                <span class="c1"># The command that was run</span>
+<span class="n">atlas_</span><span class="o">&lt;</span><span class="n">atlas</span><span class="o">&gt;</span><span class="n">_region_ids</span>               <span class="c1"># The region ids for the atlas (1 x n_parcels array)</span>
+<span class="n">atlas_</span><span class="o">&lt;</span><span class="n">atlas</span><span class="o">&gt;</span><span class="n">_region_labels</span>            <span class="c1"># The region labels for the atlas (1 x n_parcels array)</span>
+<span class="n">atlas_</span><span class="o">&lt;</span><span class="n">atlas</span><span class="o">&gt;</span><span class="n">_</span><span class="o">&lt;</span><span class="n">measure</span><span class="o">&gt;</span><span class="n">_connectivity</span>   <span class="c1"># The connectivity matrix for the atlas and measure (n_parcels x n_parcels array)</span>
+</pre></div>
+</div>
+<section id="mrtrix3-connectivity-measures">
+<h4>MRtrix3 Connectivity Measures<a class="headerlink" href="#mrtrix3-connectivity-measures" title="Link to this heading"></a></h4>
+<p>MRtrix3 connectivity workflows produce 4 structural connectome outputs for each atlas.
+The 4 connectivity matrix outputs are</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><em>atlas_&lt;atlas&gt;_radius&lt;N&gt;.count.connectivity</em>: raw streamline count based matrix</p></li>
+<li><p><em>atlas_&lt;atlas&gt;_sift.radius&lt;N&gt;.count.connectivity</em>: sift-weighted streamline count based matrix</p></li>
+<li><p><em>atlas_&lt;atlas&gt;_radius&lt;N&gt;.meanlength.connectivity</em>: a matrix containing mean length of raw streamlines</p></li>
+<li><p><em>atlas_&lt;atlas&gt;_sift.radius&lt;N&gt;.meanlength.connectivity</em>: a matrix containing mean length of sifted output</p></li>
+</ul>
+</div></blockquote>
+<p>The number <code class="docutils literal notranslate"><span class="pre">N</span></code> in <code class="docutils literal notranslate"><span class="pre">radiusN</span></code> indicates how many mm the algorithm would search up from a
+given streamline’s endpoint for a cortical region. E.g., a radius of 2 indicates that
+if a streamline ended before hitting gray matter, the search for a cortical
+termination region could be up to 2mm from the endpoint.</p>
+</section>
+<section id="dsi-studio-connectivity-measures">
+<h4>DSI Studio Connectivity Measures<a class="headerlink" href="#dsi-studio-connectivity-measures" title="Link to this heading"></a></h4>
+<p>DSI Studio has two options for how to count streamlines as “connecting” a region pair.
+<code class="docutils literal notranslate"><span class="pre">pass</span></code> counts a connection if any part of a streamline intersects two regions.
+<code class="docutils literal notranslate"><span class="pre">end</span></code> requires that a streamline terminates in each region in order to be connected.
+There are some practical considerations with each choice:
+<code class="docutils literal notranslate"><span class="pre">pass</span></code> could produce a connectivity matrix with <em>more</em> counts than the number of streamlines you requested.
+<code class="docutils literal notranslate"><span class="pre">end</span></code> will include many fewer counts than the streamlines you requested.
+Due to the arbitrary nature of streamline tractography, the <code class="docutils literal notranslate"><span class="pre">pass</span></code> method is probably more realistic.</p>
+<p>Once the streamlines connecting each region pair are found, they need to be used to quantify that connection somehow.
+The streamlines connecting a region pair can by default are summarized by</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><em>count</em>: the count of streamlines</p></li>
+<li><p><em>ncount</em>: the count of streamlines normalized by their length</p></li>
+<li><p><em>mean_length</em>: the mean length of streamlines in millimeters</p></li>
+<li><p><em>gfa</em>: the mean Generalized Fractional Anisotropy along the streamlines</p></li>
+</ul>
+</div></blockquote>
+<p>A great walkthrough of connectivity analysis with DSI Studio can be found
+<a class="reference external" href="https://dsi-studio.labsolver.org/doc/gui_t3_whole_brain.html">here</a>.</p>
+</section>
+</section>
+</section>
+<section id="references">
+<h2>References<a class="headerlink" href="#references" title="Link to this heading"></a></h2>
+<div class="docutils container" id="id74">
+<aside class="footnote-list brackets">
+<aside class="footnote brackets" id="footcite-cieslak2021qsiprep" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id1">1</a><span class="fn-bracket">]</span></span>
+<p>Matthew Cieslak, Philip A Cook, Xiaosong He, Fang-Cheng Yeh, Thijs Dhollander, Azeez Adebimpe, Geoffrey K Aguirre, Danielle S Bassett, Richard F Betzel, Josiane Bourque, and others. Qsiprep: an integrative platform for preprocessing and reconstructing diffusion mri data. <em>Nature methods</em>, 18(7):775–778, 2021. URL: <a class="reference external" href="https://doi.org/10.1038/s41592-021-01185-5">https://doi.org/10.1038/s41592-021-01185-5</a>, <a class="reference external" href="https://doi.org/10.1038/s41592-021-01185-5">doi:10.1038/s41592-021-01185-5</a>.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-dhollander2019response" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id3">2</a><span class="fn-bracket">]</span></span>
+<p>T Dhollander, R Mito, D Raffelt, and A Connelly. Improved white matter response function estimation for 3-tissue constrained spherical deconvolution. In <em>Proc. Intl. Soc. Mag. Reson. Med</em>, 555. 2019.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-smith2015sift2" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id4">3</a><span class="fn-bracket">]</span></span>
+<p>Robert E Smith, Jacques-Donald Tournier, Fernando Calamante, and Alan Connelly. Sift2: enabling dense quantitative assessment of brain white matter connectivity using streamlines tractography. <em>Neuroimage</em>, 119:338–351, 2015. URL: <a class="reference external" href="https://doi.org/10.1016/j.neuroimage.2015.06.092">https://doi.org/10.1016/j.neuroimage.2015.06.092</a>, <a class="reference external" href="https://doi.org/10.1016/j.neuroimage.2015.06.092">doi:10.1016/j.neuroimage.2015.06.092</a>.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-msmt5tt" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span>4<span class="fn-bracket">]</span></span>
+<span class="backrefs">(<a role="doc-backlink" href="#id6">1</a>,<a role="doc-backlink" href="#id11">2</a>)</span>
+<p>Ben Jeurissen, Jacques-Donald Tournier, Thijs Dhollander, Alan Connelly, and Jan Sijbers. Multi-tissue constrained spherical deconvolution for improved analysis of multi-shell diffusion mri data. <em>NeuroImage</em>, 103:411–426, 2014.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-smith2012anatomically" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span>5<span class="fn-bracket">]</span></span>
+<span class="backrefs">(<a role="doc-backlink" href="#id7">1</a>,<a role="doc-backlink" href="#id14">2</a>)</span>
+<p>Robert E Smith, Jacques-Donald Tournier, Fernando Calamante, and Alan Connelly. Anatomically-constrained tractography: improved diffusion mri streamlines tractography through effective use of anatomical information. <em>Neuroimage</em>, 62(3):1924–1938, 2012. URL: <a class="reference external" href="https://doi.org/10.1016/j.neuroimage.2012.06.005">https://doi.org/10.1016/j.neuroimage.2012.06.005</a>, <a class="reference external" href="https://doi.org/10.1016/j.neuroimage.2012.06.005">doi:10.1016/j.neuroimage.2012.06.005</a>.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-smith2020hybrid" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span>6<span class="fn-bracket">]</span></span>
+<span class="backrefs">(<a role="doc-backlink" href="#id8">1</a>,<a role="doc-backlink" href="#id15">2</a>)</span>
+<p>Robert Smith, Antonin Skoch, Claude J Bajada, Svenja Caspers, and Alan Connelly. Hybrid surface-volume segmentation for improved anatomically-constrained tractography. <em>OHBM</em>, 2020. URL: <a class="reference external" href="https://www.um.edu.mt/library/oar/handle/123456789/59839">https://www.um.edu.mt/library/oar/handle/123456789/59839</a>.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-dhollander2016novel" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span>7<span class="fn-bracket">]</span></span>
+<span class="backrefs">(<a role="doc-backlink" href="#id13">1</a>,<a role="doc-backlink" href="#id18">2</a>,<a role="doc-backlink" href="#id39">3</a>)</span>
+<p>Thijs Dhollander and Alan Connelly. A novel iterative approach to reap the benefits of multi-tissue csd from just single-shell (+ b= 0) diffusion mri data. In <em>Proc ISMRM</em>, volume 24, 3010. 2016.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-pyafq2" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id20">8</a><span class="fn-bracket">]</span></span>
+<p>Jason D. Yeatman, Robert F. Dougherty, Nathaniel J. Myall, Brian A. Wandell, and Heidi M. Feldman. Tract profiles of white matter properties: automating fiber-tract quantification. <em>PLoS ONE</em>, 2012. <a class="reference external" href="https://doi.org/10.1371/journal.pone.0049790">doi:10.1371/journal.pone.0049790</a>.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-pyafq" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id21">9</a><span class="fn-bracket">]</span></span>
+<p>J. Kruper, J.D. Yeatman, A. Richie-Halford, D. Bloom, M. Grotheer, S. Caffarra, G. Kiar, I.I. Karipidis, E. Roy, B.Q. Chandio, E. Garyfallidis, and A. Rokem. Evaluating the reliability of human brain white matter tractometry. <em>Aperture Neuro</em>, 1:1–25, 2021.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-noddi" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id25">10</a><span class="fn-bracket">]</span></span>
+<p>Hui Zhang, Torben Schneider, Claudia A Wheeler-Kingshott, and Daniel C Alexander. Noddi: practical in vivo neurite orientation dispersion and density imaging of the human brain. <em>Neuroimage</em>, 61(4):1000–1016, 2012. <a class="reference external" href="https://doi.org/10.1016/j.neuroimage.2012.03.072">doi:10.1016/j.neuroimage.2012.03.072</a>.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-amico" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id26">11</a><span class="fn-bracket">]</span></span>
+<p>Alessandro Daducci, Erick J Canales-Rodríguez, Hui Zhang, Tim B Dyrby, Daniel C Alexander, and Jean-Philippe Thiran. Accelerated microstructure imaging via convex optimization (amico) from diffusion mri data. <em>NeuroImage</em>, 105:32–44, 2015. <a class="reference external" href="https://doi.org/10.1016/j.neuroimage.2014.10.026">doi:10.1016/j.neuroimage.2014.10.026</a>.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-parker2021not" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span>12<span class="fn-bracket">]</span></span>
+<span class="backrefs">(<a role="doc-backlink" href="#id27">1</a>,<a role="doc-backlink" href="#id28">2</a>)</span>
+<p>C.S. Parker, T. Veale, M. Bocchetta, C.F. Slattery, I.B. Malone, D.L. Thomas, J.M. Schott, D.M. Cash, and H. Zhang. Not all voxels are created equal: reducing estimation bias in regional noddi metrics using tissue-weighted means. <em>NeuroImage</em>, 245:118749, 2021. URL: <a class="reference external" href="https://www.sciencedirect.com/science/article/pii/S1053811921010211">https://www.sciencedirect.com/science/article/pii/S1053811921010211</a>, <a class="reference external" href="https://doi.org/https://doi.org/10.1016/j.neuroimage.2021.118749">doi:https://doi.org/10.1016/j.neuroimage.2021.118749</a>.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-yeh2013" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id30">13</a><span class="fn-bracket">]</span></span>
+<p>Fang-Cheng Yeh, Timothy D Verstynen, Yu Wang, Juan C Fernández-Miranda, and Wen-Yih Isaac Tseng. Deterministic diffusion fiber tracking improved by quantitative anisotropy. <em>PLOS ONE</em>, 8(11):e80713, 2013.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-autotrack" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id34">14</a><span class="fn-bracket">]</span></span>
+<p>Fang-Cheng Yeh. Shape analysis of the human association pathways. <em>Neuroimage</em>, 223:117329, 2020.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-yeh2022population" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id35">15</a><span class="fn-bracket">]</span></span>
+<p>Fang-Cheng Yeh. Population-based tract-to-region connectome of the human brain and its hierarchical topology. <em>Nature communications</em>, 13(1):4933, 2022. URL: <a class="reference external" href="https://doi.org/10.1038/s41467-022-32595-4">https://doi.org/10.1038/s41467-022-32595-4</a>, <a class="reference external" href="https://doi.org/10.1038/s41467-022-32595-4">doi:10.1038/s41467-022-32595-4</a>.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-tortoisev3" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id43">16</a><span class="fn-bracket">]</span></span>
+<p>Mustafa Okan Irfanoglu, Amritha Nayak, Jeffrey Jenkins, and Carlo Pierpaoli. Tortoise v3: improvements and new features of the nih diffusion mri processing pipeline. In <em>Program and proceedings of the ISMRM 25th annual meeting and exhibition, Honolulu, HI, USA</em>. 2017.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-fan2016human" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id65">17</a><span class="fn-bracket">]</span></span>
+<p>Lingzhong Fan, Hai Li, Junjie Zhuo, Yu Zhang, Jiaojian Wang, Liangfu Chen, Zhengyi Yang, Congying Chu, Sangma Xie, Angela R Laird, and others. The human brainnetome atlas: a new brain atlas based on connectional architecture. <em>Cerebral cortex</em>, 26(8):3508–3526, 2016. URL: <a class="reference external" href="https://doi.org/10.1093/cercor/bhw157">https://doi.org/10.1093/cercor/bhw157</a>, <a class="reference external" href="https://doi.org/10.1093/cercor/bhw157">doi:10.1093/cercor/bhw157</a>.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-joliot2015aicha" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id66">18</a><span class="fn-bracket">]</span></span>
+<p>Marc Joliot, Gaël Jobard, Mikaël Naveau, Nicolas Delcroix, Laurent Petit, Laure Zago, Fabrice Crivello, Emmanuel Mellet, Bernard Mazoyer, and Nathalie Tzourio-Mazoyer. Aicha: an atlas of intrinsic connectivity of homotopic areas. <em>Journal of neuroscience methods</em>, 254:46–59, 2015. URL: <a class="reference external" href="https://doi.org/10.1016/j.jneumeth.2015.07.013">https://doi.org/10.1016/j.jneumeth.2015.07.013</a>, <a class="reference external" href="https://doi.org/10.1016/j.jneumeth.2015.07.013">doi:10.1016/j.jneumeth.2015.07.013</a>.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-gordon2016generation" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id67">19</a><span class="fn-bracket">]</span></span>
+<p>Evan M Gordon, Timothy O Laumann, Babatunde Adeyemo, Jeremy F Huckins, William M Kelley, and Steven E Petersen. Generation and evaluation of a cortical area parcellation from resting-state correlations. <em>Cerebral cortex</em>, 26(1):288–303, 2016. URL: <a class="reference external" href="https://doi.org/10.1093/cercor/bhu239">https://doi.org/10.1093/cercor/bhu239</a>, <a class="reference external" href="https://doi.org/10.1093/cercor/bhu239">doi:10.1093/cercor/bhu239</a>.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-tzourio2002automated" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id68">20</a><span class="fn-bracket">]</span></span>
+<p>Nathalie Tzourio-Mazoyer, Brigitte Landeau, Dimitri Papathanassiou, Fabrice Crivello, Octave Etard, Nicolas Delcroix, Bernard Mazoyer, and Marc Joliot. Automated anatomical labeling of activations in spm using a macroscopic anatomical parcellation of the mni mri single-subject brain. <em>Neuroimage</em>, 15(1):273–289, 2002. URL: <a class="reference external" href="https://doi.org/10.1006/nimg.2001.0978">https://doi.org/10.1006/nimg.2001.0978</a>, <a class="reference external" href="https://doi.org/10.1006/nimg.2001.0978">doi:10.1006/nimg.2001.0978</a>.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-schaefer-2017" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id69">21</a><span class="fn-bracket">]</span></span>
+<p>Alexander Schaefer, Ru Kong, Evan M. Gordon, Timothy O. Laumann, Xi-Nian Zuo, Avram J. Holmes, Simon B. Eickhoff, and B. T. Thomas Yeo. Local-Global Parcellation of the Human Cerebral Cortex from Intrinsic Functional Connectivity MRI. <em>Cerebral Cortex (New York, N.Y.: 1991)</em>, 28(9):3095–3114, September 2018. <a class="reference external" href="https://doi.org/10.1093/cercor/bhx179">doi:10.1093/cercor/bhx179</a>.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-pauli2018high" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id70">22</a><span class="fn-bracket">]</span></span>
+<p>Wolfgang M Pauli, Amanda N Nili, and J Michael Tyszka. A high-resolution probabilistic in vivo atlas of human subcortical brain nuclei. <em>Scientific data</em>, 5(1):1–13, 2018. URL: <a class="reference external" href="https://doi.org/10.1038/sdata.2018.63">https://doi.org/10.1038/sdata.2018.63</a>, <a class="reference external" href="https://doi.org/10.1038/sdata.2018.63">doi:10.1038/sdata.2018.63</a>.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-king2019functional" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id71">23</a><span class="fn-bracket">]</span></span>
+<p>Maedbh King, Carlos R Hernandez-Castillo, Russell A Poldrack, Richard B Ivry, and Jörn Diedrichsen. Functional boundaries in the human cerebellum revealed by a multi-domain task battery. <em>Nature neuroscience</em>, 22(8):1371–1378, 2019. URL: <a class="reference external" href="https://doi.org/10.1038/s41593-019-0436-x">https://doi.org/10.1038/s41593-019-0436-x</a>, <a class="reference external" href="https://doi.org/10.1038/s41593-019-0436-x">doi:10.1038/s41593-019-0436-x</a>.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-najdenovska2018vivo" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id72">24</a><span class="fn-bracket">]</span></span>
+<p>Elena Najdenovska, Yasser Alemán-Gómez, Giovanni Battistella, Maxime Descoteaux, Patric Hagmann, Sebastien Jacquemont, Philippe Maeder, Jean-Philippe Thiran, Eleonora Fornari, and Meritxell Bach Cuadra. In-vivo probabilistic atlas of human thalamic nuclei based on diffusion-weighted magnetic resonance imaging. <em>Scientific data</em>, 5(1):1–11, 2018. URL: <a class="reference external" href="https://doi.org/10.1038/sdata.2018.270">https://doi.org/10.1038/sdata.2018.270</a>, <a class="reference external" href="https://doi.org/10.1038/sdata.2018.270">doi:10.1038/sdata.2018.270</a>.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-glasser2013minimal" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id73">25</a><span class="fn-bracket">]</span></span>
+<p>Matthew F. Glasser, Stamatios N. Sotiropoulos, J. Anthony Wilson, Timothy S. Coalson, Bruce Fischl, Jesper L. Andersson, Junqian Xu, Saad Jbabdi, Matthew Webster, Jonathan R. Polimeni, David C. Van Essen, Mark Jenkinson, and WU-Minn HCP Consortium. The minimal preprocessing pipelines for the Human Connectome Project. <em>NeuroImage</em>, 80:105–124, October 2013. <a class="reference external" href="https://doi.org/10.1016/j.neuroimage.2013.04.127">doi:10.1016/j.neuroimage.2013.04.127</a>.</p>
+</aside>
+</aside>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="models/noddi.html" class="btn btn-neutral float-left" title="Neurite Orientation Dispersion and Density Imaging (NODDI)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="building_workflows.html" class="btn btn-neutral float-right" title="Custom Reconstruction Workflows" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2021-2026, qsirecon team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

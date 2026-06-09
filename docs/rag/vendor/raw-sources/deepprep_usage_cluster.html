@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Usage Notes (Cluster) &mdash; DeepPrep  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=19f00094" />
+      <link rel="stylesheet" type="text/css" href="_static/custom.css?v=7a5c7406" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="_static/jquery.js?v=5d32c60e"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script src="_static/documentation_options.js?v=7f41d439"></script>
+        <script src="_static/doctools.js?v=9a2dae69"></script>
+        <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Usage Notes (GUI)" href="usage_GUI.html" />
+    <link rel="prev" title="Usage Notes (Local)" href="usage_local.html" /> 
+<script async type="text/javascript" src="/_/static/javascript/readthedocs-addons.js"></script><meta name="readthedocs-project-slug" content="deepprep" /><meta name="readthedocs-version-slug" content="latest" /><meta name="readthedocs-resolver-filename" content="/usage_cluster.html" /><meta name="readthedocs-http-status" content="200" /></head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html">
+            
+              <img src="_static/logo_title4.svg" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Installation</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="usage_local.html">Usage Notes (Local)</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Usage Notes (Cluster)</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#process-in-a-nutshell">Process in a Nutshell</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#platform-and-login-nodes">Platform and Login Nodes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#build-the-singularity-image">Build the Singularity image</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#build-the-deepprep-sif-image">Build the DeepPrep sif image</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#download-the-docker-image-dockerhub">Download the Docker image (DockerHub)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#download-the-deepprep-image-from-the-dockerhub">Download the DeepPrep image from the DockerHub</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#install-nextflow-23">Install Nextflow &gt;= 23</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#sample-install-on-ubuntu">Sample — Install on Ubuntu</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#update-the-configuration-file-with-gpu">Update the Configuration file (with GPU)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#run-deepprep-with-gpu">Run DeepPrep with GPU</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#update-the-configuration-file-cpu-only">Update the Configuration file (CPU only)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#run-deepprep-with-cpu-only">Run DeepPrep with CPU only</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#samples-on-three-platforms">Samples on three platforms</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#slurm">SLURM</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pbs">PBS</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#aws">AWS</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="usage_GUI.html">Usage Notes (GUI)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Process and Outputs</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="processing.html">Processing pipeline details</a></li>
+<li class="toctree-l1"><a class="reference internal" href="outputs.html">Outputs of DeepPrep</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Other Info</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="changes.html">What’s new</a></li>
+<li class="toctree-l1"><a class="reference internal" href="faq.html">FAQ - Frequently Asked Questions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="about_us.html">About Us</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">DeepPrep</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Usage Notes (Cluster)</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="usage-notes-cluster">
+<h1>Usage Notes (Cluster)<a class="headerlink" href="#usage-notes-cluster" title="Link to this heading"></a></h1>
+<section id="process-in-a-nutshell">
+<h2>Process in a Nutshell<a class="headerlink" href="#process-in-a-nutshell" title="Link to this heading"></a></h2>
+<ol class="arabic simple">
+<li><p>log into HPC or cloud platforms that have <strong>nodes</strong> with resource application permissions.</p></li>
+<li><p>Download the Singularity image to the <strong>shared directory</strong> on the cluster platform (or pull the Docker image directly).</p></li>
+<li><p>Install java &gt; 11 and Nextflow &gt; 23.</p></li>
+<li><p>Update the configuration file to meet the requirements for the specific platform.</p></li>
+<li><p>Execute DeepPrep Singularity/Docker.</p></li>
+</ol>
+</section>
+<section id="platform-and-login-nodes">
+<h2>Platform and Login Nodes<a class="headerlink" href="#platform-and-login-nodes" title="Link to this heading"></a></h2>
+<blockquote>
+<div><ul class="simple">
+<li><p>The specified login nodes are typically applicable on HPC or cloud platforms, allowing users to submit jobs to the platform.</p></li>
+<li><p>Job schedulers vary widely across HPC platforms, i.e. SLURM, PBS, SGE, etc. Thus, the commands for submitting jobs are different, i.e. <code class="docutils literal notranslate"><span class="pre">sbatch</span></code> for SLURM, <code class="docutils literal notranslate"><span class="pre">qsub</span></code> for PBS, etc.</p></li>
+<li><p>Also, different services are used across various cloud platforms to submit jobs, i.e. AWS uses AWS Batch service, and Google Cloud uses Google Cloud Batch service.</p></li>
+</ul>
+</div></blockquote>
+</section>
+<section id="build-the-singularity-image">
+<h2>Build the Singularity image<a class="headerlink" href="#build-the-singularity-image" title="Link to this heading"></a></h2>
+<p>The Singularity image is typically used on HPC since users do not have permission to access the root directory.
+Meanwhile, the Docker image is commonly used on cloud platforms.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>The Singularity image should be build to a <strong>shared directory</strong> <code class="docutils literal notranslate"><span class="pre">&lt;shared_storage_path&gt;</span></code>.</p>
+</div>
+<section id="build-the-deepprep-sif-image">
+<h3>Build the DeepPrep sif image<a class="headerlink" href="#build-the-deepprep-sif-image" title="Link to this heading"></a></h3>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>$ sudo singularity build &lt;saved_path&gt;/deepprep_25.1.0.sif docker://pbfslab/deepprep:25.1.0
+</pre></div>
+</div>
+<p>Then you will get: <code class="docutils literal notranslate"><span class="pre">&lt;shared_storage_path&gt;/deepprep_25.1.0.sif</span></code></p>
+</section>
+</section>
+<section id="download-the-docker-image-dockerhub">
+<h2>Download the Docker image (DockerHub)<a class="headerlink" href="#download-the-docker-image-dockerhub" title="Link to this heading"></a></h2>
+<p>The Docker image is typically used on AWS etc.</p>
+<section id="download-the-deepprep-image-from-the-dockerhub">
+<h3>Download the DeepPrep image from the DockerHub<a class="headerlink" href="#download-the-deepprep-image-from-the-dockerhub" title="Link to this heading"></a></h3>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>$ docker pull pbfslab/deepprep:25.1.0
+</pre></div>
+</div>
+<p>When its done, you will find the Docker image by this command <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">image</span> <span class="pre">ls</span></code>, the <code class="docutils literal notranslate"><span class="pre">REPOSITORY</span></code> is <code class="docutils literal notranslate"><span class="pre">pbfslab/deepprep</span></code> with a <code class="docutils literal notranslate"><span class="pre">TAG:</span> <span class="pre">25.1.0</span></code>.</p>
+</section>
+</section>
+<section id="install-nextflow-23">
+<h2>Install Nextflow &gt;= 23<a class="headerlink" href="#install-nextflow-23" title="Link to this heading"></a></h2>
+<p>Please install <a class="reference external" href="https://www.nextflow.io/docs/latest/getstarted.html">Nexflow</a> if you don’t have one or the version &lt; 23.</p>
+<p>Check the version of Nextflow with <code class="docutils literal notranslate"><span class="pre">nextflow</span> <span class="pre">-version</span></code>:</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>nextflow -version
+
+  N E X T F L O W
+<span class="hll">  version 23.04.3 build 5875
+</span>  created 11-08-2023 18:37 UTC (12-08-2023 02:37 CDT)
+  cite doi:10.1038/nbt.3820
+  http://nextflow.io
+</pre></div>
+</div>
+<section id="sample-install-on-ubuntu">
+<h3>Sample — Install on Ubuntu<a class="headerlink" href="#sample-install-on-ubuntu" title="Link to this heading"></a></h3>
+<p><strong>Java</strong></p>
+<p>The Cluster implemented in DeepPrep is based on Nextflow, which requires JAVA &gt; 11.
+Please install <a class="reference external" href="https://www.openlogic.com/openjdk-downloads">Java</a> if it doesn’t exist or the version &lt; 11. (<a class="reference external" href="https://www.java.com/en/download/help/index.html">How to install Java</a>)</p>
+<p>Check the version of Java with <code class="docutils literal notranslate"><span class="pre">java</span> <span class="pre">-version</span></code>:</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>java -version
+
+<span class="hll">    openjdk version &quot;11.0.21&quot; 2023-10-17
+</span>    OpenJDK Runtime Environment (build 11.0.21+9-post-Ubuntu-0ubuntu120.04)
+    OpenJDK 64-Bit Server VM (build 11.0.21+9-post-Ubuntu-0ubuntu120.04, mixed mode, sharing)
+</pre></div>
+</div>
+<p><strong>Nextflow</strong></p>
+<p>Install Nextflow:</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>$ export NEXTFLOW_BIN=/opt/nextflow/bin
+$ mkdir -p ${NEXTFLOW_BIN} &amp;&amp; cd ${NEXTFLOW_BIN} &amp;&amp; wget -qO- https://get.nextflow.io | bash
+$ chmod 755 ${NEXTFLOW_BIN}/nextflow
+$ export PATH=${NEXTFLOW_BIN}:${PATH}
+</pre></div>
+</div>
+<p>Double check the Nextflow version &gt;= 23 with <code class="docutils literal notranslate"><span class="pre">nextflow</span> <span class="pre">-version</span></code>.</p>
+</section>
+</section>
+<section id="update-the-configuration-file-with-gpu">
+<h2>Update the Configuration file (with GPU)<a class="headerlink" href="#update-the-configuration-file-with-gpu" title="Link to this heading"></a></h2>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>It is <strong>mandatory</strong> to update the DeepPrep configuration file to meet the requirements of your cluster platform.</p>
+</div>
+<p>DeepPrep is developed based on Nextflow, enabling a scalable computation on the <a class="reference external" href="https://www.nextflow.io/docs/latest/executor.html">platforms list</a>.</p>
+<p>Let’s first walk through the detailed introduction of executing DeepPrep on SLURM.
+Following that, samples for SLURM, PBS, and AWS will be provided.</p>
+<p>This is the configuration file used on SLURM with GPU Driver:</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>//deepprep.slurm.gpu.config
+
+singularity.enabled = true
+singularity.autoMounts = false
+singularity.runOptions = &#39;-e \
+--home ${output_dir}/WorkDir/home \
+--env TEMP=${output_dir}/WorkDir/tmp \
+--env TMP=${output_dir}/WorkDir/tmp \
+--env TMPDIR=${output_dir}/WorkDir/tmp \
+-B ${bids_dir} \
+-B ${output_dir} \
+-B ${subjects_dir} \
+-B ${fs_license_file}:/opt/freesurfer/license.txt \
+&#39;
+
+process {
+//errorStrategy = &#39;ignore&#39;
+
+    executor = &#39;slurm&#39;
+
+    queue = &#39;cpu1,cpu2,fat&#39;
+
+    clusterOptions = { &quot; --chdir=${nextflow_work_dir}&quot; }
+
+    container = &quot;${container}&quot;
+<span class="hll">
+</span><span class="hll">    withLabel: with_gpu {
+</span><span class="hll">        queue = &#39;gpu2&#39;
+</span><span class="hll">        clusterOptions = { &quot; --chdir=${nextflow_work_dir} --gres=gpu:1&quot; }
+</span><span class="hll">        singularity.runOptions = &#39;-e --nv \
+</span>            --home ${output_dir}/WorkDir/home \
+            --env TEMP=${output_dir}/WorkDir/tmp \
+            --env TMP=${output_dir}/WorkDir/tmp \
+            --env TMPDIR=${output_dir}/WorkDir/tmp \
+            -B ${bids_dir} \
+            -B ${output_dir} \
+            -B ${subjects_dir} \
+            -B ${fs_license_file}:/opt/freesurfer/license.txt \
+            &#39;
+     }
+}
+</pre></div>
+</div>
+<dl class="simple">
+<dt><strong>Explanation</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">singularity.enabled</span> <span class="pre">=</span> <span class="pre">true</span></code> - Execution is based on the Singularity image. This command can be replaced with <code class="docutils literal notranslate"><span class="pre">docker.enabled</span> <span class="pre">=</span> <span class="pre">true</span></code> on cloud platforms if Docker image is used.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">singularity.autoMounts</span> <span class="pre">=</span> <span class="pre">false</span></code> - When set to <code class="docutils literal notranslate"><span class="pre">true</span></code>, the host directories will be automatically mounted in the container upon execution. It relies on the <code class="docutils literal notranslate"><span class="pre">user</span> <span class="pre">bin</span> <span class="pre">control</span></code>, which is enabled by default in Singularity installation. However, DeepPrep does not need this function; thus, it is set to <code class="docutils literal notranslate"><span class="pre">false</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">singularity.runOptions</span></code> - The personalized setting to execute the DeepPrep Singularity image. <em>Do NOT modify</em>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">process</span></code> - defines the parameters for each process in DeepPrep.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">executor</span> <span class="pre">=</span> <span class="pre">'slurm'</span></code> - indicates the executed environment is SLURM.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">queue</span> <span class="pre">=</span> <span class="pre">'cpu1,cpu2,fat'</span></code> - specifies the resource from <code class="docutils literal notranslate"><span class="pre">queue</span></code> to be allocated. A list of available <code class="docutils literal notranslate"><span class="pre">queue</span></code> will be returned from the command <code class="docutils literal notranslate"><span class="pre">sinfo</span></code>, and users need to <em>UPDATE this setting</em> with available resources from the list.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">clusterOptions</span> <span class="pre">=</span> <span class="pre">{</span> <span class="pre">&quot;</span> <span class="pre">--chdir=${nextflow_work_dir}&quot;</span> <span class="pre">}</span></code> - other personalized settings on the cluster, where <code class="docutils literal notranslate"><span class="pre">--chdir=${nextflow_work_dir}</span></code> is the personalized working directory.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">container</span> <span class="pre">=</span> <span class="pre">&quot;${container}&quot;</span></code> - the specified container to use.</p></li>
+</ul>
+</dd>
+<dt><strong>For GPU users</strong></dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">withLabel:</span> <span class="pre">with_gpu</span></code> - the personalized GPU setting.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">queue</span> <span class="pre">=</span> <span class="pre">'gpu2'</span></code> - indicates the resource to be allocated from the GPU queue named <cite>‘gpu2’</cite>. <em>UPDATE this setting</em> with available GPU queue (check with <code class="docutils literal notranslate"><span class="pre">sinfo</span></code>).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">clusterOptions</span> <span class="pre">=</span> <span class="pre">{</span> <span class="pre">&quot;</span> <span class="pre">--gres=gpu:1&quot;</span> <span class="pre">}</span></code> - specifies the resource required for a job submission, <code class="docutils literal notranslate"><span class="pre">gpu:1</span></code> indicates one GPU.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">singularity.runOptions</span> <span class="pre">=</span> <span class="pre">'--nv'</span></code> - The GPU environment will be enabled upon execution.</p></li>
+</ul>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Personalize the <code class="docutils literal notranslate"><span class="pre">queue</span></code> settings ONLY should work well for all the SLURM-based HPC platforms.</p>
+</div>
+<p>The configuration file is <code class="docutils literal notranslate"><span class="pre">DeepPrep/deepprep/nextflow/cluster/deepprep.slurm.gpu.config</span></code>.</p>
+<section id="run-deepprep-with-gpu">
+<h3>Run DeepPrep with GPU<a class="headerlink" href="#run-deepprep-with-gpu" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p>Assign an <em>absolute path</em> to <code class="docutils literal notranslate"><span class="pre">${TEST_DIR}</span></code>.</p></li>
+</ol>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>$ export TEST_DIR=&lt;shared_storage_path&gt;
+</pre></div>
+</div>
+<ol class="arabic simple" start="2">
+<li><p>Download the DeepPrep code.</p></li>
+</ol>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ cd ${TEST_DIR}
+$ git clone https://github.com/pBFSLab/DeepPrep.git &amp;&amp; cd DeepPrep &amp;&amp; git checkout 25.1.0
+</pre></div>
+</div>
+<ol class="arabic simple" start="3">
+<li><p>Run DeepPrep.</p></li>
+</ol>
+<p>Pass <em>absolute paths</em> to avoid any mistakes.</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>export FS_LICENSE=&lt;freesurfer_license_file&gt;
+export BIDS_PATH=${TEST_DIR}/&lt;bids_path&gt;
+export OUTPUT_PATH=${TEST_DIR}/&lt;output_path&gt;
+
+${TEST_DIR}/DeepPrep/deepprep/deepprep.sh \
+${BIDS_PATH} \
+${OUTPUT_PATH} \
+participant \
+--bold_task_type &lt;task_label&gt; \
+--deepprep_home ${TEST_DIR}/DeepPrep \
+--fs_license_file ${FS_LICENSE} \
+--executor cluster \
+--container ${TEST_DIR}/deepprep_25.1.0.sif \
+<span class="hll">--config_file ${TEST_DIR}/DeepPrep/deepprep/nextflow/cluster/deepprep.slurm.gpu.config
+</span></pre></div>
+</div>
+<p><strong>Add the following arguments to execute on clusters</strong></p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>--executor cluster
+--container ${TEST_DIR}/deepprep_25.1.0.sif
+--config_file ${TEST_DIR}/DeepPrep/deepprep/nextflow/cluster/deepprep.slurm.gpu.config
+</pre></div>
+</div>
+</section>
+</section>
+<section id="update-the-configuration-file-cpu-only">
+<h2>Update the Configuration file (CPU only)<a class="headerlink" href="#update-the-configuration-file-cpu-only" title="Link to this heading"></a></h2>
+<p>To execute DeepPrep on CPU, you can use the previously stated configuration file (on GPU) by removing the <code class="docutils literal notranslate"><span class="pre">withLabel:</span> <span class="pre">with_gpu</span> <span class="pre">...</span></code> section.</p>
+<p>Shown as below:</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>//deepprep.slurm.cpu.config
+
+singularity.enabled = true
+singularity.autoMounts = false
+singularity.runOptions = &#39;-e \
+    --home ${output_dir}/WorkDir/home \
+    --env TEMP=${output_dir}/WorkDir/tmp \
+    --env TMP=${output_dir}/WorkDir/tmp \
+    --env TMPDIR=${output_dir}/WorkDir/tmp \
+    -B ${bids_dir} \
+    -B ${output_dir} \
+    -B ${subjects_dir} \
+    -B ${fs_license_file}:/opt/freesurfer/license.txt \
+&#39;
+
+process {
+//errorStrategy = &#39;ignore&#39;
+
+    executor = &#39;slurm&#39;
+
+    queue = &#39;cpu1,cpu2,fat&#39;
+
+    clusterOptions = { &quot; --chdir=${nextflow_work_dir}&quot; }
+
+    container = &quot;${container}&quot;
+}
+</pre></div>
+</div>
+<p>The configuration file is <code class="docutils literal notranslate"><span class="pre">DeepPrep/deepprep/nextflow/cluster/deepprep.slurm.cpu.config</span></code>.</p>
+<section id="run-deepprep-with-cpu-only">
+<h3>Run DeepPrep with CPU only<a class="headerlink" href="#run-deepprep-with-cpu-only" title="Link to this heading"></a></h3>
+<p>To execute DeepPrep only on CPUs, add the <code class="docutils literal notranslate"><span class="pre">--device</span> <span class="pre">cpu</span></code> command and modify the <code class="docutils literal notranslate"><span class="pre">--config_file</span></code> to the CPU version <code class="docutils literal notranslate"><span class="pre">deepprep.slurm.cpu.config</span></code>.</p>
+<p>Pass <em>absolute paths</em> to avoid any mistakes.</p>
+<p>Shown as below:</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>export FS_LICENSE=&lt;freesurfer_license_file&gt;
+export BIDS_PATH=${TEST_DIR}/&lt;bids_path&gt;
+export OUTPUT_PATH=${TEST_DIR}/&lt;output_path&gt;
+
+${TEST_DIR}/DeepPrep/deepprep/deepprep.sh \
+${BIDS_PATH} \
+${OUTPUT_PATH} \
+participant \
+--bold_task_type &lt;task_label&gt; \
+--deepprep_home ${TEST_DIR}/DeepPrep \
+--fs_license_file ${FS_LICENSE} \
+--executor cluster \
+--container ${TEST_DIR}/deepprep_25.1.0.sif \
+<span class="hll">--config_file ${TEST_DIR}/DeepPrep/deepprep/nextflow/cluster/deepprep.slurm.cpu.config \
+</span><span class="hll">--device cpu
+</span></pre></div>
+</div>
+</section>
+</section>
+<section id="samples-on-three-platforms">
+<h2>Samples on three platforms<a class="headerlink" href="#samples-on-three-platforms" title="Link to this heading"></a></h2>
+<p>Get started with a <code class="docutils literal notranslate"><span class="pre">test_sample</span></code>, <a class="reference external" href="https://drive.google.com/drive/folders/13txuhCNW_nHG4NX3cl7HehlBJ1ZVB5CV">download here</a>.</p>
+<p>The BIDS formatted sample contains one subject with one anatomical image and two functional images.</p>
+<section id="slurm">
+<h3>SLURM<a class="headerlink" href="#slurm" title="Link to this heading"></a></h3>
+<p><strong>CPU Only</strong></p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>export TEST_DIR=&lt;test_dir&gt;
+${TEST_DIR}/DeepPrep/deepprep/deepprep.sh \
+${TEST_DIR}/test_sample \
+${TEST_DIR}/test_sample_DeepPrep_cpu \
+participant \
+--bold_task_type rest \
+--deepprep_home ${TEST_DIR}/DeepPrep \
+--fs_license_file ${TEST_DIR}/DeepPrep/license.txt \
+--executor cluster \
+--container ${TEST_DIR}/deepprep_25.1.0.sif \
+--config_file ${TEST_DIR}/DeepPrep/deepprep/nextflow/cluster/deepprep.slurm.cpu.config \
+--device cpu \
+--debug \
+--resume
+</pre></div>
+</div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>//deepprep.slurm.cpu.config
+
+singularity.enabled = true
+singularity.autoMounts = false
+singularity.runOptions = &#39;-e \
+    --home ${output_dir}/WorkDir/home \
+    --env TEMP=${output_dir}/WorkDir/tmp \
+    --env TMP=${output_dir}/WorkDir/tmp \
+    --env TMPDIR=${output_dir}/WorkDir/tmp \
+    -B ${bids_dir} \
+    -B ${output_dir} \
+    -B ${subjects_dir} \
+    -B ${fs_license_file}:/opt/freesurfer/license.txt \
+&#39;
+
+process {
+//errorStrategy = &#39;ignore&#39;
+
+    executor = &#39;slurm&#39;
+
+    queue = &#39;cpu1,cpu2,fat&#39;
+
+    clusterOptions = { &quot; --chdir=${nextflow_work_dir}&quot; }
+
+    container = &quot;${container}&quot;
+}
+</pre></div>
+</div>
+<p><strong>With GPU</strong></p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>export TEST_DIR=&lt;test_dir&gt;
+${TEST_DIR}/DeepPrep/deepprep/deepprep.sh \
+${TEST_DIR}/test_sample \
+${TEST_DIR}/test_sample_DeepPrep_gpu \
+participant \
+--bold_task_type rest \
+--deepprep_home ${TEST_DIR}/DeepPrep \
+--fs_license_file ${TEST_DIR}/DeepPrep/license.txt \
+--executor cluster \
+--container ${TEST_DIR}/deepprep_25.1.0.sif \
+--config_file ${TEST_DIR}/DeepPrep/deepprep/nextflow/cluster/deepprep.slurm.gpu.config \
+--debug \
+--resume
+</pre></div>
+</div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>//deepprep.slurm.gpu.config
+
+singularity.enabled = true
+singularity.autoMounts = false
+singularity.runOptions = &#39;-e \
+--home ${output_dir}/WorkDir/home \
+--env TEMP=${output_dir}/WorkDir/tmp \
+--env TMP=${output_dir}/WorkDir/tmp \
+--env TMPDIR=${output_dir}/WorkDir/tmp \
+-B ${bids_dir} \
+-B ${output_dir} \
+-B ${subjects_dir} \
+-B ${fs_license_file}:/opt/freesurfer/license.txt \
+&#39;
+
+process {
+//errorStrategy = &#39;ignore&#39;
+
+    executor = &#39;slurm&#39;
+
+    queue = &#39;cpu1,cpu2,fat&#39;
+
+    clusterOptions = { &quot; --chdir=${nextflow_work_dir}&quot; }
+
+    container = &quot;${container}&quot;
+
+    withLabel: with_gpu {
+        queue = &#39;gpu2&#39;
+        clusterOptions = { &quot; --chdir=${nextflow_work_dir} --gres=gpu:1&quot; }
+        singularity.runOptions = &#39;-e --nv \
+            --home ${output_dir}/WorkDir/home \
+            --env TEMP=${output_dir}/WorkDir/tmp \
+            --env TMP=${output_dir}/WorkDir/tmp \
+            --env TMPDIR=${output_dir}/WorkDir/tmp \
+            -B ${bids_dir} \
+            -B ${output_dir} \
+            -B ${subjects_dir} \
+            -B ${fs_license_file}:/opt/freesurfer/license.txt \
+            &#39;
+     }
+}
+</pre></div>
+</div>
+</section>
+<section id="pbs">
+<h3>PBS<a class="headerlink" href="#pbs" title="Link to this heading"></a></h3>
+<p><strong>CPU Only</strong></p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>export TEST_DIR=&lt;test_dir&gt;
+${TEST_DIR}/DeepPrep/deepprep/deepprep.sh \
+${TEST_DIR}/test_sample \
+${TEST_DIR}/test_sample_DeepPrep_cpu \
+participant \
+--bold_task_type rest \
+--deepprep_home ${TEST_DIR}/DeepPrep \
+--fs_license_file ${TEST_DIR}/DeepPrep/license.txt \
+--executor cluster \
+--container ${TEST_DIR}/deepprep_25.1.0.sif \
+--config_file ${TEST_DIR}/DeepPrep/deepprep/nextflow/cluster/deepprep.pbfs.cpu.config \
+--device cpu \
+--debug \
+--resume
+</pre></div>
+</div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>// deepprep.pbs.cpu.config
+
+singularity.enabled = true
+singularity.autoMounts = false
+singularity.runOptions = &#39;-e \
+    --home ${output_dir}/WorkDir/home \
+    --env TEMP=${output_dir}/WorkDir/tmp \
+    --env TMP=${output_dir}/WorkDir/tmp \
+    --env TMPDIR=${output_dir}/WorkDir/tmp \
+    -B ${bids_dir} \
+    -B ${output_dir} \
+    -B ${subjects_dir} \
+    -B ${fs_license_file}:/opt/freesurfer/license.txt \
+&#39;
+
+process {
+//errorStrategy = &#39;ignore&#39;
+
+    executor = &#39;pbspro&#39;
+
+    time = &#39;2h&#39;
+
+//    queue = &#39;bigmem&#39;
+//    clusterOptions = { &#39; &#39; }
+
+    container = &#39;${container}&#39;
+}
+</pre></div>
+</div>
+<p><strong>With GPU</strong></p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>export TEST_DIR=&lt;test_dir&gt;
+${TEST_DIR}/DeepPrep/deepprep/deepprep.sh \
+${TEST_DIR}/test_sample \
+${TEST_DIR}/test_sample_DeepPrep_gpu \
+participant \
+--bold_task_type rest \
+--deepprep_home ${TEST_DIR}/DeepPrep \
+--fs_license_file ${TEST_DIR}/DeepPrep/license.txt \
+--executor cluster \
+--container ${TEST_DIR}/deepprep_25.1.0.sif \
+--config_file ${TEST_DIR}/DeepPrep/deepprep/nextflow/cluster/deepprep.pbfs.gpu.config \
+--device auto \
+--debug \
+--resume
+</pre></div>
+</div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>// deepprep.pbs.gpu.config
+
+singularity.enabled = true
+singularity.autoMounts = false
+singularity.runOptions = &#39;-e \
+    --home ${output_dir}/WorkDir/home \
+    --env TEMP=${output_dir}/WorkDir/tmp \
+    --env TMP=${output_dir}/WorkDir/tmp \
+    --env TMPDIR=${output_dir}/WorkDir/tmp \
+    -B ${bids_dir} \
+    -B ${output_dir} \
+    -B ${subjects_dir} \
+    -B ${fs_license_file}:/opt/freesurfer/license.txt \
+&#39;
+
+process {
+//errorStrategy = &#39;ignore&#39;
+
+    executor = &#39;pbspro&#39;
+
+    time = &#39;2h&#39;
+
+//    queue = &#39;bigmem&#39;
+//    clusterOptions = { &quot; &quot; }
+
+    container = &#39;${container}&#39;
+
+    withLabel: with_gpu {
+        module = &#39;cuda/11.8.0-gcc/9.5.0&#39;
+        queue = &#39;gpu_k240&#39;
+        clusterOptions = { &#39; -l select=1:ncpus=8:mem=20gb:ngpus=1:gpu_model=p100,walltime=00:20:0&#39; }
+        singularity.runOptions = &#39;-e --nv \
+            --home ${output_dir}/WorkDir/home \
+            --env TEMP=${output_dir}/WorkDir/tmp \
+            --env TMP=${output_dir}/WorkDir/tmp \
+            --env TMPDIR=${output_dir}/WorkDir/tmp \
+            -B ${bids_dir} \
+            -B ${output_dir} \
+            -B ${subjects_dir} \
+            -B ${fs_license_file}:/opt/freesurfer/license.txt \
+        &#39;
+    }
+}
+</pre></div>
+</div>
+</section>
+<section id="aws">
+<h3>AWS<a class="headerlink" href="#aws" title="Link to this heading"></a></h3>
+<p><em>In Process</em></p>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="usage_local.html" class="btn btn-neutral float-left" title="Usage Notes (Local)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="usage_GUI.html" class="btn btn-neutral float-right" title="Usage Notes (GUI)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023-2025 pBFS lab, Changping Laboratory All rights reserved.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

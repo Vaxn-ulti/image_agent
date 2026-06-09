@@ -27,12 +27,14 @@ Use resolved absolute paths:
 Current image contracts:
 
 - DeepPrep: `pbfslab/deepprep:25.1.0`
-- QSIPrep: `pennlinc/qsiprep:latest`
+- QSIPrep toolbox / legacy QSIPrep: `pennlinc/qsiprep:latest`
 - QSIRecon: `pennlinc/qsirecon:latest`
 
 Pin images in implementation when reproducibility matters. If `latest` remains in MVP, surface it clearly in validation output.
 
 `pennlinc/qsiprep:latest` exposes `eddy_cuda11.0` at `/app/.pixi/envs/qsiprep/bin/eddy_cuda11.0`. Detection uses `eddy_cuda*` glob to accept versioned binaries (`eddy_cuda11.0`, `eddy_cuda10.2`, etc.), not only an exact `eddy_cuda` name. If the image changes and no `eddy_cuda*` executable exists, QSIPrep validation must fail quickly and say a CUDA-enabled QSIPrep/FSL image is required.
+
+Production `dwi_fast_gpu_dti` does not use that image as a full QSIPrep workflow. It uses host FSL at `/home/yyf/project/MCI_project/tools/fsl` for GPU `eddy_cuda` and FSL registration commands, and uses `pennlinc/qsiprep:latest` only to access MRtrix commands.
 
 ## Commands
 
@@ -50,6 +52,23 @@ docker run --rm -v {bids}:/data:ro -v {output}:/output -v {work}:/work -v {fs_li
 
 Use implementation-specific DeepPrep BOLD flags if the repository adds them; keep the product contract that BOLD preprocessing belongs to DeepPrep.
 
+Production fast GPU DTI:
+
+```text
+python -m app.workflows.dwi_fast_dti run --bids {bids} --out {output} --work {work} --resources {resources} --fsl-dir /home/yyf/project/MCI_project/tools/fsl --mrtrix-image pennlinc/qsiprep:latest --max-runtime-sec 2100 --require-gpu-eddy
+```
+
+Runtime must validate host FSL commands, GPU visibility, and MRtrix toolbox commands. The production fast DTI path must not execute:
+
+```text
+qsiprep /data /out participant
+qsirecon /data /out participant
+```
+
+Expected production steps are lightweight staging/QC, `dwi2mask` or fallback mask, host FSL `eddy_cuda`, MRtrix tensor fitting/metrics, MNI152 registration, atlas regional statistics, and provenance/QC output.
+
+Known-good production evidence: task `107` on project 22 / series 38 completed in about 19 minutes 52 seconds (`runtime_sec=1156`), task `112` on project 23 / series 39 completed in about 18 minutes 2 seconds (`runtime_sec=1042`), and task `114` on mixed project 13 / series 24 completed with `runtime_sec=1021`. These runs used host FSL GPU `eddy_cuda`, MRtrix toolbox tensor metrics, conservative `flirt_normmi_dof6` MNI registration, native and MNI152 FA/MD/AD/RD maps, HarvardOxford regional TSVs, and `validation_only=false` summaries. Treat task `106` as the protected regression for invalid NaN FLIRT matrices.
+
 QSIPrep:
 
 ```text
@@ -66,13 +85,15 @@ QSIRecon:
 docker run --rm --gpus all -v {qsiprep_output}:/data:ro -v {output}:/output -v {work}:/work -v {fs_license}:/opt/freesurfer/license.txt:ro pennlinc/qsirecon:latest /data /output participant --recon-spec {recon_spec}
 ```
 
-`--recon-spec` selects the reconstruction pipeline (e.g. `dipy`, `mrtrix`, `dsi_studio`, or a custom JSON spec path). Validation must fail fast when `--recon-spec` is missing, undefined, or references an unsupported pipeline.
+`--recon-spec` selects the reconstruction pipeline. Official built-in values include QSIRecon workflow names such as `dipy_dki` and `mrtrix_multishell_msmt_noACT`; official custom workflow specs are YAML authoring references. Current Image Agent production is policy-limited to backend-approved profiles, not arbitrary user-supplied custom specs in production. Validation must fail fast when `--recon-spec` is missing, undefined, or references an unsupported pipeline.
 
 QSIRecon has no confirmed CUDA-specific CLI switch in current documentation. Validation should record whether the GPU is visible inside the container, for example with `nvidia-smi` when available.
 
 ## DWI Runtime Capacity Contract
 
-Real DWI processing is serialized per project backend with `data/projects/locks/dwi_qsiprep.lock`. This prevents multiple project-owned QSIPrep containers from consuming memory simultaneously while still allowing task 2 to queue and wait. The lock is part of the runtime contract and should be visible in task logs as `Waiting for workflow lock`, `Acquired workflow lock`, and `Released workflow lock`.
+Legacy QSIPrep processing is serialized per project backend with `data/projects/locks/dwi_qsiprep.lock`. This prevents multiple project-owned QSIPrep containers from consuming memory simultaneously while still allowing task 2 to queue and wait. The lock is part of the legacy runtime contract and should be visible in task logs as `Waiting for workflow lock`, `Acquired workflow lock`, and `Released workflow lock`.
+
+Production `dwi_fast_gpu_dti` has a separate 35 minute target and should be monitored by task logs and runner timeout/provenance. Do not route it into the legacy QSIPrep lock path unless code explicitly documents a resource conflict reason.
 
 Default QSIPrep command resources are intentionally conservative for this host:
 

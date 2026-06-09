@@ -52,5 +52,6 @@ export const api = {
   getTask: (taskId) => request(`/tasks/${taskId}`),
   getLogs: (taskId) => request(`/tasks/${taskId}/logs`),
   getOutputs: (taskId) => request(`/tasks/${taskId}/outputs`),
+  getResultSummary: (taskId) => request(`/tasks/${taskId}/result-summary`),
   chat: (projectId, message) => request('/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_id: projectId, message }) }),
 };

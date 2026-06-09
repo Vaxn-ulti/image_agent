@@ -1,0 +1,519 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" />
+  <meta name="readthedocs-addons-api-version" content="1"><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Outputs of XCP-D &mdash; xcp_d 26.0.3 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/theme_overrides.css" />
+      <link rel="stylesheet" type="text/css" href="_static/sphinx-design.min.css?v=95c83b7e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=1ca43036"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="https://cdn.rawgit.com/chrisfilo/zenodo.js/v0.1/zenodo.js"></script>
+      <script src="_static/design-tabs.js?v=f930bc37"></script>
+    <script src="_static/js/theme.js"></script>
+    <script src="_static/js/versions.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Contributing to XCP-D" href="contributing.html" />
+    <link rel="prev" title="Processing Pipeline Details" href="workflows.html" /> 
+<script async type="text/javascript" src="/_/static/javascript/readthedocs-addons.js"></script><meta name="readthedocs-project-slug" content="xcp-d" /><meta name="readthedocs-version-slug" content="stable" /><meta name="readthedocs-resolver-filename" content="/outputs.html" /><meta name="readthedocs-http-status" content="200" /></head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            xcp_d
+          </a>
+              <div class="switch-menus">
+                <div class="version-switch"></div>
+                <div class="language-switch"></div>
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Running <em>XCP-D</em></a></li>
+<li class="toctree-l1"><a class="reference internal" href="workflows.html">Processing Pipeline Details</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Outputs of <em>XCP-D</em></a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#summary-reports">Summary Reports</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#parcellations-and-atlases">Parcellations and Atlases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#anatomical-outputs">Anatomical Outputs</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#surface-mesh-files">Surface mesh files</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#surface-morphometric-files">Surface morphometric files</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#functional-outputs">Functional Outputs</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#denoised-or-residual-bold-data">Denoised or residual BOLD data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#functional-timeseries-and-connectivity-matrices">Functional timeseries and connectivity matrices</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#resting-state-metric-derivatives-reho-and-alff">Resting-state metric derivatives (ReHo and ALFF)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#other-outputs-include-quality-control-framewise-displacement-and-confounds-files">Other outputs include quality control, framewise displacement, and confounds files</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#dcan-style-scrubbing-file-if-skip-dcan-qc-is-not-used">DCAN style scrubbing file (if <code class="docutils literal notranslate"><span class="pre">--skip-dcan-qc</span></code> is not used)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#references">References</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="contributing.html">Contributing to <em>XCP-D</em></a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">Developers - API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="changes.html">What’s New</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">xcp_d</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Outputs of <em>XCP-D</em></li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/outputs.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="outputs-of-xcp-d">
+<h1>Outputs of <em>XCP-D</em><a class="headerlink" href="#outputs-of-xcp-d" title="Link to this heading"></a></h1>
+<p>The  <em>XCP-D</em> outputs are written out in BIDS format and consist of three main parts.</p>
+<div class="admonition-a-note-on-bids-compliance admonition">
+<p class="admonition-title">A note on BIDS compliance</p>
+<p><em>XCP-D</em> attempts to follow the BIDS specification as closely as possible.
+However, many <em>XCP-D</em> derivatives are not currently covered by the specification.
+In those instances, we attempt to follow recommendations from existing BIDS Extension Proposals
+(BEPs), which are in-progress proposals to add new features to BIDS.
+However, we do not guarantee compliance with any BEP,
+as they are not yet part of the official BIDS specification.</p>
+<p>Four BEPs that are of particular use in <em>XCP-D</em> are
+<a class="reference external" href="https://github.com/bids-standard/bids-specification/pull/518">BEP011: Structural preprocessing derivatives</a>,
+<a class="reference external" href="https://github.com/bids-standard/bids-specification/pull/519">BEP012: Functional preprocessing derivatives</a>,
+<a class="reference external" href="https://docs.google.com/document/d/1ugBdUF6dhElXdj3u9vw0iWjE6f_Bibsro3ah7sRV0GA/edit?usp=sharing">BEP017: Relationship &amp; connectivity matrix data schema</a>,
+and</p>
+<p>In cases where a derivative type is not covered by an existing BEP,
+we have simply attempted to follow the general principles of BIDS.</p>
+<p>If you discover a problem with the BIDS compliance of <em>XCP-D</em>’s derivatives,
+please open an issue in the <em>XCP-D</em> repository.</p>
+</div>
+<section id="summary-reports">
+<h2>Summary Reports<a class="headerlink" href="#summary-reports" title="Link to this heading"></a></h2>
+<p>There are two summary reports - a Nipreps-style participant summary and an executive summary per
+session.
+The executive summary is based on the DCAN lab’s
+<a class="reference external" href="https://github.com/DCAN-Labs/ExecutiveSummary">ExecutiveSummary tool</a>.</p>
+<p>The report output level can be set to <code class="docutils literal notranslate"><span class="pre">root</span></code> (shown below), <code class="docutils literal notranslate"><span class="pre">subject</span></code>, or <code class="docutils literal notranslate"><span class="pre">session</span></code> using the
+<code class="docutils literal notranslate"><span class="pre">--report-output-level</span></code> parameter.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">xcp_d</span><span class="o">/</span>
+   <span class="n">sub</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;.</span><span class="n">html</span>
+   <span class="n">sub</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="p">[</span><span class="n">_ses</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="p">]</span><span class="n">_executive_summary</span><span class="o">.</span><span class="n">html</span>
+</pre></div>
+</div>
+</section>
+<section id="parcellations-and-atlases">
+<h2>Parcellations and Atlases<a class="headerlink" href="#parcellations-and-atlases" title="Link to this heading"></a></h2>
+<p><em>XCP-D</em> produces parcellated anatomical and functional outputs using a series of atlases.
+The individual outputs are documented in the relevant sections of this document,
+with this section describing the atlases themselves.</p>
+<p>The atlases currently used in <em>XCP-D</em> can be separated into three groups: subcortical, cortical,
+and combined cortical/subcortical.
+The two subcortical atlases are the Tian atlas <a class="footnote-reference brackets" href="#footcite-tian2020topographic" id="id1" role="doc-noteref"><span class="fn-bracket">[</span>1<span class="fn-bracket">]</span></a> and the
+CIFTI subcortical parcellation <a class="footnote-reference brackets" href="#footcite-glasser2013minimal" id="id2" role="doc-noteref"><span class="fn-bracket">[</span>2<span class="fn-bracket">]</span></a>.
+The cortical atlases are the Glasser <a class="footnote-reference brackets" href="#footcite-glasser-2016" id="id3" role="doc-noteref"><span class="fn-bracket">[</span>3<span class="fn-bracket">]</span></a>, the
+Gordon <a class="footnote-reference brackets" href="#footcite-gordon-2014" id="id4" role="doc-noteref"><span class="fn-bracket">[</span>4<span class="fn-bracket">]</span></a>,
+the MIDB precision brain atlas derived from ABCD data and thresholded at 75% probability
+<a class="footnote-reference brackets" href="#footcite-hermosillo2024precision" id="id5" role="doc-noteref"><span class="fn-bracket">[</span>5<span class="fn-bracket">]</span></a>,
+and the Myers-Labonte infant atlas thresholded at 50% probability <a class="footnote-reference brackets" href="#footcite-myers2023functional" id="id6" role="doc-noteref"><span class="fn-bracket">[</span>6<span class="fn-bracket">]</span></a>.
+The combined cortical/subcortical atlases are 10 different resolutions of the
+4S (Schaefer Supplemented with Subcortical Structures) atlas.</p>
+<p>The 4S atlas combines the Schaefer 2018 cortical atlas (version v0143) <a class="footnote-reference brackets" href="#footcite-schaefer-2017" id="id7" role="doc-noteref"><span class="fn-bracket">[</span>7<span class="fn-bracket">]</span></a>
+at 10 different resolutions (100, 200, 300, 400, 500, 600, 700, 800, 900, and 1000 parcels) with
+the CIT168 subcortical atlas <a class="footnote-reference brackets" href="#footcite-pauli2018high" id="id8" role="doc-noteref"><span class="fn-bracket">[</span>8<span class="fn-bracket">]</span></a>,
+the Diedrichson cerebellar atlas <a class="footnote-reference brackets" href="#footcite-king2019functional" id="id9" role="doc-noteref"><span class="fn-bracket">[</span>9<span class="fn-bracket">]</span></a>,
+the HCP thalamic atlas <a class="footnote-reference brackets" href="#footcite-najdenovska2018vivo" id="id10" role="doc-noteref"><span class="fn-bracket">[</span>10<span class="fn-bracket">]</span></a>,
+and the amygdala and hippocampus parcels from the HCP CIFTI subcortical parcellation
+<a class="footnote-reference brackets" href="#footcite-glasser2013minimal" id="id11" role="doc-noteref"><span class="fn-bracket">[</span>2<span class="fn-bracket">]</span></a>.
+The 4S atlas is used in the same manner across three PennLINC BIDS Apps:
+<em>XCP-D</em>, <a class="reference external" href="https://qsiprep.readthedocs.io">QSIPrep</a>, and <a class="reference external" href="https://aslprep.readthedocs.io">ASLPrep</a>, to produce synchronized outputs across modalities.
+For more information about the 4S atlas, please see <a class="reference external" href="https://github.com/PennLINC/AtlasPack">https://github.com/PennLINC/AtlasPack</a>.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>You can choose to only use a subset of the available atlases by using the <code class="docutils literal notranslate"><span class="pre">--atlases</span></code>
+parameter.</p>
+<p>Alternatively, if you want to skip the parcellation step completely,
+you can use the unified <code class="docutils literal notranslate"><span class="pre">--skip</span> <span class="pre">parcellation</span></code> parameter.</p>
+<div class="admonition-deprecated-option admonition">
+<p class="admonition-title">Deprecated option</p>
+<p>The legacy <code class="docutils literal notranslate"><span class="pre">--skip-parcellation</span></code> flag is deprecated and will be removed
+in a future release. It is still accepted for backward compatibility, but
+users should migrate to <code class="docutils literal notranslate"><span class="pre">--skip</span> <span class="pre">parcellation</span></code>.</p>
+</div>
+<p>You can also skip other postprocessing steps using the <code class="docutils literal notranslate"><span class="pre">--skip</span></code> parameter.
+See <a class="reference internal" href="usage.html#usage-cli"><span class="std std-ref">Command-Line Arguments</span></a> for more information about the <code class="docutils literal notranslate"><span class="pre">--skip</span></code> parameter.</p>
+</div>
+<p>Atlases are written out to the <code class="docutils literal notranslate"><span class="pre">atlases</span></code> subfolder, following BIDS formatting.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">xcp_d</span><span class="o">/</span>
+   <span class="n">sourcedata</span><span class="o">/</span>
+      <span class="n">atlases</span><span class="o">/</span>
+         <span class="n">dataset_description</span><span class="o">.</span><span class="n">json</span>
+         <span class="n">atlas</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_description</span><span class="o">.</span><span class="n">json</span>
+         <span class="n">tpl</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span>
+            <span class="n">tpl</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_atlas</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="p">[</span><span class="n">_res</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="p">][</span><span class="n">_den</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="p">][</span><span class="n">_desc</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="p">]</span><span class="n">_dseg</span><span class="o">.</span><span class="n">json</span>
+            <span class="n">tpl</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_atlas</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="p">[</span><span class="n">_res</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="p">][</span><span class="n">_den</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="p">][</span><span class="n">_desc</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="p">]</span><span class="n">_dseg</span><span class="o">.</span><span class="n">tsv</span>
+            <span class="n">tpl</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_atlas</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="p">[</span><span class="n">_res</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="p">][</span><span class="n">_den</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="p">][</span><span class="n">_desc</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="p">]</span><span class="n">_dseg</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>
+            <span class="n">tpl</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_atlas</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="p">[</span><span class="n">_res</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="p">][</span><span class="n">_den</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="p">][</span><span class="n">_desc</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="p">]</span><span class="n">_dseg</span><span class="o">.</span><span class="n">dlabel</span><span class="o">.</span><span class="n">nii</span>
+</pre></div>
+</div>
+</section>
+<section id="anatomical-outputs">
+<h2>Anatomical Outputs<a class="headerlink" href="#anatomical-outputs" title="Link to this heading"></a></h2>
+<p>Anatomical outputs consist of anatomical preprocessed T1w and/or T2w images in MNI space.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">xcp_d</span><span class="o">/</span>
+   <span class="n">sub</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span><span class="p">[</span><span class="n">ses</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span><span class="p">]</span>
+      <span class="n">anat</span><span class="o">/</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">MNI152NLin6Asym_desc</span><span class="o">-</span><span class="n">preproc_T1w</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">MNI152NLin6Asym_desc</span><span class="o">-</span><span class="n">preproc_T2w</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>
+</pre></div>
+</div>
+<section id="surface-mesh-files">
+<h3>Surface mesh files<a class="headerlink" href="#surface-mesh-files" title="Link to this heading"></a></h3>
+<p>If the <code class="docutils literal notranslate"><span class="pre">--warp-surfaces-native2std</span></code> option is selected, and reconstructed surfaces are available
+in the preprocessed dataset, then these surfaces will be warped to fsLR space at 32k density.</p>
+<p>The resulting mesh files will reflect the subject’s morphology with the same geometry and density
+as fsLR-32k surfaces, which may be useful for visualizing fsLR-space derivatives on a subject’s
+brain.</p>
+<p>The mesh files are also warped so that they can be overlaid on top of the MNI152NLin6Asym template,
+as in XCP-D’s brainsprite.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">xcp_d</span><span class="o">/</span>
+   <span class="n">sub</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span><span class="p">[</span><span class="n">ses</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span><span class="p">]</span>
+      <span class="n">anat</span><span class="o">/</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_hemi</span><span class="o">-&lt;</span><span class="n">L</span><span class="o">|</span><span class="n">R</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">fsLR_den</span><span class="o">-</span><span class="mi">32</span><span class="n">k_desc</span><span class="o">-</span><span class="n">hcp_midthickness</span><span class="o">.</span><span class="n">surf</span><span class="o">.</span><span class="n">gii</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_hemi</span><span class="o">-&lt;</span><span class="n">L</span><span class="o">|</span><span class="n">R</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">fsLR_den</span><span class="o">-</span><span class="mi">32</span><span class="n">k_desc</span><span class="o">-</span><span class="n">hcp_inflated</span><span class="o">.</span><span class="n">surf</span><span class="o">.</span><span class="n">gii</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_hemi</span><span class="o">-&lt;</span><span class="n">L</span><span class="o">|</span><span class="n">R</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">fsLR_den</span><span class="o">-</span><span class="mi">32</span><span class="n">k_desc</span><span class="o">-</span><span class="n">hcp_vinflated</span><span class="o">.</span><span class="n">surf</span><span class="o">.</span><span class="n">gii</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_hemi</span><span class="o">-&lt;</span><span class="n">L</span><span class="o">|</span><span class="n">R</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">fsLR_den</span><span class="o">-</span><span class="mi">32</span><span class="n">k_pial</span><span class="o">.</span><span class="n">surf</span><span class="o">.</span><span class="n">gii</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_hemi</span><span class="o">-&lt;</span><span class="n">L</span><span class="o">|</span><span class="n">R</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">fsLR_den</span><span class="o">-</span><span class="mi">32</span><span class="n">k_white</span><span class="o">.</span><span class="n">surf</span><span class="o">.</span><span class="n">gii</span>
+</pre></div>
+</div>
+</section>
+<section id="surface-morphometric-files">
+<h3>Surface morphometric files<a class="headerlink" href="#surface-morphometric-files" title="Link to this heading"></a></h3>
+<p><em>XCP-D</em> will also pass along several morphometric files from the preprocessing derivatives,
+as long as the files are already in fsLR space at 91k density.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">xcp_d</span><span class="o">/</span>
+   <span class="n">sub</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span><span class="p">[</span><span class="n">ses</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span><span class="p">]</span>
+      <span class="n">anat</span><span class="o">/</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">fsLR_den</span><span class="o">-</span><span class="mi">91</span><span class="n">k_sulc</span><span class="o">.</span><span class="n">dscalar</span><span class="o">.</span><span class="n">nii</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">fsLR_den</span><span class="o">-</span><span class="mi">91</span><span class="n">k_curv</span><span class="o">.</span><span class="n">dscalar</span><span class="o">.</span><span class="n">nii</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">fsLR_den</span><span class="o">-</span><span class="mi">91</span><span class="n">k_thickness</span><span class="o">.</span><span class="n">dscalar</span><span class="o">.</span><span class="n">nii</span>
+</pre></div>
+</div>
+<p><em>XCP-D</em> will additionally parcellate each of these files, when they are present, using each of the
+atlases it uses to parcellate the functional outputs.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">xcp_d</span><span class="o">/</span>
+   <span class="n">sub</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span><span class="p">[</span><span class="n">ses</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span><span class="p">]</span>
+      <span class="n">anat</span><span class="o">/</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">fsLR_atlas</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_stat</span><span class="o">-</span><span class="n">mean_desc</span><span class="o">-</span><span class="n">curv_morph</span><span class="o">.</span><span class="n">tsv</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">fsLR_atlas</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_stat</span><span class="o">-</span><span class="n">mean_desc</span><span class="o">-</span><span class="n">sulc_morph</span><span class="o">.</span><span class="n">tsv</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">fsLR_atlas</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_stat</span><span class="o">-</span><span class="n">mean_desc</span><span class="o">-</span><span class="n">thickness_morph</span><span class="o">.</span><span class="n">tsv</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="functional-outputs">
+<h2>Functional Outputs<a class="headerlink" href="#functional-outputs" title="Link to this heading"></a></h2>
+<p>Functional outputs consist of processed/denoised BOLD data, timeseries,
+functional connectivity matrices, and resting-state derivatives.</p>
+<section id="denoised-or-residual-bold-data">
+<h3>Denoised or residual BOLD data<a class="headerlink" href="#denoised-or-residual-bold-data" title="Link to this heading"></a></h3>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>Smoothed denoised BOLD files will only be generated if smoothing is enabled with the
+<code class="docutils literal notranslate"><span class="pre">--smoothing</span></code> parameter.</p>
+</div>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">xcp_d</span><span class="o">/</span>
+   <span class="n">sub</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span><span class="p">[</span><span class="n">ses</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span><span class="p">]</span>
+      <span class="n">func</span><span class="o">/</span>
+         <span class="c1"># NIfTI</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_desc</span><span class="o">-</span><span class="n">denoised_bold</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_desc</span><span class="o">-</span><span class="n">denoisedSmoothed_bold</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>
+
+         <span class="c1"># CIFTI</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">fsLR_den</span><span class="o">-</span><span class="mi">91</span><span class="n">k_desc</span><span class="o">-</span><span class="n">denoised_bold</span><span class="o">.</span><span class="n">dtseries</span><span class="o">.</span><span class="n">nii</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">fsLR_den</span><span class="o">-</span><span class="mi">91</span><span class="n">k_desc</span><span class="o">-</span><span class="n">denoisedSmoothed_bold</span><span class="o">.</span><span class="n">dtseries</span><span class="o">.</span><span class="n">nii</span>
+</pre></div>
+</div>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>If <code class="docutils literal notranslate"><span class="pre">abcd</span></code> or <code class="docutils literal notranslate"><span class="pre">hbcd</span></code> mode is used, the denoised BOLD data will be interpolated.
+If <code class="docutils literal notranslate"><span class="pre">linc</span></code> mode is used, the denoised BOLD data will be censored.</p>
+</div>
+<p>The sidecar json files contains parameters of the data and processing steps.
+The Sources field contains BIDS URIs pointing to the files used to create the derivative.
+The associated DatasetLinks are defined in the dataset_description.json.</p>
+<blockquote>
+<div><div class="highlight-json-object notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">   </span><span class="nt">&quot;EchoTime&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.0424</span><span class="p">,</span>
+<span class="w">   </span><span class="nt">&quot;EffectiveEchoSpacing&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.000639989</span><span class="p">,</span>
+<span class="w">   </span><span class="nt">&quot;FlipAngle&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">51</span><span class="p">,</span>
+<span class="w">   </span><span class="nt">&quot;Manufacturer&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Siemens&quot;</span><span class="p">,</span>
+<span class="w">   </span><span class="nt">&quot;ManufacturersModelName&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Skyra&quot;</span><span class="p">,</span>
+<span class="w">   </span><span class="nt">&quot;NuisanceParameters&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;gsr_only&quot;</span><span class="p">,</span>
+<span class="w">   </span><span class="nt">&quot;PhaseEncodingDirection&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;j-&quot;</span><span class="p">,</span>
+<span class="w">   </span><span class="nt">&quot;RepetitionTime&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span>
+<span class="w">   </span><span class="nt">&quot;SoftwareFilters&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;Bandpass filter&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">         </span><span class="nt">&quot;Filter order&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span>
+<span class="w">         </span><span class="nt">&quot;High-pass cutoff (Hz)&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.01</span><span class="p">,</span>
+<span class="w">         </span><span class="nt">&quot;Low-pass cutoff (Hz)&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.08</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">   </span><span class="p">},</span>
+<span class="w">   </span><span class="nt">&quot;Sources&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">      </span><span class="s2">&quot;bids:preprocessed:sub-0000001/ses-01/func/sub-0000001_ses-01_task-rest_space-MNI152NLin6Asym_desc-preproc_bold.nii.gz&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="s2">&quot;bids:xcp_d:sub-0000001/ses-01/func/sub-0000001_ses-01_task-rest_outliers.tsv&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="s2">&quot;bids:xcp_d:sub-0000001/ses-01/func/sub-0000001_ses-01_task-rest_desc-preproc_design.tsv&quot;</span>
+<span class="w">   </span><span class="p">],</span>
+<span class="w">   </span><span class="nt">&quot;TaskName&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;resting state&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div></blockquote>
+</section>
+<section id="functional-timeseries-and-connectivity-matrices">
+<h3>Functional timeseries and connectivity matrices<a class="headerlink" href="#functional-timeseries-and-connectivity-matrices" title="Link to this heading"></a></h3>
+<p>This includes the atlases used to extract the timeseries.</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>If <code class="docutils literal notranslate"><span class="pre">abcd</span></code> or <code class="docutils literal notranslate"><span class="pre">hbcd</span></code> mode is used, the time series will be interpolated.
+If <code class="docutils literal notranslate"><span class="pre">linc</span></code> mode is used, the time series will be censored.
+In both cases, the correlation matrices will be calculated using the censored time series.</p>
+</div>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>Correlation matrices with the <code class="docutils literal notranslate"><span class="pre">desc-&lt;INT&gt;volumes</span></code> entity are produced if the
+<code class="docutils literal notranslate"><span class="pre">--create-matrices</span></code> parameter is used with integer values.</p>
+</div>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">xcp_d</span><span class="o">/</span>
+   <span class="n">sub</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span><span class="p">[</span><span class="n">ses</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span><span class="p">]</span>
+      <span class="n">func</span><span class="o">/</span>
+         <span class="c1"># NIfTI</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_atlas</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_stat</span><span class="o">-</span><span class="n">coverage_bold</span><span class="o">.</span><span class="n">tsv</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_atlas</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_stat</span><span class="o">-</span><span class="n">mean_timeseries</span><span class="o">.</span><span class="n">tsv</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_atlas</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_stat</span><span class="o">-</span><span class="n">pearsoncorrelation_relmat</span><span class="o">.</span><span class="n">tsv</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_atlas</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_stat</span><span class="o">-</span><span class="n">pearsoncorrelation_desc</span><span class="o">-&lt;</span><span class="n">INT</span><span class="o">&gt;</span><span class="n">volumes_relmat</span><span class="o">.</span><span class="n">tsv</span>
+
+         <span class="c1"># CIFTI</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">fsLR_atlas</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_den</span><span class="o">-</span><span class="mi">91</span><span class="n">k_stat</span><span class="o">-</span><span class="n">coverage_bold</span><span class="o">.</span><span class="n">tsv</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">fsLR_atlas</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_den</span><span class="o">-</span><span class="mi">91</span><span class="n">k_stat</span><span class="o">-</span><span class="n">coverage_boldmap</span><span class="o">.</span><span class="n">pscalar</span><span class="o">.</span><span class="n">nii</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">fsLR_atlas</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_den</span><span class="o">-</span><span class="mi">91</span><span class="n">k_stat</span><span class="o">-</span><span class="n">mean_timeseries</span><span class="o">.</span><span class="n">tsv</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">fsLR_atlas</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_den</span><span class="o">-</span><span class="mi">91</span><span class="n">k_stat</span><span class="o">-</span><span class="n">mean_timeseries</span><span class="o">.</span><span class="n">ptseries</span><span class="o">.</span><span class="n">nii</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">fsLR_atlas</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_den</span><span class="o">-</span><span class="mi">91</span><span class="n">k_stat</span><span class="o">-</span><span class="n">pearsoncorrelation_relmat</span><span class="o">.</span><span class="n">tsv</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">fsLR_atlas</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_den</span><span class="o">-</span><span class="mi">91</span><span class="n">k_stat</span><span class="o">-</span><span class="n">pearsoncorrelation_boldmap</span><span class="o">.</span><span class="n">pconn</span><span class="o">.</span><span class="n">nii</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">fsLR_atlas</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_den</span><span class="o">-</span><span class="mi">91</span><span class="n">k_stat</span><span class="o">-</span><span class="n">pearsoncorrelation_desc</span><span class="o">-&lt;</span><span class="n">INT</span><span class="o">&gt;</span><span class="n">volumes_relmat</span><span class="o">.</span><span class="n">tsv</span>
+</pre></div>
+</div>
+</section>
+<section id="resting-state-metric-derivatives-reho-and-alff">
+<h3>Resting-state metric derivatives (ReHo and ALFF)<a class="headerlink" href="#resting-state-metric-derivatives-reho-and-alff" title="Link to this heading"></a></h3>
+<p><em>XCP-D</em> calculates both regional homogeneity (ReHo) and amplitude of low-frequency fluctuations
+(ALFF), depending on the parameters.</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>Smoothed ALFF will only be generated if smoothing is enabled with the <code class="docutils literal notranslate"><span class="pre">--smoothing</span></code>
+parameter.</p>
+</div>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>ALFF will not be generated if bandpass filtering is disabled with the
+<code class="docutils literal notranslate"><span class="pre">--disable-bandpass-filtering</span></code> parameter.</p>
+</div>
+<p><em>XCP-D</em> will also parcellate the ReHo and ALFF maps with each of the atlases used for the BOLD
+data.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">xcp_d</span><span class="o">/</span>
+   <span class="n">sub</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span><span class="p">[</span><span class="n">ses</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span><span class="p">]</span>
+      <span class="n">func</span><span class="o">/</span>
+         <span class="c1"># NIfTI</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_stat</span><span class="o">-</span><span class="n">reho_boldmap</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_stat</span><span class="o">-</span><span class="n">alff_boldmap</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_stat</span><span class="o">-</span><span class="n">alff_desc</span><span class="o">-</span><span class="n">smooth_boldmap</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_atlas</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_stat</span><span class="o">-</span><span class="n">alff_bold</span><span class="o">.</span><span class="n">tsv</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_atlas</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_stat</span><span class="o">-</span><span class="n">reho_bold</span><span class="o">.</span><span class="n">tsv</span>
+
+         <span class="c1"># CIFTI</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">fsLR_den</span><span class="o">-</span><span class="mi">91</span><span class="n">k_stat</span><span class="o">-</span><span class="n">reho_boldmap</span><span class="o">.</span><span class="n">dscalar</span><span class="o">.</span><span class="n">nii</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">fsLR_den</span><span class="o">-</span><span class="mi">91</span><span class="n">k_stat</span><span class="o">-</span><span class="n">alff_boldmap</span><span class="o">.</span><span class="n">dscalar</span><span class="o">.</span><span class="n">nii</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">fsLR_den</span><span class="o">-</span><span class="mi">91</span><span class="n">k_stat</span><span class="o">-</span><span class="n">alff_desc</span><span class="o">-</span><span class="n">smooth_boldmap</span><span class="o">.</span><span class="n">dscalar</span><span class="o">.</span><span class="n">nii</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">fsLR_atlas</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_stat</span><span class="o">-</span><span class="n">alff_bold</span><span class="o">.</span><span class="n">tsv</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">fsLR_atlas</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_stat</span><span class="o">-</span><span class="n">reho_bold</span><span class="o">.</span><span class="n">tsv</span>
+</pre></div>
+</div>
+</section>
+<section id="other-outputs-include-quality-control-framewise-displacement-and-confounds-files">
+<h3>Other outputs include quality control, framewise displacement, and confounds files<a class="headerlink" href="#other-outputs-include-quality-control-framewise-displacement-and-confounds-files" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">xcp_d</span><span class="o">/</span>
+   <span class="n">desc</span><span class="o">-</span><span class="n">linc_qc</span><span class="o">.</span><span class="n">json</span>
+
+   <span class="n">sub</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span><span class="p">[</span><span class="n">ses</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span><span class="p">]</span>
+      <span class="n">func</span><span class="o">/</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_motion</span><span class="o">.</span><span class="n">tsv</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_outliers</span><span class="o">.</span><span class="n">tsv</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_design</span><span class="o">.</span><span class="n">tsv</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_desc</span><span class="o">-</span><span class="n">linc_qc</span><span class="o">.</span><span class="n">tsv</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">_motion.tsv</span></code> is a tab-delimited file with seven columns:
+one for each of the six filtered motion parameters, as well as “framewise_displacement”.
+If motion filtering was applied, this file will seven extra columns: the seven described above,
+with <code class="docutils literal notranslate"><span class="pre">_filtered</span></code> appended to each column.
+This file includes the high-motion volumes that are removed in most other derivatives.</p>
+<p><code class="docutils literal notranslate"><span class="pre">outliers.tsv</span></code> is a tab-delimited file with one column: “framewise_displacement”.
+The “framewise_displacement” column contains zeros for low-motion volumes, and ones for
+high-motion outliers.
+This file includes the high-motion volumes that are removed in most other derivatives.</p>
+<p><code class="docutils literal notranslate"><span class="pre">design.tsv</span></code> is a tab-delimited file with one column for each nuisance regressor,
+including one-hot encoded regressors indicating each of the high-motion outlier volumes.
+This file includes the high-motion volumes that are removed in most other derivatives.</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>Please note that the outlier columns are somewhat misleading,
+as volumes are removed by censoring, rather than regression.</p>
+</div>
+</section>
+<section id="dcan-style-scrubbing-file-if-skip-dcan-qc-is-not-used">
+<h3>DCAN style scrubbing file (if <code class="docutils literal notranslate"><span class="pre">--skip-dcan-qc</span></code> is not used)<a class="headerlink" href="#dcan-style-scrubbing-file-if-skip-dcan-qc-is-not-used" title="Link to this heading"></a></h3>
+<p>This file is in hdf5 format (readable by h5py), and contains binary scrubbing masks from 0.0
+to 1mm FD in 0.01 steps.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">xcp_d</span><span class="o">/</span>
+   <span class="n">sub</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span><span class="p">[</span><span class="n">ses</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span><span class="p">]</span>
+      <span class="n">func</span><span class="o">/</span>
+         <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_desc</span><span class="o">-</span><span class="n">abcc_qc</span><span class="o">.</span><span class="n">hdf5</span>
+</pre></div>
+</div>
+<p>These files have the following keys:</p>
+<ol class="arabic simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">FD_threshold</span></code>: a number &gt;= 0 that represents the FD threshold used to calculate the
+metrics in this list</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">frame_removal</span></code>: a binary vector/array the same length as the number of frames in the
+concatenated time series, indicates whether a frame is removed (1) or not (0)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">format_string</span></code> (legacy): a string that denotes how the frames were excluded – uses a
+notation devised by Avi Snyder</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">total_frame_count</span></code>: a whole number that represents the total number of frames in the
+concatenated series</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">remaining_frame_count</span></code>: a whole number that represents the number of remaining frames in
+the concatenated series</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">remaining_seconds</span></code>: a whole number that represents the amount of time remaining after
+thresholding</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">remaining_frame_mean_FD</span></code>: a number &gt;= 0 that represents the mean FD of the remaining frames</p></li>
+</ol>
+</section>
+</section>
+<section id="references">
+<h2>References<a class="headerlink" href="#references" title="Link to this heading"></a></h2>
+<div class="docutils container" id="id12">
+<aside class="footnote-list brackets">
+<aside class="footnote brackets" id="footcite-tian2020topographic" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id1">1</a><span class="fn-bracket">]</span></span>
+<p>Ye Tian, Daniel S Margulies, Michael Breakspear, and Andrew Zalesky. Topographic organization of the human subcortex unveiled with functional connectivity gradients. <em>Nature neuroscience</em>, 23(11):1421–1432, 2020. URL: <a class="reference external" href="https://doi.org/10.1038/s41593-020-00711-6">https://doi.org/10.1038/s41593-020-00711-6</a>, <a class="reference external" href="https://doi.org/10.1038/s41593-020-00711-6">doi:10.1038/s41593-020-00711-6</a>.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-glasser2013minimal" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span>2<span class="fn-bracket">]</span></span>
+<span class="backrefs">(<a role="doc-backlink" href="#id2">1</a>,<a role="doc-backlink" href="#id11">2</a>)</span>
+<p>Matthew F. Glasser, Stamatios N. Sotiropoulos, J. Anthony Wilson, Timothy S. Coalson, Bruce Fischl, Jesper L. Andersson, Junqian Xu, Saad Jbabdi, Matthew Webster, Jonathan R. Polimeni, David C. Van Essen, Mark Jenkinson, and WU-Minn HCP Consortium. The minimal preprocessing pipelines for the Human Connectome Project. <em>NeuroImage</em>, 80:105–124, October 2013. <a class="reference external" href="https://doi.org/10.1016/j.neuroimage.2013.04.127">doi:10.1016/j.neuroimage.2013.04.127</a>.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-glasser-2016" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id3">3</a><span class="fn-bracket">]</span></span>
+<p>Matthew F. Glasser, Timothy S. Coalson, Emma C. Robinson, Carl D. Hacker, John Harwell, Essa Yacoub, Kamil Ugurbil, Jesper Andersson, Christian F. Beckmann, Mark Jenkinson, Stephen M. Smith, and David C. Van Essen. A multi-modal parcellation of human cerebral cortex. <em>Nature</em>, 536(7615):171–178, August 2016. Bandiera_abtest:. URL: <a class="reference external" href="https://www.nature.com/articles/nature18933">https://www.nature.com/articles/nature18933</a> (visited on 2021-07-23), <a class="reference external" href="https://doi.org/10.1038/nature18933">doi:10.1038/nature18933</a>.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-gordon-2014" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id4">4</a><span class="fn-bracket">]</span></span>
+<p>Evan M. Gordon, Timothy O. Laumann, Babatunde Adeyemo, Jeremy F. Huckins, William M. Kelley, and Steven E. Petersen. Generation and Evaluation of a Cortical Area Parcellation from Resting-State Correlations. <em>Cerebral Cortex</em>, 26(1):288–303, January 2016. URL: <a class="reference external" href="https://doi.org/10.1093/cercor/bhu239">https://doi.org/10.1093/cercor/bhu239</a> (visited on 2021-07-23), <a class="reference external" href="https://doi.org/10.1093/cercor/bhu239">doi:10.1093/cercor/bhu239</a>.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-hermosillo2024precision" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id5">5</a><span class="fn-bracket">]</span></span>
+<p>Robert JM Hermosillo, Lucille A Moore, Eric Feczko, Óscar Miranda-Domínguez, Adam Pines, Ally Dworetsky, Gregory Conan, Michael A Mooney, Anita Randolph, Alice Graham, and others. A precision functional atlas of personalized network topography and probabilities. <em>Nature neuroscience</em>, 27(5):1000–1013, 2024. URL: <a class="reference external" href="https://doi.org/10.1038/s41593-024-01596-5">https://doi.org/10.1038/s41593-024-01596-5</a>, <a class="reference external" href="https://doi.org/10.1038/s41593-024-01596-5">doi:10.1038/s41593-024-01596-5</a>.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-myers2023functional" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id6">6</a><span class="fn-bracket">]</span></span>
+<p>Michael J Myers, Alyssa K Labonte, Evan M Gordon, Timothy O Laumann, Jiaxin Cindy Tu, Muriah D Wheelock, Ashley N Nielsen, Rebecca Schwarzlose, M Catalina Camacho, Barbara B Warner, and others. Functional parcellation of the neonatal brain. <em>bioRxiv</em>, 2023. URL: <a class="reference external" href="https://doi.org/10.1101/2023.11.10.566629">https://doi.org/10.1101/2023.11.10.566629</a>, <a class="reference external" href="https://doi.org/10.1101/2023.11.10.566629">doi:10.1101/2023.11.10.566629</a>.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-schaefer-2017" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id7">7</a><span class="fn-bracket">]</span></span>
+<p>Alexander Schaefer, Ru Kong, Evan M. Gordon, Timothy O. Laumann, Xi-Nian Zuo, Avram J. Holmes, Simon B. Eickhoff, and B. T. Thomas Yeo. Local-Global Parcellation of the Human Cerebral Cortex from Intrinsic Functional Connectivity MRI. <em>Cerebral Cortex (New York, N.Y.: 1991)</em>, 28(9):3095–3114, September 2018. <a class="reference external" href="https://doi.org/10.1093/cercor/bhx179">doi:10.1093/cercor/bhx179</a>.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-pauli2018high" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id8">8</a><span class="fn-bracket">]</span></span>
+<p>Wolfgang M Pauli, Amanda N Nili, and J Michael Tyszka. A high-resolution probabilistic in vivo atlas of human subcortical brain nuclei. <em>Scientific data</em>, 5(1):1–13, 2018. URL: <a class="reference external" href="https://doi.org/10.1038/sdata.2018.63">https://doi.org/10.1038/sdata.2018.63</a>, <a class="reference external" href="https://doi.org/10.1038/sdata.2018.63">doi:10.1038/sdata.2018.63</a>.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-king2019functional" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id9">9</a><span class="fn-bracket">]</span></span>
+<p>Maedbh King, Carlos R Hernandez-Castillo, Russell A Poldrack, Richard B Ivry, and Jörn Diedrichsen. Functional boundaries in the human cerebellum revealed by a multi-domain task battery. <em>Nature neuroscience</em>, 22(8):1371–1378, 2019. URL: <a class="reference external" href="https://doi.org/10.1038/s41593-019-0436-x">https://doi.org/10.1038/s41593-019-0436-x</a>, <a class="reference external" href="https://doi.org/10.1038/s41593-019-0436-x">doi:10.1038/s41593-019-0436-x</a>.</p>
+</aside>
+<aside class="footnote brackets" id="footcite-najdenovska2018vivo" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id10">10</a><span class="fn-bracket">]</span></span>
+<p>Elena Najdenovska, Yasser Alemán-Gómez, Giovanni Battistella, Maxime Descoteaux, Patric Hagmann, Sebastien Jacquemont, Philippe Maeder, Jean-Philippe Thiran, Eleonora Fornari, and Meritxell Bach Cuadra. In-vivo probabilistic atlas of human thalamic nuclei based on diffusion-weighted magnetic resonance imaging. <em>Scientific data</em>, 5(1):1–11, 2018. URL: <a class="reference external" href="https://doi.org/10.1038/sdata.2018.270">https://doi.org/10.1038/sdata.2018.270</a>, <a class="reference external" href="https://doi.org/10.1038/sdata.2018.270">doi:10.1038/sdata.2018.270</a>.</p>
+</aside>
+</aside>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="workflows.html" class="btn btn-neutral float-left" title="Processing Pipeline Details" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="contributing.html" class="btn btn-neutral float-right" title="Contributing to XCP-D" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2021-, {author}.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

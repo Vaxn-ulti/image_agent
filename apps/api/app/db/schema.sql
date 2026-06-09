@@ -98,3 +98,38 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   content TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS agent_runs (
+  agent_run_id TEXT PRIMARY KEY,
+  request_type TEXT NOT NULL,
+  thread_id TEXT,
+  project_id INTEGER,
+  series_id INTEGER,
+  task_id INTEGER,
+  workflow_type TEXT,
+  status TEXT NOT NULL,
+  intent TEXT,
+  action_lane TEXT,
+  selected_skill TEXT,
+  approved INTEGER,
+  message_sha256 TEXT,
+  model_gateway_access TEXT NOT NULL,
+  retrieved_sources_json TEXT NOT NULL DEFAULT '[]',
+  tool_invocations_json TEXT NOT NULL DEFAULT '[]',
+  safe_metadata_json TEXT NOT NULL DEFAULT '{}',
+  error_message TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  finished_at TEXT,
+  FOREIGN KEY(project_id) REFERENCES projects(id),
+  FOREIGN KEY(series_id) REFERENCES imaging_series(id),
+  FOREIGN KEY(task_id) REFERENCES tasks(id)
+);
+CREATE TABLE IF NOT EXISTS agent_run_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  agent_run_id TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  status TEXT NOT NULL,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(agent_run_id) REFERENCES agent_runs(agent_run_id)
+);

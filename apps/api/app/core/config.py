@@ -31,6 +31,11 @@ DOCKER_IMAGES = {
     "qsiprep": "pennlinc/qsiprep:latest",
     "qsirecon": "pennlinc/qsirecon:latest",
 }
+QSIRECON_PROFILE = os.environ.get("IMAGE_AGENT_QSIRECON_PROFILE", "dki").strip().lower() or "dki"
+QSIRECON_PROFILE_RECON_SPECS = {
+    "dki": "dipy_dki",
+    "tractography": "mrtrix_multishell_msmt_noACT",
+}
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
 DEEPSEEK_BASE_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")

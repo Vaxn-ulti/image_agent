@@ -1,0 +1,387 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" />
+  <meta name="readthedocs-addons-api-version" content="1"><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quick Start &mdash; qsirecon 26.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/theme_overrides.css?v=c2e89e5a" />
+      <link rel="stylesheet" type="text/css" href="_static/sphinx-design.min.css?v=95c83b7e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2b5cba5c"></script>
+      <script src="_static/doctools.js?v=9a2dae69"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="https://cdn.rawgit.com/chrisfilo/zenodo.js/v0.1/zenodo.js"></script>
+      <script src="_static/design-tabs.js?v=f930bc37"></script>
+    <script src="_static/js/theme.js"></script>
+    <script src="_static/js/versions.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Available Models in QSIRecon" href="models.html" />
+    <link rel="prev" title="Installation" href="installation.html" /> 
+<script async type="text/javascript" src="/_/static/javascript/readthedocs-addons.js"></script><meta name="readthedocs-project-slug" content="qsirecon" /><meta name="readthedocs-version-slug" content="stable" /><meta name="readthedocs-resolver-filename" content="/quickstart.html" /><meta name="readthedocs-http-status" content="200" /></head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            qsirecon
+          </a>
+              <div class="switch-menus">
+                <div class="version-switch"></div>
+                <div class="language-switch"></div>
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Quick Start</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#command-line-arguments">Command-Line Arguments</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#qsirecon.cli.parser-_build_parser-positional-arguments">Positional Arguments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#qsirecon.cli.parser-_build_parser-options-for-filtering-input-data">Options for filtering input data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#qsirecon.cli.parser-_build_parser-options-to-handle-performance">Options to handle performance</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#qsirecon.cli.parser-_build_parser-options-for-performing-only-a-subset-of-the-workflow">Options for performing only a subset of the workflow</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#qsirecon.cli.parser-_build_parser-workflow-configuration">Workflow configuration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#qsirecon.cli.parser-_build_parser-specific-options-for-freesurfer-preprocessing">Specific options for FreeSurfer preprocessing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#qsirecon.cli.parser-_build_parser-options-for-recon-workflows">Options for recon workflows</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#qsirecon.cli.parser-_build_parser-parcellation-options">Parcellation options</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#qsirecon.cli.parser-_build_parser-other-options">Other options</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#troubleshooting">Troubleshooting</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="models.html">Available Models in <em>QSIRecon</em></a></li>
+<li class="toctree-l1"><a class="reference internal" href="builtin_workflows.html">Built-In Reconstruction Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="building_workflows.html">Custom Reconstruction Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="outputs.html">Outputs of <em>QSIRecon</em></a></li>
+<li class="toctree-l1"><a class="reference internal" href="contributors.html">Contributing to <em>QSIRecon</em></a></li>
+<li class="toctree-l1"><a class="reference internal" href="changes.html">What’s New</a></li>
+<li class="toctree-l1"><a class="reference internal" href="comparisons.html">Comparisons to other pipelines</a></li>
+<li class="toctree-l1"><a class="reference internal" href="help.html">Getting help</a></li>
+<li class="toctree-l1"><a class="reference internal" href="license.html">License information</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api_reference.html">API Documentation</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">qsirecon</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Quick Start</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/quickstart.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="quick-start">
+<h1>Quick Start<a class="headerlink" href="#quick-start" title="Link to this heading"></a></h1>
+<p>Before you can use <em>QSIRecon</em>, you must have some preprocessed dMRI data.
+See <a class="reference internal" href="input_data.html#input-data"><span class="std std-ref">Input Data for QSIRecon</span></a></p>
+<p>The next step is to get a containerized version of <em>QSIRecon</em>. This can be
+done with <a class="reference external" href="https://sylabs.io/singularity/">Singularity</a>, <a class="reference external" href="https://apptainer.org/">Apptainer</a> or <a class="reference external" href="https://docs.docker.com/">Docker</a>. Most users run <em>QSIRecon</em> on
+a high performance computing cluster, so we will assume Apptainer is being
+used throughout this documentation. See <a class="reference internal" href="installation.html#install-qsirecon"><span class="std std-ref">Installation</span></a> on how to create
+a <cite>sif</cite> file or pull the image with Docker.</p>
+<p>Next, you need to decide which workflow you’d like to run. You can pick
+from any of the <a class="reference internal" href="builtin_workflows.html#builtin-workflows"><span class="std std-ref">Built-In Reconstruction Workflows</span></a> or <a class="reference internal" href="building_workflows.html#building-workflows"><span class="std std-ref">Custom Reconstruction Workflows</span></a>.
+Here we’ll pick the <code class="docutils literal notranslate"><span class="pre">dsi_studio_autotrack</span></code> workflow.</p>
+<p>Finally, you’ll need to craft a command to set up your <em>QSIRecon</em> run.
+Suppose you’re in a directory where there are some qsiprep results in
+<code class="docutils literal notranslate"><span class="pre">inputs/qsiprep</span></code>. You’d like to save <em>QSIRecon</em> outputs in <code class="docutils literal notranslate"><span class="pre">results</span></code>. You
+have access to 8 cpus.  To run the from <code class="docutils literal notranslate"><span class="pre">qsirecon-latest.sif</span></code> you could use:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>apptainer<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--containall<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--writable-tmpfs<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>-B<span class="w"> </span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">PWD</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>qsirecon-latest.sif<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">PWD</span><span class="si">}</span><span class="s2">/inputs/qsiprep&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">PWD</span><span class="si">}</span><span class="s2">/results/qsirecon&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>participant<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>-w<span class="w"> </span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">PWD</span><span class="si">}</span><span class="s2">/work&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--nthreads<span class="w"> </span><span class="m">8</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--omp-nthreads<span class="w"> </span><span class="m">8</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--recon-spec<span class="w"> </span>dsi_studio_autotrack<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>-v<span class="w"> </span>-v
+</pre></div>
+</div>
+<p>Once this completes you will see a number of new directories written to <code class="docutils literal notranslate"><span class="pre">results</span></code>.
+You will find errors (if any occurred) and configuration files for each subject
+directly under <code class="docutils literal notranslate"><span class="pre">results/sub-*</span></code>. Each analysis also creates its own directory that
+contains results per subject. In the case of <code class="docutils literal notranslate"><span class="pre">dsi_studio_autotrack</span></code> we will see
+<code class="docutils literal notranslate"><span class="pre">results/qsirecon-DSIStudio/sub-*</span></code> containing the outputs from the ss3t_autotrack
+workflow. Some workflows produce multiple directories, particularly when multiple
+models are fit.</p>
+<section id="command-line-arguments">
+<h2>Command-Line Arguments<a class="headerlink" href="#command-line-arguments" title="Link to this heading"></a></h2>
+<p><p>QSIRecon v26.0.0: q-Space Image Reconstruction Workflows</p>
+</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">usage</span><span class="p">:</span> <span class="n">qsirecon</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">participant</span><span class="o">-</span><span class="n">label</span> <span class="n">PARTICIPANT_LABEL</span> <span class="p">[</span><span class="n">PARTICIPANT_LABEL</span> <span class="o">...</span><span class="p">]]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">session</span><span class="o">-</span><span class="nb">id</span> <span class="n">SESSION_ID</span> <span class="p">[</span><span class="n">SESSION_ID</span> <span class="o">...</span><span class="p">]]</span>
+                <span class="p">[</span><span class="o">-</span><span class="n">d</span> <span class="n">PACKAGE</span><span class="o">=</span><span class="n">PATH</span> <span class="p">[</span><span class="n">PACKAGE</span><span class="o">=</span><span class="n">PATH</span> <span class="o">...</span><span class="p">]]</span> <span class="p">[</span><span class="o">--</span><span class="n">bids</span><span class="o">-</span><span class="nb">filter</span><span class="o">-</span><span class="n">file</span> <span class="n">FILE</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">bids</span><span class="o">-</span><span class="n">database</span><span class="o">-</span><span class="nb">dir</span> <span class="n">PATH</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">nprocs</span> <span class="n">NPROCS</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">omp</span><span class="o">-</span><span class="n">nthreads</span> <span class="n">OMP_NTHREADS</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">mem</span> <span class="n">MEMORY_MB</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">low</span><span class="o">-</span><span class="n">mem</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">use</span><span class="o">-</span><span class="n">plugin</span> <span class="n">FILE</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">sloppy</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">boilerplate</span><span class="o">-</span><span class="n">only</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">reports</span><span class="o">-</span><span class="n">only</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">report</span><span class="o">-</span><span class="n">output</span><span class="o">-</span><span class="n">level</span> <span class="p">{</span><span class="n">root</span><span class="p">,</span><span class="n">subject</span><span class="p">,</span><span class="n">session</span><span class="p">}]</span> <span class="p">[</span><span class="o">--</span><span class="n">infant</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">b0</span><span class="o">-</span><span class="n">threshold</span> <span class="n">B0_THRESHOLD</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">output</span><span class="o">-</span><span class="n">resolution</span> <span class="n">OUTPUT_RESOLUTION</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">fs</span><span class="o">-</span><span class="n">license</span><span class="o">-</span><span class="n">file</span> <span class="n">PATH</span><span class="p">]</span> <span class="o">--</span><span class="n">recon</span><span class="o">-</span><span class="n">spec</span> <span class="n">RECON_SPEC</span>
+                <span class="p">[</span><span class="o">--</span><span class="nb">input</span><span class="o">-</span><span class="nb">type</span> <span class="p">{</span><span class="n">qsiprep</span><span class="p">,</span><span class="n">ukb</span><span class="p">,</span><span class="n">hcpya</span><span class="p">}]</span> <span class="p">[</span><span class="o">--</span><span class="n">fs</span><span class="o">-</span><span class="n">subjects</span><span class="o">-</span><span class="nb">dir</span> <span class="n">PATH</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">skip</span><span class="o">-</span><span class="n">odf</span><span class="o">-</span><span class="n">reports</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">recon</span><span class="o">-</span><span class="n">spec</span><span class="o">-</span><span class="n">aux</span><span class="o">-</span><span class="n">files</span> <span class="n">RECON_SPEC_AUX_FILES</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">atlases</span> <span class="n">ATLAS</span> <span class="p">[</span><span class="n">ATLAS</span> <span class="o">...</span><span class="p">]]</span> <span class="p">[</span><span class="o">--</span><span class="n">version</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">v</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">w</span> <span class="n">WORK_DIR</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">resource</span><span class="o">-</span><span class="n">monitor</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">config</span><span class="o">-</span><span class="n">file</span> <span class="n">FILE</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">write</span><span class="o">-</span><span class="n">graph</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">stop</span><span class="o">-</span><span class="n">on</span><span class="o">-</span><span class="n">first</span><span class="o">-</span><span class="n">crash</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">notrack</span><span class="p">]</span>
+                <span class="p">[</span><span class="o">--</span><span class="n">debug</span> <span class="p">{</span><span class="n">pdb</span><span class="p">,</span><span class="nb">all</span><span class="p">}</span> <span class="p">[{</span><span class="n">pdb</span><span class="p">,</span><span class="nb">all</span><span class="p">}</span> <span class="o">...</span><span class="p">]]</span>
+                <span class="n">input_dir</span> <span class="n">output_dir</span> <span class="p">{</span><span class="n">participant</span><span class="p">}</span>
+</pre></div>
+</div>
+<section id="qsirecon.cli.parser-_build_parser-positional-arguments">
+<h3>Positional Arguments<a class="headerlink" href="#qsirecon.cli.parser-_build_parser-positional-arguments" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>input_dir</kbd></dt>
+<dd><p>The root folder of the input dataset  (subject-level folders should be found at the top level in this folder). If the dataset is not BIDS-valid, then a BIDS-compliant version will be created based on the –input-type value.</p>
+</dd>
+<dt><kbd>output_dir</kbd></dt>
+<dd><p>The output path for the outcomes of postprocessing and visual reports</p>
+</dd>
+<dt><kbd>analysis_level</kbd></dt>
+<dd><p>Possible choices: participant</p>
+<p>Processing stage to be run, only “participant” in the case of QSIRecon (for now).</p>
+</dd>
+</dl>
+</section>
+<section id="qsirecon.cli.parser-_build_parser-options-for-filtering-input-data">
+<h3>Options for filtering input data<a class="headerlink" href="#qsirecon.cli.parser-_build_parser-options-for-filtering-input-data" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>--participant-label</kbd></dt>
+<dd><p>A space delimited list of participant identifiers or a single identifier (the sub- prefix can be removed)</p>
+</dd>
+<dt><kbd>--session-id</kbd></dt>
+<dd><p>A space delimited list of session identifiers or a single identifier (the ses- prefix can be removed)</p>
+</dd>
+<dt><kbd>-d, --datasets</kbd></dt>
+<dd><p>Search PATH(s) for derivatives or atlas datasets. These may be provided as named folders (e.g., <code class="docutils literal notranslate"><span class="pre">--datasets</span> <span class="pre">smriprep=/path/to/smriprep</span></code>).</p>
+</dd>
+<dt><kbd>--bids-filter-file</kbd></dt>
+<dd><p>A JSON file describing custom BIDS input filters using PyBIDS. For further details, please check out <a class="reference external" href="https://fmriprep.readthedocs.io/en/26.0.0/faq.html#how-do-I-select-only-certain-files-to-be-input-to-fMRIPrep">https://fmriprep.readthedocs.io/en/26.0.0/faq.html#how-do-I-select-only-certain-files-to-be-input-to-fMRIPrep</a></p>
+</dd>
+<dt><kbd>--bids-database-dir</kbd></dt>
+<dd><p>Path to a PyBIDS database folder, for faster indexing (especially useful for large datasets). Will be created if not present.</p>
+</dd>
+</dl>
+</section>
+<section id="qsirecon.cli.parser-_build_parser-options-to-handle-performance">
+<h3>Options to handle performance<a class="headerlink" href="#qsirecon.cli.parser-_build_parser-options-to-handle-performance" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>--nprocs, --nthreads, --n-cpus</kbd></dt>
+<dd><p>Maximum number of threads across all processes</p>
+</dd>
+<dt><kbd>--omp-nthreads</kbd></dt>
+<dd><p>Maximum number of threads per-process</p>
+</dd>
+<dt><kbd>--mem, --mem-mb</kbd></dt>
+<dd><p>Upper bound memory limit for QSIRecon processes</p>
+</dd>
+<dt><kbd>--low-mem</kbd></dt>
+<dd><p>Attempt to reduce memory usage (will increase disk usage in working directory)</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--use-plugin, --nipype-plugin-file</kbd></dt>
+<dd><p>Nipype plugin configuration file</p>
+</dd>
+<dt><kbd>--sloppy</kbd></dt>
+<dd><p>Use low-quality tools for speed - TESTING ONLY</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+</dl>
+</section>
+<section id="qsirecon.cli.parser-_build_parser-options-for-performing-only-a-subset-of-the-workflow">
+<h3>Options for performing only a subset of the workflow<a class="headerlink" href="#qsirecon.cli.parser-_build_parser-options-for-performing-only-a-subset-of-the-workflow" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>--boilerplate-only, --boilerplate</kbd></dt>
+<dd><p>Generate boilerplate only</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--reports-only</kbd></dt>
+<dd><p>Only generate reports, don’t run workflows. This will only rerun report aggregation, not reportlet generation for specific nodes.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--report-output-level</kbd></dt>
+<dd><p>Possible choices: root, subject, session</p>
+<p>Where should the html reports be written? By default root will write them to the –output-dir. Other options will write them into their subject or session directory.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">'root'</span></code></p>
+</dd>
+</dl>
+</section>
+<section id="qsirecon.cli.parser-_build_parser-workflow-configuration">
+<h3>Workflow configuration<a class="headerlink" href="#qsirecon.cli.parser-_build_parser-workflow-configuration" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>--infant</kbd></dt>
+<dd><p>configure pipelines to process infant brains</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--b0-threshold</kbd></dt>
+<dd><p>any value in the .bval file less than this will be considered a b=0 image. Current default threshold = 100; this threshold can be lowered or increased. Note, setting this too high can result in inaccurate results.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">100</span></code></p>
+</dd>
+<dt><kbd>--output-resolution</kbd></dt>
+<dd><p>the isotropic voxel size in mm the data will be resampled to after preprocessing. If set to a lower value than the original voxel size, your data will be upsampled using BSpline interpolation.</p>
+</dd>
+</dl>
+</section>
+<section id="qsirecon.cli.parser-_build_parser-specific-options-for-freesurfer-preprocessing">
+<h3>Specific options for FreeSurfer preprocessing<a class="headerlink" href="#qsirecon.cli.parser-_build_parser-specific-options-for-freesurfer-preprocessing" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>--fs-license-file</kbd></dt>
+<dd><p>Path to FreeSurfer license key file. Get it (for free) by registering at <a class="reference external" href="https://surfer.nmr.mgh.harvard.edu/registration.html">https://surfer.nmr.mgh.harvard.edu/registration.html</a>. If not provided, QSIRecon will look for a license file in the following locations: 1) <code class="docutils literal notranslate"><span class="pre">$FS_LICENSE</span></code> environment variable; and 2) the <code class="docutils literal notranslate"><span class="pre">$FREESURFER_HOME/license.txt</span></code> path.</p>
+</dd>
+</dl>
+</section>
+<section id="qsirecon.cli.parser-_build_parser-options-for-recon-workflows">
+<h3>Options for recon workflows<a class="headerlink" href="#qsirecon.cli.parser-_build_parser-options-for-recon-workflows" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>--recon-spec</kbd></dt>
+<dd><p>YAML file specifying a reconstruction pipeline to be run.</p>
+</dd>
+<dt><kbd>--input-type</kbd></dt>
+<dd><p>Possible choices: qsiprep, ukb, hcpya</p>
+<p>Specify which pipeline was used to create the data specified as the input_dir.Not necessary to specify if the data was processed by QSIPrep. Other options include “ukb” for data processed with the UK BioBank minimal preprocessing pipeline and “hcpya” for the HCP young adult minimal preprocessing pipeline.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">'qsiprep'</span></code></p>
+</dd>
+<dt><kbd>--fs-subjects-dir</kbd></dt>
+<dd><p>Directory containing Freesurfer outputs to be integrated into recon. Freesurfer must already be run. QSIRecon will not run Freesurfer.</p>
+</dd>
+<dt><kbd>--skip-odf-reports</kbd></dt>
+<dd><p>run only reconstruction, assumes preprocessing has already completed.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--recon-spec-aux-files</kbd></dt>
+<dd><p>Path to a directory containing auxiliary files for the reconstruction pipeline. This is currently only used to provide common response functions for a subset of the built-in recon specs.</p>
+</dd>
+</dl>
+</section>
+<section id="qsirecon.cli.parser-_build_parser-parcellation-options">
+<h3>Parcellation options<a class="headerlink" href="#qsirecon.cli.parser-_build_parser-parcellation-options" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>--atlases</kbd></dt>
+<dd><p>Selection of atlases to apply to the data. Built-in atlases include: AAL116, AICHA384Ext, Brainnetome246Ext, Gordon333Ext, and the 4S atlases.</p>
+</dd>
+</dl>
+</section>
+<section id="qsirecon.cli.parser-_build_parser-other-options">
+<h3>Other options<a class="headerlink" href="#qsirecon.cli.parser-_build_parser-other-options" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>--version</kbd></dt>
+<dd><p>show program’s version number and exit</p>
+</dd>
+<dt><kbd>-v, --verbose</kbd></dt>
+<dd><p>Increases log verbosity for each occurrence, debug level is -vvv</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">0</span></code></p>
+</dd>
+<dt><kbd>-w, --work-dir</kbd></dt>
+<dd><p>Path where intermediate results should be stored</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">/home/docs/checkouts/readthedocs.org/user_builds/qsirecon/checkouts/stable/docs/work</span></code></p>
+</dd>
+<dt><kbd>--resource-monitor</kbd></dt>
+<dd><p>Enable Nipype’s resource monitoring to keep track of memory and CPU usage</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--config-file</kbd></dt>
+<dd><p>Use pre-generated configuration file. Values in file will be overridden by command-line arguments. This is not currently used by QSIRecon.</p>
+</dd>
+<dt><kbd>--write-graph</kbd></dt>
+<dd><p>Write workflow graph.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--stop-on-first-crash</kbd></dt>
+<dd><p>Force stopping on first crash, even if a work directory was specified.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--notrack</kbd></dt>
+<dd><p>Opt-out of sending tracking information of this run to the QSIRecon developers. This information helps to improve QSIRecon and provides an indicator of real world usage crucial for obtaining funding.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--debug</kbd></dt>
+<dd><p>Possible choices: pdb, all</p>
+<p>Debug mode(s) to enable. ‘all’ is alias for all available modes.</p>
+</dd>
+</dl>
+</section>
+</section>
+<section id="troubleshooting">
+<h2>Troubleshooting<a class="headerlink" href="#troubleshooting" title="Link to this heading"></a></h2>
+<p>Logs and crashfiles are outputted into the
+<code class="docutils literal notranslate"><span class="pre">&lt;output</span> <span class="pre">dir&gt;/qsirecon/sub-&lt;participant_label&gt;/log</span></code> directory.
+Information on how to customize and understand these files can be found on the
+<a class="reference external" href="http://nipype.readthedocs.io/en/latest/users/debug.html">nipype debugging</a>
+page.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="installation.html" class="btn btn-neutral float-left" title="Installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="models.html" class="btn btn-neutral float-right" title="Available Models in QSIRecon" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2021-2026, qsirecon team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

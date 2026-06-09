@@ -6,6 +6,7 @@ import time
 import zipfile
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.core import config
@@ -71,6 +72,50 @@ def test_pipeline_bids_preserves_uncompressed_nifti_and_sidecars(tmp_path, monke
     assert (dirs['bids'] / 'sub-01' / 'dwi' / 'sub-01_dwi.bvec').exists()
     assert (dirs['bids'] / 'sub-01' / 'dwi' / 'sub-01_dwi.json').exists()
     assert not (dirs['bids'] / 'sub-01' / 'dwi' / 'sub-01_dwi.json').is_symlink()
+
+
+def test_dwi_stage_copies_uploaded_json_sidecar_by_file_id(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
+    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
+    from app.db import database
+    from app.workflows import pipeline
+    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(pipeline, 'PROJECTS_ROOT', tmp_path / 'projects')
+
+    database.init_db()
+    client = TestClient(app)
+    project = client.post('/projects', json={'name': 'P-dwi-json-stage'}).json()
+    dwi = tmp_path / 'sub-001_dwi.nii.gz'
+    bval = tmp_path / 'sub-001_dwi.bval'
+    bvec = tmp_path / 'sub-001_dwi.bvec'
+    sidecar = tmp_path / 'sub-001_dwi.json'
+    make_nifti(dwi, shape=(8, 8, 8, 3))
+    bval.write_text('0 1000 1000\n', encoding='utf-8')
+    bvec.write_text('1 0 0\n0 1 0\n0 0 1\n', encoding='utf-8')
+    sidecar.write_text('{"PhaseEncodingDirection": "j-", "TotalReadoutTime": 0.07}', encoding='utf-8')
+    with dwi.open('rb') as f, bval.open('rb') as bval_f, bvec.open('rb') as bvec_f, sidecar.open('rb') as json_f:
+        uploaded = client.post(
+            f"/projects/{project['id']}/upload-dwi",
+            files={
+                'nifti': (dwi.name, f, 'application/gzip'),
+                'bval': (bval.name, bval_f, 'text/plain'),
+                'bvec': (bvec.name, bvec_f, 'text/plain'),
+                'json_sidecar': (sidecar.name, json_f, 'application/json'),
+            },
+        ).json()
+
+    task = {
+        'id': 12,
+        'project_id': project['id'],
+        'series_id': uploaded['series']['id'],
+        'workflow_type': 'dwi_fast_gpu_dti_validate',
+        'log_path': str(tmp_path / 'task.log'),
+    }
+    dirs = pipeline._build_bids(task, {'metadata_json': json.dumps(uploaded['series']['metadata']), **uploaded['series']})
+    staged = dirs['bids'] / 'sub-01' / 'dwi' / 'sub-01_dwi.json'
+
+    assert json.loads(staged.read_text(encoding='utf-8'))['PhaseEncodingDirection'] == 'j-'
 
 
 def test_container_workflows_request_gpu(monkeypatch, tmp_path):
@@ -288,7 +333,9 @@ def test_bold_bids_includes_project_t1_when_available(tmp_path, monkeypatch):
 
 def test_workflow_catalog_exposes_implemented_workflows():
     client = TestClient(app)
-    workflow_types = {w['type'] for w in client.get('/workflows').json()['workflows']}
+    workflows = client.get('/workflows').json()['workflows']
+    workflow_types = {w['type'] for w in workflows}
+    workflow_labels = {w['type']: w['label'] for w in workflows}
 
     assert 'dicom_convert_validate' in workflow_types
     assert 'dicom_convert' in workflow_types
@@ -296,6 +343,11 @@ def test_workflow_catalog_exposes_implemented_workflows():
     assert 'bold_alff' in workflow_types
     assert 'bold_falff_validate' in workflow_types
     assert 'bold_falff' in workflow_types
+    assert 'bold_second_level' in workflow_types
+    assert 'bold_second_level_validate' in workflow_types
+    assert 'dwi_fast_gpu_dti' in workflow_types
+    assert 'dwi_fast_gpu_dti_validate' in workflow_types
+    assert workflow_labels['bold_second_level'] == 'BOLD downstream metrics (single subject)'
 
 
 def test_dwi_validate_reports_missing_eddy_cuda(monkeypatch, tmp_path):
@@ -326,6 +378,268 @@ def test_dwi_validate_reports_missing_eddy_cuda(monkeypatch, tmp_path):
 
     assert updates['status'] == 'failed'
     assert 'eddy_cuda' in updates['error_message']
+
+
+def test_bold_metric_command_uses_completed_deepprep_outputs(tmp_path, monkeypatch):
+    from app.workflows import pipeline
+
+    monkeypatch.setattr(pipeline, 'PROJECTS_ROOT', tmp_path / 'projects')
+    project_id = 7
+    source_task = 41
+    func = tmp_path / 'projects' / str(project_id) / 'derivatives' / str(source_task) / 'output' / 'BOLD' / 'sub-01' / 'func'
+    qc = tmp_path / 'projects' / str(project_id) / 'derivatives' / str(source_task) / 'output' / 'QC' / 'sub-01' / 'figures'
+    func.mkdir(parents=True)
+    qc.mkdir(parents=True)
+    preproc = func / 'sub-01_task-rest_space-MNI152NLin6Asym_desc-preproc_bold.nii.gz'
+    bold_json = func / 'sub-01_task-rest_space-MNI152NLin6Asym_desc-preproc_bold.json'
+    mask = func / 'sub-01_task-rest_space-MNI152NLin6Asym_desc-brain_mask.nii.gz'
+    confounds = func / 'sub-01_task-rest_desc-confounds_timeseries.tsv'
+    tsnr = qc / 'sub-01_task-rest_desc-tsnr_bold.nii.gz'
+    for path in (preproc, mask, tsnr):
+        path.write_bytes(b'nifti')
+    bold_json.write_text('{"RepetitionTime": 2.0}', encoding='utf-8')
+    confounds.write_text('framewise_displacement\tdvars\n0.1\t1.0\n', encoding='utf-8')
+
+    def fake_row(sql, params=()):
+        if "workflow_type='bold_deepprep'" in sql:
+            return {'id': source_task, 'project_id': project_id}
+        return None
+
+    monkeypatch.setattr(pipeline, '_row', fake_row)
+    inputs = pipeline._resolve_bold_metric_inputs(
+        {'project_id': project_id, 'series_id': 3},
+        {'project_id': project_id, 'id': 3},
+    )
+    cmd = pipeline._commands(
+        'bold_alff',
+        {'bids': tmp_path / 'bids', 'output': tmp_path / 'out', 'work': tmp_path / 'work', 'root': tmp_path},
+        metric_inputs=inputs,
+    )[0]
+
+    assert '--preproc-bold' in cmd
+    assert str(preproc) in cmd
+    assert '--brain-mask' in cmd
+    assert str(mask) in cmd
+    assert '--confounds' in cmd
+    assert str(confounds) in cmd
+
+
+def test_dwi_fast_gpu_dti_validate_is_fixed_production_dwi_workflow(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
+    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
+    from app.db import database
+    import app.main as main
+    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(main, 'run_pipeline_task', lambda task_id, qsiprep_task_id=None: None)
+
+    database.init_db()
+    client = TestClient(app)
+    project = client.post('/projects', json={'name': 'P-fast-dti'}).json()
+    dwi = tmp_path / 'sub-001_dwi.nii.gz'
+    bval = tmp_path / 'sub-001_dwi.bval'
+    bvec = tmp_path / 'sub-001_dwi.bvec'
+    sidecar = tmp_path / 'sub-001_dwi.json'
+    make_nifti(dwi, shape=(8, 8, 8, 3))
+    bval.write_text('0 1000 1000\n', encoding='utf-8')
+    bvec.write_text('1 0 0\n0 1 0\n0 0 1\n', encoding='utf-8')
+    sidecar.write_text('{"PhaseEncodingDirection": "j", "TotalReadoutTime": 0.05}', encoding='utf-8')
+    with dwi.open('rb') as f, bval.open('rb') as bval_f, bvec.open('rb') as bvec_f, sidecar.open('rb') as json_f:
+        uploaded = client.post(
+            f"/projects/{project['id']}/upload-dwi",
+            files={
+                'nifti': (dwi.name, f, 'application/gzip'),
+                'bval': (bval.name, bval_f, 'text/plain'),
+                'bvec': (bvec.name, bvec_f, 'text/plain'),
+                'json_sidecar': (sidecar.name, json_f, 'application/json'),
+            },
+        ).json()
+    assert uploaded['series']['metadata']['has_json'] is True
+    assert uploaded['series']['metadata']['has_dwi_eddy_metadata'] is True
+
+    accepted = client.post(
+        f"/series/{uploaded['series']['id']}/run",
+        json={'workflow_type': 'dwi_fast_gpu_dti_validate'},
+    )
+
+    assert accepted.status_code == 200
+    assert accepted.json()['workflow_type'] == 'dwi_fast_gpu_dti_validate'
+
+
+def test_dwi_fast_gpu_dti_rejects_missing_json_sidecar(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
+    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
+    from app.db import database
+    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
+
+    database.init_db()
+    client = TestClient(app)
+    project = client.post('/projects', json={'name': 'P-fast-dti-no-json'}).json()
+    dwi = tmp_path / 'sub-001_dwi.nii.gz'
+    bval = tmp_path / 'sub-001_dwi.bval'
+    bvec = tmp_path / 'sub-001_dwi.bvec'
+    make_nifti(dwi, shape=(8, 8, 8, 3))
+    bval.write_text('0 1000 1000\n', encoding='utf-8')
+    bvec.write_text('1 0 0\n0 1 0\n0 0 1\n', encoding='utf-8')
+    with dwi.open('rb') as f, bval.open('rb') as bval_f, bvec.open('rb') as bvec_f:
+        uploaded = client.post(
+            f"/projects/{project['id']}/upload-dwi",
+            files={
+                'nifti': (dwi.name, f, 'application/gzip'),
+                'bval': (bval.name, bval_f, 'text/plain'),
+                'bvec': (bvec.name, bvec_f, 'text/plain'),
+            },
+        ).json()
+
+    rejected = client.post(
+        f"/series/{uploaded['series']['id']}/run",
+        json={'workflow_type': 'dwi_fast_gpu_dti_validate'},
+    )
+
+    assert rejected.status_code == 400
+    assert 'JSON sidecar' in rejected.json()['detail']
+
+
+def test_dwi_fast_gpu_dti_validate_checks_lightweight_toolbox_not_full_qsiprep(monkeypatch, tmp_path):
+    from app.workflows import pipeline
+
+    monkeypatch.setattr(pipeline.dwi_fast_dti, "check_runtime", lambda: (True, "FSL eddy_cuda ok\nfull_qsiprep_run: false\nmax_runtime_sec: 2100"))
+    monkeypatch.setattr(pipeline, "_build_bids", lambda task, series: {
+        "root": tmp_path,
+        "bids": tmp_path / "bids",
+        "output": tmp_path / "output",
+        "work": tmp_path / "work",
+    })
+    monkeypatch.setattr(pipeline, "_row", lambda sql, params=(): {
+        "id": 8,
+        "project_id": 1,
+        "series_id": 1,
+        "workflow_type": "dwi_fast_gpu_dti_validate",
+        "log_path": str(tmp_path / "task.log"),
+        "modality": "DWI",
+        "metadata_json": "{}",
+    })
+    monkeypatch.setattr(pipeline.dwi_fast_dti, "validate_inputs", lambda dirs: None)
+    monkeypatch.setattr(pipeline, "_update", lambda *args, **kwargs: None)
+    outputs = []
+    monkeypatch.setattr(pipeline, "_insert_output", lambda *args, **kwargs: outputs.append(args))
+
+    pipeline.run_pipeline_task(8)
+
+    metadata = outputs[-1][3]
+    command_text = " ".join(str(part) for cmd in metadata["commands"] for part in cmd)
+    assert "full_qsiprep_run: false" in metadata["inspect_tail"]
+    assert "max_runtime_sec: 2100" in metadata["inspect_tail"]
+    assert "qsiprep /data /out participant" not in command_text
+    assert "--eddy-config" not in command_text
+    assert "app.workflows.dwi_fast_dti run" in command_text
+
+
+def test_task_result_summary_endpoint_returns_frontend_contract(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
+    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
+    from app.db import database
+    from app.db.database import now_iso
+    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
+
+    database.init_db()
+    client = TestClient(app)
+    project = client.post('/projects', json={'name': 'P-result-summary'}).json()
+    nii = tmp_path / 'sub-001_T1w.nii.gz'
+    make_nifti(nii)
+    with nii.open('rb') as f:
+        uploaded = client.post(f"/projects/{project['id']}/upload", files={'file': (nii.name, f, 'application/gzip')}).json()
+    summary_dir = tmp_path / 'projects' / str(project['id']) / 'derivatives' / '99' / 'output' / 'summary'
+    summary_dir.mkdir(parents=True)
+    summary = summary_dir / 't1_result_summary.json'
+    summary.write_text(
+        json.dumps({
+            'contract_version': '1.0',
+            'task_id': 99,
+            'workflow_type': 't1_deepprep',
+            'modality': 'T1',
+            'spaces': ['T1w', 'MNI152'],
+            'feature_groups': ['segmentation_volumes'],
+            'outputs': {},
+            'provenance': {},
+        }),
+        encoding='utf-8',
+    )
+    with database.connect() as conn:
+        conn.execute(
+            "INSERT INTO tasks(id, project_id, series_id, workflow_type, status, progress, log_path, created_at) VALUES(?,?,?,?,?,?,?,?)",
+            (99, project['id'], uploaded['series']['id'], 't1_deepprep', 'completed', 100, str(tmp_path / 'task.log'), now_iso()),
+        )
+        conn.execute(
+            "INSERT INTO outputs(task_id, output_type, path, preview_path, metadata_json, created_at) VALUES(?,?,?,?,?,?)",
+            (99, 'json', str(summary), None, json.dumps({'kind': 'result_summary'}), now_iso()),
+        )
+
+    result = client.get('/tasks/99/result-summary')
+
+    assert result.status_code == 200
+    assert result.json()['workflow_type'] == 't1_deepprep'
+    assert result.json()['spaces'] == ['T1w', 'MNI152']
+
+
+def test_t1_deepprep_pipeline_registers_real_freesurfer_stats_summary(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
+    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
+    from app.db import database
+    from app.db.database import now_iso
+    from app.workflows import pipeline
+    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(pipeline, 'PROJECTS_ROOT', tmp_path / 'projects')
+
+    database.init_db()
+    client = TestClient(app)
+    project = client.post('/projects', json={'name': 'P-t1-real-summary'}).json()
+    nii = tmp_path / 'sub-001_T1w.nii.gz'
+    make_nifti(nii)
+    with nii.open('rb') as f:
+        uploaded = client.post(f"/projects/{project['id']}/upload", files={'file': (nii.name, f, 'application/gzip')}).json()
+
+    log_path = tmp_path / 'task.log'
+    with database.connect() as conn:
+        conn.execute(
+            "INSERT INTO tasks(id, project_id, series_id, workflow_type, status, progress, log_path, created_at) VALUES(?,?,?,?,?,?,?,?)",
+            (120, project['id'], uploaded['series']['id'], 't1_deepprep', 'queued', 0, str(log_path), now_iso()),
+        )
+
+    def fake_run_command(task, cmd, task_log_path):
+        out = tmp_path / 'projects' / str(project['id']) / 'derivatives' / '120' / 'output'
+        stats = out / 'Recon' / 'sub-01' / 'stats'
+        stats.mkdir(parents=True)
+        mri = out / 'Recon' / 'sub-01' / 'mri'
+        (mri / 'transforms').mkdir(parents=True)
+        (mri / 'aparc+aseg.mgz').write_bytes(b'mgz')
+        (mri / 'transforms' / 'talairach.xfm').write_text('xfm', encoding='utf-8')
+        (stats / 'brainvol.stats').write_text(
+            '# Measure BrainSeg, BrainSegVol, Brain Segmentation Volume, 938722.000000000000, mm^3\n',
+            encoding='utf-8',
+        )
+        aparc = '\n'.join([
+            '# ColHeaders StructName NumVert SurfArea GrayVol ThickAvg ThickStd MeanCurv GausCurv FoldInd CurvInd',
+            'bankssts 1227 925 1890 2.133 0.453 0.104 0.021 5 1.1',
+        ])
+        (stats / 'lh.aparc.stats').write_text(aparc, encoding='utf-8')
+        (stats / 'rh.aparc.stats').write_text(aparc, encoding='utf-8')
+
+    monkeypatch.setattr(pipeline, '_run_command', fake_run_command)
+
+    pipeline.run_pipeline_task(120)
+
+    result = client.get('/tasks/120/result-summary')
+    assert result.status_code == 200
+    payload = result.json()
+    assert payload['provenance']['placeholder_outputs'] is False
+    assert payload['provenance']['extraction_status'] == 'real_deepprep_freesurfer_stats'
+    assert payload['outputs']['tables'][0]['name'] == 't1_brain_measures'
+    assert any(item['name'] == 't1_aparc_aseg' for item in payload['outputs']['maps'])
+    assert any(item['name'] == 'talairach_xfm' for item in payload['outputs']['transforms'])
 
 
 def test_dwi_validate_accepts_versioned_eddy_cuda(monkeypatch, tmp_path):
@@ -442,6 +756,96 @@ def test_qsirecon_validate_records_gpu_visibility(monkeypatch, tmp_path):
 
     metadata = outputs[0][3]
     assert 'QSIRecon GPU visible with Docker --gpus all: True' in metadata['inspect_tail']
+    assert metadata['qsirecon_profile']['profile'] == 'dki'
+    assert metadata['qsirecon_profile']['recon_spec'] == 'dipy_dki'
+    assert metadata['legacy_snapshot_path'].endswith('qsirecon_legacy_dipy_dki_command.json')
+
+
+def test_qsirecon_defaults_to_dipy_dki_with_notrack(monkeypatch, tmp_path):
+    import importlib
+    import app.core.config as app_config
+    from app.workflows import pipeline
+
+    monkeypatch.delenv("IMAGE_AGENT_QSIRECON_PROFILE", raising=False)
+    importlib.reload(app_config)
+    importlib.reload(pipeline)
+    monkeypatch.setattr(pipeline, "FS_LICENSE", tmp_path / "license.txt")
+    dirs = {
+        "root": tmp_path,
+        "bids": tmp_path / "bids",
+        "output": tmp_path / "output",
+        "work": tmp_path / "work",
+    }
+
+    cmd = pipeline._commands("dwi_qsirecon", dirs)[0]
+
+    assert "--recon-spec" in cmd
+    assert cmd[cmd.index("--recon-spec") + 1] == "dipy_dki"
+    assert "--notrack" in cmd
+    assert "--skip-odf-reports" in cmd
+
+
+def test_qsirecon_tractography_profile_switches_recon_spec(monkeypatch, tmp_path):
+    import importlib
+    import app.core.config as app_config
+    from app.workflows import pipeline
+
+    monkeypatch.setenv("IMAGE_AGENT_QSIRECON_PROFILE", "tractography")
+    importlib.reload(app_config)
+    importlib.reload(pipeline)
+    monkeypatch.setattr(pipeline, "FS_LICENSE", tmp_path / "license.txt")
+    dirs = {
+        "root": tmp_path,
+        "bids": tmp_path / "bids",
+        "output": tmp_path / "output",
+        "work": tmp_path / "work",
+    }
+
+    cmd = pipeline._commands("dwi_qsirecon", dirs)[0]
+
+    assert "--recon-spec" in cmd
+    assert cmd[cmd.index("--recon-spec") + 1] == "mrtrix_multishell_msmt_noACT"
+    assert "--notrack" not in cmd
+    assert "--skip-odf-reports" not in cmd
+
+
+def test_qsirecon_invalid_profile_fails_fast(monkeypatch, tmp_path):
+    import importlib
+    import app.core.config as app_config
+    from app.workflows import pipeline
+
+    monkeypatch.setenv("IMAGE_AGENT_QSIRECON_PROFILE", "typo_profile")
+    importlib.reload(app_config)
+    importlib.reload(pipeline)
+    monkeypatch.setattr(pipeline, "FS_LICENSE", tmp_path / "license.txt")
+    dirs = {
+        "root": tmp_path,
+        "bids": tmp_path / "bids",
+        "output": tmp_path / "output",
+        "work": tmp_path / "work",
+    }
+
+    with pytest.raises(RuntimeError, match="Unsupported IMAGE_AGENT_QSIRECON_PROFILE"):
+        pipeline._commands("dwi_qsirecon", dirs)
+
+    monkeypatch.delenv("IMAGE_AGENT_QSIRECON_PROFILE", raising=False)
+    importlib.reload(app_config)
+    importlib.reload(pipeline)
+
+
+def test_qsirecon_legacy_snapshot_is_written(tmp_path):
+    from app.workflows import pipeline
+
+    snapshot = pipeline._write_qsirecon_legacy_snapshot(tmp_path)
+
+    assert snapshot.exists()
+    payload = json.loads(snapshot.read_text(encoding="utf-8"))
+    assert payload["recon_spec"] == "dipy_dki"
+    assert "--notrack" in payload["extra_flags"]
+    assert payload["image"] == "pennlinc/qsirecon:latest"
+    assert payload["input_type"] == "qsiprep"
+    assert payload["command_template"][0:4] == ["docker", "run", "--rm", "--gpus"]
+    assert "dipy_dki" in payload["command_template"]
 
 
 def test_dwi_qsi_full_validate_fails_without_eddy_cuda(monkeypatch, tmp_path):
@@ -691,8 +1095,69 @@ def test_mixed_dataset_ingest_inventory_and_bids(tmp_path, monkeypatch):
     assert inventory['post_conversion_counts']['by_modality']['BOLD'] >= 1
     assert any(x['sequence'] == 'T2_FLAIR' for x in inventory['recognized_unsupported_sequences'])
     assert all('bids/rawdata/' in x['bids_path'] for x in inventory['series'])
+    by_modality = {item['modality']: item for item in inventory['series']}
+    assert by_modality['T1']['workflow_eligibility']['primary_recommendation']['workflow_type'] == 't1_deepprep_anat_report'
+    assert by_modality['BOLD']['workflow_eligibility']['primary_recommendation']['workflow_type'] == 'bold_fmriprep_xcpd_report'
+    assert by_modality['DWI']['workflow_eligibility']['production_task_created'] is False
+    assert not by_modality['DWI']['workflow_eligibility']['runnable_workflows']
+    dwi_blockers = {
+        blocked['workflow_type']: blocked['blocking_reasons']
+        for blocked in by_modality['DWI']['workflow_eligibility']['blocked_workflows']
+    }
+    assert 'dwi_fast_gpu_dti' in dwi_blockers
+    assert any('JSON sidecar' in reason for reason in dwi_blockers['dwi_fast_gpu_dti'])
+    flair_eligibility = by_modality['FLAIR']['workflow_eligibility']
+    assert flair_eligibility['primary_recommendation'] is None
+    assert not flair_eligibility['runnable_workflows']
+    assert any(
+        'not supported for processing' in reason or 'Current software does not support' in reason
+        for blocked in flair_eligibility['blocked_workflows']
+        for reason in blocked['blocking_reasons']
+    )
     polled = client.get(f"/projects/{project['id']}/datasets/{session['id']}/inventory").json()
     assert polled['inventory']['post_conversion_counts'] == inventory['post_conversion_counts']
+    assert polled['inventory']['series'][0]['workflow_eligibility']['production_task_created'] is False
+    assert client.get(f"/projects/{project['id']}/tasks").json() == []
+
+
+def test_mixed_dataset_ingest_keeps_nifti_inventory_when_dcm2niix_missing(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
+    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
+    from app.db import database
+    from app.imaging import ingest
+    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(ingest, 'PROJECTS_ROOT', tmp_path / 'projects')
+
+    def missing_dcm2niix(*args, **kwargs):
+        raise FileNotFoundError("dcm2niix")
+
+    monkeypatch.setattr(ingest.subprocess, 'run', missing_dcm2niix)
+    database.init_db()
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w') as z:
+        tmp = tmp_path / 'subj1_T1w.nii.gz'
+        make_nifti(tmp, shape=(8, 8, 8))
+        z.writestr('subj1/anat/subj1_T1w.nii.gz', tmp.read_bytes())
+        z.writestr('subj1/dicom/IM0001.dcm', b'\0' * 128 + b'DICM' + b'fake')
+
+    client = TestClient(app)
+    project = client.post('/projects', json={'name': 'P-missing-dcm2niix'}).json()
+    session = client.post(
+        f"/projects/{project['id']}/datasets/upload-session",
+        json={'label': 'mixed.zip', 'source_type': 'folder_or_archive'},
+    ).json()
+    result = client.post(
+        f"/projects/{project['id']}/datasets/{session['id']}/ingest",
+        files={'archive': ('mixed.zip', buf.getvalue(), 'application/zip')},
+    ).json()
+
+    inventory = result['inventory']
+    assert result['status'] == 'completed_with_partial_failures'
+    assert inventory['dicom']['found_files'] == 1
+    assert inventory['dicom']['conversion_status'] == 'failed'
+    assert 'dcm2niix executable not found' in inventory['dicom']['failures'][0]['log_tail']
+    assert inventory['post_conversion_counts']['by_modality']['T1'] == 1
 
 
 def test_deepseek_chat_provider_can_be_used(tmp_path, monkeypatch):
@@ -715,6 +1180,80 @@ def test_deepseek_chat_provider_can_be_used(tmp_path, monkeypatch):
     res = client.post('/chat', json={'project_id': project['id'], 'message': '帮我解释当前项目'}).json()
     assert res['provider'] == 'deepseek'
     assert res['reply'] == 'DeepSeek response'
+
+
+def test_chat_status_uses_requested_task_ids_beyond_recent_limit(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
+    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
+    from app.db import database
+    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
+
+    database.init_db()
+    client = TestClient(app)
+    project = client.post('/projects', json={'name': 'P-chat-status'}).json()
+    with database.connect() as conn:
+        for task_id in range(41, 75):
+            conn.execute(
+                "INSERT INTO tasks(id, project_id, series_id, workflow_type, status, progress, log_path, created_at) VALUES(?,?,?,?,?,?,?,?)",
+                (
+                    task_id,
+                    project['id'],
+                    1,
+                    't1_deepprep' if task_id == 41 else 'older_workflow',
+                    'completed',
+                    100,
+                    str(tmp_path / f'{task_id}.log'),
+                    f'2026-05-01T00:{task_id:02d}:00+00:00',
+                ),
+            )
+        for task_id, workflow in ((111, 'bold_second_level'), (114, 'dwi_fast_gpu_dti')):
+            conn.execute(
+                "INSERT INTO tasks(id, project_id, series_id, workflow_type, status, progress, log_path, created_at) VALUES(?,?,?,?,?,?,?,?)",
+                (task_id, project['id'], 1, workflow, 'completed', 100, str(tmp_path / f'{task_id}.log'), '2026-05-02T00:00:00+00:00'),
+            )
+
+    res = client.post('/chat', json={'project_id': project['id'], 'message': '查看任务41、111、114的状态，并建议下一步'}).json()
+
+    assert res['provider'] == 'rules'
+    assert res['intent'] == 'status'
+    assert '#41 t1_deepprep completed 100%' in res['reply']
+    assert '#111 bold_second_level completed 100%' in res['reply']
+    assert '#114 dwi_fast_gpu_dti completed 100%' in res['reply']
+    assert res['recommended_next_step']
+    assert res['tool_invocations']
+
+
+def test_chat_mentions_real_bold_metric_outputs_after_implementation(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
+    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
+    from app.db import database
+    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
+
+    database.init_db()
+    client = TestClient(app)
+    reply = client.post('/chat', json={'message': 'Can you compute ALFF and seed connectivity?'}).json()['reply']
+    assert 'ALFF' in reply
+    assert 'seed-to-ROI' in reply
+    assert 'fixed-coordinate spherical seed' in reply
+
+
+def test_chat_exposes_intent_and_next_step_hints(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
+    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
+    from app.db import database
+    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
+
+    database.init_db()
+    client = TestClient(app)
+    payload = client.post('/chat', json={'message': 'show me task status and next step'}).json()
+    assert payload['intent'] in {'status', 'next_step'}
+    assert payload['recommended_next_step']
+    assert payload['tool_chain_hint']
+    assert any(item['tool'] == 'inspect_task_status' for item in payload['tool_invocations'])
+    assert payload['rag_mode'] in {'langgraph', 'fallback'}
 
 
 

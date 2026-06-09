@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en">
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Running MRIQC &mdash; mriqc 26.0.0.dev93+gc030ac191 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/sphinx_highlight.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="author" title="About these documents" href="about.html" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Image Quality Metrics (IQMs)" href="measures.html" />
+    <link rel="prev" title="Installing MRIQC" href="install.html" /> 
+<script async type="text/javascript" src="/_/static/javascript/readthedocs-addons.js"></script><meta name="readthedocs-project-slug" content="mriqc" /><meta name="readthedocs-version-slug" content="latest" /><meta name="readthedocs-resolver-filename" content="/usage.html" /><meta name="readthedocs-http-status" content="200" /></head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            mriqc
+          </a>
+              <div class="version">
+                26.0.0.dev93
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="about.html">Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installing <em>MRIQC</em></a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Running <em>MRIQC</em></a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#containerized-execution-with-docker-and-singularity-apptainer">Containerized execution with <em>Docker</em> and <em>Singularity</em>/<em>Apptainer</em></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#mriqc-can-fetch-data-in-datalad-datasets"><em>MRIQC</em> can fetch data in <em>DataLad</em> datasets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#troubleshooting">Troubleshooting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#a-bids-apps-command-line-interface">A <em>BIDS Apps</em> command line interface</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#command-line-interface">Command line interface</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#positional-arguments">Positional Arguments</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#named-arguments">Named Arguments</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#options-for-filtering-bids-queries">Options for filtering BIDS queries</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#options-to-handle-performance">Options to handle performance</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#instrumental-options">Instrumental options</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#specific-settings-for-ants">Specific settings for ANTs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#diffusion-mri-workflow-configuration">Diffusion MRI workflow configuration</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#functional-mri-workflow-configuration">Functional MRI workflow configuration</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#running-mriqc-on-hpc-with-singularity-apptainer">Running <em>MRIQC</em> on HPC with <em>Singularity</em>/<em>Apptainer</em></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="measures.html">Image Quality Metrics (IQMs)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reports.html">Visual Reports</a></li>
+<li class="toctree-l1"><a class="reference internal" href="workflows.html">Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="dsa.html">Data Sharing Agreement</a></li>
+<li class="toctree-l1"><a class="reference internal" href="license.html">About the <em>NiPreps</em> framework licensing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="changes.html">What’s new</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">mriqc</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Running <em>MRIQC</em></li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/usage.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="running-mriqc">
+<span id="id1"></span><h1>Running <em>MRIQC</em><a class="headerlink" href="#running-mriqc" title="Permalink to this heading"></a></h1>
+<p><em>MRIQC</em> is a <a class="reference external" href="http://bids-apps.neuroimaging.io/">BIDS-App</a> <a class="reference internal" href="#bidsapps" id="id2"><span>[BIDSApps]</span></a>,
+and therefore it inherently understands the <abbr title="brain imaging data structure">BIDS</abbr> standard <a class="reference internal" href="#bids" id="id3"><span>[BIDS]</span></a>.
+Before moving forward, please make sure to have read and understood
+<em>NiPreps</em>’s
+<a class="reference external" href="https://www.nipreps.org/apps/framework/">introductory documentation</a>).</p>
+<section id="containerized-execution-with-docker-and-singularity-apptainer">
+<h2>Containerized execution with <em>Docker</em> and <em>Singularity</em>/<em>Apptainer</em><a class="headerlink" href="#containerized-execution-with-docker-and-singularity-apptainer" title="Permalink to this heading"></a></h2>
+<p>For containerized execution with <em>Docker</em> or <em>Singularity</em>/<em>Apptainer</em>, please
+follow the documentation on the <em>NiPreps</em> site, which contains
+tip and troubleshooting guidelines for both
+<a class="reference external" href="https://www.nipreps.org/apps/docker/">Docker</a>, and
+<a class="reference external" href="https://www.nipreps.org/apps/singularity/">Singularity or Apptainer</a>.
+In addition to container-specific guidelines, the documentation
+also includes specific
+<a class="reference external" href="https://www.nipreps.org/apps/datalad/">help for processing DataLad-managed datasets</a>.</p>
+<p>The rest of this documentation page applies to both <em>bare-metal</em>
+and containerized execution modes.</p>
+</section>
+<section id="mriqc-can-fetch-data-in-datalad-datasets">
+<h2><em>MRIQC</em> can fetch data in <em>DataLad</em> datasets<a class="headerlink" href="#mriqc-can-fetch-data-in-datalad-datasets" title="Permalink to this heading"></a></h2>
+<p>As of version 22.0.3, <em>MRIQC</em> bundles <em>DataLad</em>, enabling automatic
+data fetching in <em>DataLad</em> datasets.
+Employing this feature in containerized environments may lead to
+somewhat obscure errors (see, for example,
+<a class="reference external" href="https://github.com/nipreps/mriqc/issues/1307">nipreps/mriqc#1307</a>).
+If you intend to use <em>DataLad</em> datasets, please read carefully
+<em>NiPreps</em>’ <a class="reference external" href="https://www.nipreps.org/apps/datalad/">help for processing DataLad-managed datasets</a>.</p>
+<p>Alternatively, this feature can be disabled by adding
+<code class="docutils literal notranslate"><span class="pre">--no-datalad-get</span></code> to the command line.
+This will separate <em>DataLad</em> management from <em>MRIQC</em>’s operation,
+which can be an effective way of debugging issues and averting
+erroneous conditions.</p>
+</section>
+<section id="troubleshooting">
+<h2>Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permalink to this heading"></a></h2>
+<p>If you encounter problems, please check our
+<a class="reference external" href="https://www.nipreps.org/apps/singularity/">NiPreps Guidelines for Singularity or Apptainer</a>.
+Common tips and guidelines that used to be found within <em>MRIQC</em>’s
+or <em>fMRIPrep</em>’s documentation sites have been relocated in the
+general <em>NiPreps</em> website.</p>
+</section>
+<section id="a-bids-apps-command-line-interface">
+<h2>A <em>BIDS Apps</em> command line interface<a class="headerlink" href="#a-bids-apps-command-line-interface" title="Permalink to this heading"></a></h2>
+<p><em>MRIQC</em> follows the <em>BIDS Apps</em> standard command line interface:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">mriqc</span> <span class="n">bids</span><span class="o">-</span><span class="n">root</span><span class="o">/</span> <span class="n">output</span><span class="o">-</span><span class="n">folder</span><span class="o">/</span> <span class="n">participant</span>
+</pre></div>
+</div>
+<p>That simple command runs <em>MRIQC</em> on all the <em>T1w</em> and <em>BOLD</em> images found
+under the BIDS-compliant folder <code class="docutils literal notranslate"><span class="pre">bids-root/</span></code>.
+The last <code class="docutils literal notranslate"><span class="pre">participant</span></code> keyword indicates that the first level analysis
+is run. (i.e. extracting the <abbr title="image quality metrics">IQMs</abbr> from the
+images retrieved within <code class="docutils literal notranslate"><span class="pre">bids-root/</span></code>).
+The second level (<code class="docutils literal notranslate"><span class="pre">group</span></code>) is automatically run if no particular subject
+is provided for analysis.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If the argument <code class="code docutils literal notranslate"><span class="pre">--participant-label</span></code> is not provided, then all
+subjects will be processed and the group level analysis will
+automatically be executed without need of running the command in item 3.</p>
+</div>
+<p>To specify one particular subject, the <code class="docutils literal notranslate"><span class="pre">--participant-label</span></code> argument
+can be used:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">mriqc</span> <span class="n">bids</span><span class="o">-</span><span class="n">root</span><span class="o">/</span> <span class="n">output</span><span class="o">-</span><span class="n">folder</span><span class="o">/</span> <span class="n">participant</span> <span class="o">--</span><span class="n">participant</span><span class="o">-</span><span class="n">label</span> <span class="n">S01</span> <span class="n">S02</span> <span class="n">S03</span>
+</pre></div>
+</div>
+<p>That command will run MRIQC only on the subjects indicated: only
+<code class="docutils literal notranslate"><span class="pre">bids-root/sub-S01</span></code>, <code class="docutils literal notranslate"><span class="pre">bids-root/sub-S02</span></code>, and <code class="docutils literal notranslate"><span class="pre">bids-root/sub-S03</span></code>
+will be processed.
+In this case, the <code class="docutils literal notranslate"><span class="pre">group</span></code> level will not be triggered automatically.
+We generate the <code class="docutils literal notranslate"><span class="pre">group</span></code> level results (the group level report and the
+features CSV table) with:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">mriqc</span> <span class="n">bids</span><span class="o">-</span><span class="n">root</span><span class="o">/</span> <span class="n">output</span><span class="o">-</span><span class="n">folder</span><span class="o">/</span> <span class="n">group</span>
+</pre></div>
+</div>
+<p>Examples of the generated visual reports are found
+in <a class="reference internal" href="reports.html#reports"><span class="std std-ref">The MRIQC Reports</span></a>.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>MRIQC by default attempts to upload anonymized quality metrics to a publicly accessible
+web server (<a class="reference external" href="http://mriqc.nimh.nih.gov/">mriqc.nimh.nih.gov</a>). The uploaded data consists
+only of calculated quality metrics and scanning parameters. It removes all personal
+health information and participant identifiers. We try to collect this data to build normal
+distributions for improved outlier detection, but if you do not wish to participate you can
+disable the submission with the <code class="docutils literal notranslate"><span class="pre">--no-sub</span></code> flag.</p>
+</div>
+<aside class="topic">
+<p class="topic-title">BIDS data organization</p>
+<p>The software automatically finds the data the input folder if it
+follows the <abbr title="brain imaging data structure">BIDS</abbr> standard <a class="reference internal" href="#bids" id="id4"><span>[BIDS]</span></a>.
+A fast and easy way to check that your dataset fulfills the
+<abbr title="brain imaging data structure">BIDS</abbr> standard is
+the <a class="reference external" href="https://github.com/bids-standard/bids-validator">BIDS validator</a>.</p>
+</aside>
+<aside class="topic">
+<p class="topic-title">BIDS-App levels</p>
+<p>In the <code class="docutils literal notranslate"><span class="pre">participant</span></code> level, all individual images to be processed are run
+through the pipeline, and the <a class="reference internal" href="measures.html#measures"><span class="std std-ref">MRIQC measures</span></a> are extracted and
+the individual reports (see <a class="reference internal" href="reports.html#reports"><span class="std std-ref">The MRIQC Reports</span></a>) generated.
+In the <code class="docutils literal notranslate"><span class="pre">group</span></code> level, the <abbr title="image quality metrics">IQMs</abbr> extracted in
+first place are combined in a table and the group reports are generated.</p>
+</aside>
+<section id="command-line-interface">
+<h3>Command line interface<a class="headerlink" href="#command-line-interface" title="Permalink to this heading"></a></h3>
+<p><p>MRIQC 26.0.0.dev93+gc030ac191
+Automated Quality Control and visual reports for Quality Assessment of structural (T1w, T2w) and functional MRI of the brain.</p>
+<p>IMPORTANT: Anonymized quality metrics (IQMs) will be submitted to MRIQC’s metrics repository. Submission of IQMs can be disabled using the <code class="docutils literal notranslate"><span class="pre">--no-sub</span></code> argument. Please visit <a class="reference external" href="https://mriqc.readthedocs.io/en/latest/dsa.html">https://mriqc.readthedocs.io/en/latest/dsa.html</a> to revise MRIQC’s Data Sharing Agreement.</p>
+</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">usage</span><span class="p">:</span> <span class="n">mriqc</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">version</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">v</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">species</span> <span class="p">{</span><span class="n">human</span><span class="p">,</span><span class="n">rat</span><span class="p">}]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">participant</span><span class="o">-</span><span class="n">label</span> <span class="n">PARTICIPANT_LABEL</span> <span class="p">[</span><span class="n">PARTICIPANT_LABEL</span> <span class="o">...</span><span class="p">]]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">bids</span><span class="o">-</span><span class="nb">filter</span><span class="o">-</span><span class="n">file</span> <span class="n">PATH</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">session</span><span class="o">-</span><span class="nb">id</span> <span class="p">[</span><span class="n">SESSION_ID</span> <span class="o">...</span><span class="p">]]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">run</span><span class="o">-</span><span class="nb">id</span> <span class="p">[</span><span class="n">RUN_ID</span> <span class="o">...</span><span class="p">]]</span> <span class="p">[</span><span class="o">--</span><span class="n">task</span><span class="o">-</span><span class="nb">id</span> <span class="p">[</span><span class="n">TASK_ID</span> <span class="o">...</span><span class="p">]]</span>
+             <span class="p">[</span><span class="o">-</span><span class="n">m</span> <span class="p">[{</span><span class="n">T1w</span><span class="p">,</span><span class="n">T2w</span><span class="p">,</span><span class="n">bold</span><span class="p">,</span><span class="n">dwi</span><span class="p">}</span> <span class="o">...</span><span class="p">]]</span> <span class="p">[</span><span class="o">--</span><span class="n">dsname</span> <span class="n">DSNAME</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">bids</span><span class="o">-</span><span class="n">database</span><span class="o">-</span><span class="nb">dir</span> <span class="n">PATH</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">bids</span><span class="o">-</span><span class="n">database</span><span class="o">-</span><span class="n">wipe</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">no</span><span class="o">-</span><span class="n">datalad</span><span class="o">-</span><span class="n">get</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">nprocs</span> <span class="n">NPROCS</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">omp</span><span class="o">-</span><span class="n">nthreads</span> <span class="n">OMP_NTHREADS</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">mem</span> <span class="n">MEMORY_GB</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">testing</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">f</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">pdb</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">w</span> <span class="n">WORK_DIR</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">verbose</span><span class="o">-</span><span class="n">reports</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">reports</span><span class="o">-</span><span class="n">only</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">write</span><span class="o">-</span><span class="n">graph</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">dry</span><span class="o">-</span><span class="n">run</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">resource</span><span class="o">-</span><span class="n">monitor</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">use</span><span class="o">-</span><span class="n">plugin</span> <span class="n">USE_PLUGIN</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">crashfile</span><span class="o">-</span><span class="nb">format</span> <span class="p">{</span><span class="n">txt</span><span class="p">,</span><span class="n">pklz</span><span class="p">}]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">no</span><span class="o">-</span><span class="n">sub</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">email</span> <span class="n">EMAIL</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">webapi</span><span class="o">-</span><span class="n">url</span> <span class="n">WEBAPI_URL</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">webapi</span><span class="o">-</span><span class="n">port</span> <span class="n">WEBAPI_PORT</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">upload</span><span class="o">-</span><span class="n">strict</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">notrack</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">ants</span><span class="o">-</span><span class="nb">float</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">ants</span><span class="o">-</span><span class="n">settings</span> <span class="n">ANTS_SETTINGS</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">--</span><span class="nb">min</span><span class="o">-</span><span class="n">dwi</span><span class="o">-</span><span class="n">length</span> <span class="n">MIN_LEN_DWI</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="nb">min</span><span class="o">-</span><span class="n">bold</span><span class="o">-</span><span class="n">length</span> <span class="n">MIN_LEN_BOLD</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">fft</span><span class="o">-</span><span class="n">spikes</span><span class="o">-</span><span class="n">detector</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">fd_thres</span> <span class="n">FD_THRES</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">deoblique</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">despike</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">start</span><span class="o">-</span><span class="n">idx</span> <span class="n">START_IDX</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">stop</span><span class="o">-</span><span class="n">idx</span> <span class="n">STOP_IDX</span><span class="p">]</span>
+             <span class="n">bids_dir</span> <span class="n">output_dir</span> <span class="p">{</span><span class="n">participant</span><span class="p">,</span><span class="n">group</span><span class="p">}</span> <span class="p">[{</span><span class="n">participant</span><span class="p">,</span><span class="n">group</span><span class="p">}</span> <span class="o">...</span><span class="p">]</span>
+</pre></div>
+</div>
+<section id="positional-arguments">
+<h4>Positional Arguments<a class="headerlink" href="#positional-arguments" title="Permalink to this heading"></a></h4>
+<dl class="option-list">
+<dt><kbd>bids_dir</kbd></dt>
+<dd><p>The root folder of a BIDS valid dataset (sub-XXXXX folders should be found at the top level in this folder).</p>
+</dd>
+<dt><kbd>output_dir</kbd></dt>
+<dd><p>The directory where the output files should be stored. If you are running group level analysis this folder should be prepopulated with the results of the participant level analysis.</p>
+</dd>
+<dt><kbd>analysis_level</kbd></dt>
+<dd><p>Possible choices: participant, group</p>
+<p>Level of the analysis that will be performed. Multiple participant level analyses can be run independently (in parallel) using the same output_dir.</p>
+</dd>
+</dl>
+</section>
+<section id="named-arguments">
+<h4>Named Arguments<a class="headerlink" href="#named-arguments" title="Permalink to this heading"></a></h4>
+<dl class="option-list">
+<dt><kbd>--version</kbd></dt>
+<dd><p>show program’s version number and exit</p>
+</dd>
+<dt><kbd>-v, --verbose</kbd></dt>
+<dd><p>Increases log verbosity for each occurrence, debug level is -vvv.</p>
+</dd>
+<dt><kbd>--species</kbd></dt>
+<dd><p>Possible choices: human, rat</p>
+<p>Use appropriate template for population</p>
+</dd>
+</dl>
+</section>
+<section id="options-for-filtering-bids-queries">
+<h4>Options for filtering BIDS queries<a class="headerlink" href="#options-for-filtering-bids-queries" title="Permalink to this heading"></a></h4>
+<dl class="option-list">
+<dt><kbd>--participant-label, --participant_label, --participant-labels, --participant_labels</kbd></dt>
+<dd><p>A space delimited list of participant identifiers or a single identifier (the sub- prefix can be removed).</p>
+</dd>
+<dt><kbd>--bids-filter-file</kbd></dt>
+<dd><p>a JSON file describing custom BIDS input filter using pybids {&lt;suffix&gt;:{&lt;entity&gt;:&lt;filter&gt;,…},…} (<a class="reference external" href="https://github.com/bids-standard/pybids/blob/master/src/bids/layout/config/bids.json">https://github.com/bids-standard/pybids/blob/master/src/bids/layout/config/bids.json</a>)</p>
+</dd>
+<dt><kbd>--session-id</kbd></dt>
+<dd><p>Filter input dataset by session ID.</p>
+</dd>
+<dt><kbd>--run-id</kbd></dt>
+<dd><p>DEPRECATED - This argument will be disabled. Use <code class="docutils literal notranslate"><span class="pre">--bids-filter-file</span></code> instead.</p>
+</dd>
+<dt><kbd>--task-id</kbd></dt>
+<dd><p>Filter input dataset by task ID.</p>
+</dd>
+<dt><kbd>-m, --modalities</kbd></dt>
+<dd><p>Possible choices: T1w, T2w, bold, dwi</p>
+<p>Filter input dataset by MRI type.</p>
+</dd>
+<dt><kbd>--dsname</kbd></dt>
+<dd><p>A dataset name.</p>
+</dd>
+<dt><kbd>--bids-database-dir</kbd></dt>
+<dd><p>Path to an existing PyBIDS database folder, for faster indexing (especially useful for large datasets).</p>
+</dd>
+<dt><kbd>--bids-database-wipe</kbd></dt>
+<dd><p>Wipe out previously existing BIDS indexing caches, forcing re-indexing.</p>
+</dd>
+<dt><kbd>--no-datalad-get</kbd></dt>
+<dd><p>Disable attempting to get remote files in DataLad datasets.</p>
+</dd>
+</dl>
+</section>
+<section id="options-to-handle-performance">
+<h4>Options to handle performance<a class="headerlink" href="#options-to-handle-performance" title="Permalink to this heading"></a></h4>
+<dl class="option-list">
+<dt><kbd>--nprocs, --n_procs, --n_cpus, -n-cpus</kbd></dt>
+<dd><p>Maximum number of simultaneously running parallel processes executed by <em>MRIQC</em> (e.g., several instances of ANTs’ registration). However, when <code class="docutils literal notranslate"><span class="pre">--nprocs</span></code> is greater or equal to the <code class="docutils literal notranslate"><span class="pre">--omp-nthreads</span></code> option, it also sets the maximum number of threads that simultaneously running processes may aggregate (meaning, with <code class="docutils literal notranslate"><span class="pre">--nprocs</span> <span class="pre">16</span> <span class="pre">--omp-nthreads</span> <span class="pre">8</span></code> a maximum of two 8-CPU-threaded processes will be running at a given time). Under this mode of operation, <code class="docutils literal notranslate"><span class="pre">--nprocs</span></code> sets the maximum number of processors that can be assigned work within an <em>MRIQC</em> job, which includes all the processors used by currently running single- and multi-threaded processes. If <code class="docutils literal notranslate"><span class="pre">None</span></code>, the number of CPUs available will be automatically assigned (which may not be what you want in, e.g., shared systems like a HPC cluster.</p>
+</dd>
+<dt><kbd>--omp-nthreads, --ants-nthreads</kbd></dt>
+<dd><p>Maximum number of threads that multi-threaded processes executed by <em>MRIQC</em> (e.g., ANTs’ registration) can use. If <code class="docutils literal notranslate"><span class="pre">None</span></code>, the number of CPUs available will be automatically assigned (which may not be what you want in, e.g., shared systems like a HPC cluster.</p>
+</dd>
+<dt><kbd>--mem, --mem_gb, --mem-gb</kbd></dt>
+<dd><p>Upper bound memory limit for MRIQC processes.</p>
+</dd>
+<dt><kbd>--testing</kbd></dt>
+<dd><p>Use testing settings for a minimal footprint.</p>
+</dd>
+<dt><kbd>-f, --float32</kbd></dt>
+<dd><p>Cast the input data to float32 if it’s represented in higher precision (saves space and improves performance).</p>
+</dd>
+<dt><kbd>--pdb</kbd></dt>
+<dd><p>Open Python debugger (pdb) on exceptions.</p>
+</dd>
+</dl>
+</section>
+<section id="instrumental-options">
+<h4>Instrumental options<a class="headerlink" href="#instrumental-options" title="Permalink to this heading"></a></h4>
+<dl class="option-list">
+<dt><kbd>-w, --work-dir</kbd></dt>
+<dd><p>Path where intermediate results should be stored.</p>
+</dd>
+<dt><kbd>--verbose-reports</kbd></dt>
+<dd></dd>
+<dt><kbd>--reports-only</kbd></dt>
+<dd></dd>
+<dt><kbd>--write-graph</kbd></dt>
+<dd><p>Write workflow graph.</p>
+</dd>
+<dt><kbd>--dry-run</kbd></dt>
+<dd><p>Do not run the workflow.</p>
+</dd>
+<dt><kbd>--resource-monitor, --profile</kbd></dt>
+<dd><p>Hook up the resource profiler callback to nipype.</p>
+</dd>
+<dt><kbd>--use-plugin</kbd></dt>
+<dd><p>Nipype plugin configuration file.</p>
+</dd>
+<dt><kbd>--crashfile-format</kbd></dt>
+<dd><p>Possible choices: txt, pklz</p>
+<p>Nipype crashfile format</p>
+</dd>
+<dt><kbd>--no-sub</kbd></dt>
+<dd><p>Turn off submission of anonymized quality metrics to MRIQC’s metrics repository.</p>
+</dd>
+<dt><kbd>--email</kbd></dt>
+<dd><p>Email address to include with quality metric submission.</p>
+</dd>
+<dt><kbd>--webapi-url</kbd></dt>
+<dd><p>IP address where the MRIQC WebAPI is listening.</p>
+</dd>
+<dt><kbd>--webapi-port</kbd></dt>
+<dd><p>Port where the MRIQC WebAPI is listening.</p>
+</dd>
+<dt><kbd>--upload-strict</kbd></dt>
+<dd><p>Upload will fail if upload is strict.</p>
+</dd>
+<dt><kbd>--notrack</kbd></dt>
+<dd><p>Opt-out of sending tracking information of this run to the NiPreps developers. This information helps to improve MRIQC and provides an indicator of real world usage  crucial for obtaining funding.</p>
+</dd>
+</dl>
+</section>
+<section id="specific-settings-for-ants">
+<h4>Specific settings for ANTs<a class="headerlink" href="#specific-settings-for-ants" title="Permalink to this heading"></a></h4>
+<dl class="option-list">
+<dt><kbd>--ants-float</kbd></dt>
+<dd><p>Use float number precision on ANTs computations.</p>
+</dd>
+<dt><kbd>--ants-settings</kbd></dt>
+<dd><p>Path to JSON file with settings for ANTs.</p>
+</dd>
+</dl>
+</section>
+<section id="diffusion-mri-workflow-configuration">
+<h4>Diffusion MRI workflow configuration<a class="headerlink" href="#diffusion-mri-workflow-configuration" title="Permalink to this heading"></a></h4>
+<dl class="option-list">
+<dt><kbd>--min-dwi-length</kbd></dt>
+<dd><p>Drop DWI runs with fewer orientations than this threshold.</p>
+</dd>
+</dl>
+</section>
+<section id="functional-mri-workflow-configuration">
+<h4>Functional MRI workflow configuration<a class="headerlink" href="#functional-mri-workflow-configuration" title="Permalink to this heading"></a></h4>
+<dl class="option-list">
+<dt><kbd>--min-bold-length</kbd></dt>
+<dd><p>Drop BOLD runs with fewer time points than this threshold.</p>
+</dd>
+<dt><kbd>--fft-spikes-detector</kbd></dt>
+<dd><p>Turn on FFT based spike detector (slow).</p>
+</dd>
+<dt><kbd>--fd_thres</kbd></dt>
+<dd><p>Threshold on framewise displacement estimates to detect outliers.</p>
+</dd>
+<dt><kbd>--deoblique</kbd></dt>
+<dd><p>Deoblique the functional scans during head motion correction preprocessing.</p>
+</dd>
+<dt><kbd>--despike</kbd></dt>
+<dd><p>Despike the functional scans during head motion correction preprocessing.</p>
+</dd>
+<dt><kbd>--start-idx</kbd></dt>
+<dd><p>DEPRECATED Initial volume in functional timeseries that should be considered for preprocessing.</p>
+</dd>
+<dt><kbd>--stop-idx</kbd></dt>
+<dd><p>DEPRECATED Final volume in functional timeseries that should be considered for preprocessing.</p>
+</dd>
+</dl>
+</section>
+</section>
+</section>
+<section id="running-mriqc-on-hpc-with-singularity-apptainer">
+<h2>Running <em>MRIQC</em> on HPC with <em>Singularity</em>/<em>Apptainer</em><a class="headerlink" href="#running-mriqc-on-hpc-with-singularity-apptainer" title="Permalink to this heading"></a></h2>
+<p>We have profiled cores and memory usages with the <em>resource profiler</em>
+tool of <em>Nipype</em>.</p>
+<p>An <em>MRIQC</em> run of one subject (from the ABIDE) dataset, containing only one
+run, one BOLD task (resting-state) yielded the following report:</p>
+<blockquote>
+<div><iframe src="_static/bold-1subject-1task.html" height="345px" width="100%"></iframe><p>Using the <code class="docutils literal notranslate"><span class="pre">MultiProc</span></code> plugin of nipype with <code class="docutils literal notranslate"><span class="pre">nprocs=10</span></code>, the workflow
+nodes run across the available processors for 41.68 minutes.
+A memory peak of 8GB is reached by the end of the runtime, when the
+plotting nodes are fired up.</p>
+</div></blockquote>
+<p>We also profiled MRIQC on a dataset with 8 tasks (one run per task),
+on ds030 of OpenfMRI:</p>
+<blockquote>
+<div><iframe src="_static/bold-1subject-8tasks.html" height="345px" width="100%"></iframe><p>Again, we used <code class="docutils literal notranslate"><span class="pre">n_procs=10</span></code>. The software run for roughly about the same
+time (47.11 min). Most of the run time, memory usage keeps around a
+maximum of 10GB. Since we saw a memory consumption of 1-2GB during the
+the 1-task example, a rule of thumb may be that each task takes around
+1GB of memory.</p>
+</div></blockquote>
+<aside class="topic">
+<p class="topic-title">References</p>
+<div role="list" class="citation-list">
+<div class="citation" id="bids" role="doc-biblioentry">
+<span class="label"><span class="fn-bracket">[</span>BIDS<span class="fn-bracket">]</span></span>
+<span class="backrefs">(<a role="doc-backlink" href="#id3">1</a>,<a role="doc-backlink" href="#id4">2</a>)</span>
+<p><a class="reference external" href="http://bids.neuroimaging.io/">Brain Imaging Data Structure</a></p>
+</div>
+<div class="citation" id="bidsapps" role="doc-biblioentry">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id2">BIDSApps</a><span class="fn-bracket">]</span></span>
+<p><a class="reference external" href="http://bids-apps.neuroimaging.io/">BIDS-Apps: portable neuroimaging pipelines that understand BIDS
+datasets</a></p>
+</div>
+</div>
+</aside>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="install.html" class="btn btn-neutral float-left" title="Installing MRIQC" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="measures.html" class="btn btn-neutral float-right" title="Image Quality Metrics (IQMs)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Copyright 2016-2024, The NiPreps Developers.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,228 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" />
+  <meta name="readthedocs-addons-api-version" content="1"><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Installation &mdash; fmriprep version documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=03e43079" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/theme_overrides.css?v=0af3e540" />
+
+  
+    <link rel="canonical" href="https://fmriprep.org/en/stable/installation.html" />
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=553808b2"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="https://cdn.rawgit.com/chrisfilo/zenodo.js/v0.1/zenodo.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <script src="_static/js/versions.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Usage Notes" href="usage.html" />
+    <link rel="prev" title="fMRIPrep: A Robust Preprocessing Pipeline for fMRI Data" href="index.html" /> 
+<script async type="text/javascript" src="/_/static/javascript/readthedocs-addons.js"></script><meta name="readthedocs-project-slug" content="fmriprep" /><meta name="readthedocs-version-slug" content="stable" /><meta name="readthedocs-resolver-filename" content="/installation.html" /><meta name="readthedocs-http-status" content="200" /></head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            fmriprep
+          </a>
+              <div class="switch-menus">
+                <div class="version-switch"></div>
+                <div class="language-switch"></div>
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Installation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#containerized-execution-docker-and-singularity">Containerized execution (Docker and Singularity)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#manually-prepared-environment-python-3-10">Manually Prepared Environment (Python 3.10+)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#external-dependencies">External Dependencies</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#not-running-on-a-local-machine-data-transfer">Not running on a local machine? - Data transfer</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Usage Notes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="workflows.html">Processing pipeline details</a></li>
+<li class="toctree-l1"><a class="reference internal" href="outputs.html">Outputs of <em>fMRIPrep</em></a></li>
+<li class="toctree-l1"><a class="reference internal" href="benchmarks.html">Performance benchmarks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="spaces.html">Defining standard and nonstandard spaces where data will be resampled</a></li>
+<li class="toctree-l1"><a class="reference internal" href="faq.html">FAQ - Frequently Asked Questions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">Developers - API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="changes.html">What’s new</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">fmriprep</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Installation</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/installation.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="id1">
+<h1>Installation<a class="headerlink" href="#id1" title="Link to this heading"></a></h1>
+<p>There are two ways to install <em>fMRIPrep</em>:</p>
+<ul class="simple">
+<li><p>using container technologies (RECOMMENDED); or</p></li>
+<li><p>within a <a class="reference internal" href="#manually-prepared-environment-python-3-10">Manually Prepared Environment (Python 3.10+)</a>, also known as
+<em>bare-metal installation</em>.</p></li>
+</ul>
+<p>The <code class="docutils literal notranslate"><span class="pre">fmriprep</span></code> command-line adheres to the <a class="reference external" href="usage.html#execution-and-the-bids-format">BIDS-Apps recommendations
+for the user interface</a>.
+Therefore, the command-line has the following structure:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ fmriprep &lt;input_bids_path&gt; &lt;derivatives_path&gt; &lt;analysis_level&gt; &lt;named_options&gt;
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">fmriprep</span></code> command-line options are documented in the <a class="reference internal" href="usage.html#usage"><span class="std std-ref">Usage Notes</span></a>
+section.</p>
+<p>The command as shown works for a <em>bare-metal</em> environment set-up (second option above).
+If you choose the recommended container-based installation, then
+the command-line will be composed of a preamble to configure the
+container execution followed by the <code class="docutils literal notranslate"><span class="pre">fmriprep</span></code> command-line options
+as if you were running it on a <em>bare-metal</em> installation.
+The command-line structure above is then modified as follows:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ &lt;container_command_and_options&gt; &lt;container_image&gt; \
+     &lt;input_bids_path&gt; &lt;derivatives_path&gt; &lt;analysis_level&gt; &lt;fmriprep_named_options&gt;
+</pre></div>
+</div>
+<p>Therefore, once specified the container options and the image to be run
+the command line is the same as for the <em>bare-metal</em> installation but dropping
+the <code class="docutils literal notranslate"><span class="pre">fmriprep</span></code> executable name.</p>
+<section id="containerized-execution-docker-and-singularity">
+<h2>Containerized execution (Docker and Singularity)<a class="headerlink" href="#containerized-execution-docker-and-singularity" title="Link to this heading"></a></h2>
+<p><em>fMRIPrep</em> is a <em>NiPreps</em> application, and therefore follows some overarching principles
+of containerized execution drawn from the BIDS-Apps protocols.
+For detailed information of containerized execution of <em>NiPreps</em>, please visit the corresponding
+<a class="reference external" href="https://www.nipreps.org/apps/docker/">Docker</a>
+or <a class="reference external" href="https://www.nipreps.org/apps/singularity/">Singularity</a> subsections.
+The <em>NiPreps</em> portal also contains
+<a class="reference external" href="https://www.nipreps.org/apps/docker/#running-a-niprep-with-a-lightweight-wrapper">extended details of execution with the Docker wrapper</a>.</p>
+<p>In short, install the <code class="docutils literal notranslate"><span class="pre">fmriprep-docker</span></code> wrapper with pip:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ python -m pip install fmriprep-docker
+</pre></div>
+</div>
+<p>Then run the <code class="docutils literal notranslate"><span class="pre">fmriprep-docker</span></code> command-line as if you were running
+<code class="docutils literal notranslate"><span class="pre">fmriprep</span></code> on a <em>bare-metal</em> installation:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ fmriprep-docker &lt;input_bids_path&gt; &lt;derivatives_path&gt; &lt;analysis_level&gt; &lt;named_options&gt;
+</pre></div>
+</div>
+</section>
+<section id="manually-prepared-environment-python-3-10">
+<h2>Manually Prepared Environment (Python 3.10+)<a class="headerlink" href="#manually-prepared-environment-python-3-10" title="Link to this heading"></a></h2>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>This method is not recommended! Please consider using containers.</p>
+</div>
+<p>Make sure all of <em>fMRIPrep</em>’s <a class="reference internal" href="#external-dependencies">External Dependencies</a> are installed.
+These tools must be installed and their binaries available in the
+system’s <code class="docutils literal notranslate"><span class="pre">$PATH</span></code>.
+A relatively interpretable description of how your environment can be set-up
+is found in the <a class="reference external" href="https://github.com/nipreps/fmriprep/blob/master/Dockerfile">Dockerfile</a>.
+As an additional installation setting, FreeSurfer requires a license file (see <a class="reference internal" href="usage.html#fs-license"><span class="std std-ref">The FreeSurfer license</span></a>).</p>
+<p>On a functional Python 3.10 (or above) environment with <code class="docutils literal notranslate"><span class="pre">pip</span></code> installed,
+<em>fMRIPrep</em> can be installed using the habitual command</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ python -m pip install fmriprep
+</pre></div>
+</div>
+<p>Check your installation with the <code class="docutils literal notranslate"><span class="pre">--version</span></code> argument</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ fmriprep --version
+</pre></div>
+</div>
+<section id="external-dependencies">
+<h3>External Dependencies<a class="headerlink" href="#external-dependencies" title="Link to this heading"></a></h3>
+<p><em>fMRIPrep</em> is written using Python 3.8 (or above), and is based on
+<a class="reference external" href="https://nipype.readthedocs.io/en/latest/">nipype</a>.</p>
+<p><em>fMRIPrep</em> requires some other neuroimaging software tools that are
+not handled by the Python’s packaging system (Pypi) used to deploy
+the <code class="docutils literal notranslate"><span class="pre">fmriprep</span></code> package:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/">FSL</a> (version 6.0.7.7)</p></li>
+<li><p><a class="reference external" href="https://stnava.github.io/ANTs/">ANTs</a> (version 2.5.1)</p></li>
+<li><p><a class="reference external" href="https://afni.nimh.nih.gov/">AFNI</a> (version 24.0.05)</p></li>
+<li><p><a class="reference external" href="https://surfer.nmr.mgh.harvard.edu/">FreeSurfer</a> (version 7.3.2)</p></li>
+<li><p><a class="reference external" href="https://github.com/bids-standard/bids-validator">bids-validator</a> (version 1.14.0)</p></li>
+<li><p><a class="reference external" href="https://www.humanconnectome.org/software/connectome-workbench">connectome-workbench</a> (version 1.5.0)</p></li>
+</ul>
+</section>
+</section>
+<section id="not-running-on-a-local-machine-data-transfer">
+<h2>Not running on a local machine? - Data transfer<a class="headerlink" href="#not-running-on-a-local-machine-data-transfer" title="Link to this heading"></a></h2>
+<p>If you intend to run <em>fMRIPrep</em> on a remote system, you will need to
+make your data available within that system first.</p>
+<p>For instance, here at the Poldrack Lab we use Stanford’s
+<abbr title="high-performance computing">HPC</abbr> system, called Sherlock.
+Sherlock enables <a class="reference external" href="https://www.sherlock.stanford.edu/docs/user-guide/storage/data-transfer/">the following data transfer options</a>.</p>
+<p>Alternatively, more comprehensive solutions such as <a class="reference external" href="https://www.datalad.org/">Datalad</a> will handle data transfers with the appropriate
+settings and commands.
+Datalad also performs version control over your data.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="index.html" class="btn btn-neutral float-left" title="fMRIPrep: A Robust Preprocessing Pipeline for fMRI Data" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="usage.html" class="btn btn-neutral float-right" title="Usage Notes" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2016-, The fMRIPrep developers.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

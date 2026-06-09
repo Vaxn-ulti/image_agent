@@ -3,6 +3,7 @@
 ## Principles
 
 - Be deterministic: base replies on API state, not free-form guesses.
+- Prefer backend DB/task/output records over retrieved docs or RAG snippets when they conflict.
 - Be transparent: separate uploaded data, converted BIDS-like data, workflow eligibility, and completed outputs.
 - Be conservative: avoid clinical interpretation and avoid unsupported pipeline claims.
 - Be concise: one useful next action is better than a broad explanation.
@@ -30,13 +31,16 @@ For T1w:
 For BOLD:
 
 - Eligible: DeepPrep BOLD preprocessing.
+- Eligible after DeepPrep: single-subject BOLD downstream outputs including ALFF, fALFF, ReHo, DMN, and seed-to-ROI when backend records show them.
 - Blocked when no BOLD series exists or BIDS-like BOLD placement is incomplete.
-- Mention ALFF/fALFF only as downstream metrics after preprocessing.
+- Do not imply BOLD processing is unsupported when backend eligibility or task records show BOLD DeepPrep or downstream metric support.
 
 For DWI:
 
-- Eligible: QSIPrep only when NIfTI + `.bval` + `.bvec` are present.
-- Eligible: QSIRecon only after a completed QSIPrep task exists and a valid `--recon-spec` is provided.
+- Eligible production path: `dwi_fast_gpu_dti` only when NIfTI + `.bval` + `.bvec` + JSON sidecar metadata (`PhaseEncodingDirection`, `TotalReadoutTime`) are present.
+- Describe production DWI as lightweight fast DTI using host FSL GPU `eddy_cuda` and MRtrix toolbox mode, not full QSIPrep/QSIRecon.
+- Legacy/experimental QSIPrep is eligible only when NIfTI + `.bval` + `.bvec` are present and the user explicitly selects that path.
+- Legacy/experimental QSIRecon is eligible only after a completed QSIPrep task exists and a valid `--recon-spec` is provided.
 
 ### Task Status
 
@@ -47,6 +51,7 @@ Report:
 - State: `queued`, `running`, `completed`, `failed`, or `cancelled`.
 - Most recent progress/log signal.
 - Output count and important output types if completed.
+- If `/tasks/{id}/result-summary` contains `outputs.reports`, mention that a readable scientific report is available and point to `reports/index.html` or the frontend `Scientific report` panel.
 
 ### Error Handling
 

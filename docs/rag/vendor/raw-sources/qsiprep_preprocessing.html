@@ -1,0 +1,880 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" />
+  <meta name="readthedocs-addons-api-version" content="1"><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Preprocessing &mdash; qsiprep 26.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/theme_overrides.css?v=09a20fa7" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2b5cba5c"></script>
+      <script src="_static/doctools.js?v=9a2dae69"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="https://cdn.rawgit.com/chrisfilo/zenodo.js/v0.1/zenodo.js"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <script src="_static/js/versions.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Reconstruction" href="reconstruction.html" />
+    <link rel="prev" title="Usage" href="usage.html" /> 
+<script async type="text/javascript" src="/_/static/javascript/readthedocs-addons.js"></script><meta name="readthedocs-project-slug" content="qsiprep" /><meta name="readthedocs-version-slug" content="stable" /><meta name="readthedocs-resolver-filename" content="/preprocessing.html" /><meta name="readthedocs-http-status" content="200" /></head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            qsiprep
+          </a>
+              <div class="switch-menus">
+                <div class="version-switch"></div>
+                <div class="language-switch"></div>
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Usage</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Preprocessing</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#building-a-pipeline">Building a pipeline</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#merging-multiple-scans-from-a-session">Merging multiple scans from a session</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#using-bids-filters">Using BIDS filters</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#denoising-and-merging-images">Denoising and Merging Images</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#preprocessing-hcp-style">Preprocessing HCP-style</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#outputs-of-qsiprep">Outputs of <em>QSIPrep</em></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#visual-reports">Visual Reports</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#preprocessed-data-qsiprep-derivatives">Preprocessed data (<em>QSIPrep derivatives</em>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#transforms">Transforms</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#confounds">Confounds</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#quality-control-data">Quality Control Data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#confounds-and-carpet-plot-on-the-visual-reports">Confounds and “carpet”-plot on the visual reports</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#preprocessing-pipeline-details">Preprocessing pipeline details</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#processing-the-subject-anatomical-reference-t1w-or-t2w-images">Processing the <em>Subject Anatomical Reference</em> T1w or T2w images</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#handling-lesions-and-abnormalities">Handling Lesions and abnormalities</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#longitudinal-anatomical-processing">Longitudinal anatomical processing</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#processing-infant-data">Processing Infant Data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#dwi-preprocessing">DWI preprocessing</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#head-motion-eddy-current-distortion-correction-fsl">Head-motion / Eddy Current / Distortion correction (FSL)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#head-motion-estimation-shoreline">Head-motion estimation (SHORELine)</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#susceptibility-correction-methods">Susceptibility correction methods</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#selecting-representative-images-for-pepolar">Selecting representative images for PEPOLAR</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#using-only-dwi-data-bypassing-the-t1w-workflows">Using only DWI data (bypassing the T1w workflows)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dwi-reference-image-estimation">DWI reference image estimation</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#pre-processed-dwis-in-a-different-space">Pre-processed DWIs in a different space</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#b0-to-t1w-registration">b0 to T1w registration</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#references">References</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="reconstruction.html">Reconstruction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="contributors.html">Contributing to <em>QSIPrep</em></a></li>
+<li class="toctree-l1"><a class="reference internal" href="changes.html">What’s New</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">Developers - API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="comparisons.html">Comparisons to other pipelines</a></li>
+<li class="toctree-l1"><a class="reference internal" href="help.html">Getting help</a></li>
+<li class="toctree-l1"><a class="reference internal" href="license.html">License information</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">qsiprep</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Preprocessing</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/preprocessing.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="preprocessing">
+<span id="id1"></span><h1>Preprocessing<a class="headerlink" href="#preprocessing" title="Link to this heading"></a></h1>
+<section id="building-a-pipeline">
+<h2>Building a pipeline<a class="headerlink" href="#building-a-pipeline" title="Link to this heading"></a></h2>
+<p><em>QSIPrep</em> builds a pipeline based on your BIDS inputs. In general the pipeline will incorporate
+all the data it knows how to handle (i.e., fieldmaps, dMRI, and anatomical data) automatically.
+There may be cases where you want to change the default behavior, particularly in regard to</p>
+<blockquote>
+<div><ol class="arabic simple">
+<li><p><a class="reference internal" href="#merging"><span class="std std-ref">Merging multiple scans from a session</span></a></p></li>
+<li><p><a class="reference internal" href="#merge-denoise"><span class="std std-ref">Denoising and Merging Images</span></a></p></li>
+<li><p>Head motion correction, either</p></li>
+</ol>
+<blockquote>
+<div><ol class="loweralpha simple">
+<li><p><a class="reference internal" href="#fsl-wf"><span class="std std-ref">Head-motion / Eddy Current / Distortion correction (FSL)</span></a></p></li>
+<li><p><a class="reference internal" href="#dwi-hmc"><span class="std std-ref">Head-motion estimation (SHORELine)</span></a></p></li>
+</ol>
+</div></blockquote>
+<ol class="arabic simple" start="4">
+<li><p><a class="reference internal" href="#dwi-only"><span class="std std-ref">Using only DWI data (bypassing the T1w workflows)</span></a></p></li>
+</ol>
+</div></blockquote>
+<section id="merging-multiple-scans-from-a-session">
+<span id="merging"></span><h3>Merging multiple scans from a session<a class="headerlink" href="#merging-multiple-scans-from-a-session" title="Link to this heading"></a></h3>
+<p>For q-space imaging sequences it is common to have multiple separate scans to
+acquire the entire sampling scheme.
+These scans get aligned and merged into a single DWI series before reconstruction.</p>
+<p>It is also common to collect a DWI scan (or scans) in the reverse phase encoding direction
+to use for susceptibility distortion correction (SDC).</p>
+<div class="admonition-encoding-scan-merging-intent-with-bids-metadata admonition">
+<p class="admonition-title">Encoding scan merging intent with BIDS metadata</p>
+<p>The most appropriate way to explicitly specify which DWIs should be merged is to use the
+<a class="reference external" href="https://bids-specification.readthedocs.io/en/v1.10.0/modality-specific-files/magnetic-resonance-imaging-data.html#multipart-split-dwi-schemes">“MultipartID” metadata field</a>.
+This field is a unique string (per participant) that identifies a set of DWIs that should be considered as part of the same acquisition.
+If a DWI scan has the same MultipartID as another DWI scan, it will be merged with the other DWI scan.
+This can be specified across phase encoding directions (PEDs), in which case the DWIs will be merged across PEDs.</p>
+<p>If you do not specify a <code class="docutils literal notranslate"><span class="pre">MultipartID</span></code>, <em>QSIPrep</em> will group all DWIs within each session.</p>
+</div>
+<p>This creates a number of possible scenarios for preprocessing your DWIs. These
+scenarios can be controlled by the <code class="docutils literal notranslate"><span class="pre">--separate-all-dwis</span></code> argument. If your study
+has multiple sessions, DWI scans will <em>never</em> be combined across sessions.
+Merging only occurs within a session.</p>
+<p>If <code class="docutils literal notranslate"><span class="pre">--separate-all-dwis</span></code> is present in the commandline call, each DWI
+scan in the <code class="docutils literal notranslate"><span class="pre">dwi</span></code> directories will be processed independently. You will have one
+preprocessed output per each DWI file in your input.</p>
+<p>Otherwise (default) the DWI scans will be merged (i.e., their images will be concatenated).
+The merging affects the pipeline at different stages.  If all DWIs in a session
+are in the same PE direction, they will be merged into a single series. If there are
+two PE directions detected in the DWI scans and <code class="docutils literal notranslate"><span class="pre">'fieldmaps'</span></code> is not in <code class="docutils literal notranslate"><span class="pre">ignore</span></code>,
+images are combined according to their PE direction, and their b0 reference images are used to
+perform SDC. Further complicating this is the FSL workflow, which combines distortion correction
+with eddy/motion correction and will merge scans with different PE directions.</p>
+<p>If you have some scans you want to combine and others you want to preprocess separately,
+you can call <em>QSIPrep</em> more than once with BIDS filters to process the different scans.</p>
+</section>
+<section id="using-bids-filters">
+<span id="bids-filters"></span><h3>Using BIDS filters<a class="headerlink" href="#using-bids-filters" title="Link to this heading"></a></h3>
+<p>BIDS filters allow users to filter the set of images available to <em>QSIPrep</em> at run
+time. BIDS filters should be stored in a json file and passed to <em>QSIPrep</em> with
+the <code class="docutils literal notranslate"><span class="pre">--bids-filter-file</span></code> option.
+Filters modify “queries”, which are used to find data for each data type.
+NOTE: this is illustrating how modalities are queried in general, and is not the format
+of the file you will send to <code class="docutils literal notranslate"><span class="pre">--bids-filter-file</span></code>. The queries in <em>QSIPrep</em> are:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+    <span class="s2">&quot;fmap&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;datatype&quot;</span><span class="p">:</span> <span class="s2">&quot;fmap&quot;</span><span class="p">},</span>
+    <span class="s2">&quot;t2w&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;datatype&quot;</span><span class="p">:</span> <span class="s2">&quot;anat&quot;</span><span class="p">,</span> <span class="s2">&quot;suffix&quot;</span><span class="p">:</span> <span class="s2">&quot;T2w&quot;</span><span class="p">},</span>
+    <span class="s2">&quot;t1w&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;datatype&quot;</span><span class="p">:</span> <span class="s2">&quot;anat&quot;</span><span class="p">,</span> <span class="s2">&quot;suffix&quot;</span><span class="p">:</span> <span class="s2">&quot;T1w&quot;</span><span class="p">},</span>
+    <span class="s2">&quot;roi&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;datatype&quot;</span><span class="p">:</span> <span class="s2">&quot;anat&quot;</span><span class="p">,</span> <span class="s2">&quot;suffix&quot;</span><span class="p">:</span> <span class="s2">&quot;roi&quot;</span><span class="p">},</span>
+    <span class="s2">&quot;dwi&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;datatype&quot;</span><span class="p">:</span> <span class="s2">&quot;dwi&quot;</span><span class="p">,</span> <span class="s2">&quot;suffix&quot;</span><span class="p">:</span> <span class="s2">&quot;dwi&quot;</span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>Each query has several “entities”, which can be modified by filters. The list of
+supported entities is <a class="reference external" href="https://github.com/bids-standard/pybids/blob/master/bids/layout/config/bids.json">here</a>.
+To filter data, modify the queries by changing one or more of the supported
+entities in the BIDS filter file. The general format of the filter file is:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+  <span class="s2">&quot;query&quot;</span><span class="p">:</span> <span class="p">{</span> <span class="s2">&quot;entity&quot;</span><span class="p">:</span> <span class="s2">&quot;value&quot;</span> <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>The entities specified in the filter file are added to the queries, so you only
+need to include entities you want to use for filtering. For example, this could
+be the contents of a valid BIDS filter file:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+    <span class="s2">&quot;t1w&quot;</span><span class="p">:</span> <span class="p">{</span> <span class="s2">&quot;session&quot;</span><span class="p">:</span> <span class="s2">&quot;MR1&quot;</span> <span class="p">},</span>
+    <span class="s2">&quot;dwi&quot;</span><span class="p">:</span> <span class="p">{</span> <span class="s2">&quot;session&quot;</span><span class="p">:</span> <span class="s2">&quot;MR1&quot;</span><span class="p">,</span> <span class="s2">&quot;run&quot;</span><span class="p">:</span> <span class="s2">&quot;1&quot;</span> <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>this modifies the “t1w” and “dwi” queries, and filters both T1w and DWI scans to
+select session “MR1”. It also filters on the run number for DWI scans only.</p>
+<p>Multiple runs can be selected by passing arrays. For example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+    <span class="s2">&quot;dwi&quot;</span><span class="p">:</span> <span class="p">{</span> <span class="s2">&quot;run&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="mi">3</span><span class="p">]</span> <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>filters the “dwi” query for runs 2 and 3.</p>
+<p>You can enable regular expressions for more detailed filtering, for example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+    <span class="s2">&quot;t1w&quot;</span><span class="p">:</span> <span class="p">{</span> <span class="s2">&quot;acquisition&quot;</span><span class="p">:</span> <span class="s2">&quot;(?i)mprage&quot;</span><span class="p">,</span> <span class="s2">&quot;regex_search&quot;</span><span class="p">:</span> <span class="s2">&quot;true&quot;</span> <span class="p">},</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>will do a case-insensitive match of “mprage” within the “t1w” query.</p>
+</section>
+<section id="denoising-and-merging-images">
+<span id="merge-denoise"></span><h3>Denoising and Merging Images<a class="headerlink" href="#denoising-and-merging-images" title="Link to this heading"></a></h3>
+<p>The user can decide whether to do certain preprocessing steps and, if so,
+whether they are performed <em>before</em> or <em>after</em> the DWI series are
+concatenated. Specifically, image denoising (using <code class="docutils literal notranslate"><span class="pre">dwidenoise</span></code> or
+<code class="docutils literal notranslate"><span class="pre">patch2self</span></code>) can be disabled with <code class="docutils literal notranslate"><span class="pre">--denoise-method</span> <span class="pre">none</span></code>. Gibbs
+unringing (using <code class="docutils literal notranslate"><span class="pre">mrdegibbs</span></code>) is disabled by default but can be enabled
+with <code class="docutils literal notranslate"><span class="pre">--unringing-method</span> <span class="pre">mrdegibbs</span></code>. B1 bias field correction is applied by
+default (using <code class="docutils literal notranslate"><span class="pre">dwibiascorrect</span></code>) and can be disabled with the
+<code class="docutils literal notranslate"><span class="pre">--dwi-no-biascorr</span></code> option. The intensity of b=0 images is harmonized
+across scans (i.e. scaled to an average value) by default, but this can be
+turned off using <code class="docutils literal notranslate"><span class="pre">--dwi-no-b0-harmonization</span></code>.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>If prescan normalization is enabled,
+we recommend using <code class="docutils literal notranslate"><span class="pre">--b1-biascorrect-stage</span> <span class="pre">none</span></code>.
+This will skip B1 bias field correction,
+which may introduce artifacts on normalized data.</p>
+</div>
+<p>Together, denoising (MP-PCA or patch2self), Gibbs unringing B1 bias field
+correction, and b=0 intensity normalization are referred to as <em>denoising</em> in
+<em>QSIPrep</em>. Each of these image processing operations has assumptions about its
+inputs and changes the distribution of noise in its outputs. Although the
+inclusion of each operation can be decided by the user, the order in which
+they are applied relative to one another is fixed. MP-PCA or patch2self are
+applied directly to the BIDS inputs, which should be uninterpolated and as
+“raw” as possible. Although Gibbs unringing should be performed on “raw”
+data, it is recommended in the MRtrix3 documentation to apply MP-PCA before
+Gibbs unringing. B1 bias field correction and b=0 intensity harmonization
+do not have as specific requirements about their inputs so are run last.</p>
+<p>The last, and potentially very important decision, is whether the denoising
+operations are applied to each input DWI series individually or whether the
+denoising operations are applied to the concatenated input DWI files. At
+present, there is little data to guide this choice. The more volumes
+available, the more data MP-PCA/patch2self have to work with. However, if
+there if the head is in a vastly different location in different scans,
+denoising might be impacted in unpredictable ways.</p>
+<p>Consider MP-PCA. If a voxel contains CSF in one DWI series and the subject
+repositions their head between scans so that the voxel contains corpus
+callosum in the next DWI series, the non-noise signal will be very different
+in the two series. Similarly, if the head is repositioned different areas
+will be closer to the head coil and therefore be inconsistently affected by
+B1 bias field. Similar problems can also occur <em>within</em> a DWI series due to
+subject head motion, but these methods have been shown to work well even in
+the presence of within-scan head movement. If the head position changes
+across scans is of a similar magnitude to that of within-scan head motion, it
+is likely fine to use the <code class="docutils literal notranslate"><span class="pre">--denoise-after-combining</span></code> option. To gauge how
+much between-scan motion occurred, users can inspect the <a class="reference internal" href="#qc-data"><span class="std std-ref">Quality Control Data</span></a> to see
+whether Framewise Displacement is large where a new series begins.</p>
+<p>By default, the scans in the same warped space are individually denoised before
+they are concatenated. When warped groups are concatenated an additional b=0
+image intensity normalization is performed.</p>
+</section>
+<section id="preprocessing-hcp-style">
+<h3>Preprocessing HCP-style<a class="headerlink" href="#preprocessing-hcp-style" title="Link to this heading"></a></h3>
+<p><em>QSIPrep</em> can be configured to produce a very similar pipeline to the HCP dMRI pipelines.
+HCP and HCP-Lifespan scans acquire complete multi-shell sequences in opposing phase
+encoding directions, making them a special case where <a class="reference internal" href="api/qsiprep.workflows.fieldmap.pepolar.html#sdc-pepolar"><span class="std std-ref">Phase Encoding POLARity (PEPOLAR) techniques</span></a> are used
+and the corrected images from both PE directions are averaged at the end. To produce
+output from <em>QSIPrep</em> that is directly comparable to the HCP dMRI pipeline you
+will want to include:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">--</span><span class="n">distortion</span><span class="o">-</span><span class="n">group</span><span class="o">-</span><span class="n">merge</span> <span class="n">average</span> \
+<span class="o">--</span><span class="n">combine</span><span class="o">-</span><span class="nb">all</span><span class="o">-</span><span class="n">dwis</span> \
+</pre></div>
+</div>
+<p>If you want to disable the image pair averaging and get a result with twice as
+many images, you can substitute <code class="docutils literal notranslate"><span class="pre">average</span></code> with <code class="docutils literal notranslate"><span class="pre">concat</span></code>.</p>
+</section>
+</section>
+<section id="outputs-of-qsiprep">
+<span id="outputs"></span><h2>Outputs of <em>QSIPrep</em><a class="headerlink" href="#outputs-of-qsiprep" title="Link to this heading"></a></h2>
+<p><em>QSIPrep</em> generates three broad classes of outcomes:</p>
+<blockquote>
+<div><ol class="arabic simple">
+<li><p><strong>Visual QA (quality assessment) reports</strong>:
+one <abbr title="hypertext markup language">HTML</abbr> per subject,
+depicting images that provide a sanity check for each step of the pipeline.</p></li>
+<li><p><strong>Preprocessed imaging data</strong> such as anatomical segmentations, realigned, and resampled
+diffusion weighted images and the corresponding corrected gradient files in FSL and MRTrix
+format.</p></li>
+<li><p><strong>Additional data for subsequent analysis</strong>, for instance the transformations
+between different spaces or the estimated head motion and model fit quality calculated
+during model-based head motion correction.</p></li>
+<li><p><strong>Quantitative QA</strong>:
+A single-line csv file per subject summarizing subject motion, coregistration quality and
+image quality.</p></li>
+</ol>
+</div></blockquote>
+<section id="visual-reports">
+<h3>Visual Reports<a class="headerlink" href="#visual-reports" title="Link to this heading"></a></h3>
+<p><em>QSIPrep</em> outputs summary reports, written to <code class="docutils literal notranslate"><span class="pre">&lt;output_dir&gt;/qsiprep/sub-&lt;subject_label&gt;.html</span></code>.
+These reports provide a quick way to make visual inspection of the results easy.
+One useful graphic is the animation of the q-space sampling scheme before and after the pipeline.
+Here is a sampling scheme from a DSI scan:</p>
+<figure class="align-default" id="id7">
+<a class="reference internal image-reference" href="_images/sampling_scheme.gif"><img alt="_images/sampling_scheme.gif" src="_images/sampling_scheme.gif" style="width: 750.0px; height: 375.0px;" />
+</a>
+<figcaption>
+<p><span class="caption-text">A Q5 DSI sampling scheme before (left) and after (right) preprocessing.
+This is useful to confirm that the gradients have indeed been rotated and
+that head motion correction has not disrupted the scheme extensively.</span><a class="headerlink" href="#id7" title="Link to this image"></a></p>
+</figcaption>
+</figure>
+</section>
+<section id="preprocessed-data-qsiprep-derivatives">
+<h3>Preprocessed data (<em>QSIPrep derivatives</em>)<a class="headerlink" href="#preprocessed-data-qsiprep-derivatives" title="Link to this heading"></a></h3>
+<p>There are additional files, called “Derivatives”,
+written to <code class="docutils literal notranslate"><span class="pre">&lt;output_dir&gt;/qsiprep/sub-&lt;label&gt;/[ses-&lt;label&gt;/]</span></code>.</p>
+<p>Derivatives related to anatomical files are nearly identical to those produced by <code class="docutils literal notranslate"><span class="pre">fMRIPrep</span></code> and
+can be found in the <code class="docutils literal notranslate"><span class="pre">anat</span></code> subfolder.
+One major difference is that the anatomical derivatives are in LPS+ orientation and are realigned to the AC-PC,
+while <code class="docutils literal notranslate"><span class="pre">fMRIPrep</span></code>’s are in RAS+ orientation and retain the original anatomical images’ orientation</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sub</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span><span class="p">[</span><span class="n">ses</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span><span class="p">]</span>
+  <span class="n">anat</span><span class="o">/</span>
+    <span class="c1"># Brain mask derived from SynthStrip</span>
+    <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">ACPC_desc</span><span class="o">-</span><span class="n">brain_mask</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>
+
+    <span class="c1"># Tissue-probability maps</span>
+    <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">ACPC_label</span><span class="o">-</span><span class="n">CSF_probseg</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>
+    <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">ACPC_label</span><span class="o">-</span><span class="n">GM_probseg</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>
+    <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">ACPC_label</span><span class="o">-</span><span class="n">WM_probseg</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>
+
+    <span class="c1"># Tissue class map derived SynthSeg</span>
+    <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">ACPC_dseg</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>
+
+    <span class="c1"># Bias field corrected T1w file, using ANTS&#39; N4BiasFieldCorrection</span>
+    <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">ACPC_desc</span><span class="o">-</span><span class="n">preproc_T1w</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>
+
+    <span class="c1"># The same files as above, but in the selected output space.</span>
+    <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">MNI152NLin2009cAsym_desc</span><span class="o">-</span><span class="n">brain_mask</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>
+    <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">MNI152NLin2009cAsym_label</span><span class="o">-</span><span class="n">CSF_probseg</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>
+    <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">MNI152NLin2009cAsym_label</span><span class="o">-</span><span class="n">GM_probseg</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>
+    <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">MNI152NLin2009cAsym_label</span><span class="o">-</span><span class="n">WM_probseg</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>
+    <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">MNI152NLin2009cAsym_dseg</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>
+    <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">MNI152NLin2009cAsym_desc</span><span class="o">-</span><span class="n">preproc_T1w</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>
+</pre></div>
+</div>
+<p>Derivatives related to diffusion images are in the <code class="docutils literal notranslate"><span class="pre">dwi</span></code> subfolder</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sub</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span><span class="p">[</span><span class="n">ses</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span><span class="p">]</span>
+  <span class="n">dwi</span><span class="o">/</span>
+    <span class="c1"># A tab-separated value file with one column per calculated confound</span>
+    <span class="c1"># and one row per timepoint/volume</span>
+    <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_desc</span><span class="o">-</span><span class="n">confounds_timeseries</span><span class="o">.</span><span class="n">tsv</span>
+</pre></div>
+</div>
+<p>Volumetric outputs are written out in <code class="docutils literal notranslate"><span class="pre">ACPC</span></code> space</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sub</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span><span class="p">[</span><span class="n">ses</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span><span class="p">]</span>
+  <span class="n">dwi</span><span class="o">/</span>
+    <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">ACPC_dwiref</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>
+
+    <span class="c1"># The generous brain mask that should be reduced probably</span>
+    <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">ACPC_desc</span><span class="o">-</span><span class="n">brain_mask</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>
+    <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">ACPC_desc</span><span class="o">-</span><span class="n">preproc_dwi</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>
+
+    <span class="c1"># FSL-style bval and bvec files.</span>
+    <span class="c1"># These will be incorrectly interpreted by MRTrix,</span>
+    <span class="c1"># but will work with DSI Studio and Dipy.</span>
+    <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">ACPC_desc</span><span class="o">-</span><span class="n">preproc_dwi</span><span class="o">.</span><span class="n">bval</span>
+    <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">ACPC_desc</span><span class="o">-</span><span class="n">preproc_dwi</span><span class="o">.</span><span class="n">bvec</span>
+
+    <span class="c1"># Use the ``.b`` file for MRTrix.</span>
+    <span class="c1"># The gradient table to import data into MRTrix.</span>
+    <span class="c1"># This can be used with the preprocessed DWI file and</span>
+    <span class="c1"># converted directly to a ``.mif`` file using the</span>
+    <span class="c1"># ``mrconvert -grad _dwi.b`` command.</span>
+    <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">ACPC_desc</span><span class="o">-</span><span class="n">preproc_dwi</span><span class="o">.</span><span class="n">b</span>
+
+    <span class="c1"># Contrast-to-noise model defined as the variance of the</span>
+    <span class="c1"># signal model divided by the variance of the error of the signal model.</span>
+    <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">ACPC_stat</span><span class="o">-</span><span class="n">cnr_desc</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_dwimap</span><span class="o">.</span><span class="n">json</span>
+    <span class="o">&lt;</span><span class="n">source_entities</span><span class="o">&gt;</span><span class="n">_space</span><span class="o">-</span><span class="n">ACPC_stat</span><span class="o">-</span><span class="n">cnr_desc</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_dwimap</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>
+</pre></div>
+</div>
+</section>
+<section id="transforms">
+<h3>Transforms<a class="headerlink" href="#transforms" title="Link to this heading"></a></h3>
+<p><em>QSIPrep</em> will write out a series of transforms needed to map between the different spaces.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sub</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span>
+  <span class="n">anat</span><span class="o">/</span>
+    <span class="n">sub</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_from</span><span class="o">-</span><span class="n">anat_to</span><span class="o">-</span><span class="n">ACPC_mode</span><span class="o">-</span><span class="n">image_xfm</span><span class="o">.</span><span class="n">mat</span>
+    <span class="n">sub</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_from</span><span class="o">-</span><span class="n">ACPC_to</span><span class="o">-</span><span class="n">anat_mode</span><span class="o">-</span><span class="n">image_xfm</span><span class="o">.</span><span class="n">mat</span>
+    <span class="n">sub</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_from</span><span class="o">-</span><span class="n">ACPC_to</span><span class="o">-&lt;</span><span class="n">output</span><span class="o">-</span><span class="n">space</span><span class="o">&gt;</span><span class="n">_mode</span><span class="o">-</span><span class="n">image_xfm</span><span class="o">.</span><span class="n">h5</span>
+    <span class="n">sub</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_from</span><span class="o">-&lt;</span><span class="n">output</span><span class="o">-</span><span class="n">space</span><span class="o">&gt;</span><span class="n">_to</span><span class="o">-</span><span class="n">ACPC_mode</span><span class="o">-</span><span class="n">image_xfm</span><span class="o">.</span><span class="n">h5</span>
+  <span class="n">ses</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span>
+    <span class="n">anat</span><span class="o">/</span>
+      <span class="n">sub</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_ses</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_from</span><span class="o">-</span><span class="n">orig_to</span><span class="o">-</span><span class="n">anat_mode</span><span class="o">-</span><span class="n">image_xfm</span><span class="o">.</span><span class="n">txt</span>
+      <span class="n">sub</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_ses</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_from</span><span class="o">-</span><span class="n">anat_to</span><span class="o">-</span><span class="n">orig_mode</span><span class="o">-</span><span class="n">image_xfm</span><span class="o">.</span><span class="n">txt</span>
+</pre></div>
+</div>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>Motion correction, eddy current correction, and distortion correction are performed with Eddy,
+which does not produce transforms that can be written out and reused.
+In the future, if Eddy starts writing out usable transforms
+or an alternate implementation is made available,
+<em>QSIPrep</em> may start writing these transforms out in a similar manner to fMRIPrep.</p>
+<p>These will most likely be organized thusly:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sub</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span>
+  <span class="n">ses</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span>
+    <span class="n">dwi</span><span class="o">/</span>
+      <span class="n">sub</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_ses</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_from</span><span class="o">-</span><span class="n">orig_to</span><span class="o">-</span><span class="n">dwiref_mode</span><span class="o">-</span><span class="n">image_desc</span><span class="o">-</span><span class="n">eddy_xfm</span><span class="o">.</span><span class="n">h5</span>
+</pre></div>
+</div>
+</div>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p><em>QSIPrep</em> does not currently write out the coregistration transform from dwiref space to ACPC space.
+When it does start writing this transform out, it will be organized like this:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sub</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span>
+  <span class="n">ses</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;/</span>
+    <span class="n">dwi</span><span class="o">/</span>
+      <span class="n">sub</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_ses</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_from</span><span class="o">-</span><span class="n">dwiref_to</span><span class="o">-</span><span class="n">ACPC_mode</span><span class="o">-</span><span class="n">image_xfm</span><span class="o">.</span><span class="n">h5</span>
+      <span class="n">sub</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_ses</span><span class="o">-&lt;</span><span class="n">label</span><span class="o">&gt;</span><span class="n">_from</span><span class="o">-</span><span class="n">ACPC_to</span><span class="o">-</span><span class="n">dwiref_mode</span><span class="o">-</span><span class="n">image_xfm</span><span class="o">.</span><span class="n">h5</span>
+</pre></div>
+</div>
+</div>
+</section>
+<section id="confounds">
+<span id="dwi-confounds"></span><h3>Confounds<a class="headerlink" href="#confounds" title="Link to this heading"></a></h3>
+<p>See implementation on <a class="reference internal" href="api/qsiprep.workflows.dwi.confounds.html#id0" title="qsiprep.workflows.dwi.confounds.init_dwi_confs_wf"><code class="xref py py-func docutils literal notranslate"><span class="pre">init_dwi_confs_wf()</span></code></a>.</p>
+<p>For each DWI processed by <em>QSIPrep</em>, a
+<code class="docutils literal notranslate"><span class="pre">&lt;output_folder&gt;/qsiprep/sub-&lt;label&gt;/func/&lt;source_entities&gt;_desc-confounds_timeseries.tsv</span></code>
+file will be generated. These are <abbr title="tab-separated values">TSV</abbr> tables,
+which look like the example below:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">framewise_displacement</span>        <span class="n">trans_x</span> <span class="n">trans_y</span> <span class="n">trans_z</span> <span class="n">rot_x</span>   <span class="n">rot_y</span>   <span class="n">rot_z</span>   <span class="n">hmc_r2</span>  <span class="n">hmc_xcorr</span>       <span class="n">original_file</span>   <span class="n">grad_x</span>  <span class="n">grad_y</span>  <span class="n">grad_z</span>  <span class="n">bval</span>
+
+<span class="n">n</span><span class="o">/</span><span class="n">a</span>    <span class="o">-</span><span class="mf">0.705</span> <span class="o">-</span><span class="mf">0.002</span>  <span class="mf">0.133</span>   <span class="mf">0.119</span>   <span class="mf">0.350</span>   <span class="mf">0.711</span>   <span class="mf">0.941</span>   <span class="mf">0.943</span>   <span class="n">sub</span><span class="o">-</span><span class="n">abcd_dwi</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>     <span class="mf">0.000</span>   <span class="mf">0.000</span>   <span class="mf">0.000</span>   <span class="mf">0.000</span>
+<span class="mf">16.343</span>        <span class="o">-</span><span class="mf">0.711</span>  <span class="o">-</span><span class="mf">0.075</span>  <span class="mf">0.220</span>   <span class="mf">0.067</span>   <span class="mf">0.405</span>   <span class="mf">0.495</span>   <span class="mf">0.945</span>   <span class="mf">0.946</span>   <span class="n">sub</span><span class="o">-</span><span class="n">abcd_dwi</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>     <span class="mf">0.000</span>   <span class="mf">0.000</span>   <span class="mf">0.000</span>   <span class="mf">0.000</span>
+<span class="mf">35.173</span>        <span class="o">-</span><span class="mf">0.672</span>  <span class="o">-</span><span class="mf">0.415</span>  <span class="mf">0.725</span>   <span class="mf">0.004</span>   <span class="mf">0.468</span>   <span class="mf">1.055</span>   <span class="mf">0.756</span>   <span class="mf">0.766</span>   <span class="n">sub</span><span class="o">-</span><span class="n">abcd_dwi</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>     <span class="o">-</span><span class="mf">0.356</span>  <span class="mf">0.656</span>   <span class="mf">0.665</span>   <span class="mf">3000.000</span>
+<span class="mf">45.131</span>        <span class="mf">0.021</span>   <span class="o">-</span><span class="mf">0.498</span>  <span class="mf">1.046</span>   <span class="mf">0.403</span>   <span class="mf">0.331</span>   <span class="mf">1.400</span>   <span class="mf">0.771</span>   <span class="mf">0.778</span>   <span class="n">sub</span><span class="o">-</span><span class="n">abcd_dwi</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>     <span class="o">-</span><span class="mf">0.935</span>  <span class="mf">0.272</span>   <span class="mf">0.229</span>   <span class="mf">3000.000</span>
+<span class="mf">37.506</span>        <span class="o">-</span><span class="mf">0.184</span>  <span class="mf">0.117</span>   <span class="mf">0.723</span>   <span class="mf">0.305</span>   <span class="mf">0.138</span>   <span class="mf">0.964</span>   <span class="mf">0.895</span>   <span class="mf">0.896</span>   <span class="n">sub</span><span class="o">-</span><span class="n">abcd_dwi</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>     <span class="o">-</span><span class="mf">0.187</span>  <span class="o">-</span><span class="mf">0.957</span>  <span class="o">-</span><span class="mf">0.223</span>  <span class="mf">2000.000</span>
+<span class="mf">16.388</span>        <span class="o">-</span><span class="mf">0.447</span>  <span class="mf">0.020</span>   <span class="mf">0.847</span>   <span class="mf">0.217</span>   <span class="mf">0.129</span>   <span class="mf">0.743</span>   <span class="mf">0.792</span>   <span class="mf">0.800</span>   <span class="n">sub</span><span class="o">-</span><span class="n">abcd_dwi</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>     <span class="o">-</span><span class="mf">0.111</span>  <span class="o">-</span><span class="mf">0.119</span>  <span class="mf">0.987</span>   <span class="mf">3000.000</span>
+</pre></div>
+</div>
+<p>The motion parameters come from the model-based head motion estimation
+workflow. The <code class="docutils literal notranslate"><span class="pre">hmc_r2</span></code> and <code class="docutils literal notranslate"><span class="pre">hmc_xcorr</span></code> are whole-brain r^2 values and
+cross correlation scores (using the ANTs definition) between the
+model-generated target image and the motion-corrected empirical image. The
+final columns are not really confounds, but book-keeping information that
+reminds us which 4d DWI series the image originally came from and what
+gradient direction (<code class="docutils literal notranslate"><span class="pre">grad_x</span></code>, <code class="docutils literal notranslate"><span class="pre">grad_y</span></code>, <code class="docutils literal notranslate"><span class="pre">grad_z</span></code>) and gradient strength
+<code class="docutils literal notranslate"><span class="pre">bval</span></code> the image came from. This can be useful for tracking down
+mostly-corrupted scans and can indicate if the head motion model isn’t
+working on specific gradient strengths or directions.</p>
+</section>
+<section id="quality-control-data">
+<span id="qc-data"></span><h3>Quality Control Data<a class="headerlink" href="#quality-control-data" title="Link to this heading"></a></h3>
+<p>A single-line tsv file (<code class="docutils literal notranslate"><span class="pre">desc-image_qc.tsv</span></code>) is created for each output
+image. This file is particularly useful for comparing the relative quality
+across subjects before deciding who to include in a group analysis. The
+columns in this file come from DSI Studio’s QC calculation and is described
+in <span id="id2">[Yeh2019]</span>. Columns prefixed by <code class="docutils literal notranslate"><span class="pre">raw_</span></code> reflect QC measurements from the
+data before preprocessing. Columns prefixed by <code class="docutils literal notranslate"><span class="pre">t1_</span></code> or <code class="docutils literal notranslate"><span class="pre">mni_</span></code> contain QC
+metrics calculated on the preprocessed data. Motion parameter summaries are
+also provided, such as the mean and max of framewise displacement
+(<code class="docutils literal notranslate"><span class="pre">mean_fd</span></code>, <code class="docutils literal notranslate"><span class="pre">max_fd</span></code>). The max and mean absolute values for translation
+and rotation are <code class="docutils literal notranslate"><span class="pre">max_translation</span></code> and <code class="docutils literal notranslate"><span class="pre">max_rotation</span></code> and the maxima of
+their derivatives are in <code class="docutils literal notranslate"><span class="pre">max_rel_translation</span></code> and <code class="docutils literal notranslate"><span class="pre">max_rel_rotation</span></code>.
+Finally, the difference in spatial overlap between the anatomical mask and
+the anatomical brain mask and the DWI brain mask is calculated using the Dice
+distance in <code class="docutils literal notranslate"><span class="pre">t1_dice_distance</span></code> and <code class="docutils literal notranslate"><span class="pre">mni_dice_distance</span></code>.</p>
+</section>
+<section id="confounds-and-carpet-plot-on-the-visual-reports">
+<h3>Confounds and “carpet”-plot on the visual reports<a class="headerlink" href="#confounds-and-carpet-plot-on-the-visual-reports" title="Link to this heading"></a></h3>
+<p>fMRI has been using a “carpet” visualization of the
+<abbr title="blood-oxygen level-dependent">BOLD</abbr> time-series (see Power<a class="footnote-reference brackets" href="#footcite-power2017simple" id="id3" role="doc-noteref"><span class="fn-bracket">[</span>1<span class="fn-bracket">]</span></a>),
+but this type of plot does not make sense for DWI data. Instead, we plot
+the cross-correlation value between each raw slice and the HMC model signal
+resampled into that slice.
+This plot is included for each run within the corresponding visual report.
+Examples of these plots follow:</p>
+<figure class="align-default" id="id8">
+<a class="reference internal image-reference" href="_images/sub-abcd_carpetplot.svg"><img alt="_images/sub-abcd_carpetplot.svg" height="412" src="_images/sub-abcd_carpetplot.svg" width="512" /></a>
+<figcaption>
+<p><span class="caption-text">For SHORELine higher scores appear more yellow, while lower scores
+are more blue. Not all slices contain the same number of voxels,
+so the number of voxels in the slice is represented in the color bar
+to the left of the image plot. The more yellow the pixel, the more
+voxels are present in the slice. Purple pixels reflect slices with fewer
+brain voxels.</span><a class="headerlink" href="#id8" title="Link to this image"></a></p>
+</figcaption>
+</figure>
+<figure class="align-default" id="id9">
+<a class="reference internal image-reference" href="_images/sub-pnc_carpetplot.png"><img alt="_images/sub-pnc_carpetplot.png" src="_images/sub-pnc_carpetplot.png" style="width: 456.8px; height: 357.6px;" />
+</a>
+<figcaption>
+<p><span class="caption-text">For eddy slices with more outliers appear more yellow, while fewer
+outliers is more blue.</span><a class="headerlink" href="#id9" title="Link to this image"></a></p>
+</figcaption>
+</figure>
+</section>
+</section>
+<section id="preprocessing-pipeline-details">
+<span id="workflow-details"></span><h2>Preprocessing pipeline details<a class="headerlink" href="#preprocessing-pipeline-details" title="Link to this heading"></a></h2>
+<p><em>QSIPrep</em> adapts its pipeline depending on what data and metadata are
+available and are used as the input.</p>
+<section id="processing-the-subject-anatomical-reference-t1w-or-t2w-images">
+<h3>Processing the <em>Subject Anatomical Reference</em> T1w or T2w images<a class="headerlink" href="#processing-the-subject-anatomical-reference-t1w-or-t2w-images" title="Link to this heading"></a></h3>
+<p><a class="reference internal" href="api/qsiprep.workflows.anatomical.html#qsiprep.workflows.anatomical.init_anat_preproc_wf" title="qsiprep.workflows.anatomical.init_anat_preproc_wf"><code class="xref py py-func docutils literal notranslate"><span class="pre">qsiprep.workflows.anatomical.init_anat_preproc_wf()</span></code></a></p>
+<p>(<a class="reference external" href=".//preprocessing-1.py">Source code</a>)</p>
+<p>As of version 0.18 <em>QSIPrep</em> has been changed to be very flexible with anatomical
+processing workflows. Versions prior to 0.18 were focused on the T1w images and
+provided only 2 possible templates. Version 0.18 introduces 2 terms that
+simplify the anatomical processing and open up new opportunities for choosing
+a template. First, is the <em>subject anatomical reference</em> and the second is the
+<em>template anatomical reference</em>.</p>
+<p>As a dMRI-focused tool, <em>QSIPrep</em> only uses an <em>anatomical reference</em> image for an
+extra-robust brain extraction and to get a tissue segmentation for visualizing
+the susceptibility distortion correction results.  The anatomical workflows
+leverage fast and powerful tools from FreeSurfer, namely <code class="docutils literal notranslate"><span class="pre">SynthStrip</span></code> and
+<code class="docutils literal notranslate"><span class="pre">SynthSeg</span></code> to perform brain extraction and segmentation.</p>
+<p>Many imaging protocols acquire some high-resolution, undistorted anatomical
+reference scans. <em>QSIPrep</em> can use either T1-weighted or T2-weighted 3D images as
+the <em>anatomical reference</em>. To specify which contrast you’d like to use for your
+anatomical reference, be sure to specify <code class="docutils literal notranslate"><span class="pre">--anatomical-contrast</span></code> as either
+<code class="docutils literal notranslate"><span class="pre">T1w</span></code>, <code class="docutils literal notranslate"><span class="pre">T2w</span></code> or <code class="docutils literal notranslate"><span class="pre">none</span></code>. Specifying <code class="docutils literal notranslate"><span class="pre">none</span></code> is equivalent to the previous
+option of <code class="docutils literal notranslate"><span class="pre">--dwi-only</span></code>, where no anatomical images are used from the input
+data and the AC-PC alignment is based either on the adult or infant MNI
+templates.</p>
+<p>We discourage the use of <code class="docutils literal notranslate"><span class="pre">--anatomical-contrast</span> <span class="pre">none</span></code> in most cases. It is
+very rare to have dMRI data without any kind of T1w or T2w image from the
+same individual.</p>
+<p>Regardless of whether you are using T1w or T2w images as your anatomical reference,
+the following steps will be applied to the anatomical reference images:
+Processing the <em>Anatomical Reference</em> images</p>
+<blockquote>
+<div><ol class="arabic simple">
+<li><p>The anatomical sub-workflow begins by constructing an average image by
+<a class="reference internal" href="anat/base.html#conformation"><span class="std std-ref">conforming</span></a> all found T1w or T2w images to LPS+
+orientation and a common voxel size.</p></li>
+<li><p>If there are multiple images of the preferred anatomical contrast, they will
+be bias corrected using N4 and aligned to one another. If <code class="docutils literal notranslate"><span class="pre">--subject-anatomical-reference</span> <span class="pre">unbiased</span></code>
+is specified they will be unbiasedly registered to each other using ANTs.
+Otherwise all the images are registered to the first (alphabetically) image (see
+<a href="#id13"><span class="problematic" id="id14">`Longitudinal T1w processing`_</span></a>).</p></li>
+<li><p>Brain extraction is performed using <code class="docutils literal notranslate"><span class="pre">SynthStrip</span></code>.</p></li>
+</ol>
+<blockquote>
+<div><figure class="align-default" id="id10">
+<a class="reference internal image-reference" href="_images/brainextraction_t1.svg"><img alt="_images/brainextraction_t1.svg" height="220" src="_images/brainextraction_t1.svg" width="1477" /></a>
+<figcaption>
+<p><span class="caption-text">Brain extraction</span><a class="headerlink" href="#id10" title="Link to this image"></a></p>
+</figcaption>
+</figure>
+</div></blockquote>
+<ol class="arabic simple" start="4">
+<li><p>Brain tissue segmentation is performed using <code class="docutils literal notranslate"><span class="pre">SynthStrip</span></code></p></li>
+</ol>
+<blockquote>
+<div><figure class="align-default" id="id11">
+<a class="reference internal image-reference" href="_images/segmentation.svg"><img alt="_images/segmentation.svg" height="220" src="_images/segmentation.svg" width="1477" /></a>
+<figcaption>
+<p><span class="caption-text">Brain tissue segmentation.</span><a class="headerlink" href="#id11" title="Link to this image"></a></p>
+</figcaption>
+</figure>
+</div></blockquote>
+<ol class="arabic simple" start="5">
+<li><p>Rigid alignment to the <em>subject anatomical reference</em>. This can take
+two forms. If the <em>template anatomical reference</em> is a standard
+template, this will effectively AC-PC align the output data. If the
+<em>template anatomical reference</em> is another scan of the same
+individual (e.g. the output of fmriprep), the output will be aligned
+to this externam image.</p></li>
+<li><p>If the template anatomical reference is not a native scan, then ANTs’
+<code class="docutils literal notranslate"><span class="pre">antsRegistration</span></code> will register the subject images to the template
+anatomical reference in a multiscale, mutual-information based, nonlinear
+registration scheme.</p></li>
+</ol>
+</div></blockquote>
+<section id="handling-lesions-and-abnormalities">
+<span id="t1preproc-steps"></span><h4>Handling Lesions and abnormalities<a class="headerlink" href="#handling-lesions-and-abnormalities" title="Link to this heading"></a></h4>
+<p>When processing images from patients with focal brain lesions (e.g., stroke, tumor
+resection), it is possible to provide a lesion mask to be used during spatial
+normalization to MNI-space <span id="id4">[Brett2001]</span>.
+ANTs will use this mask to minimize warping of healthy tissue into damaged
+areas (or vice-versa).
+Lesion masks should be binary NIfTI images (damaged areas = 1, everywhere else = 0)
+in the same space and resolution as the T1 image, and follow the naming convention specified in
+<a class="reference external" href="https://docs.google.com/document/d/1Wwc4A6Mow4ZPPszDIWfCUCRNstn7d_zzaWPcfcHmgI4/edit#heading=h.9146wuepclkt">BIDS Extension Proposal 3: Common Derivatives</a>
+(e.g. <code class="docutils literal notranslate"><span class="pre">sub-001_T1w_label-lesion_roi.nii.gz</span></code>).
+This file should be placed in the <code class="docutils literal notranslate"><span class="pre">sub-*/anat</span></code> directory of the BIDS dataset
+to be run through <em>QSIPrep</em>.</p>
+<figure class="align-default" id="id12">
+<a class="reference internal image-reference" href="_images/T1MNINormalization.svg"><img alt="_images/T1MNINormalization.svg" height="469" src="_images/T1MNINormalization.svg" width="1108" /></a>
+<figcaption>
+<p><span class="caption-text">Animation showing T1w to MNI normalization</span><a class="headerlink" href="#id12" title="Link to this image"></a></p>
+</figcaption>
+</figure>
+</section>
+<section id="longitudinal-anatomical-processing">
+<h4>Longitudinal anatomical processing<a class="headerlink" href="#longitudinal-anatomical-processing" title="Link to this heading"></a></h4>
+<p>In the case of multiple T1w images (across sessions and/or within a session),
+T1w images are merged into a single template image using FreeSurfer’s
+<code class="docutils literal notranslate"><span class="pre">mri_robust_template</span></code>. This template may be <em>unbiased</em>, or equidistant from
+all source images, or aligned to the first image (determined lexicographically
+by session label). For two images, the additional cost of estimating an unbiased
+template is trivial and is the default behavior, but, for greater than two
+images, the cost can be a slowdown of an order of magnitude.
+Therefore, in the case of three or more images, <em>QSIPrep</em> constructs
+templates aligned to the first image, unless passed the <code class="docutils literal notranslate"><span class="pre">--subject-anatomical-reference</span> <span class="pre">unbiased</span></code>
+flag, which forces the estimation of an unbiased template.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The preprocessed T1w image defines the <code class="docutils literal notranslate"><span class="pre">anat</span></code> space.
+In the case of multiple T1w images, this space may not be precisely aligned
+with any of the original images.
+Reconstructed surfaces and functional datasets will be registered to the
+<code class="docutils literal notranslate"><span class="pre">anat</span></code> space, and not to the input images.</p>
+</div>
+</section>
+</section>
+<section id="processing-infant-data">
+<h3>Processing Infant Data<a class="headerlink" href="#processing-infant-data" title="Link to this heading"></a></h3>
+<p>When processing infant DWI data, users may add <code class="docutils literal notranslate"><span class="pre">--infant</span></code> to their
+<em>QSIPrep</em> call. This will swap the default MNI152NLin2009cAsym template
+with the MNI infant template. It is highly advisable to also include
+<code class="docutils literal notranslate"><span class="pre">--dwi-only</span></code> to avoid problems with T1w skull-stripping.</p>
+</section>
+<section id="dwi-preprocessing">
+<span id="dwi-overview"></span><h3>DWI preprocessing<a class="headerlink" href="#dwi-preprocessing" title="Link to this heading"></a></h3>
+<p><a class="reference internal" href="api/qsiprep.workflows.dwi.base.html#id0" title="qsiprep.workflows.dwi.base.init_dwi_preproc_wf"><code class="xref py py-func docutils literal notranslate"><span class="pre">qsiprep.workflows.dwi.base.init_dwi_preproc_wf()</span></code></a></p>
+<p>(<a class="reference external" href=".//preprocessing-2.py">Source code</a>)</p>
+<p>Preprocessing of <abbr title="Diffusion Weighted Image">DWI</abbr> files is
+split into multiple sub-workflows described below.</p>
+<section id="head-motion-eddy-current-distortion-correction-fsl">
+<span id="fsl-wf"></span><h4>Head-motion / Eddy Current / Distortion correction (FSL)<a class="headerlink" href="#head-motion-eddy-current-distortion-correction-fsl" title="Link to this heading"></a></h4>
+<p><a class="reference internal" href="api/qsiprep.workflows.dwi.fsl.html#id0" title="qsiprep.workflows.dwi.fsl.init_fsl_hmc_wf"><code class="xref py py-func docutils literal notranslate"><span class="pre">qsiprep.workflows.dwi.fsl.init_fsl_hmc_wf()</span></code></a></p>
+<p>FSL provides the most widely-used tools for head motion correction, eddy
+current correction, and susceptibility distortion correction. These tools
+are designed to work directly with one another and share a file format that
+is unique to their workflow.</p>
+<p>To ensure that the FSL workflow works as intended, all inputs are forced into
+to the FSL standard orientation. The head motion, eddy current, and susceptibility
+distortion corrections are applied at the end of <code class="docutils literal notranslate"><span class="pre">eddy</span></code>, which means that
+there will be <em>two</em> total interpolations in the FSL-based <em>QSIPrep</em> workflow, as
+the final interpolation into T1w/AC-PC space is done externally in ANTs.</p>
+<p>The FSL workflow can take three different forms.</p>
+<blockquote>
+<div><ol class="arabic simple">
+<li><p>No distortion correction</p></li>
+<li><p>PEPOLAR distortion correction (using topup)</p></li>
+<li><p>Fieldmap-based distortion correction</p></li>
+</ol>
+</div></blockquote>
+<section id="no-distortion-correction">
+<h5>No distortion correction<a class="headerlink" href="#no-distortion-correction" title="Link to this heading"></a></h5>
+<p>If there are no fieldmap images or the user has specified <code class="docutils literal notranslate"><span class="pre">--ignore</span> <span class="pre">fieldmaps</span></code>,
+no distortion correction will occur. In this case, only head motion correction
+and eddy current correction will be performed. The workflow looks like this:</p>
+<p>(<a class="reference external" href=".//preprocessing-3.py">Source code</a>)</p>
+</section>
+<section id="pepolar-topup-distortion-correction">
+<h5>PEPOLAR (TOPUP) Distortion Correction<a class="headerlink" href="#pepolar-topup-distortion-correction" title="Link to this heading"></a></h5>
+<p>When images with different phase encoding directions are available, either
+dedicated fieldmaps (in the <code class="docutils literal notranslate"><span class="pre">fmap/</span></code> directory) or DWI series
+(in the <code class="docutils literal notranslate"><span class="pre">dwi/</span></code> directory), example b=0 images can be used for distortion correction.</p>
+<p>(<a class="reference external" href=".//preprocessing-4.py">Source code</a>)</p>
+</section>
+<section id="fieldmap-based-distortion-correction">
+<h5>Fieldmap-based Distortion Correction<a class="headerlink" href="#fieldmap-based-distortion-correction" title="Link to this heading"></a></h5>
+<p>If a GRE fieldmap or SyN-based fieldmapless distortion correction
+are detected, these will be performed on the outputs of <code class="docutils literal notranslate"><span class="pre">eddy</span></code>.
+For details see <a class="reference internal" href="#dwi-sdc"><span class="std std-ref">Susceptibility correction methods</span></a>.</p>
+<p>(<a class="reference external" href=".//preprocessing-5.py">Source code</a>)</p>
+</section>
+<section id="configuring-eddy">
+<span id="configure-eddy"></span><h5>Configuring <code class="docutils literal notranslate"><span class="pre">eddy</span></code><a class="headerlink" href="#configuring-eddy" title="Link to this heading"></a></h5>
+<p><code class="docutils literal notranslate"><span class="pre">eddy</span></code> has many configuration options. Instead of making these commandline
+options, you can specify them in a JSON file and pass that to <em>QSIPrep</em>
+using the <code class="docutils literal notranslate"><span class="pre">--eddy-config</span></code> option. An example (default) eddy config json can
+be viewed or downloaded <a class="reference external" href="https://github.com/PennLINC/qsiprep/blob/main/qsiprep/data/eddy_params.json">here</a></p>
+</section>
+</section>
+<section id="head-motion-estimation-shoreline">
+<span id="dwi-hmc"></span><h4>Head-motion estimation (SHORELine)<a class="headerlink" href="#head-motion-estimation-shoreline" title="Link to this heading"></a></h4>
+<p><a class="reference internal" href="api/qsiprep.workflows.dwi.hmc.html#id0" title="qsiprep.workflows.dwi.hmc.init_dwi_hmc_wf"><code class="xref py py-func docutils literal notranslate"><span class="pre">qsiprep.workflows.dwi.hmc.init_dwi_hmc_wf()</span></code></a></p>
+<p>A long-standing issue for q-space imaging techniques, particularly DSI, has
+been the lack of motion correction methods. DTI and multi-shell HARDI have
+had <code class="docutils literal notranslate"><span class="pre">eddy_correct</span></code> and <code class="docutils literal notranslate"><span class="pre">eddy</span></code> in FSL, but DSI has relied on aligning the
+interleaved b0 images and applying the transforms to nearby non-b0 images.</p>
+<p><em>QSIPrep</em> introduces a method for head motion correction that iteratively
+creates target images based on <code class="docutils literal notranslate"><span class="pre">3dSHORE</span></code> or <code class="docutils literal notranslate"><span class="pre">MAPMRI</span></code> fits.
+First, all b0 images are aligned to a midpoint b0 image (or the first b0 image
+if <code class="docutils literal notranslate"><span class="pre">hmc_align_to=&quot;first&quot;</span></code>) and each non-b0 image is transformed along with
+its nearest b0 image.</p>
+<p>Then, for each non-b0 image, a <code class="docutils literal notranslate"><span class="pre">3dSHORE</span></code> or <code class="docutils literal notranslate"><span class="pre">MAPMRI</span></code>
+model is fit to all the other images with that image left out. The model is then
+used to generate a target signal image for the gradient direction and magnitude
+(i.e. q-space coordinate) of the left-out image. The left-out image is registered
+to the generated target
+signal image and its vector is rotated accordingly. A new model is fit on the
+transformed images and their rotated vectors. The leave-one-out procedure is
+then repeated on this updated DWI and gradient set.</p>
+<p>If <code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code> is specified as the hmc_model, then only the b0 images are used
+and the non-b0 images are transformed based on their nearest b0 image. This
+is probably not a great idea.</p>
+<p>Susceptibility distortion correction is run as part of this pipeline to be
+consistent with the <code class="docutils literal notranslate"><span class="pre">TOPUP</span></code>/<code class="docutils literal notranslate"><span class="pre">eddy</span></code> workflow.</p>
+<p>Ultimately a list of 6 (or 12) parameters per time-step is written and
+fed to the <a class="reference internal" href="#dwi-confounds"><span class="std std-ref">confounds workflow</span></a>. These are used to
+estimate framewise displacement.  Additionally, measures of model fits
+are saved for each slice for display in a carpet plot-like thing.</p>
+<p>(<a class="reference external" href=".//preprocessing-6.py">Source code</a>)</p>
+</section>
+</section>
+<section id="susceptibility-correction-methods">
+<span id="dwi-sdc"></span><h3>Susceptibility correction methods<a class="headerlink" href="#susceptibility-correction-methods" title="Link to this heading"></a></h3>
+<p><a class="reference internal" href="api/qsiprep.workflows.fieldmap.base.html#qsiprep.workflows.fieldmap.base.init_sdc_wf" title="qsiprep.workflows.fieldmap.base.init_sdc_wf"><code class="xref py py-func docutils literal notranslate"><span class="pre">qsiprep.workflows.fieldmap.base.init_sdc_wf()</span></code></a></p>
+<figure class="align-default">
+<img alt="_images/unwarping.svg" src="_images/unwarping.svg" /></figure>
+<p>The are three kinds of SDC available in <em>QSIPrep</em>:</p>
+<blockquote>
+<div><ol class="arabic simple">
+<li><p><a class="reference internal" href="api/qsiprep.workflows.fieldmap.pepolar.html#sdc-pepolar"><span class="std std-ref">Phase Encoding POLARity (PEPOLAR) techniques</span></a> (also called <strong>blip-up/blip-down</strong>):
+This is the implementation from sdcflows, using 3dQwarp to
+correct a DWI series using a fieldmap in the fmaps directory <span id="id5">[Jezzard1995]</span>.
+The reverse phase encoding direction scan can come from the fieldmaps directory
+or the dwi directory. If using <a class="reference internal" href="#fsl-wf"><span class="std std-ref">Head-motion / Eddy Current / Distortion correction (FSL)</span></a>, then <code class="docutils literal notranslate"><span class="pre">TOPUP</span></code> is used for this correction.
+Also relevant is <a class="reference internal" href="#best-b0"><span class="std std-ref">Selecting representative images for PEPOLAR</span></a>.</p></li>
+<li><p><a class="reference internal" href="api/qsiprep.workflows.fieldmap.phdiff.html#sdc-phasediff"><span class="std std-ref">Phase-difference B0 estimation</span></a>: Use a B0map sequence that includes at lease one magnitude
+image and two phase images or a phasediff image.</p></li>
+<li><p><a class="reference internal" href="api/qsiprep.workflows.fieldmap.syn.html#sdc-fieldmapless"><span class="std std-ref">Fieldmap-less estimation (experimental)</span></a>: The SyN-based susceptibility distortion correction
+implemented in FMRIPREP. To use this method, include argument <code class="docutils literal notranslate"><span class="pre">--use-syn-sdc</span></code> when
+calling <em>QSIPrep</em>. Briefly, this method estimates a SDC warp using ANTS SyN based
+on an average fieldmap in MNI space. For details on this method.</p></li>
+</ol>
+</div></blockquote>
+<p><em>QSIPrep</em> determines if a fieldmap should be used based on the <code class="docutils literal notranslate"><span class="pre">&quot;IntendedFor&quot;</span></code>
+fields in the JSON sidecars in the <code class="docutils literal notranslate"><span class="pre">fmap/</span></code> directory.</p>
+<section id="selecting-representative-images-for-pepolar">
+<span id="best-b0"></span><h4>Selecting representative images for PEPOLAR<a class="headerlink" href="#selecting-representative-images-for-pepolar" title="Link to this heading"></a></h4>
+<p><code class="docutils literal notranslate"><span class="pre">TOPUP</span></code> estimates EPI distortion based on the shapes of images with
+different phase encoding directions and total readout times (i.e. warped
+groups). It is therefore ideal to provide less-noisy images as inputs, so the
+registration has plenty of accurate anatomical features to work with.</p>
+<p>For diffusion-weighted MRI, the b=0 images are used as input to TOPUP. While
+these contain a lot of anatomical detail, they can also contain troublesome
+artefacts such as spin history, head motion and slice dropout.</p>
+<p>In <em>QSIPrep</em> versions up until 0.13, up to 3 b=0 images were selected per
+warped group as input to <code class="docutils literal notranslate"><span class="pre">TOPUP</span></code>. The images were selected to be
+evenly spaced within their acquisitions.</p>
+<p>In versions 0.13 and later, <em>QSIPrep</em> finds the “most representative” b=0
+images per warped group. A nearly identical approach is used in the
+developmental HCP pipelines, where a pairwise spatial correlation score is
+calculated between all b=0 images of the same warped group and the images
+with the highest average correlation to the other images are used as input
+to <code class="docutils literal notranslate"><span class="pre">TOPUP</span></code>. To see which images were selected, examine the <code class="docutils literal notranslate"><span class="pre">selected_for_topup</span></code>
+column in the confounds tsv file.</p>
+</section>
+<section id="using-only-dwi-data-bypassing-the-t1w-workflows">
+<span id="dwi-only"></span><h4>Using only DWI data (bypassing the T1w workflows)<a class="headerlink" href="#using-only-dwi-data-bypassing-the-t1w-workflows" title="Link to this heading"></a></h4>
+<p>It is possible to use <em>QSIPrep</em> to process <em>only</em> diffusion-weighted images. In
+the case of infant data, where robust skull-stripping methods are not
+currently available, or where anatomical preprocessing has already been
+performed in another pipeline, the user can specify <code class="docutils literal notranslate"><span class="pre">--dwi-only</span></code>.</p>
+<p>Instead of registering the b=0 template image to the skull-stripped T1w
+image, the b=0 template is registered directly to a template and only the
+rigid part of the transformation is kept. This results in an AC-PC aligned
+b=0 template that maintains the shape and size of the original image.</p>
+<p>In this case the <code class="docutils literal notranslate"><span class="pre">b0_anat_coreg</span></code> workflow instead registers the b=0 reference
+to an AC-PC-oriented template and the rigid components of the coregistration
+transform are extracted.</p>
+</section>
+<section id="dwi-reference-image-estimation">
+<span id="dwi-ref"></span><h4>DWI reference image estimation<a class="headerlink" href="#dwi-reference-image-estimation" title="Link to this heading"></a></h4>
+<p><a class="reference internal" href="api/qsiprep.workflows.dwi.util.html#id0" title="qsiprep.workflows.dwi.util.init_dwi_reference_wf"><code class="xref py py-func docutils literal notranslate"><span class="pre">qsiprep.workflows.dwi.util.init_dwi_reference_wf()</span></code></a></p>
+<p>(<a class="reference external" href=".//preprocessing-7.py">Source code</a>)</p>
+<p>This workflow estimates a reference image for a DWI series. This
+procedure is different from the DWI reference image workflow in the
+sense that true brain masking isn’t usually done until later in the
+pipeline for DWIs</p>
+</section>
+<section id="pre-processed-dwis-in-a-different-space">
+<span id="resampling"></span><h4>Pre-processed DWIs in a different space<a class="headerlink" href="#pre-processed-dwis-in-a-different-space" title="Link to this heading"></a></h4>
+<p><a class="reference internal" href="api/qsiprep.workflows.dwi.resampling.html#id0" title="qsiprep.workflows.dwi.resampling.init_dwi_trans_wf"><code class="xref py py-func docutils literal notranslate"><span class="pre">qsiprep.workflows.dwi.resampling.init_dwi_trans_wf()</span></code></a></p>
+<p>(<a class="reference external" href=".//preprocessing-8.py">Source code</a>)</p>
+<p>A DWI series is resampled to an output space. The <code class="docutils literal notranslate"><span class="pre">output_resolution</span></code> is
+specified on the commandline call. All transformations, including head motion
+correction, susceptibility distortion correction, coregistration and (optionally)
+normalization to the template is performed in a single shot using a Lanczos kernel.</p>
+<p>There are two ways that the gradient vectors can be saved. This workflow always
+produces a FSL-style bval/bvec pair for the image and a MRTrix .b gradient table
+with the rotations from the linear transforms applied. You can also write out
+a <code class="docutils literal notranslate"><span class="pre">local_bvecs</span></code> file that contains a 3d vector that has been rotated to account
+for nonlinear transforms in each voxel. I’m not aware of any software that can
+use these yet, but it’s an interesting idea.</p>
+</section>
+</section>
+<section id="b0-to-t1w-registration">
+<span id="b0-reg"></span><h3>b0 to T1w registration<a class="headerlink" href="#b0-to-t1w-registration" title="Link to this heading"></a></h3>
+<p><a class="reference internal" href="api/qsiprep.workflows.dwi.registration.html#qsiprep.workflows.dwi.registration.init_b0_to_anat_registration_wf" title="qsiprep.workflows.dwi.registration.init_b0_to_anat_registration_wf"><code class="xref py py-func docutils literal notranslate"><span class="pre">qsiprep.workflows.dwi.registration.init_b0_to_anat_registration_wf()</span></code></a></p>
+<p>(<a class="reference external" href=".//preprocessing-9.py">Source code</a>)</p>
+<p>This just uses <cite>antsRegistration</cite>.</p>
+</section>
+</section>
+<section id="references">
+<h2>References<a class="headerlink" href="#references" title="Link to this heading"></a></h2>
+<div class="docutils container" id="id6">
+<aside class="footnote-list brackets">
+<aside class="footnote brackets" id="footcite-power2017simple" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id3">1</a><span class="fn-bracket">]</span></span>
+<p>Jonathan D. Power. A simple but useful way to assess fmri scan qualities. <em>NeuroImage</em>, 154:150–158, 2017. <a class="reference external" href="https://doi.org/10.1016/j.neuroimage.2016.08.009">doi:10.1016/j.neuroimage.2016.08.009</a>.</p>
+</aside>
+</aside>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="usage.html" class="btn btn-neutral float-left" title="Usage" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="reconstruction.html" class="btn btn-neutral float-right" title="Reconstruction" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2021-2026, qsiprep team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -60,7 +60,7 @@ Required:
 
 - Completed QSIPrep task id.
 - QSIPrep output directory readable as QSIRecon input.
-- Valid `--recon-spec` value (e.g. `dipy`, `mrtrix`, `dsi_studio`, or a custom JSON spec path).
+- Valid `--recon-spec` value selected by backend policy. Official custom specs are YAML files, but current production policy is limited to backend-approved profiles rather than arbitrary user-supplied custom specs.
 - QSIRecon Docker image for validate or run.
 
 Do not run QSIRecon directly on raw DWI.
@@ -77,7 +77,23 @@ Command pattern:
 docker run --rm --gpus all -v {qsiprep_output}:/data:ro -v {output}:/output -v {work}:/work -v {fs_license}:/opt/freesurfer/license.txt:ro pennlinc/qsirecon:latest /data /output participant --recon-spec {recon_spec}
 ```
 
-`--recon-spec` is the required flag that selects which reconstruction pipeline(s) to run. Common values: `dipy`, `mrtrix`, `dsi_studio`, or a path to a custom JSON spec. Validation must fail fast when `--recon-spec` is missing, undefined, or references an unsupported pipeline.
+`--recon-spec` is the required flag that selects which reconstruction pipeline(s) to run. Official built-in values include QSIRecon workflow names; official custom workflows are YAML specs. Validation must fail fast when `--recon-spec` is missing, undefined, or references an unsupported pipeline.
+
+Current backend profiles:
+
+- Default `dki` profile: `--recon-spec dipy_dki --skip-odf-reports --notrack`
+- Optional `tractography` profile: `--recon-spec mrtrix_multishell_msmt_noACT`
+- Custom YAML spec support is documentation/provenance coverage only; current Image Agent production policy does not accept arbitrary user-supplied custom specs in production.
+
+The active profile is controlled by `IMAGE_AGENT_QSIRECON_PROFILE`.
+
+- `dki` preserves the historical scalar-map behavior and is the safe default.
+- `tractography` enables a QSIRecon built-in workflow that can emit tractography outputs without requiring T1-based ACT.
+- Any other profile value must fail fast during validation or command construction.
+
+The backend also writes a legacy snapshot of the historical `dipy_dki` command under each QSIRecon-capable task directory:
+
+- `derivatives/<task_id>/knowledge_base/qsirecon/qsirecon_legacy_dipy_dki_command.json`
 
 No CUDA-specific QSIRecon CLI switch is currently documented. GPU exposure is via Docker `--gpus all`. Validation should record whether GPU is visible inside the container.
 
@@ -107,6 +123,19 @@ QSIRecon:
 - Tractography.
 - Connectome.
 - HTML report.
+
+## Local Knowledge Base
+
+The project keeps a local copy of the official QSIRecon docs at:
+
+- `docs/knowledge-base/qsirecon/README.md`
+
+Key mirrored pages include:
+
+- official home page
+- quickstart
+- built-in workflows
+- custom workflow authoring reference
 
 ## Concrete Eval Cases
 

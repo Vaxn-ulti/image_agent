@@ -17,6 +17,6 @@ Ownership boundaries:
 - Imaging IO: DICOM/NIfTI detection, conversion, BIDS-like construction, inventory.
 - Workflow runtime: Docker command construction, validation, execution, output discovery.
 - Frontend: upload, inventory, task run/status/log/output UI.
-- Chat: DeepSeek prompt/tool routing grounded in backend state.
+- Chat: OpenAI SDK chat gateway via `ModelGateway`, Responses-native request shape, backend/RAG grounding, deterministic rule fallbacks, and DeepSeek legacy fallback compatibility.
 
 Do not move runtime data into source-controlled docs. Keep generated uploads, derivatives, logs, and caches out of hand-written documentation changes.

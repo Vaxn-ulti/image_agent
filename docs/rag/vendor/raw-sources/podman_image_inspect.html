@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>podman-image-inspect &#8212; Podman  documentation</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="../_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="../_static/alabaster.css?v=27fed22d" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=29a5987f" />
+    <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="canonical" href="https://docs.podman.io/en/latest/markdown/podman-image-inspect.1.html" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  <script async type="text/javascript" src="/_/static/javascript/readthedocs-addons.js"></script><meta name="readthedocs-project-slug" content="podman" /><meta name="readthedocs-version-slug" content="latest" /><meta name="readthedocs-resolver-filename" content="/markdown/podman-image-inspect.1.html" /><meta name="readthedocs-http-status" content="200" /></head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="name">
+<h1>NAME<a class="headerlink" href="#name" title="Link to this heading">¶</a></h1>
+<p>podman-image-inspect - Display an image’s configuration</p>
+</section>
+<section id="synopsis">
+<h1>SYNOPSIS<a class="headerlink" href="#synopsis" title="Link to this heading">¶</a></h1>
+<p><strong>podman image inspect</strong> [<em>options</em>] <em>image</em> [<em>image</em> …]</p>
+</section>
+<section id="description">
+<h1>DESCRIPTION<a class="headerlink" href="#description" title="Link to this heading">¶</a></h1>
+<p>This displays the low-level information on images identified by name or ID. By default, this renders all results in a JSON array.  If a format is specified, the given template is executed for each result.</p>
+</section>
+<section id="options">
+<h1>OPTIONS<a class="headerlink" href="#options" title="Link to this heading">¶</a></h1>
+<section id="format-f-format">
+<h2><strong>--format</strong>, <strong>-f</strong>=<em>format</em><a class="headerlink" href="#format-f-format" title="Link to this heading">¶</a></h2>
+<p>Format the output using the given Go template.
+The keys of the returned JSON can be used as the values for the --format flag (see examples below).</p>
+<p>Valid placeholders for the Go template are listed below:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p><strong>Placeholder</strong></p></th>
+<th class="head"><p><strong>Description</strong></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>.Annotations …</p></td>
+<td><p>Annotation information included in the image</p></td>
+</tr>
+<tr class="row-odd"><td><p>.Architecture</p></td>
+<td><p>Architecture of software in the image</p></td>
+</tr>
+<tr class="row-even"><td><p>.Author</p></td>
+<td><p>Image author</p></td>
+</tr>
+<tr class="row-odd"><td><p>.Comment</p></td>
+<td><p>Image comment</p></td>
+</tr>
+<tr class="row-even"><td><p>.Config …</p></td>
+<td><p>Structure with config info</p></td>
+</tr>
+<tr class="row-odd"><td><p>.Created …</p></td>
+<td><p>Image creation time (string, ISO3601)</p></td>
+</tr>
+<tr class="row-even"><td><p>.Digest</p></td>
+<td><p>Image digest (sha256:+64-char hash)</p></td>
+</tr>
+<tr class="row-odd"><td><p>.GraphDriver …</p></td>
+<td><p>Structure for the graph driver info</p></td>
+</tr>
+<tr class="row-even"><td><p>.HealthCheck …</p></td>
+<td><p>Structure for the health check info</p></td>
+</tr>
+<tr class="row-odd"><td><p>.History</p></td>
+<td><p>History information stored in image</p></td>
+</tr>
+<tr class="row-even"><td><p>.ID</p></td>
+<td><p>Image ID (full 64-char hash)</p></td>
+</tr>
+<tr class="row-odd"><td><p>.Labels …</p></td>
+<td><p>Label information included in the image</p></td>
+</tr>
+<tr class="row-even"><td><p>.ManifestType</p></td>
+<td><p>Manifest type of the image</p></td>
+</tr>
+<tr class="row-odd"><td><p>.NamesHistory</p></td>
+<td><p>Name history information stored in image</p></td>
+</tr>
+<tr class="row-even"><td><p>.Os</p></td>
+<td><p>Operating system of software in the image</p></td>
+</tr>
+<tr class="row-odd"><td><p>.Parent</p></td>
+<td><p>Parent image of the specified image</p></td>
+</tr>
+<tr class="row-even"><td><p>.RepoDigests</p></td>
+<td><p>Repository digests for the image</p></td>
+</tr>
+<tr class="row-odd"><td><p>.RepoTags</p></td>
+<td><p>Repository tags for the image</p></td>
+</tr>
+<tr class="row-even"><td><p>.RootFS …</p></td>
+<td><p>Structure for the root file system info</p></td>
+</tr>
+<tr class="row-odd"><td><p>.Size</p></td>
+<td><p>Size of image, in bytes</p></td>
+</tr>
+<tr class="row-even"><td><p>.User</p></td>
+<td><p>Default user to execute the image as</p></td>
+</tr>
+<tr class="row-odd"><td><p>.Version</p></td>
+<td><p>Image Version</p></td>
+</tr>
+<tr class="row-even"><td><p>.VirtualSize</p></td>
+<td><p>Virtual size of image, in bytes</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="example">
+<h1>EXAMPLE<a class="headerlink" href="#example" title="Link to this heading">¶</a></h1>
+<p>Inspect information on the specified image:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ podman image inspect fedora
+[
+    {
+        &quot;Id&quot;: &quot;37e5619f4a8ca9dbc4d6c0ae7890625674a10dbcfb76201399e2aaddb40da17d&quot;,
+        &quot;Digest&quot;: &quot;sha256:1b0d4ddd99b1a8c8a80e885aafe6034c95f266da44ead992aab388e6aa91611a&quot;,
+        &quot;RepoTags&quot;: [
+            &quot;registry.fedoraproject.org/fedora:latest&quot;
+        ],
+        &quot;RepoDigests&quot;: [
+            &quot;registry.fedoraproject.org/fedora@sha256:1b0d4ddd99b1a8c8a80e885aafe6034c95f266da44ead992aab388e6aa91611a&quot;,
+            &quot;registry.fedoraproject.org/fedora@sha256:b5290db40008aae9272ad3a6bd8070ef7ecd547c3bef014b894c327960acc582&quot;
+        ],
+        &quot;Parent&quot;: &quot;&quot;,
+        &quot;Comment&quot;: &quot;Created by Image Factory&quot;,
+        &quot;Created&quot;: &quot;2021-08-09T05:48:47Z&quot;,
+        &quot;Config&quot;: {
+            &quot;Env&quot;: [
+                &quot;DISTTAG=f34container&quot;,
+                &quot;FGC=f34&quot;,
+                &quot;container=oci&quot;
+            ],
+            &quot;Cmd&quot;: [
+                &quot;/bin/bash&quot;
+            ],
+            &quot;Labels&quot;: {
+                &quot;license&quot;: &quot;MIT&quot;,
+                &quot;name&quot;: &quot;fedora&quot;,
+                &quot;vendor&quot;: &quot;Fedora Project&quot;,
+                &quot;version&quot;: &quot;34&quot;
+            }
+        },
+        &quot;Version&quot;: &quot;1.10.1&quot;,
+        &quot;Author&quot;: &quot;&quot;,
+        &quot;Architecture&quot;: &quot;amd64&quot;,
+        &quot;Os&quot;: &quot;linux&quot;,
+        &quot;Size&quot;: 183852302,
+        &quot;VirtualSize&quot;: 183852302,
+        &quot;GraphDriver&quot;: {
+            &quot;Name&quot;: &quot;overlay&quot;,
+            &quot;Data&quot;: {
+                &quot;UpperDir&quot;: &quot;/home/dwalsh/.local/share/containers/storage/overlay/0203e243f1ca4b6bb49371ecd21363212467ec6d7d3fa9f324cd4e78cc6b5fa2/diff&quot;,
+                &quot;WorkDir&quot;: &quot;/home/dwalsh/.local/share/containers/storage/overlay/0203e243f1ca4b6bb49371ecd21363212467ec6d7d3fa9f324cd4e78cc6b5fa2/work&quot;
+            }
+        },
+        &quot;RootFS&quot;: {
+            &quot;Type&quot;: &quot;layers&quot;,
+            &quot;Layers&quot;: [
+                &quot;sha256:0203e243f1ca4b6bb49371ecd21363212467ec6d7d3fa9f324cd4e78cc6b5fa2&quot;
+            ]
+        },
+        &quot;Labels&quot;: {
+            &quot;license&quot;: &quot;MIT&quot;,
+            &quot;name&quot;: &quot;fedora&quot;,
+            &quot;vendor&quot;: &quot;Fedora Project&quot;,
+            &quot;version&quot;: &quot;34&quot;
+        },
+        &quot;Annotations&quot;: {},
+        &quot;ManifestType&quot;: &quot;application/vnd.docker.distribution.manifest.v2+json&quot;,
+        &quot;User&quot;: &quot;&quot;,
+        &quot;History&quot;: [
+            {
+                &quot;created&quot;: &quot;2021-08-09T05:48:47Z&quot;,
+                &quot;comment&quot;: &quot;Created by Image Factory&quot;
+            }
+        ],
+        &quot;NamesHistory&quot;: [
+            &quot;registry.fedoraproject.org/fedora:latest&quot;
+        ]
+    }
+]
+</pre></div>
+</div>
+<p>Inspect image ID for the specified image:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ podman image inspect --format &#39;{{ .Id }}&#39; fedora
+37e5619f4a8ca9dbc4d6c0ae7890625674a10dbcfb76201399e2aaddb40da17d
+</pre></div>
+</div>
+</section>
+<section id="see-also">
+<h1>SEE ALSO<a class="headerlink" href="#see-also" title="Link to this heading">¶</a></h1>
+<p><strong><a class="reference internal" href="podman.1.html"><span class="std std-doc">podman(1)</span></a></strong>, <strong><a class="reference internal" href="podman-image.1.html"><span class="std std-doc">podman-image(1)</span></a></strong>, <strong><a class="reference internal" href="podman-inspect.1.html"><span class="std std-doc">podman-inspect(1)</span></a></strong></p>
+</section>
+<section id="history">
+<h1>HISTORY<a class="headerlink" href="#history" title="Link to this heading">¶</a></h1>
+<p>Sep 2021, Originally compiled by Dan Walsh <a class="reference external" href="mailto:dwalsh&#37;&#52;&#48;redhat&#46;com">dwalsh<span>&#64;</span>redhat<span>&#46;</span>com</a></p>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../index.html">Podman</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../Introduction.html">Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../Commands.html">Commands</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../Reference.html">Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../Tutorials.html">Tutorials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../Search.html">Search</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://podman-py.readthedocs.io/en/latest/">Podman Python</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../index.html">Documentation overview</a><ul>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2019, team.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.0.4</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="../_sources/markdown/podman-image-inspect.1.md.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

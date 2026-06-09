@@ -1,0 +1,2131 @@
+Built-In Reconstruction Workflows — qsirecon 26.1.0.dev1+g79953f538 documentation
+qsirecon
+Installation
+Quick Start
+Available Models in
+QSIRecon
+Built-In Reconstruction Workflows
+Workflows
+MRtrix3-based Workflows
+MRtrix3 DWI Outputs
+MRtrix3 Anatomical Outputs
+mrtrix_multishell_msmt_ACT-hsvs
+mrtrix_multishell_msmt_ACT-fast
+mrtrix_multishell_msmt_noACT
+mrtrix_singleshell_ss3t_ACT-hsvs
+mrtrix_singleshell_ss3t_ACT-fast
+mrtrix_singleshell_ss3t_noACT
+pyafq_tractometry
+PyAFQ Outputs
+mrtrix_multishell_msmt_pyafq_tractometry
+PyAFQ Outputs
+amico_noddi
+Scalar Maps
+Other Outputs
+dsi_studio_gqi
+Scalar Maps
+Other Outputs
+dsi_studio_autotrack
+Scalar Maps
+Other Outputs
+ss3t_fod_autotrack
+Scalar Maps
+Other Outputs
+TORTOISE
+Scalar Maps
+Other Outputs
+dipy_mapmri
+Scalar Maps
+Other Outputs
+dipy_dki
+Scalar Maps
+Other Outputs
+dipy_3dshore
+Scalar Maps
+reorient_fslstd
+csdsi_3dshore
+Scalar Maps
+Other Outputs
+hbcd_scalar_maps
+Scalar Maps
+Other Outputs
+multishell_scalarfest
+Scalar Maps
+Other Outputs
+Which workflows are appropriate for your dMRI data?
+Connectivity matrices
+Atlases
+Using custom atlases
+Connectivity Measures
+MRtrix3 Connectivity Measures
+DSI Studio Connectivity Measures
+References
+Custom Reconstruction Workflows
+Outputs of
+QSIRecon
+Contributing to
+QSIRecon
+What’s New
+Comparisons to other pipelines
+Getting help
+License information
+API Documentation
+qsirecon
+Built-In Reconstruction Workflows
+View page source
+Built-In Reconstruction Workflows
+
+The Built-In recon workflows can be easily selected by specifying their name
+after the
+--recon-spec
+flag (e.g.
+--recon-spec
+amico_noddi
+).
+Many of these workflows were originally described in Cieslak
+et al.
+[
+1
+]
+.
+Not all workflows are suitable for all kinds of dMRI data.
+Be sure to check
+Which workflows are appropriate for your dMRI data?
+.
+By specifying just a name for
+--recon_spec
+, you will be using all the default arguments
+for the various steps in that workflow. Workflows can be customized
+(see
+Custom Reconstruction Workflows
+).
+Workflows
+
+MRtrix3-based Workflows
+
+The MRtrix workflows are identical up to the FOD estimation. In each case the fiber response
+function is estimated using
+dwi2response
+dhollander
+[
+2
+]
+with a mask based on the T1w.
+The main differences are in
+the CSD algorithm used in dwi2fod (msmt_csd or ss3t_csd)
+whether a T1w-based tissue segmentation is used during tractography
+In the
+*_noACT
+versions of the pipelines, no T1w-based segmentation is used during
+tractography. Otherwise, cropping is performed at the GM/WM interface, along with backtracking.
+In all pipelines, tractography is performed using
+tckgen
+, which uses the iFOD2 probabilistic tracking method to generate 1e7 streamlines with a
+maximum length of 250mm, minimum length of 30mm, FOD power of 0.33. Weights for each streamline
+were calculated using
+SIFT2
+[
+3
+]
+and were included for while estimating the
+structural connectivity matrix.
+Warning
+We don’t recommend using ACT with FAST segmentations. The full benefits of ACT
+require very precise tissue boundaries and FAST just doesn’t do this reliably
+enough. We strongly recommend the
+hsvs
+segmentation if you’re going to
+use ACT. Note that this requires
+--fs-subjects-dir
+MRtrix3 DWI Outputs
+
+These files are located in the
+dwi/
+directories.
+File Name
+Description
+*_connectivity.mat
+MATLAB format mat file containing connectivity matrices for all the selected atlases. This is an hdf5-format file and can be read using
+scipy.io.matlab.loadmat
+in Python.
+*_exemplarbundles.zip
+A zip archive containing the output directory from
+connectome2tck
+. Unzip this directory and view the exemplar connections (one is created for each nonzero edge in the connectivity matrix) using
+mrview
+to ensure that you’re seeing the expected shapes of connections.
+*_streamlines.tck.gz
+Streamlines produced by
+tckgen
+. NOTE: these are not saved to the output directory by default.
+*model-mtnorm*param-inliermask*_dwimap.nii.gz
+Inlier mask created by
+mtnormalize
+*model-mtnorm*param-norm*_dwimap.nii.gz
+Inlier mask created by
+mtnormalize
+*model-sift2*_mu.txt
+The $mu$ value that should be used to adjust SIFT2 weights to account for different response functions.
+*model-sift2*_streamlineweights.csv
+Per-streamline SIFT2 weight for each streamline in
+streamlines.tck.gz
+.
+*param-fod*label-CSF*_dwimap.mif.gz
+FOD for cerebrospinal fluid.
+*param-fod*label-CSF*_dwimap.txt
+SH response function for cerebrospinal fluid.
+*param-fod*label-GM*_dwimap.mif.gz
+FOD for gray matter.
+*param-fod*label-GM*_dwimap.txt
+SH response function for gray matter.
+*param-fod*label-WM*_dwimap.mif.gz
+FOD for white matter. These FODs are used as inputs to
+tckgen
+for tractograpy.
+*param-fod*label-WM*_dwimap.txt
+SH response function for white matter.
+MRtrix3 Anatomical Outputs
+
+These files are located
+anat/
+directories.
+File Name
+Description
+*space-ACPC|T1w*seg-hsvs*_dseg.nii.gz
+Hybrid Surface/Voume Segmentation in MRtrix3 5tt format. Aligned in coordinate space to
+space-ACPC
+.
+*space-fsnative*seg-hsvs*_dseg.nii.gz
+Hybrid Surface/Volume Segmentation in MRtrix3 5tt format. Aligned to the FreeSurfer
+orig.mgz
+image.
+mrtrix_multishell_msmt_ACT-hsvs
+
+This workflow uses the
+msmt_csd
+algorithm
+[
+4
+]
+to estimate FODs for white matter,
+gray matter and cerebrospinal fluid using
+multi-shell acquisitions
+. The white matter FODs are
+used for tractography and the T1w segmentation is used for anatomical constraints
+[
+5
+]
+.
+The T1w segmentation uses the hybrid surface volume segmentation (hsvs)
+[
+6
+]
+and
+requires
+--fs-subjects-dir
+.
+This workflow produces
+MRtrix3 DWI Outputs
+and
+MRtrix3 Anatomical Outputs
+.
+mrtrix_multishell_msmt_ACT-fast
+
+Identical to
+mrtrix_multishell_msmt_ACT-hsvs
+except FSL’s FAST is used for
+tissue segmentation. This workflow is not recommended.
+This workflow produces
+MRtrix3 DWI Outputs
+.
+mrtrix_multishell_msmt_noACT
+
+This workflow uses the
+msmt_csd
+algorithm
+[
+4
+]
+to estimate FODs for white matter,
+gray matter and cerebrospinal fluid using
+multi-shell acquisitions
+. The white matter FODs are
+used for tractography with no T1w-based anatomical constraints.
+This workflow produces
+MRtrix3 DWI Outputs
+.
+mrtrix_singleshell_ss3t_ACT-hsvs
+
+This workflow uses the
+ss3t_csd_beta1
+algorithm
+[
+7
+]
+to estimate FODs for white matter,
+and cerebrospinal fluid using
+single shell (DTI) acquisitions
+. The white matter FODs are
+used for tractography and the T1w segmentation is used for anatomical constraints
+[
+5
+]
+.
+The T1w segmentation uses the hybrid surface volume segmentation (hsvs)
+[
+6
+]
+and
+requires
+--fs-subjects-dir
+.
+This workflow produces
+MRtrix3 DWI Outputs
+and
+MRtrix3 Anatomical Outputs
+.
+mrtrix_singleshell_ss3t_ACT-fast
+
+Identical to
+mrtrix_singleshell_ss3t_ACT-hsvs
+except FSL’s FAST is used for
+tissue segmentation. This workflow is not recommended.
+This workflow produces
+MRtrix3 DWI Outputs
+.
+mrtrix_singleshell_ss3t_noACT
+
+This workflow uses the
+ss3t_csd_beta1
+algorithm
+[
+7
+]
+to estimate FODs for white matter,
+and cerebrospinal fluid using
+single shell (DTI) acquisitions
+. The white matter FODs are
+used for tractography with no T1w-based anatomical constraints.
+This workflow produces
+MRtrix3 DWI Outputs
+.
+pyafq_tractometry
+
+This workflow uses the AFQ
+[
+8
+]
+implemented in Python
+[
+9
+]
+to recognize
+major white matter pathways within the tractography, and then extract tissue properties along
+those pathways. See the
+pyAFQ documentation
+.
+PyAFQ Outputs
+
+File Name
+Description
+sub-* (directory)
+PyAFQ results direcrory for each subject
+mrtrix_multishell_msmt_pyafq_tractometry
+
+Identical to
+pyafq_tractometry
+except that tractography generated using IFOD2 from MRTrix3,
+instead of using pyAFQ’s default DIPY tractography.
+This can also be used as an example for how to import tractographies from other
+reconstruciton pipelines to pyAFQ.
+This workflow produces
+MRtrix3 DWI Outputs
+.
+PyAFQ Outputs
+
+File Name
+Description
+sub-* (directory)
+PyAFQ results direcrory for each subject
+amico_noddi
+
+This workflow estimates the NODDI
+[
+10
+]
+model using the implementation from
+AMICO
+[
+11
+]
+and tissue fraction modulation described in
+[
+12
+]
+.
+Images with (modulated) intra-cellular volume fraction (ICVF), isotropic volume fraction (ISOVF),
+(modulated) orientation dispersion (OD), root mean square error (RMSE) and normalized RMSE are written to outputs.
+Additionally, a DSI Studio fib file is created using the peak directions and ICVF as a stand-in for QA to be
+used for tractography.
+Please see Parker 2021
+[
+12
+]
+for a detailed description of use and application of the
+tissue fraction modulated outputs.
+Scalar Maps
+
+Model
+Parameter
+Description
+noddi
+direction
+Peak directions from NODDI
+noddi
+icvf
+Intracellular volume fraction from NODDI
+noddi
+isovf
+Isotropic volume fraction from NODDI
+noddi
+od
+Orientation dispersion index from NODDI
+noddi
+modulated icvf
+Tissue fraction modulated intracellular volume fraction from NODDI
+noddi
+modulated od
+Tissue fraction modulated orientation dispersion from NODDI
+noddi
+rmse
+Root mean square error between predicted and observed signal from NODDI
+noddi
+rmse
+Normalized RMSE between predicted and observed signal from NODDI
+Other Outputs
+
+File Name
+Description
+*model-noddi*_config.pickle.gz
+A config file internally used by AMICO.
+*model-noddi*param-direction*_dwimap.fib.gz
+DSI Studio fib format file where the peak directions come from the NODDI fit. The “qa” variable is actually ICVF.
+dsi_studio_gqi
+
+Here the standard GQI plus deterministic tractography pipeline is used
+[
+13
+]
+.
+GQI works on
+almost any imaginable sampling scheme because DSI Studio will internally interpolate the q-space
+data so  symmetry requirements are met. GQI models the water diffusion ODF, so ODF peaks are much
+smaller  than you see with CSD. This results in a rather conservative peak detection, which greatly
+benefits from having more diffusion data than a typical DTI.
+5 million streamlines are created with a maximum length of 250mm, minimum length of 30mm,
+random seeding, a step size of 1mm and an automatically calculated QA threshold.
+Additionally, a number of anisotropy scalar images are produced such as QA, GFA and ISO.
+Scalar Maps
+
+Model
+Parameter
+Single Shell
+Multi Shell
+Description
+gqi
+gfa
+Yes
+Yes
+Generalized Fractional Anisotropy from a GQI fit
+gqi
+iso
+Yes
+Yes
+Isotropic Diffusion from a GQI fit
+gqi
+qa
+Yes
+Yes
+Quantitative Anisotropy from a GQI fit
+gqi
+rdi
+Yes
+Yes
+Restricted diffusion imagimg from a GQI fit
+gqi
+nrdi02L
+No
+Yes
+Non-restricted diffusion at 0.2 diffusion sampling length from a GQI fit
+gqi
+nrdi04L
+No
+Yes
+Non-restricted diffusion at 0.4 diffusion sampling length from a GQI fit
+gqi
+nrdi06L
+No
+Yes
+Non-restricted diffusion at 0.6 diffusion sampling length from a GQI fit
+tensor
+ad
+Yes
+Yes
+Axial Diffusivity (first eigenvalue) from a tensor fit
+tensor
+fa
+Yes
+Yes
+Radial Diffusivity from a tensor fit
+tensor
+ha
+Yes
+Yes
+Helix Angle from a tensor fit
+tensor
+md
+Yes
+Yes
+Mean Diffusivity from a tensor fit
+tensor
+rd
+Yes
+Yes
+Radial Diffusivity from a tensor fit
+tensor
+rd1
+Yes
+Yes
+Lambda 2 (second eigenvalue) from a tensor fit
+tensor
+rd2
+Yes
+Yes
+Lambda 3 (third eigenvalue) from a tensor fit
+tensor
+txx
+Yes
+Yes
+Tensor fit txx
+tensor
+txy
+Yes
+Yes
+Tensor fit txy
+tensor
+txz
+Yes
+Yes
+Tensor fit txz
+tensor
+tyy
+Yes
+Yes
+Tensor fit tyy
+tensor
+tyz
+Yes
+Yes
+Tensor fit tyz
+tensor
+tzz
+Yes
+Yes
+Tensor fit tzz
+Other Outputs
+
+File Name
+Description
+*_connectivity.mat
+MATLAB format mat file containing connectivity matrices for all the selected atlases. This is an hdf5-format file and can be read using
+scipy.io.matlab.loadmat
+in Python.
+*space-ACPC|T1w*_dwimap.fib.gz
+DSI Studio fib format containing the GQI ODFs used for AutoTrack. This also contains all of the scalar maps for use with tracking.
+dsi_studio_autotrack
+
+This workflow implements DSI Studio’s q-space diffeomorphic reconstruction (QSDR), the MNI space
+(ICBM-152) version of GQI, followed by automatic fiber tracking (autotrack)
+[
+14
+]
+[
+15
+]
+of 56 white matter pathways. Autotrack uses a population-averaged tractography atlas
+(based on HCP-Young Adult data) to identify tracts of interest in individual subject’s data.
+The autotrack procedure seeds deterministic fiber tracking with randomized parameter saturation
+within voxels that correspondto each tract in the tractography atlas and determines whether
+generated streamlines belong to the target tract based on the Hausdorff distance between
+subject and atlas streamlines.
+Reconstructed subject-specific tracts are written out as .tck files that are aligned to the
+QSIRecon
+-generated _dwiref.nii.gz and preproc_T1w.nii.gz volumes; .tck files can be visualized
+overlaid on these volumes in mrview or MI-brain. Note, .tck files will not appear in alignment
+with the dwiref/T1w volumes in DSI Studio due to how the .tck files are read in.
+Diffusion metrics (e.g., dti_fa, gfa, iso,rdi, nrdi02) and shape statistics (e.g., mean_length,
+span, curl, volume, endpoint_radius) are calculated for subject-specific tracts and written out in
+an AutoTrackGQI.csv file.
+Scalar Maps
+
+Model
+Parameter
+Single Shell
+Multi Shell
+Description
+gqi
+gfa
+Yes
+Yes
+Generalized Fractional Anisotropy from a GQI fit
+gqi
+iso
+Yes
+Yes
+Isotropic Diffusion from a GQI fit
+gqi
+qa
+Yes
+Yes
+Quantitative Anisotropy from a GQI fit
+gqi
+rdi
+Yes
+Yes
+Restricted diffusion imagimg from a GQI fit
+gqi
+nrdi02L
+No
+Yes
+Non-restricted diffusion at 0.2 diffusion sampling length from a GQI fit
+gqi
+nrdi04L
+No
+Yes
+Non-restricted diffusion at 0.4 diffusion sampling length from a GQI fit
+gqi
+nrdi06L
+No
+Yes
+Non-restricted diffusion at 0.6 diffusion sampling length from a GQI fit
+tensor
+ad
+Yes
+Yes
+Axial Diffusivity (first eigenvalue) from a tensor fit
+tensor
+fa
+Yes
+Yes
+Radial Diffusivity from a tensor fit
+tensor
+ha
+Yes
+Yes
+Helix Angle from a tensor fit
+tensor
+md
+Yes
+Yes
+Mean Diffusivity from a tensor fit
+tensor
+rd
+Yes
+Yes
+Radial Diffusivity from a tensor fit
+tensor
+rd1
+Yes
+Yes
+Lambda 2 (second eigenvalue) from a tensor fit
+tensor
+rd2
+Yes
+Yes
+Lambda 3 (third eigenvalue) from a tensor fit
+tensor
+txx
+Yes
+Yes
+Tensor fit txx
+tensor
+txy
+Yes
+Yes
+Tensor fit txy
+tensor
+txz
+Yes
+Yes
+Tensor fit txz
+tensor
+tyy
+Yes
+Yes
+Tensor fit tyy
+tensor
+tyz
+Yes
+Yes
+Tensor fit tyz
+tensor
+tzz
+Yes
+Yes
+Tensor fit tzz
+Other Outputs
+
+File Name
+Description
+*_streamlines.tck.gz
+One tck.gz per bundle. The bundle represented by this file is specified in the
+bundle-
+tag.
+*bundles-DSIStudio*_scalarstats.tsv
+Statistics on scalars produced by this workflow
+*bundles-DSIStudio*_tdistats.tsv
+Statistics on streamline density in voxels
+*space-ACPC|T1w*_dwimap.fib.gz
+DSI Studio fib format containing the GQI ODFs used for AutoTrack.
+ss3t_fod_autotrack
+
+This workflow is identical to
+dsi_studio_autotrack
+, except it substitutes
+the GQI fit with the
+ss3t_csd_beta1
+algorithm
+[
+7
+]
+to estimate FODs for white matter.
+A GQI reconstruction is performed first based on the entire input data.
+The QA and ISO images from GQI are used to register the ACPC data to DSI Studio’s ICBM 152 template.
+The GQI-based registration is used to transform the template bundles to subject ACPC space,
+where the SS3T-based FODs are used for tractography.
+This is a good workflow for doing tractometry on low-quality single shell data.
+If more than one shell is present in the input data, only the highest b-value shell is used.
+Scalar Maps
+
+Model
+Parameter
+Single Shell
+Multi Shell
+Description
+gqi
+gfa
+Yes
+Yes
+Generalized Fractional Anisotropy from a GQI fit
+gqi
+iso
+Yes
+Yes
+Isotropic Diffusion from a GQI fit
+gqi
+qa
+Yes
+Yes
+Quantitative Anisotropy from a GQI fit
+gqi
+rdi
+Yes
+Yes
+Restricted diffusion imagimg from a GQI fit
+gqi
+nrdi02L
+No
+Yes
+Non-restricted diffusion at 0.2 diffusion sampling length from a GQI fit
+gqi
+nrdi04L
+No
+Yes
+Non-restricted diffusion at 0.4 diffusion sampling length from a GQI fit
+gqi
+nrdi06L
+No
+Yes
+Non-restricted diffusion at 0.6 diffusion sampling length from a GQI fit
+tensor
+ad
+Yes
+Yes
+Axial Diffusivity (first eigenvalue) from a tensor fit
+tensor
+fa
+Yes
+Yes
+Radial Diffusivity from a tensor fit
+tensor
+ha
+Yes
+Yes
+Helix Angle from a tensor fit
+tensor
+md
+Yes
+Yes
+Mean Diffusivity from a tensor fit
+tensor
+rd
+Yes
+Yes
+Radial Diffusivity from a tensor fit
+tensor
+rd1
+Yes
+Yes
+Lambda 2 (second eigenvalue) from a tensor fit
+tensor
+rd2
+Yes
+Yes
+Lambda 3 (third eigenvalue) from a tensor fit
+tensor
+txx
+Yes
+Yes
+Tensor fit txx
+tensor
+txy
+Yes
+Yes
+Tensor fit txy
+tensor
+txz
+Yes
+Yes
+Tensor fit txz
+tensor
+tyy
+Yes
+Yes
+Tensor fit tyy
+tensor
+tyz
+Yes
+Yes
+Tensor fit tyz
+tensor
+tzz
+Yes
+Yes
+Tensor fit tzz
+Other Outputs
+
+File Name
+Description
+*bundles-DSIStudio*_scalarstats.csv
+Statistics on scalars produced by this workflow.
+*bundles-DSIStudio*_tdistats.tsv
+Statistics on streamline density in voxels.
+*model-ss3t*_streamlines.tck.gz
+One tck.gz per bundle. The bundle represented by this file is specified in the
+bundle-
+tag. Bundles were tracked using the SS3t FODs.
+*space-ACPC|T1w*model-gqi*_dwimap.fib.gz
+DSI Studio fib format containing the GQI ODFs used for AutoTrack registration.
+*space-ACPC|T1w*model-ss3t*_dwimap.fib.gz
+DSI Studio fib format containing the SS3T FODs used for AutoTrack.
+*space-ACPC|T1w*model-ss3t*_dwimap.map.gz
+Mapping file produced by DSI Studio. Here the model entity specifies ss3t so that DSI Studio associates the mapping with the model-ss3t fib.gz file. Be aware that this mapping was created using the model-gqi fib.gz file.
+TORTOISE
+
+The TORTOISE
+[
+16
+]
+software can calculate Tensor and MAPMRI fits,
+along with their many associated scalar maps. This workflow only produces scalar maps.
+Scalar Maps
+
+Model
+Parameter
+Description
+mapmri
+ng
+Non-Gaussianity from MAPMRI
+mapmri
+ngpar
+Non-Gaussianity parallel from MAPMRI
+mapmri
+ngperp
+Non-Gaussianity perpendicular from MAPMRI
+mapmri
+pa
+PA from MAPMRI
+mapmri
+path
+PAth from MAPMRI
+mapmri
+rtap
+Return to axis probability from MAPMRI
+mapmri
+rtop
+Return to origin probability from MAPMRI
+mapmri
+rtpp
+Return to plane probability from MAPMRI
+tensor
+ad
+Axial Diffusivity (first eigenvalue) from a tensor fit
+tensor
+am
+A0 from a tensor fit
+tensor
+fa
+Fractional Anisotropy from a tensor fit
+tensor
+li
+LI from a tensor fit
+tensor
+rd
+Radial Diffusivity from a tensor fit
+Other Outputs
+
+File Name
+Description
+*_scalarstats.tsv
+TORTOISE scalars (tensors and MAPMRI) summarized within WM bundles. The name of the method used to create the bundles is specified after
+bundles-
+.
+dipy_mapmri
+
+The MAPMRI method is used to estimate EAPs from which ODFs are calculated analytically. This
+method produces scalars like RTOP, RTAP, QIV, MSD, etc.
+The ODFs are saved in DSI Studio format and tractography is run identically to that in
+dsi_studio_gqi
+.
+Scalar Maps
+
+Model
+Parameter
+Description
+mapmri
+lapnorm
+Laplacian norm from regularized MAPMRI (MAPL)
+mapmri
+mapcoeffs
+MAPMRI coefficients
+mapmri
+msd
+mean square displacement from MAPMRI
+mapmri
+ng
+Non-Gaussianity from MAPMRI
+mapmri
+ngpar
+Non-Gaussianity parallel from MAPMRI
+mapmri
+ngperp
+Non-Gaussianity perpendicular from MAPMRI
+mapmri
+qiv
+q-space inverse variance from MAPMRI
+mapmri
+rtap
+Return to axis probability from MAPMRI
+mapmri
+rtop
+Return to origin probability from MAPMRI
+mapmri
+rtpp
+Return to plane probability from MAPMRI
+Other Outputs
+
+File Name
+Description
+*_scalarstats.tsv
+MAPMRI scalars summarized within WM bundles. The name of the method used to create the bundles is specified after
+bundles-
+.
+dipy_dki
+
+A DKI model is fit to the dMRI signal and multiple scalar maps are produced.
+Scalar Maps
+
+Model
+Parameter
+Description
+dki
+ad
+DKI Axial Diffusivity
+dki
+ak
+DKI Axial Kurtosis
+dki
+kfa
+DKI Kurtosis Fractional Anisotropy
+dki
+linearity
+DKI Linearity
+dki
+md
+DKI Mean Diffusivity
+dki
+mk
+DKI Mean Kurtosis
+dki
+mkt
+DKI Mean Kurtosis Tensor
+dki
+planarity
+DKI Planarity
+dki
+rd
+DKI Radial Diffusivity
+dki
+rk
+DKI Radial Kurtosis
+dki
+sphericity
+DKI Sphericity
+tensor
+fa
+DKI Fractional Anisotropy
+dkimicro
+ad
+DKI Microstructural Axial Diffusivity
+dkimicro
+ade
+DKI Microstructural Axial Diffusivity of the Extra-Cellular Compartment
+dkimicro
+ak
+DKI Microstructural Axial Kurtosis
+dkimicro
+awf
+DKI Microstructural Axonal Water Fraction
+dkimicro
+axonald
+DKI Microstructural Axonal Diffusivity
+dkimicro
+kfa
+DKI Microstructural Kurtosis Fractional Anisotropy
+dkimicro
+md
+DKI Microstructural Mean Diffusivity
+dkimicro
+rd
+DKI Microstructural Radial Diffusivity
+dkimicro
+rde
+DKI Microstructural Radial Diffusivity of the Extra-Cellular Compartment
+dkimicro
+tortuosity
+DKI Microstructural Tortuosity
+dkimicro
+trace
+DKI Microstructural Trace
+Other Outputs
+
+File Name
+Description
+*_scalarstats.tsv
+DKI scalars summarized within WM bundles. The name of the method used to create the bundles is specified after
+bundles-
+.
+dipy_3dshore
+
+This uses the BrainSuite 3dSHORE basis in a Dipy reconstruction. Much like
+dipy_mapmri
+,
+a slew of anisotropy scalars are estimated. Here the
+dsi_studio_gqi
+fiber tracking is
+again run on the 3dSHORE-estimated ODFs.
+Scalar Maps
+
+Model
+Parameter
+Description
+3dshore
+CNR
+Contrast to noise ratio for 3dshore fit
+3dshore
+alpha
+alpha used when fitting in each voxel
+3dshore
+lapnorm
+Laplacian norm from regularized MAPMRI (MAPL)
+3dshore
+mapcoeffs
+MAPMRI coefficients
+3dshore
+msd
+mean square displacement from MAPMRI
+3dshore
+ng
+Non-Gaussianity from MAPMRI
+3dshore
+ngpar
+Non-Gaussianity parallel from MAPMRI
+3dshore
+ngperp
+Non-Gaussianity perpendicular from MAPMRI
+3dshore
+qiv
+q-space inverse variance from MAPMRI
+3dshore
+r2
+r^2 of the 3dshore fit
+3dshore
+regularization
+regularization of the 3dshore fit
+3dshore
+rtap
+Return to axis probability from MAPMRI
+3dshore
+rtop
+Return to origin probability from MAPMRI
+3dshore
+rtpp
+Return to plane probability from MAPMRI
+reorient_fslstd
+
+Reorients the
+QSIRecon
+preprocessed DWI and bval/bvec to the standard FSL orientation.
+This can be useful if FSL tools will be applied outside of
+QSIRecon
+.
+csdsi_3dshore
+
+[EXPERIMENTAL]
+This pipeline is for DSI or compressed-sensing DSI. The first step is a
+L2-regularized 3dSHORE reconstruction of the ensemble average propagator in each voxel. These EAPs
+are then used for two purposes
+To calculate ODFs, which are then sent to DSI Studio for tractography
+To estimate signal for a multishell (specifically HCP) sampling scheme, which is run
+through the  pipeline
+All outputs, including the imputed HCP sequence are saved in the outputs directory.
+Scalar Maps
+
+Model
+Parameter
+Description
+3dshore
+CNR
+Contrast to noise ratio for 3dshore fit
+3dshore
+alpha
+alpha used when fitting in each voxel
+3dshore
+lapnorm
+Laplacian norm from regularized MAPMRI (MAPL)
+3dshore
+mapcoeffs
+MAPMRI coefficients
+3dshore
+msd
+mean square displacement from MAPMRI
+3dshore
+ng
+Non-Gaussianity from MAPMRI
+3dshore
+ngpar
+Non-Gaussianity parallel from MAPMRI
+3dshore
+ngperp
+Non-Gaussianity perpendicular from MAPMRI
+3dshore
+qiv
+q-space inverse variance from MAPMRI
+3dshore
+r2
+r^2 of the 3dshore fit
+3dshore
+regularization
+regularization of the 3dshore fit
+3dshore
+rtap
+Return to axis probability from MAPMRI
+3dshore
+rtop
+Return to origin probability from MAPMRI
+3dshore
+rtpp
+Return to plane probability from MAPMRI
+Other Outputs
+
+File Name
+Description
+*_scalarstats.tsv
+MAPMRI scalars summarized within WM bundles. The name of the method used to create the bundles is specified after
+bundles-
+.
+hbcd_scalar_maps
+
+Designed to run on
+HBCD
+data, this is also a general-purpose
+way to get many multishell-supported fitting methods, including
+dipy_dki
+TORTOISE
+(model-MAPMRI)
+TORTOISE
+(model-tensor using only b<4000)
+dsi_studio_gqi
+Bundles are generated using
+dsi_studio_autotrack
+.
+All the scalars generated by these models are then mapped
+Into template space
+On to the bundles from
+dsi_studio_autotrack
+In total, the scalars estimated by this workflow are:
+Scalar Maps
+
+Model
+Parameter
+Description
+dki
+ad
+DKI Axial Diffusivity
+dki
+ak
+DKI Axial Kurtosis
+dki
+kfa
+DKI Kurtosis Fractional Anisotropy
+dki
+md
+DKI Mean Diffusivity
+dki
+mk
+DKI Mean Kurtosis
+dki
+mkt
+DKI Mean Kurtosis Tensor
+dki
+rd
+DKI Radial Diffusivity
+dki
+rk
+DKI Radial Kurtosis
+gqi
+gfa
+Generalized Fractional Anisotropy
+gqi
+iso
+Isotropic Diffusion from GQI
+gqi
+qa
+Quantitative Anisotropy from a GQI fit
+mapmri
+ng
+Non-Gaussianity from MAPMRI
+mapmri
+ngpar
+Non-Gaussianity parallel from MAPMRI
+mapmri
+ngperp
+Non-Gaussianity perpendicular from MAPMRI
+mapmri
+pa
+PA from MAPMRI
+mapmri
+path
+PAth from MAPMRI
+mapmri
+rtap
+Return to axis probability from MAPMRI
+mapmri
+rtop
+Return to origin probability from MAPMRI
+mapmri
+rtpp
+Return to plane probability from MAPMRI
+tensor
+ad
+Axial Diffusivity (first eigenvalue) from a tensor fit
+tensor
+am
+A0 from a tensor fit
+tensor
+fa
+Fractional Anisotropy from a tensor fit
+tensor
+ha
+Helix Angle from tensor fit
+tensor
+li
+LI from a tensor fit
+tensor
+md
+Mean Diffusivity from a tensor fit
+tensor
+rd
+Radial Diffusivity from a tensor fit
+tensor
+rd1
+Lambda 2 (second eigenvalue) from a tensor fit
+tesnor
+rd2
+Lambda 3 (third eigenvalue) from a tensor fit
+tensor
+txx
+Tensor fit txx
+tensor
+txy
+Tensor fit txy
+tensor
+txz
+Tensor fit txz
+tensor
+tyy
+Tensor fit tyy
+tensor
+tyz
+Tensor fit tyz
+tensor
+tzz
+Tensor fit tzz
+Other Outputs
+
+File Name
+Description
+*_streamlines.tck.gz
+One tck.gz per bundle. The bundle represented by this file is specified in the
+bundle-
+tag.
+*bundles-DSIStudio*_scalarstats.csv
+Statistics on scalars produced by this workflow
+*bundles-DSIStudio*_tdistats.tsv
+Statistics on streamline density in voxels
+*space-ACPC|T1w*_dwimap.fib.gz
+DSI Studio fib format containing the GQI ODFs used for AutoTrack.
+*space-ACPC|T1w*_dwimap.map.gz
+Mapping file produced by DSI Studio.
+multishell_scalarfest
+
+This is a general-purpose way to get scalar maps from many multishell-supported fitting methods,
+including:
+dipy_dki
+TORTOISE
+(model-MAPMRI)
+TORTOISE
+(model-tensor using only b<4000)
+dsi_studio_gqi
+amico_noddi
+Scalar Maps
+
+Model
+Parameter
+Description
+dki
+ad
+DKI Axial Diffusivity
+dki
+ak
+DKI Axial Kurtosis
+dki
+kfa
+DKI Kurtosis Fractional Anisotropy
+dki
+md
+DKI Mean Diffusivity
+dki
+mk
+DKI Mean Kurtosis
+dki
+mkt
+DKI Mean Kurtosis Tensor
+dki
+rd
+DKI Radial Diffusivity
+dki
+rk
+DKI Radial Kurtosis
+gqi
+gfa
+Generalized Fractional Anisotropy
+gqi
+iso
+Isotropic Diffusion from GQI
+gqi
+qa
+Quantitative Anisotropy from a GQI fit
+mapmri
+ng
+Non-Gaussianity from MAPMRI
+mapmri
+ngpar
+Non-Gaussianity parallel from MAPMRI
+mapmri
+ngperp
+Non-Gaussianity perpendicular from MAPMRI
+mapmri
+pa
+PA from MAPMRI
+mapmri
+path
+PAth from MAPMRI
+mapmri
+rtap
+Return to axis probability from MAPMRI
+mapmri
+rtop
+Return to origin probability from MAPMRI
+mapmri
+rtpp
+Return to plane probability from MAPMRI
+tensor
+ad
+Axial Diffusivity (first eigenvalue) from a tensor fit
+tensor
+am
+A0 from a tensor fit
+tensor
+fa
+Fractional Anisotropy from a tensor fit
+tensor
+ha
+Helix Angle from tensor fit
+tensor
+li
+LI from a tensor fit
+tensor
+md
+Mean Diffusivity from a tensor fit
+tensor
+rd
+Radial Diffusivity from a tensor fit
+tensor
+rd1
+Lambda 2 (second eigenvalue) from a tensor fit
+tesnor
+rd2
+Lambda 3 (third eigenvalue) from a tensor fit
+tensor
+txx
+Tensor fit txx
+tensor
+txy
+Tensor fit txy
+tensor
+txz
+Tensor fit txz
+tensor
+tyy
+Tensor fit tyy
+tensor
+tyz
+Tensor fit tyz
+tensor
+tzz
+Tensor fit tzz
+Other Outputs
+
+No other outputs are produced.
+Which workflows are appropriate for your dMRI data?
+
+Most reconstruction workflows will fit a model to the dMRI data. Listed below are
+the model-fitting workflows and which sampling schemes work with them.
+Name
+MultiShell
+Cartesian
+SingleShell
+amico_noddi
+Yes
+No
+No
+csdsi_3dshore
+Yes
+Yes
+No
+dipy_3dshore
+Yes
+Yes
+No
+dipy_dki
+Yes
+No
+No
+dipy_mapmri
+Yes
+Yes
+No
+dsi_studio_autotrack
+Yes
+Yes
+Yes
+dsi_studio_gqi
+Yes
+Yes
+Yes*
+hbcd_scalar_maps
+Yes
+No
+No
+mrtrix_multishell_msmt_ACT-fast
+*
+Yes
+No
+No
+mrtrix_multishell_msmt_ACT-hsvs
+Yes
+No
+No
+mrtrix_multishell_msmt_noACT
+Yes
+No
+No
+mrtrix_multishell_msmt_pyafq_tractometry
+Yes
+No
+Yes
+mrtrix_singleshell_ss3t_ACT-fast
+*
+No
+No
+Yes
+mrtrix_singleshell_ss3t_ACT-hsvs
+No
+No
+Yes
+mrtrix_singleshell_ss3t_noACT
+No
+No
+Yes
+multishell_scalarfest
+Yes
+No
+No
+pyafq_tractometry
+Yes
+No
+Yes
+reorient_fslstd
+Yes
+Yes
+Yes
+ss3t_fod_autotrack
+Yes
+No
+Yes
+TORTOISE
+Yes
+No
+No
+* Not recommended
+Connectivity matrices
+
+Instead of offering a bewildering number of options for constructing connectivity matrices,
+QSIRecon
+will construct as many connectivity matrices as it can given the reconstruction
+methods.
+It is
+highly
+recommended that you pick a weighting scheme before you run
+these pipelines and only look at those numbers.
+If you look at more than one weighting method be sure to adjust your statistics for the
+additional comparisons.
+To skip this step in your workflow, you can modify an existing recon pipeline by removing the
+action:
+connectivity
+section from the yaml file.
+Atlases
+
+The following atlases are included in
+QSIRecon
+.
+This means you do not need to add a
+--datasets
+argument to your command line,
+and can instead select them just with
+--atlases
+.
+If you previously were using the default atlases in a “connectivity matrix” workflow,
+you can match the previous behavior by adding
+--atlases
+4S156Parcels
+4S256Parcels
+4S456Parcels
+Brainnetome246Ext
+AICHA384Ext
+Gordon333Ext
+AAL116
+If you use one of them please be sure to cite the relevant publication.
+Brainnetome246Ext
+: Fan
+et al.
+[
+17
+]
+, extended with subcortical parcels.
+AICHA384Ext
+: Joliot
+et al.
+[
+18
+]
+, extended with subcortical parcels.
+Gordon333Ext
+: Gordon
+et al.
+[
+19
+]
+, extended with subcortical parcels.
+AAL116
+: Tzourio-Mazoyer
+et al.
+[
+20
+]
+The
+QSIRecon
+atlas set can be downloaded directly from
+box
+.
+The 4S atlas combines the Schaefer 2018 cortical atlas (version v0143)
+[
+21
+]
+at 10 different resolutions (100, 200, 300, 400, 500, 600, 700, 800, 900, and 1000 parcels) with
+the CIT168 subcortical atlas
+[
+22
+]
+,
+the Diedrichson cerebellar atlas
+[
+23
+]
+,
+the HCP thalamic atlas
+[
+24
+]
+,
+and the amygdala and hippocampus parcels from the HCP CIFTI subcortical parcellation
+[
+25
+]
+.
+The 4S atlas is used in the same manner across three PennLINC BIDS Apps:
+QSIRecon
+,
+XCP-D
+, and
+ASLPrep
+, to produce synchronized outputs across modalities.
+For more information about the 4S atlas, please see
+https://github.com/PennLINC/AtlasPack
+.
+Atlases are written out to the
+atlases
+subfolder, following
+BEP038
+.
+qsirecon
+/
+atlases
+/
+dataset_description
+.
+json
+atlas
+-<
+label
+>/
+atlas
+-<
+label
+>
+_space
+-<
+label
+>
+_res
+-<
+label
+>
+_dseg
+.
+nii
+.
+gz
+atlas
+-<
+label
+>
+_space
+-<
+label
+>
+_res
+-<
+label
+>
+_dseg
+.
+json
+atlas
+-<
+label
+>
+_dseg
+.
+tsv
+Additionally, each atlas is warped to the subject’s anatomical space and written out in the
+associated reconstruction workflows dataset.
+qsirecon
+/
+derivatives
+/
+qsirecon
+-<
+suffix
+>/
+sub
+-<
+label
+>/
+dwi
+/
+sub
+-<
+label
+>
+_space
+-
+ACPC_seg
+-<
+label
+>
+_dseg
+.
+nii
+.
+gz
+sub
+-<
+label
+>
+_space
+-
+ACPC_seg
+-<
+label
+>
+_dseg
+.
+mif
+.
+gz
+sub
+-<
+label
+>
+_space
+-
+ACPC_seg
+-<
+label
+>
+_dseg
+.
+json
+sub
+-<
+label
+>
+_space
+-
+ACPC_seg
+-<
+label
+>
+_dseg
+.
+tsv
+Using custom atlases
+
+It’s possible to use your own atlases provided you organize the atlases into BIDS-Atlas datasets.
+Users can control which atlases are used with the
+--atlases
+and
+--datasets
+parameters.
+The nifti images should be registered to the
+MNI152NLin2009cAsym
+included in
+QSIRecon
+.
+It is essential that your images are in the LPS+ orientation and have the sform zeroed-out in the header.
+Be sure to check for alignment and orientation
+in your outputs.
+Connectivity Measures
+
+Connectivity measures are bundled together in binary
+.mat
+files,
+rather than as atlas- and measure-specific tabular files.
+Warning
+We ultimately plan to organize the connectivity matrices according to the BIDS-Connectivity BEP,
+wherein each measure from each atlas is stored in a separate file.
+Therefore, this organization will change in the future.
+qsirecon
+/
+derivatives
+/
+qsirecon
+-<
+suffix
+>/
+sub
+-<
+label
+>/
+[
+ses
+-<
+label
+>/
+]
+dwi
+/
+<
+source_entities
+>
+_connectivity
+.
+mat
+The
+.mat
+file contains a dictionary with all of the connectivity measures specified
+by the recon spec for all of the different atlases specified by the user.
+For example, in the case where a user has selected a single atlas (
+<atlas>
+) and
+the recon spec specifies a single connectivity measure (
+<measure>
+),
+the
+.mat
+file will contain the following keys:
+command
+# The command that was run
+atlas_
+<
+atlas
+>
+_region_ids
+# The region ids for the atlas (1 x n_parcels array)
+atlas_
+<
+atlas
+>
+_region_labels
+# The region labels for the atlas (1 x n_parcels array)
+atlas_
+<
+atlas
+>
+_
+<
+measure
+>
+_connectivity
+# The connectivity matrix for the atlas and measure (n_parcels x n_parcels array)
+MRtrix3 Connectivity Measures
+
+MRtrix3 connectivity workflows produce 4 structural connectome outputs for each atlas.
+The 4 connectivity matrix outputs are
+atlas_<atlas>_radius<N>.count.connectivity
+: raw streamline count based matrix
+atlas_<atlas>_sift.radius<N>.count.connectivity
+: sift-weighted streamline count based matrix
+atlas_<atlas>_radius<N>.meanlength.connectivity
+: a matrix containing mean length of raw streamlines
+atlas_<atlas>_sift.radius<N>.meanlength.connectivity
+: a matrix containing mean length of sifted output
+The number
+N
+in
+radiusN
+indicates how many mm the algorithm would search up from a
+given streamline’s endpoint for a cortical region. E.g., a radius of 2 indicates that
+if a streamline ended before hitting gray matter, the search for a cortical
+termination region could be up to 2mm from the endpoint.
+DSI Studio Connectivity Measures
+
+DSI Studio has two options for how to count streamlines as “connecting” a region pair.
+pass
+counts a connection if any part of a streamline intersects two regions.
+end
+requires that a streamline terminates in each region in order to be connected.
+There are some practical considerations with each choice:
+pass
+could produce a connectivity matrix with
+more
+counts than the number of streamlines you requested.
+end
+will include many fewer counts than the streamlines you requested.
+Due to the arbitrary nature of streamline tractography, the
+pass
+method is probably more realistic.
+Once the streamlines connecting each region pair are found, they need to be used to quantify that connection somehow.
+The streamlines connecting a region pair can by default are summarized by
+count
+: the count of streamlines
+ncount
+: the count of streamlines normalized by their length
+mean_length
+: the mean length of streamlines in millimeters
+gfa
+: the mean Generalized Fractional Anisotropy along the streamlines
+A great walkthrough of connectivity analysis with DSI Studio can be found
+here
+.
+References
+
+[
+1
+]
+Matthew Cieslak, Philip A Cook, Xiaosong He, Fang-Cheng Yeh, Thijs Dhollander, Azeez Adebimpe, Geoffrey K Aguirre, Danielle S Bassett, Richard F Betzel, Josiane Bourque, and others. Qsiprep: an integrative platform for preprocessing and reconstructing diffusion mri data.
+Nature methods
+, 18(7):775–778, 2021. URL:
+https://doi.org/10.1038/s41592-021-01185-5
+,
+doi:10.1038/s41592-021-01185-5
+.
+[
+2
+]
+T Dhollander, R Mito, D Raffelt, and A Connelly. Improved white matter response function estimation for 3-tissue constrained spherical deconvolution. In
+Proc. Intl. Soc. Mag. Reson. Med
+, 555. 2019.
+[
+3
+]
+Robert E Smith, Jacques-Donald Tournier, Fernando Calamante, and Alan Connelly. Sift2: enabling dense quantitative assessment of brain white matter connectivity using streamlines tractography.
+Neuroimage
+, 119:338–351, 2015. URL:
+https://doi.org/10.1016/j.neuroimage.2015.06.092
+,
+doi:10.1016/j.neuroimage.2015.06.092
+.
+[
+4
+]
+(
+1
+,
+2
+)
+Ben Jeurissen, Jacques-Donald Tournier, Thijs Dhollander, Alan Connelly, and Jan Sijbers. Multi-tissue constrained spherical deconvolution for improved analysis of multi-shell diffusion mri data.
+NeuroImage
+, 103:411–426, 2014.
+[
+5
+]
+(
+1
+,
+2
+)
+Robert E Smith, Jacques-Donald Tournier, Fernando Calamante, and Alan Connelly. Anatomically-constrained tractography: improved diffusion mri streamlines tractography through effective use of anatomical information.
+Neuroimage
+, 62(3):1924–1938, 2012. URL:
+https://doi.org/10.1016/j.neuroimage.2012.06.005
+,
+doi:10.1016/j.neuroimage.2012.06.005
+.
+[
+6
+]
+(
+1
+,
+2
+)
+Robert Smith, Antonin Skoch, Claude J Bajada, Svenja Caspers, and Alan Connelly. Hybrid surface-volume segmentation for improved anatomically-constrained tractography.
+OHBM
+, 2020. URL:
+https://www.um.edu.mt/library/oar/handle/123456789/59839
+.
+[
+7
+]
+(
+1
+,
+2
+,
+3
+)
+Thijs Dhollander and Alan Connelly. A novel iterative approach to reap the benefits of multi-tissue csd from just single-shell (+ b= 0) diffusion mri data. In
+Proc ISMRM
+, volume 24, 3010. 2016.
+[
+8
+]
+Jason D. Yeatman, Robert F. Dougherty, Nathaniel J. Myall, Brian A. Wandell, and Heidi M. Feldman. Tract profiles of white matter properties: automating fiber-tract quantification.
+PLoS ONE
+, 2012.
+doi:10.1371/journal.pone.0049790
+.
+[
+9
+]
+J. Kruper, J.D. Yeatman, A. Richie-Halford, D. Bloom, M. Grotheer, S. Caffarra, G. Kiar, I.I. Karipidis, E. Roy, B.Q. Chandio, E. Garyfallidis, and A. Rokem. Evaluating the reliability of human brain white matter tractometry.
+Aperture Neuro
+, 1:1–25, 2021.
+[
+10
+]
+Hui Zhang, Torben Schneider, Claudia A Wheeler-Kingshott, and Daniel C Alexander. Noddi: practical in vivo neurite orientation dispersion and density imaging of the human brain.
+Neuroimage
+, 61(4):1000–1016, 2012.
+doi:10.1016/j.neuroimage.2012.03.072
+.
+[
+11
+]
+Alessandro Daducci, Erick J Canales-Rodríguez, Hui Zhang, Tim B Dyrby, Daniel C Alexander, and Jean-Philippe Thiran. Accelerated microstructure imaging via convex optimization (amico) from diffusion mri data.
+NeuroImage
+, 105:32–44, 2015.
+doi:10.1016/j.neuroimage.2014.10.026
+.
+[
+12
+]
+(
+1
+,
+2
+)
+C.S. Parker, T. Veale, M. Bocchetta, C.F. Slattery, I.B. Malone, D.L. Thomas, J.M. Schott, D.M. Cash, and H. Zhang. Not all voxels are created equal: reducing estimation bias in regional noddi metrics using tissue-weighted means.
+NeuroImage
+, 245:118749, 2021. URL:
+https://www.sciencedirect.com/science/article/pii/S1053811921010211
+,
+doi:https://doi.org/10.1016/j.neuroimage.2021.118749
+.
+[
+13
+]
+Fang-Cheng Yeh, Timothy D Verstynen, Yu Wang, Juan C Fernández-Miranda, and Wen-Yih Isaac Tseng. Deterministic diffusion fiber tracking improved by quantitative anisotropy.
+PLOS ONE
+, 8(11):e80713, 2013.
+[
+14
+]
+Fang-Cheng Yeh. Shape analysis of the human association pathways.
+Neuroimage
+, 223:117329, 2020.
+[
+15
+]
+Fang-Cheng Yeh. Population-based tract-to-region connectome of the human brain and its hierarchical topology.
+Nature communications
+, 13(1):4933, 2022. URL:
+https://doi.org/10.1038/s41467-022-32595-4
+,
+doi:10.1038/s41467-022-32595-4
+.
+[
+16
+]
+Mustafa Okan Irfanoglu, Amritha Nayak, Jeffrey Jenkins, and Carlo Pierpaoli. Tortoise v3: improvements and new features of the nih diffusion mri processing pipeline. In
+Program and proceedings of the ISMRM 25th annual meeting and exhibition, Honolulu, HI, USA
+. 2017.
+[
+17
+]
+Lingzhong Fan, Hai Li, Junjie Zhuo, Yu Zhang, Jiaojian Wang, Liangfu Chen, Zhengyi Yang, Congying Chu, Sangma Xie, Angela R Laird, and others. The human brainnetome atlas: a new brain atlas based on connectional architecture.
+Cerebral cortex
+, 26(8):3508–3526, 2016. URL:
+https://doi.org/10.1093/cercor/bhw157
+,
+doi:10.1093/cercor/bhw157
+.
+[
+18
+]
+Marc Joliot, Gaël Jobard, Mikaël Naveau, Nicolas Delcroix, Laurent Petit, Laure Zago, Fabrice Crivello, Emmanuel Mellet, Bernard Mazoyer, and Nathalie Tzourio-Mazoyer. Aicha: an atlas of intrinsic connectivity of homotopic areas.
+Journal of neuroscience methods
+, 254:46–59, 2015. URL:
+https://doi.org/10.1016/j.jneumeth.2015.07.013
+,
+doi:10.1016/j.jneumeth.2015.07.013
+.
+[
+19
+]
+Evan M Gordon, Timothy O Laumann, Babatunde Adeyemo, Jeremy F Huckins, William M Kelley, and Steven E Petersen. Generation and evaluation of a cortical area parcellation from resting-state correlations.
+Cerebral cortex
+, 26(1):288–303, 2016. URL:
+https://doi.org/10.1093/cercor/bhu239
+,
+doi:10.1093/cercor/bhu239
+.
+[
+20
+]
+Nathalie Tzourio-Mazoyer, Brigitte Landeau, Dimitri Papathanassiou, Fabrice Crivello, Octave Etard, Nicolas Delcroix, Bernard Mazoyer, and Marc Joliot. Automated anatomical labeling of activations in spm using a macroscopic anatomical parcellation of the mni mri single-subject brain.
+Neuroimage
+, 15(1):273–289, 2002. URL:
+https://doi.org/10.1006/nimg.2001.0978
+,
+doi:10.1006/nimg.2001.0978
+.
+[
+21
+]
+Alexander Schaefer, Ru Kong, Evan M. Gordon, Timothy O. Laumann, Xi-Nian Zuo, Avram J. Holmes, Simon B. Eickhoff, and B. T. Thomas Yeo. Local-Global Parcellation of the Human Cerebral Cortex from Intrinsic Functional Connectivity MRI.
+Cerebral Cortex (New York, N.Y.: 1991)
+, 28(9):3095–3114, September 2018.
+doi:10.1093/cercor/bhx179
+.
+[
+22
+]
+Wolfgang M Pauli, Amanda N Nili, and J Michael Tyszka. A high-resolution probabilistic in vivo atlas of human subcortical brain nuclei.
+Scientific data
+, 5(1):1–13, 2018. URL:
+https://doi.org/10.1038/sdata.2018.63
+,
+doi:10.1038/sdata.2018.63
+.
+[
+23
+]
+Maedbh King, Carlos R Hernandez-Castillo, Russell A Poldrack, Richard B Ivry, and Jörn Diedrichsen. Functional boundaries in the human cerebellum revealed by a multi-domain task battery.
+Nature neuroscience
+, 22(8):1371–1378, 2019. URL:
+https://doi.org/10.1038/s41593-019-0436-x
+,
+doi:10.1038/s41593-019-0436-x
+.
+[
+24
+]
+Elena Najdenovska, Yasser Alemán-Gómez, Giovanni Battistella, Maxime Descoteaux, Patric Hagmann, Sebastien Jacquemont, Philippe Maeder, Jean-Philippe Thiran, Eleonora Fornari, and Meritxell Bach Cuadra. In-vivo probabilistic atlas of human thalamic nuclei based on diffusion-weighted magnetic resonance imaging.
+Scientific data
+, 5(1):1–11, 2018. URL:
+https://doi.org/10.1038/sdata.2018.270
+,
+doi:10.1038/sdata.2018.270
+.
+[
+25
+]
+Matthew F. Glasser, Stamatios N. Sotiropoulos, J. Anthony Wilson, Timothy S. Coalson, Bruce Fischl, Jesper L. Andersson, Junqian Xu, Saad Jbabdi, Matthew Webster, Jonathan R. Polimeni, David C. Van Essen, Mark Jenkinson, and WU-Minn HCP Consortium. The minimal preprocessing pipelines for the Human Connectome Project.
+NeuroImage
+, 80:105–124, October 2013.
+doi:10.1016/j.neuroimage.2013.04.127
+.
+Previous
+Next
+© Copyright 2021-2026, qsirecon team.
+Built with
+Sphinx
+using a
+theme
+provided by
+Read the Docs
+.

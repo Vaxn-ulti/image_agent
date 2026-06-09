@@ -1,20 +1,38 @@
 import hashlib
 import json
+import mimetypes
 import os
+import re
 import zipfile
 from pathlib import Path
 from threading import Thread
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from app.agent.deepseek import DeepSeekUnavailable, complete_chat, provider_status
+from app.agent.graph import AgentRunner
+from app.agent.model_gateway import ModelGateway, ModelGatewayError, provider_status as model_provider_status
+from app.agent.run_ledger import finish_agent_run, list_project_agent_runs, load_agent_run, start_agent_run
+from app.agent.tools import read_project_context
+from app.agent.deepseek import DeepSeekUnavailable, complete_chat, provider_status as legacy_chat_provider_status
+from app.agent.rag_orchestration import build_rag_response
+from app.agent.rag_orchestration import dependency_status as rag_dependency_status
+from app.agent.rag_orchestration import grounding_policy as rag_grounding_policy
+from app.agent.rag_index import build_local_rag_index, local_rag_index_status, rag_vendor_coverage_catalog, rag_vendor_pointer_integrity, vendor_raw_source_status
 from app.core.config import PROJECTS_ROOT
 from app.db.database import connect, init_db, now_iso, row_to_dict
 from app.imaging.detect import detect_series
 from app.imaging.ingest import process_upload_session
+from app.workflows.artifact_manifest import build_artifact_manifest
 from app.workflows.deepprep import run_mock_deepprep
+from app.workflows.eligibility import build_workflow_eligibility
+from app.workflows.registry import allowed_runtime_workflows, list_workflows as registry_list_workflows, resolve_runtime_workflow_type
+from app.workflows.result_contract import load_result_summary, result_contract_spec
+from app.workflows.remote_scripts import classify_bold_fmriprep_xcpd_artifact_stage
+from app.scripts.verify_scientific_reports import check_output as check_scientific_report_output
+from app.scripts.verify_scientific_reports import resolve_task_output_dirs
 
 try:
     from app.workflows.pipeline import inspect_runtime, run_pipeline_task
@@ -33,29 +51,25 @@ except ImportError:
     def _list_agent_containers():
         return []
 
+try:
+    from app.workflows.bold_group_analysis import run_group_analysis
+except ImportError:
+    def run_group_analysis(*args, **kwargs):
+        raise RuntimeError('bold group analysis unavailable')
+
+try:
+    from app.workflows.bold_descriptive_review import run_descriptive_review
+except ImportError:
+    def run_descriptive_review(*args, **kwargs):
+        raise RuntimeError('bold descriptive review unavailable')
+
 app = FastAPI(title="Brain Image Agent API", version="0.2.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-WORKFLOWS = [
-    {"type": "t1_deepprep", "label": "T1 DeepPrep", "modality": "T1"},
-    {"type": "t1_deepprep_validate", "label": "T1 DeepPrep Validate", "modality": "T1"},
-    {"type": "bold_deepprep", "label": "fMRI/BOLD DeepPrep", "modality": "BOLD"},
-    {"type": "bold_deepprep_validate", "label": "fMRI/BOLD DeepPrep Validate", "modality": "BOLD"},
-    {"type": "bold_alff", "label": "BOLD ALFF", "modality": "BOLD"},
-    {"type": "bold_alff_validate", "label": "BOLD ALFF Validate", "modality": "BOLD"},
-    {"type": "bold_falff", "label": "BOLD fALFF", "modality": "BOLD"},
-    {"type": "bold_falff_validate", "label": "BOLD fALFF Validate", "modality": "BOLD"},
-    {"type": "dwi_qsiprep", "label": "DWI QSIPrep", "modality": "DWI"},
-    {"type": "dwi_qsiprep_validate", "label": "DWI QSIPrep Validate", "modality": "DWI"},
-    {"type": "dwi_qsirecon", "label": "DWI QSIRecon", "modality": "DWI"},
-    {"type": "dwi_qsirecon_validate", "label": "DWI QSIRecon Validate", "modality": "DWI"},
-    {"type": "dwi_qsi_full", "label": "DWI QSIPrep + QSIRecon", "modality": "DWI"},
-    {"type": "dwi_qsi_full_validate", "label": "DWI Full Validate", "modality": "DWI"},
-    {"type": "dicom_convert", "label": "DICOM to NIfTI", "modality": "DICOM"},
-    {"type": "dicom_convert_validate", "label": "DICOM to NIfTI Validate", "modality": "DICOM"},
-    {"type": "t1_deepprep_mock", "label": "T1 DeepPrep Mock", "modality": "T1"},
-]
-ALLOWED_WORKFLOWS = {w["type"] for w in WORKFLOWS}
+REPO_ROOT = Path(__file__).resolve().parents[3]
+
+WORKFLOWS = registry_list_workflows()
+ALLOWED_WORKFLOWS = allowed_runtime_workflows()
 
 class LoginRequest(BaseModel):
     username: str
@@ -77,6 +91,147 @@ class ChatRequest(BaseModel):
     project_id: int | None = None
     message: str
 
+
+class AgentRunRequest(BaseModel):
+    project_id: int | None = None
+    message: str
+
+
+class AgentResumeRequest(BaseModel):
+    approved: bool
+    confirmation: dict
+
+
+class RagQueryRequest(BaseModel):
+    project_id: int | None = None
+    query: str
+
+
+class ScientificReportVerifyRequest(BaseModel):
+    task_ids: list[int] = []
+    output_dirs: list[str] = []
+    projects_root: str | None = None
+    require_modalities: list[str] = []
+    require_container_native_qc: bool = False
+    min_native_qc_images: int = 0
+
+
+class BoldGroupAnalysisRequest(BaseModel):
+    group_a_task_ids: list[int]
+    group_b_task_ids: list[int]
+    seed_query: str = "PCC_DMN"
+    label_a: str = "group_a"
+    label_b: str = "group_b"
+
+
+class BoldDescriptiveReviewRequest(BaseModel):
+    deepprep_task_ids: list[int]
+    seed_preset: str = "PCC_DMN"
+
+
+def _requested_task_ids(message: str) -> list[int]:
+    anchored = [int(match) for match in re.findall(r"(?:#|任务|task\s*)\s*(\d+)", message, flags=re.IGNORECASE)]
+    if anchored:
+        tail = message
+        first_anchor = re.search(r"(?:#|任务|task\s*)\s*\d+", message, flags=re.IGNORECASE)
+        if first_anchor:
+            tail = message[first_anchor.start() :]
+        nearby = [
+            int(match)
+            for match in re.findall(r"\d+", tail)
+            if int(match) >= 20
+        ]
+        return list(dict.fromkeys([*anchored, *nearby]))
+    return []
+
+
+def _chat_intent(message: str) -> str:
+    lowered = message.lower()
+    if any(token in lowered for token in ("task", "tasks", "status", "progress", "state", "任务", "状态", "进度", "查看")):
+        return "status"
+    if any(token in lowered for token in ("next", "下一步", "建议", "tool", "工具", "调用")):
+        return "next_step"
+    if any(token in lowered for token in ("series", "image", "影像", "序列")):
+        return "series"
+    return "general"
+
+
+def _task_context(project_id: int | None, message: str) -> list[dict]:
+    requested_ids = _requested_task_ids(message)
+    if project_id and requested_ids:
+        placeholders = ",".join("?" for _ in requested_ids)
+        query = (
+            "SELECT id, project_id, workflow_type, status, progress, error_message "
+            f"FROM tasks WHERE project_id=? AND id IN ({placeholders}) ORDER BY id DESC"
+        )
+        explicit = rows(query, (project_id, *requested_ids))
+        found_ids = {task["id"] for task in explicit}
+        missing = [
+            {
+                "id": task_id,
+                "workflow_type": "unknown",
+                "status": "not_found_in_project",
+                "progress": 0,
+                "error_message": None,
+            }
+            for task_id in requested_ids
+            if task_id not in found_ids
+        ]
+        return sorted([*explicit, *missing], key=lambda task: int(task["id"]), reverse=True)
+    if project_id:
+        return rows(
+            "SELECT id, project_id, workflow_type, status, progress, error_message FROM tasks WHERE project_id=? ORDER BY id DESC LIMIT 50",
+            (project_id,),
+        )
+    if requested_ids:
+        placeholders = ",".join("?" for _ in requested_ids)
+        return rows(
+            f"SELECT id, project_id, workflow_type, status, progress, error_message FROM tasks WHERE id IN ({placeholders}) ORDER BY id DESC",
+            tuple(requested_ids),
+        )
+    return rows("SELECT id, project_id, workflow_type, status, progress, error_message FROM tasks ORDER BY id DESC LIMIT 10")
+
+
+def _output_context(project_id: int | None, task_ids: list[int] | None = None) -> list[dict]:
+    if task_ids:
+        placeholders = ",".join("?" for _ in task_ids)
+        return rows(
+            "SELECT outputs.task_id, outputs.output_type, outputs.path, outputs.metadata_json "
+            f"FROM outputs JOIN tasks ON tasks.id=outputs.task_id WHERE outputs.task_id IN ({placeholders}) ORDER BY outputs.id DESC",
+            tuple(task_ids),
+        )
+    if project_id:
+        return rows(
+            "SELECT outputs.task_id, outputs.output_type, outputs.path, outputs.metadata_json FROM outputs JOIN tasks ON tasks.id=outputs.task_id WHERE tasks.project_id=? ORDER BY outputs.id DESC LIMIT 100",
+            (project_id,),
+        )
+    return []
+
+
+def _result_summary_context(tasks: list[dict]) -> list[dict]:
+    summaries = []
+    for task in tasks:
+        if task.get("status") == "not_found_in_project":
+            continue
+        output_dir = PROJECTS_ROOT / str(task["project_id"]) / "derivatives" / str(task["id"]) / "output"
+        try:
+            summary = load_result_summary(output_dir)
+        except FileNotFoundError:
+            continue
+        if summary:
+            summaries.append(summary)
+    return summaries
+
+
+def _status_reply(tasks: list[dict], recommended_next_step: str) -> str:
+    if not tasks:
+        return f"Tasks: none. Recommended next step: {recommended_next_step}"
+    parts = []
+    for task in tasks:
+        error = f", error={task['error_message']}" if task.get("error_message") else ""
+        parts.append(f"#{task['id']} {task['workflow_type']} {task['status']} {task['progress']}%{error}")
+    return "Tasks: " + "; ".join(parts) + f". Recommended next step: {recommended_next_step}"
+
 @app.on_event("startup")
 def startup() -> None:
     init_db()
@@ -89,7 +244,84 @@ def parse_series_row(r: dict):
     r = dict(r)
     r["metadata"] = json.loads(r.pop("metadata_json"))
     r["supported_for_processing"] = bool(r.get("supported_for_processing", 1))
+    file_rows = rows("SELECT storage_path, file_type FROM files WHERE id=?", (r.get("file_id"),))
+    if file_rows:
+        r["file_storage_path"] = file_rows[0]["storage_path"]
+        r["file_type"] = file_rows[0]["file_type"]
+    r["workflow_eligibility"] = build_workflow_eligibility(r)
+    r.pop("file_storage_path", None)
+    r.pop("file_type", None)
     return r
+
+def _qsiprep_output_dir(task_id: int) -> Path:
+    task_root = PROJECTS_ROOT / str(task_id)
+    # real QSIPrep tasks write to data/projects/<project_id>/derivatives/<task_id>/output
+    for project_dir in PROJECTS_ROOT.iterdir() if PROJECTS_ROOT.exists() else []:
+        candidate = project_dir / 'derivatives' / str(task_id) / 'output'
+        if candidate.exists():
+            return candidate
+    return PROJECTS_ROOT / '__missing__' / str(task_id) / 'output'
+
+
+def _qsiprep_output_has_anat(task_id: int) -> bool:
+    output_dir = _qsiprep_output_dir(task_id)
+    anat_dir = output_dir / 'sub-01' / 'anat'
+    return anat_dir.exists() and any(anat_dir.iterdir())
+
+
+def _sidecar_base(path: Path) -> str:
+    return path.name[:-7] if path.name.lower().endswith(".nii.gz") else path.stem
+
+
+def _dwi_sidecar_paths(series: dict, metadata: dict) -> dict[str, Path]:
+    sidecars: dict[str, Path] = {}
+    for raw_path in metadata.get("sidecars") or []:
+        path = Path(raw_path)
+        suffix = path.suffix.lower()
+        if suffix in {".json", ".bval", ".bvec"} and path.exists():
+            sidecars[suffix] = path
+
+    try:
+        main_file = rows("SELECT storage_path FROM files WHERE id=?", (series["file_id"],))[0]
+    except (IndexError, KeyError):
+        main_file = None
+    allow_same_stem_fallback = bool(
+        metadata.get("sidecars")
+        or metadata.get("bids_path")
+        or series.get("format") == "NIFTI_BIDS"
+        or (main_file and main_file.get("file_type") == "NIFTI_BIDS")
+    )
+    if main_file and allow_same_stem_fallback:
+        src = Path(main_file["storage_path"])
+        base = _sidecar_base(src)
+        for suffix in (".json", ".bval", ".bvec"):
+            candidate = src.with_name(base + suffix)
+            if suffix not in sidecars and candidate.exists():
+                sidecars[suffix] = candidate
+    return sidecars
+
+
+def _dwi_has_eddy_json_metadata(series: dict, metadata: dict) -> bool:
+    if metadata.get("has_json") and metadata.get("has_dwi_eddy_metadata"):
+        return True
+    json_path = _dwi_sidecar_paths(series, metadata).get(".json")
+    if json_path is None:
+        return False
+    try:
+        payload = json.loads(json_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return payload.get("PhaseEncodingDirection") is not None and payload.get("TotalReadoutTime") is not None
+
+
+def _dwi_has_required_sidecars(series: dict, metadata: dict) -> bool:
+    sidecars = _dwi_sidecar_paths(series, metadata)
+    return (
+        bool(metadata.get("has_bval") or ".bval" in sidecars)
+        and bool(metadata.get("has_bvec") or ".bvec" in sidecars)
+        and _dwi_has_eddy_json_metadata(series, metadata)
+    )
+
 
 def save_upload(project_id: int, upload: UploadFile, file_type: str | None = None) -> dict:
     raw_dir = PROJECTS_ROOT / str(project_id) / "raw"
@@ -117,10 +349,168 @@ def health():
 def list_workflows():
     return {"workflows": WORKFLOWS}
 
+
+@app.get("/result-contract")
+def get_result_contract():
+    return result_contract_spec()
+
 @app.get("/deployment")
 def deployment():
     mode = os.environ.get("BACKEND_RUNTIME_MODE", "remote")
-    return {"backend_runtime_mode": mode, "api_base_hint": os.environ.get("IMAGE_AGENT_PUBLIC_BASE_URL", ""), "agent": provider_status()}
+    return {
+        "backend_runtime_mode": mode,
+        "api_base_hint": os.environ.get("IMAGE_AGENT_PUBLIC_BASE_URL", ""),
+        "agent": model_provider_status(),
+        "legacy_chat_provider": legacy_chat_provider_status(),
+    }
+
+
+@app.get("/agent/rag/status")
+def agent_rag_status():
+    index_status = local_rag_index_status(root=REPO_ROOT, persist_dir=REPO_ROOT / ".rag_index")
+    indexed_sources = index_status.get("indexed_sources") or []
+    return {
+        "dependencies": rag_dependency_status(),
+        "grounding_policy": rag_grounding_policy(),
+        "index": index_status,
+        "vendor_raw_sources": vendor_raw_source_status(
+            root=REPO_ROOT,
+            indexed_sources=indexed_sources,
+        ),
+        "vendor_pointer_integrity": rag_vendor_pointer_integrity(root=REPO_ROOT),
+        "vendor_coverage_catalog": rag_vendor_coverage_catalog(
+            root=REPO_ROOT,
+            indexed_sources=indexed_sources,
+        ),
+    }
+
+
+@app.post("/agent/rag/rebuild")
+def agent_rag_rebuild():
+    return build_local_rag_index(root=REPO_ROOT, persist_dir=REPO_ROOT / ".rag_index")
+
+
+@app.get("/agent/model/status")
+def agent_model_status():
+    return model_provider_status()
+
+
+@app.post("/agent/runs")
+def agent_run(req: AgentRunRequest):
+    message = req.message.strip()
+    if not message:
+        raise HTTPException(422, "message is required")
+    agent_run_id = start_agent_run(request_type="run", project_id=req.project_id, message=message)
+    project_context = read_project_context(req.project_id, rows_fn=rows, workflows=WORKFLOWS)
+    try:
+        result = dict(AgentRunner().run(message=message, project_context=project_context))
+        result["agent_run_id"] = agent_run_id
+        finish_agent_run(agent_run_id, result=result)
+        return result
+    except HTTPException as exc:
+        finish_agent_run(agent_run_id, error=exc)
+        raise
+    except Exception as exc:
+        finish_agent_run(agent_run_id, error=exc)
+        raise HTTPException(
+            502,
+            {"message": "Agent model call failed.", "agent_run_id": agent_run_id},
+        ) from exc
+
+
+@app.get("/agent/runs/{agent_run_id}")
+def agent_run_lookup(agent_run_id: str):
+    run = load_agent_run(agent_run_id)
+    if run is None:
+        raise HTTPException(404, "Agent run not found")
+    return run
+
+
+@app.post("/agent/runs/{thread_id}/resume")
+def agent_resume(thread_id: str, req: AgentResumeRequest):
+    def _create_task(series_id: int, workflow_type: str, qsiprep_task_id: int | None = None) -> dict:
+        return create_series_task(series_id, RunRequest(workflow_type=workflow_type, qsiprep_task_id=qsiprep_task_id))
+
+    agent_run_id = start_agent_run(
+        request_type="resume",
+        project_id=req.confirmation.get("project_id"),
+        thread_id=thread_id,
+        approved=req.approved,
+        confirmation=req.confirmation,
+    )
+    try:
+        result = dict(AgentRunner().resume(
+            thread_id=thread_id,
+            approved=req.approved,
+            confirmation=req.confirmation,
+            create_task_fn=_create_task,
+        ))
+        result["agent_run_id"] = agent_run_id
+        finish_agent_run(agent_run_id, result=result)
+        return result
+    except HTTPException as exc:
+        finish_agent_run(agent_run_id, error=exc)
+        raise
+    except Exception as exc:
+        finish_agent_run(agent_run_id, error=exc)
+        raise HTTPException(
+            502,
+            {"message": "Agent resume failed.", "agent_run_id": agent_run_id},
+        ) from exc
+
+
+@app.post("/agent/rag/query")
+def agent_rag_query(req: RagQueryRequest):
+    backend_context = {
+        "project_id": req.project_id,
+        "tasks": rows("SELECT id, workflow_type, status, progress, error_message FROM tasks WHERE project_id=? ORDER BY id DESC LIMIT 20", (req.project_id,)) if req.project_id else [],
+        "outputs": rows(
+            "SELECT outputs.task_id, outputs.output_type, outputs.path, outputs.metadata_json FROM outputs JOIN tasks ON tasks.id=outputs.task_id WHERE tasks.project_id=? ORDER BY outputs.id DESC LIMIT 20",
+            (req.project_id,),
+        ) if req.project_id else [],
+    }
+    return build_rag_response(req.query, root=REPO_ROOT, backend_context=backend_context)
+
+
+@app.post("/agent/tools/verify-scientific-reports")
+def agent_verify_scientific_reports(req: ScientificReportVerifyRequest):
+    projects_root = Path(req.projects_root) if req.projects_root else PROJECTS_ROOT
+    task_output_dirs, resolution_errors = resolve_task_output_dirs(projects_root, req.task_ids)
+    explicit_output_dirs = [Path(path) for path in req.output_dirs]
+    output_paths = [*explicit_output_dirs, *task_output_dirs]
+    results = [
+        check_scientific_report_output(
+            path,
+            require_container_native_qc=req.require_container_native_qc,
+            min_native_qc_images=max(req.min_native_qc_images, 0),
+        )
+        for path in output_paths
+    ]
+    required_modalities = {modality.upper() for modality in req.require_modalities}
+    present_modalities = {result.modality for result in results}
+    missing_modalities = sorted(required_modalities - present_modalities)
+    ok = all(result.ok for result in results) and not resolution_errors and not missing_modalities
+    return {
+        "ok": ok,
+        "read_only": True,
+        "projects_root": str(projects_root),
+        "task_ids": req.task_ids,
+        "require_container_native_qc": req.require_container_native_qc,
+        "min_native_qc_images": max(req.min_native_qc_images, 0),
+        "resolution_errors": resolution_errors,
+        "missing_modalities": missing_modalities,
+        "results": [
+            {
+                "output_dir": str(result.output_dir),
+                "modality": result.modality,
+                "ok": result.ok,
+                "errors": result.errors,
+                "warnings": result.warnings,
+            }
+            for result in results
+        ],
+    }
+
 
 @app.get("/runtime/containers")
 def runtime_containers():
@@ -184,23 +574,60 @@ def upload(project_id: int, file: UploadFile = File(...)):
         series_row = conn.execute("SELECT * FROM imaging_series WHERE id=?", (scur.lastrowid,)).fetchone()
     return {"file": file_row, "series": parse_series_row(series_row)}
 
+def _dwi_json_metadata(json_row: dict | None) -> dict:
+    if json_row is None:
+        return {"has_json": False, "has_dwi_eddy_metadata": False}
+    path = Path(json_row["storage_path"])
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(400, "DWI JSON sidecar must be valid JSON") from exc
+    phase_encoding = payload.get("PhaseEncodingDirection")
+    total_readout = payload.get("TotalReadoutTime")
+    return {
+        "has_json": True,
+        "json_file_id": json_row["id"],
+        "has_dwi_eddy_metadata": phase_encoding is not None and total_readout is not None,
+        "phase_encoding_direction": phase_encoding,
+        "total_readout_time": total_readout,
+    }
+
+
 @app.post("/projects/{project_id}/upload-dwi")
-def upload_dwi(project_id: int, nifti: UploadFile = File(...), bval: UploadFile = File(...), bvec: UploadFile = File(...)):
+def upload_dwi(
+    project_id: int,
+    nifti: UploadFile = File(...),
+    bval: UploadFile = File(...),
+    bvec: UploadFile = File(...),
+    json_sidecar: UploadFile | None = File(None),
+):
     if not rows("SELECT * FROM projects WHERE id=?", (project_id,)):
         raise HTTPException(404, "Project not found")
     nifti_row = save_upload(project_id, nifti, "NIFTI")
     bval_row = save_upload(project_id, bval, "BVAL")
     bvec_row = save_upload(project_id, bvec, "BVEC")
+    json_row = save_upload(project_id, json_sidecar, "JSON") if json_sidecar is not None else None
     detection = detect_series(nifti_row["storage_path"])
     metadata = detection["metadata"]
-    metadata.update({"has_bval": True, "has_bvec": True, "bval_file_id": bval_row["id"], "bvec_file_id": bvec_row["id"]})
+    metadata.update(
+        {
+            "has_bval": True,
+            "has_bvec": True,
+            "bval_file_id": bval_row["id"],
+            "bvec_file_id": bvec_row["id"],
+            **_dwi_json_metadata(json_row),
+        }
+    )
     with connect() as conn:
         scur = conn.execute(
             "INSERT INTO imaging_series(project_id, file_id, sequence_label, supported_for_processing, unsupported_reason, modality, format, confidence, metadata_json, status, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
             (project_id, nifti_row["id"], metadata.get("sequence_label", "DWI_multi_shell"), 1, "", "DWI", "NIFTI", 0.95, json.dumps(metadata), "detected", now_iso()),
         )
         series_row = conn.execute("SELECT * FROM imaging_series WHERE id=?", (scur.lastrowid,)).fetchone()
-    return {"files": [nifti_row, bval_row, bvec_row], "series": parse_series_row(series_row)}
+    file_rows = [nifti_row, bval_row, bvec_row]
+    if json_row is not None:
+        file_rows.append(json_row)
+    return {"files": file_rows, "series": parse_series_row(series_row)}
 
 @app.post("/projects/{project_id}/upload-dicom")
 def upload_dicom(project_id: int, archive: UploadFile = File(...)):
@@ -271,6 +698,10 @@ def get_inventory(project_id: int, upload_session_id: int):
 def list_series(project_id: int):
     return [parse_series_row(r) for r in rows("SELECT * FROM imaging_series WHERE project_id=? ORDER BY id DESC", (project_id,))]
 
+@app.get("/projects/{project_id}/agent-runs")
+def list_project_agent_run_history(project_id: int):
+    return {"project_id": project_id, "agent_runs": list_project_agent_runs(project_id)}
+
 @app.get("/projects/{project_id}/tasks")
 def list_project_tasks(project_id: int):
     return rows("SELECT * FROM tasks WHERE project_id=? ORDER BY id DESC", (project_id,))
@@ -283,22 +714,36 @@ def get_series(series_id: int):
     return parse_series_row(found[0])
 
 def validate_run_request(series: dict, req: RunRequest) -> None:
-    if req.workflow_type not in ALLOWED_WORKFLOWS:
+    if req.workflow_type not in allowed_runtime_workflows():
         raise HTTPException(400, f"Unknown workflow_type: {req.workflow_type}")
+    workflow_type = resolve_runtime_workflow_type(req.workflow_type)
     metadata = json.loads(series["metadata_json"])
     modality = series["modality"]
-    if req.workflow_type == "t1_deepprep_mock":
+    if workflow_type == "t1_deepprep_mock":
         if modality != "T1":
             raise HTTPException(400, "T1 mock requires T1 series")
         return
-    if req.workflow_type.startswith("t1_deepprep") and modality != "T1":
+    if workflow_type.startswith("t1_deepprep") and modality != "T1":
         raise HTTPException(400, "DeepPrep requires a T1 series")
-    if req.workflow_type.startswith("bold_deepprep") and modality != "BOLD":
+    if workflow_type.startswith("bold_deepprep") and modality != "BOLD":
         raise HTTPException(400, "BOLD DeepPrep requires a BOLD/fMRI series")
-    if req.workflow_type.startswith("dwi_qsiprep") or req.workflow_type.startswith("dwi_qsi_full"):
+    if workflow_type.startswith("dwi_qsiprep") or workflow_type.startswith("dwi_qsi_full"):
         if modality != "DWI" or not metadata.get("has_bval") or not metadata.get("has_bvec"):
             raise HTTPException(400, "DWI workflows require DWI series with bval and bvec")
-    if req.workflow_type.startswith("dwi_qsirecon"):
+        if workflow_type.startswith("dwi_qsi_full"):
+            companion_t1 = rows(
+                "SELECT id FROM imaging_series WHERE project_id=? AND modality='T1' AND supported_for_processing=1 ORDER BY id DESC LIMIT 1",
+                (series["project_id"],),
+            )
+            if not companion_t1:
+                raise HTTPException(400, "DWI QSIPrep + QSIRecon requires T1/anat data in the same project")
+    if workflow_type.startswith("dwi_fast_gpu_dti"):
+        if modality != "DWI" or not _dwi_has_required_sidecars(series, metadata):
+            raise HTTPException(
+                400,
+                "DWI fast GPU DTI requires DWI series with bval, bvec, and JSON sidecar containing PhaseEncodingDirection and TotalReadoutTime",
+            )
+    if workflow_type.startswith("dwi_qsirecon"):
         if not req.qsiprep_task_id:
             raise HTTPException(400, "QSIRecon requires qsiprep_task_id")
         candidates = rows("SELECT * FROM tasks WHERE id=?", (req.qsiprep_task_id,))
@@ -308,35 +753,31 @@ def validate_run_request(series: dict, req: RunRequest) -> None:
             raise HTTPException(400, "qsiprep_task_id must reference QSIPrep task")
         if not req.workflow_type.endswith("_validate") and candidates[0]["status"] != "completed":
             raise HTTPException(400, "QSIRecon requires completed QSIPrep task")
-    if req.workflow_type.startswith("dicom_convert") and modality != "DICOM":
+        if candidates[0]["status"] == "completed" and not _qsiprep_output_has_anat(req.qsiprep_task_id):
+            raise HTTPException(400, "QSIRecon requires QSIPrep output with subject anat derivatives; rerun QSIPrep in a project that includes T1/anat input")
+    if workflow_type.startswith("dicom_convert") and modality != "DICOM":
         raise HTTPException(400, "DICOM conversion requires a DICOM archive series")
-    if req.workflow_type.startswith("bold_") and modality != "BOLD":
+    if workflow_type.startswith("bold_") and modality != "BOLD":
         raise HTTPException(400, "BOLD workflows require BOLD series")
-    if req.workflow_type.startswith("bold_alff") or req.workflow_type.startswith("bold_falff"):
-        project_id = series["project_id"]
+    if workflow_type.startswith("bold_alff") or workflow_type.startswith("bold_falff") or workflow_type.startswith("bold_second_level"):
         prior = rows(
-            "SELECT workflow_type, status FROM tasks WHERE project_id=? ORDER BY id DESC",
-            (project_id,),
+            "SELECT workflow_type, status FROM tasks WHERE project_id=? AND series_id=? ORDER BY id DESC",
+            (series["project_id"], series["id"]),
         )
-        if req.workflow_type.endswith("_validate"):
-            has_any_preproc = any(
-                t["workflow_type"] in {"bold_deepprep_validate", "bold_deepprep", "t1_deepprep_validate", "t1_deepprep"}
-                for t in prior
-            )
-            if not has_any_preproc:
-                raise HTTPException(400, "BOLD ALFF/fALFF validate requires a prior fMRIPrep/DeepPrep task")
-        else:
-            has_completed_preproc = any(
-                t["status"] == "completed" and t["workflow_type"] in {"bold_deepprep", "t1_deepprep"}
-                for t in prior
-            )
-            if not has_completed_preproc:
-                raise HTTPException(400, "BOLD ALFF/fALFF requires a completed fMRIPrep/DeepPrep task")
-    if series.get("supported_for_processing") == 0 and req.workflow_type != "t1_deepprep_mock":
+        has_completed_preproc = any(
+            t["status"] == "completed" and t["workflow_type"] == "bold_deepprep"
+            for t in prior
+        )
+        if not has_completed_preproc:
+            raise HTTPException(400, "BOLD metrics require a completed bold_deepprep task for this series")
+    if series.get("supported_for_processing") == 0 and workflow_type != "t1_deepprep_mock":
         raise HTTPException(400, series.get("unsupported_reason") or "This sequence is not supported for processing")
 
-@app.post("/series/{series_id}/run")
-def run_series(series_id: int, req: RunRequest):
+def create_series_task(series_id: int, req: RunRequest) -> dict:
+    try:
+        req.workflow_type = resolve_runtime_workflow_type(req.workflow_type)
+    except KeyError as exc:
+        raise HTTPException(400, f"Unknown workflow_type: {req.workflow_type}") from exc
     series = rows("SELECT * FROM imaging_series WHERE id=?", (series_id,))
     if not series:
         raise HTTPException(404, "Series not found")
@@ -359,6 +800,11 @@ def run_series(series_id: int, req: RunRequest):
         Thread(target=run_pipeline_task, args=(task_id, req.qsiprep_task_id), daemon=True).start()
     return task
 
+
+@app.post("/series/{series_id}/run")
+def run_series(series_id: int, req: RunRequest):
+    return create_series_task(series_id, req)
+
 @app.get("/tasks/{task_id}")
 def get_task(task_id: int):
     found = rows("SELECT * FROM tasks WHERE id=?", (task_id,))
@@ -370,7 +816,31 @@ def get_task(task_id: int):
 def get_logs(task_id: int):
     task = get_task(task_id)
     path = Path(task["log_path"])
-    return {"task_id": task_id, "text": path.read_text(encoding="utf-8") if path.exists() else ""}
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    output_dir = PROJECTS_ROOT / str(task["project_id"]) / "derivatives" / str(task_id) / "output"
+    output_log_dir = output_dir / "logs"
+    remote_logs = []
+    if output_log_dir.exists():
+        for log_file in sorted(output_log_dir.glob("*.log")):
+            try:
+                log_text = log_file.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            remote_logs.append(
+                {
+                    "name": log_file.name,
+                    "path": str(log_file),
+                    "source_stage": classify_bold_fmriprep_xcpd_artifact_stage(log_file, output_dir),
+                    "size_bytes": log_file.stat().st_size,
+                    "tail": log_text[-12000:],
+                }
+            )
+    return {
+        "task_id": task_id,
+        "text": text,
+        "remote_logs": remote_logs,
+        "log_paths": [str(path), *[item["path"] for item in remote_logs]],
+    }
 
 @app.get("/tasks/{task_id}/outputs")
 def get_outputs(task_id: int):
@@ -380,50 +850,219 @@ def get_outputs(task_id: int):
         result.append(r)
     return result
 
+
+@app.get("/tasks/{task_id}/result-summary")
+def get_result_summary(task_id: int):
+    task = get_task(task_id)
+    task_outputs = get_outputs(task_id)
+    for output in task_outputs:
+        metadata = output["metadata"]
+        output_path = output.get("path") or ""
+        if metadata.get("kind") == "result_summary" or output_path.endswith("_result_summary.json"):
+            path = Path(output["path"])
+            if path.exists():
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                payload.setdefault("summary_path", str(path))
+                return payload
+    for output in task_outputs:
+        metadata = output["metadata"]
+        output_path = output.get("path") or ""
+        if metadata.get("kind") == "bold_metrics_summary" and output_path:
+            path = Path(output["path"])
+            if path.exists():
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                return {
+                    "contract_version": payload.get("contract_version", "legacy-bold-metrics"),
+                    "task_id": task_id,
+                    "workflow_type": task["workflow_type"],
+                    "modality": "BOLD",
+                    "spaces": payload.get("spaces", ["MNI152"]),
+                    "feature_groups": ["legacy_bold_metrics"],
+                    "outputs": {},
+                    "provenance": {
+                        "legacy_fallback": True,
+                        "legacy_summary_path": str(path),
+                        "note": "Legacy BOLD metrics summary returned because no unified result_summary was registered.",
+                    },
+                    "legacy_summary": payload,
+                }
+    output_dir = PROJECTS_ROOT / str(task["project_id"]) / "derivatives" / str(task_id) / "output"
+    summary = load_result_summary(output_dir)
+    if summary is None:
+        raise HTTPException(404, "Result summary not found")
+    return summary
+
+
+@app.get("/tasks/{task_id}/artifact-manifest")
+def get_task_artifact_manifest(task_id: int):
+    task = get_task(task_id)
+    output_dir = PROJECTS_ROOT / str(task["project_id"]) / "derivatives" / str(task_id) / "output"
+    try:
+        summary = get_result_summary(task_id)
+    except HTTPException as exc:
+        if exc.status_code != 404:
+            raise
+        summary = None
+    return build_artifact_manifest(task, output_dir, summary, get_outputs(task_id))
+
+
+@app.get("/tasks/{task_id}/artifacts/{relative_path:path}")
+def get_task_artifact(task_id: int, relative_path: str):
+    if "\\" in relative_path:
+        raise HTTPException(400, "Artifact path is outside the task output directory")
+    task = get_task(task_id)
+    output_dir = (PROJECTS_ROOT / str(task["project_id"]) / "derivatives" / str(task_id) / "output").resolve()
+    target = (output_dir / relative_path).resolve()
+    if output_dir not in [target, *target.parents]:
+        raise HTTPException(400, "Artifact path is outside the task output directory")
+    if not target.exists() or not target.is_file():
+        raise HTTPException(404, "Artifact not found")
+    if target.name.endswith(".nii.gz"):
+        media_type = "application/gzip"
+    else:
+        media_type = mimetypes.guess_type(target.name)[0]
+    return FileResponse(target, media_type=media_type)
+
+
+@app.post("/projects/{project_id}/bold/group-analysis")
+def bold_group_analysis(project_id: int, req: BoldGroupAnalysisRequest):
+    if not rows("SELECT * FROM projects WHERE id=?", (project_id,)):
+        raise HTTPException(404, "Project not found")
+    try:
+        return run_group_analysis(
+            project_id=project_id,
+            group_a_tasks=req.group_a_task_ids,
+            group_b_tasks=req.group_b_task_ids,
+            seed_query=req.seed_query,
+            label_a=req.label_a,
+            label_b=req.label_b,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.post("/projects/{project_id}/bold/descriptive-review")
+def bold_descriptive_review(project_id: int, req: BoldDescriptiveReviewRequest):
+    if not rows("SELECT * FROM projects WHERE id=?", (project_id,)):
+        raise HTTPException(404, "Project not found")
+    try:
+        return run_descriptive_review(
+            project_id=project_id,
+            deepprep_task_ids=req.deepprep_task_ids,
+            seed_preset=req.seed_preset,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
 @app.post("/chat")
 def chat(req: ChatRequest):
     message = req.message.lower()
     reply = "I can list series, check task status, and explain DICOM, DeepPrep, QSIPrep, QSIRecon, and BOLD workflow results."
     refs = []
+    task_context = _task_context(req.project_id, req.message)
+    task_ids = [task["id"] for task in task_context if task.get("status") != "not_found_in_project"]
     project_context = {
         "project_id": req.project_id,
         "series": rows("SELECT id, modality, sequence_label, supported_for_processing, status, confidence FROM imaging_series WHERE project_id=? ORDER BY id DESC LIMIT 20", (req.project_id,)) if req.project_id else [],
-        "tasks": rows("SELECT id, workflow_type, status, progress, error_message FROM tasks WHERE project_id=? ORDER BY id DESC LIMIT 20", (req.project_id,)) if req.project_id else rows("SELECT id, workflow_type, status, progress, error_message FROM tasks ORDER BY id DESC LIMIT 5"),
+        "tasks": task_context,
+        "outputs": _output_context(req.project_id, task_ids=task_ids),
+        "result_summaries": _result_summary_context(task_context),
         "supported_workflows": WORKFLOWS,
     }
+    rag_response = build_rag_response(req.message, root=REPO_ROOT, backend_context=project_context)
+    intent = rag_response.get("intent") or _chat_intent(req.message)
+    tool_recommendation = next(
+        (
+            invocation.get("result", {}).get("recommended_action")
+            for invocation in rag_response.get("tool_invocations", [])
+            if invocation.get("tool") == "recommend_next_action"
+        ),
+        None,
+    )
+    recommended_next_step = tool_recommendation or rag_response.get("recommended_next_step") or rag_response.get("tool_chain_hint") or "Inspect backend task state before launching a new workflow."
     used_provider = "rules"
     provider_error = ""
-    try:
-        reply = complete_chat(req.message, project_context)
-        used_provider = "deepseek"
-    except DeepSeekUnavailable as exc:
-        provider_error = str(exc)
+    if intent not in {"status", "next_step", "launchability"}:
+        try:
+            reply = ModelGateway().complete_text(
+                [
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are the built-in chat for image_agent. Answer from backend records first, "
+                            "use retrieved RAG only as supporting context, and stay non-diagnostic."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": "User message:\n"
+                        + req.message
+                        + "\n\nBackend project context JSON:\n"
+                        + json.dumps(project_context, ensure_ascii=False)[:20000]
+                        + "\n\nRetrieved RAG response JSON:\n"
+                        + json.dumps(rag_response, ensure_ascii=False)[:12000],
+                    },
+                ],
+                purpose="chat_answer",
+            )
+            used_provider = "OpenAI"
+        except ModelGatewayError as exc:
+            provider_error = str(exc)
+            try:
+                reply = complete_chat(req.message, project_context)
+                used_provider = "deepseek"
+                provider_error = ""
+            except DeepSeekUnavailable as fallback_exc:
+                provider_error = f"OpenAI gateway: {provider_error}; DeepSeek fallback: {fallback_exc}"
     message = req.message.lower()
-    if "series" in message or "image" in message:
+    if intent == "launchability":
+        reply = rag_response.get("answer") or "Use workflow_eligibility and backend task records to decide workflow launchability."
+        refs = [
+            {"type": "rag_source", "source": citation.get("path") or citation.get("source"), "title": citation.get("title")}
+            for citation in rag_response.get("citations", [])
+            if citation.get("path") or citation.get("source")
+        ]
+        used_provider = "rules"
+    elif "series" in message or "image" in message:
         data = project_context["series"] if req.project_id else []
         reply = "Series: " + (", ".join([f"#{x['id']} {x['modality']} ({x['confidence']:.2f})" for x in data]) or "none")
         used_provider = "rules"
-    elif "task" in message or "status" in message:
+    elif intent in {"status", "next_step"} or "task" in message or "status" in message:
         data = project_context["tasks"]
-        reply = "Tasks: " + (", ".join([f"#{x['id']} {x['workflow_type']} {x['status']} {x['progress']}%" for x in data]) or "none")
-        refs = [{"type": "task", "id": x["id"]} for x in data]
+        reply = _status_reply(data, recommended_next_step)
+        refs = [{"type": "task", "id": x["id"]} for x in data if x.get("status") != "not_found_in_project"]
         used_provider = "rules"
     elif "qsiprep" in message:
-        if used_provider != "deepseek":
+        if used_provider not in {"OpenAI", "deepseek"}:
             reply = "QSIPrep preprocesses DWI data and requires a DWI NIfTI plus bval/bvec sidecars."
     elif "qsirecon" in message:
-        if used_provider != "deepseek":
+        if used_provider not in {"OpenAI", "deepseek"}:
             reply = "QSIRecon reconstructs diffusion models from a completed QSIPrep output."
     elif "dicom" in message:
-        if used_provider != "deepseek":
+        if used_provider not in {"OpenAI", "deepseek"}:
             reply = "Upload DICOM studies as a zip archive. Dataset ingest attempts dcm2niix conversion and reports conversion status in inventory."
     elif "alff" in message or "falff" in message or "bold" in message:
-        if used_provider != "deepseek":
-            reply = "BOLD/fMRI preprocessing is handled by DeepPrep in this project. ALFF/fALFF metric computation is planned after preprocessing outputs are validated."
+        bold_scope = (
+            "BOLD/fMRI preprocessing is handled by DeepPrep in this project. "
+            "Downstream BOLD structured outputs include ALFF, fALFF, ReHo, DMN, "
+            "seed-to-ROI summaries, and fixed-coordinate spherical seed runs."
+        )
+        reply = bold_scope if used_provider not in {"OpenAI", "deepseek"} else f"{reply}\n\n{bold_scope}"
     elif "deepprep" in message or "t1" in message:
-        if used_provider != "deepseek":
+        if used_provider not in {"OpenAI", "deepseek"}:
             reply = "DeepPrep runs anatomical processing for T1 images. Use validate mode to check the command before launching a long job."
     with connect() as conn:
         conn.execute("INSERT INTO chat_messages(project_id, role, content, created_at) VALUES(?,?,?,?)", (req.project_id, "user", req.message, now_iso()))
         conn.execute("INSERT INTO chat_messages(project_id, role, content, created_at) VALUES(?,?,?,?)", (req.project_id, "assistant", reply, now_iso()))
-    return {"reply": reply, "references": refs, "provider": used_provider, "provider_error": provider_error}
+    return {
+        "reply": reply,
+        "references": refs,
+        "provider": used_provider,
+        "provider_error": provider_error,
+        "intent": intent,
+        "recommended_next_step": recommended_next_step,
+        "tool_chain_hint": rag_response.get("tool_chain_hint"),
+        "tool_invocations": rag_response.get("tool_invocations", []),
+        "rag_mode": rag_response.get("mode"),
+    }

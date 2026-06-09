@@ -4,11 +4,11 @@ Use these boundaries when multiple agents work on `/home/yyf/project/image_agent
 
 ## Model Assignments
 
-- **Orchestrator (total-control)**: Claude — coordinates, monitors, assigns work, and escalates only external blockers to the user.
-- **Frontend/Backend Developer**: Claude — edits app code and tests only.
-- **Review/Test**: Claude — reviews product and runs safe tests/validations.
-- **Skill**: Claude — maintains skills and references following skill-creator principles.
-- **Built-in chat (app)**: DeepSeek only — answers user questions inside the app UI. Not used for development, review, testing, or skill maintenance.
+- **Orchestrator (total-control)**: Claude coordinates, monitors, assigns work, and escalates only external blockers to the user.
+- **Frontend/Backend Developer**: Claude edits app code and tests only.
+- **Review/Test**: Claude reviews product and runs safe tests/validations.
+- **Skill**: Claude maintains skills and references following skill-creator principles.
+- **Built-in chat (app)**: OpenAI SDK chat gateway via `ModelGateway` and Responses-native requests for freeform answers; deterministic backend rules still handle status/series questions, and DeepSeek legacy fallback is compatibility-only when the OpenAI gateway is unavailable. Not used for development, review, testing, or skill maintenance.
 
 ## Orchestrator Agent
 
@@ -21,7 +21,7 @@ Use these boundaries when multiple agents work on `/home/yyf/project/image_agent
 ## Frontend/Backend Developer Agent (Claude)
 
 - Own product code changes in `apps/api`, `apps/desktop`, and related workflow docs.
-- Keep backend contracts deterministic before adjusting desktop UI or DeepSeek wording.
+- Keep backend contracts deterministic before adjusting desktop UI or OpenAI SDK chat gateway wording.
 - For DWI, implement QSIPrep CUDA config generation and command wiring; do not hide missing container capabilities behind retries.
 - For QSIRecon, preserve dependency on completed QSIPrep output and use Docker GPU exposure rather than inventing unsupported CLI flags.
 - Hand off with files changed, commands run, known risks, and exact next validation target.

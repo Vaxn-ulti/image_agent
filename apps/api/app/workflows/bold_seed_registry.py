@@ -1,0 +1,148 @@
+from __future__ import annotations
+
+
+DEFAULT_SEED_PRESETS = {
+    "PCC_DMN": {
+        "preset_id": "PCC_DMN",
+        "label": "Posterior cingulate cortex",
+        "coordinate_mni": [0, -52, 26],
+        "radius_mm": 6,
+        "family": "DMN",
+        "space": "MNI152",
+        "provenance": "internal_classic_seed_library_v1",
+    },
+    "mPFC_DMN": {
+        "preset_id": "mPFC_DMN",
+        "label": "Medial prefrontal cortex",
+        "coordinate_mni": [0, 52, -2],
+        "radius_mm": 6,
+        "family": "DMN",
+        "space": "MNI152",
+        "provenance": "internal_classic_seed_library_v1",
+    },
+    "dACC_SN": {
+        "preset_id": "dACC_SN",
+        "label": "Dorsal anterior cingulate cortex",
+        "coordinate_mni": [0, 20, 32],
+        "radius_mm": 6,
+        "family": "SN",
+        "space": "MNI152",
+        "provenance": "internal_classic_seed_library_v1",
+    },
+    "L_HIPPOCAMPUS": {
+        "preset_id": "L_HIPPOCAMPUS",
+        "label": "Left hippocampus",
+        "coordinate_mni": [-24, -18, -18],
+        "radius_mm": 5,
+        "family": "MTL",
+        "space": "MNI152",
+        "provenance": "internal_classic_seed_library_v1",
+    },
+    "R_HIPPOCAMPUS": {
+        "preset_id": "R_HIPPOCAMPUS",
+        "label": "Right hippocampus",
+        "coordinate_mni": [24, -18, -18],
+        "radius_mm": 5,
+        "family": "MTL",
+        "space": "MNI152",
+        "provenance": "internal_classic_seed_library_v1",
+    },
+    "L_STG": {
+        "preset_id": "L_STG",
+        "label": "Left superior temporal gyrus",
+        "coordinate_mni": [-54, -22, 6],
+        "radius_mm": 6,
+        "family": "TEMPORAL",
+        "space": "MNI152",
+        "provenance": "internal_classic_seed_library_v1",
+    },
+    "R_STG": {
+        "preset_id": "R_STG",
+        "label": "Right superior temporal gyrus",
+        "coordinate_mni": [54, -22, 6],
+        "radius_mm": 6,
+        "family": "TEMPORAL",
+        "space": "MNI152",
+        "provenance": "internal_classic_seed_library_v1",
+    },
+    "L_MTG": {
+        "preset_id": "L_MTG",
+        "label": "Left middle temporal gyrus",
+        "coordinate_mni": [-58, -38, -4],
+        "radius_mm": 6,
+        "family": "TEMPORAL",
+        "space": "MNI152",
+        "provenance": "internal_classic_seed_library_v1",
+    },
+    "R_MTG": {
+        "preset_id": "R_MTG",
+        "label": "Right middle temporal gyrus",
+        "coordinate_mni": [58, -38, -4],
+        "radius_mm": 6,
+        "family": "TEMPORAL",
+        "space": "MNI152",
+        "provenance": "internal_classic_seed_library_v1",
+    },
+    "L_ITG": {
+        "preset_id": "L_ITG",
+        "label": "Left inferior temporal gyrus",
+        "coordinate_mni": [-50, -54, -18],
+        "radius_mm": 6,
+        "family": "TEMPORAL",
+        "space": "MNI152",
+        "provenance": "internal_classic_seed_library_v1",
+    },
+    "R_ITG": {
+        "preset_id": "R_ITG",
+        "label": "Right inferior temporal gyrus",
+        "coordinate_mni": [50, -54, -18],
+        "radius_mm": 6,
+        "family": "TEMPORAL",
+        "space": "MNI152",
+        "provenance": "internal_classic_seed_library_v1",
+    },
+    "L_AMYGDALA": {
+        "preset_id": "L_AMYGDALA",
+        "label": "Left amygdala",
+        "coordinate_mni": [-22, -4, -18],
+        "radius_mm": 5,
+        "family": "MTL",
+        "space": "MNI152",
+        "provenance": "internal_classic_seed_library_v1",
+    },
+    "R_AMYGDALA": {
+        "preset_id": "R_AMYGDALA",
+        "label": "Right amygdala",
+        "coordinate_mni": [22, -4, -18],
+        "radius_mm": 5,
+        "family": "MTL",
+        "space": "MNI152",
+        "provenance": "internal_classic_seed_library_v1",
+    },
+    "L_ANGULAR_DMN": {
+        "preset_id": "L_ANGULAR_DMN",
+        "label": "Left angular gyrus",
+        "coordinate_mni": [-45, -67, 36],
+        "radius_mm": 6,
+        "family": "DMN",
+        "space": "MNI152",
+        "provenance": "internal_classic_seed_library_v1",
+    },
+    "R_ANGULAR_DMN": {
+        "preset_id": "R_ANGULAR_DMN",
+        "label": "Right angular gyrus",
+        "coordinate_mni": [45, -67, 36],
+        "radius_mm": 6,
+        "family": "DMN",
+        "space": "MNI152",
+        "provenance": "internal_classic_seed_library_v1",
+    },
+}
+
+DEFAULT_SEED_PROFILE = list(DEFAULT_SEED_PRESETS)
+
+
+def get_seed_preset(preset_id: str) -> dict:
+    if preset_id not in DEFAULT_SEED_PRESETS:
+        raise KeyError(f"Unknown seed preset: {preset_id}")
+    return DEFAULT_SEED_PRESETS[preset_id]

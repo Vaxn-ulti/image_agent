@@ -5,9 +5,12 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+.rag_index/
 node_modules/
 dist/
 .vite/
+*.tsbuildinfo
+_repo_archive/
 
 # Runtime data, real imaging inputs, generated derivatives, databases, and logs
 data/**
@@ -30,7 +33,19 @@ logs/
 *.zip
 *.tar
 *.tar.gz
+*.tgz
 *.7z
+
+# Local generated backups and dev-server process artifacts
+git_backup_*/
+*.bundle
+scoped_*.patch
+scoped_*.txt
+cached_name_status_*.txt
+image_agent_pre_slice_cached_names_*.txt
+apps/*/*-vite-*.out
+apps/*/*-vite-*.err
+apps/*/*-vite-*.pid
 
 # Local/editor/system files
 .DS_Store

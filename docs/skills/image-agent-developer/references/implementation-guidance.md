@@ -6,7 +6,7 @@
 2. Implement deterministic imaging/workflow behavior.
 3. Add or update tests.
 4. Wire frontend controls and status views.
-5. Update DeepSeek chat grounding and templates.
+5. Update OpenAI SDK chat gateway grounding, prompts, and Responses-native tool contracts; keep DeepSeek legacy fallback only where compatibility tests require it.
 6. Update workflow docs.
 
 ## Mixed Ingest

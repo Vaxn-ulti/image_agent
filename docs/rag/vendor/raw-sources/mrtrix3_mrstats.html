@@ -1,0 +1,399 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="readthedocs-addons-api-version" content="1"><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>mrstats &mdash; MRtrix3 3.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=110ea713"></script>
+      <script src="../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <script src="../../_static/js/versions.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="mrthreshold" href="mrthreshold.html" />
+    <link rel="prev" title="mrregister" href="mrregister.html" />
+      
+
+<script async type="text/javascript" src="/_/static/javascript/readthedocs-addons.js"></script><meta name="readthedocs-project-slug" content="mrtrix" /><meta name="readthedocs-version-slug" content="latest" /><meta name="readthedocs-resolver-filename" content="/reference/commands/mrstats.html" /><meta name="readthedocs-http-status" content="200" /></head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            MRtrix3
+          </a>
+              <div class="switch-menus">
+                <div class="version-switch"></div>
+                <div class="language-switch"></div>
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Install</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../installation/before_install.html">Before you install</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../installation/package_install.html">Installing <em>MRtrix3</em></a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../installation/build_from_source.html">Building <em>MRtrix3</em> from source</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../installation/deployment.html">Deploying MRtrix3</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../installation/hpc_clusters_install.html">HPC clusters installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../installation/using_containers.html">Running <em>MRtrix3</em> using containers</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../getting_started/beginner_dwi_tutorial.html">Beginner DWI tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../getting_started/image_data.html">Images and other data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../getting_started/command_line.html">Command-line usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../getting_started/config.html">Configuration file</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">DWI Pre-processing</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../dwi_preprocessing/denoising.html">DWI denoising</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../dwi_preprocessing/dwifslpreproc.html">DWI distortion correction using dwifslpreproc</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Constrained Spherical Deconvolution</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../constrained_spherical_deconvolution/response_function_estimation.html">Response function estimation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../constrained_spherical_deconvolution/constrained_spherical_deconvolution.html">Constrained spherical deconvolution</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../constrained_spherical_deconvolution/multi_shell_multi_tissue_csd.html">Multi-shell multi-tissue constrained spherical deconvolution</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Fixel-Based Analysis</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../fixel_based_analysis/st_fibre_density_cross-section.html">Fibre density and cross-section - Single-tissue CSD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../fixel_based_analysis/mt_fibre_density_cross-section.html">Fibre density and cross-section - Multi-tissue CSD</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../fixel_based_analysis/fixel_directory_format.html">Fixel image (directory) format</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../fixel_based_analysis/mitigating_brain_cropping.html">Mitigating the effects of brain cropping</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../fixel_based_analysis/computing_effect_size_wrt_controls.html">Expressing the effect size relative to controls</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../fixel_based_analysis/displaying_results_with_streamlines.html">Displaying results with streamlines</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Quantitative Structural Connectivity</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../quantitative_structural_connectivity/act.html">Anatomically-Constrained Tractography (ACT)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../quantitative_structural_connectivity/sift.html">Spherical-deconvolution Informed Filtering of Tractograms (SIFT)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../quantitative_structural_connectivity/structural_connectome.html">Structural connectome construction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../quantitative_structural_connectivity/connectome_tool.html">Using the connectome visualisation tool</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../quantitative_structural_connectivity/labelconvert_tutorial.html"><code class="docutils literal notranslate"><span class="pre">labelconvert</span></code>: Explanation &amp; demonstration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../quantitative_structural_connectivity/global_tractography.html">Global tractography</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../quantitative_structural_connectivity/ismrm_hcp_tutorial.html">ISMRM tutorial - Structural connectome for Human Connectome Project (HCP)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Concepts</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../concepts/dw_scheme.html">Diffusion gradient scheme handling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../concepts/pe_scheme.html">Phase encoding scheme handling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../concepts/global_intensity_normalisation.html">Global intensity normalisation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../concepts/spherical_harmonics.html">Spherical Harmonics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../concepts/sh_basis_lmax.html">Maximum spherical harmonic degree <em>l</em><sub>max</sub></a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../concepts/fixels_dixels.html">“Fixels” (and “Dixels”)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../concepts/afd_connectivity.html">Motivation for <code class="docutils literal notranslate"><span class="pre">afdconnectivity</span></code></a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../concepts/mrview_lock_axes/mrview_lock_axes.html"><code class="docutils literal notranslate"><span class="pre">mrview</span></code>’s “Lock To Image Axes”</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Tips and Tricks</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../tips_and_tricks/dicom_handling.html">DICOM handling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tips_and_tricks/batch_processing_with_foreach.html">Batch processing with <code class="docutils literal notranslate"><span class="pre">for_each</span></code></a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tips_and_tricks/external_modules.html">External modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tips_and_tricks/troubleshooting.html">Troubleshooting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="../commands_list.html">List of MRtrix3 commands</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="5tt2gmwmi.html">5tt2gmwmi</a></li>
+<li class="toctree-l2"><a class="reference internal" href="5tt2vis.html">5tt2vis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="5ttcheck.html">5ttcheck</a></li>
+<li class="toctree-l2"><a class="reference internal" href="5ttedit.html">5ttedit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="5ttgen.html">5ttgen</a></li>
+<li class="toctree-l2"><a class="reference internal" href="5ttgen.html#ttgen-freesurfer">5ttgen freesurfer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="5ttgen.html#ttgen-fsl">5ttgen fsl</a></li>
+<li class="toctree-l2"><a class="reference internal" href="5ttgen.html#ttgen-gif">5ttgen gif</a></li>
+<li class="toctree-l2"><a class="reference internal" href="5ttgen.html#ttgen-hsvs">5ttgen hsvs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="afdconnectivity.html">afdconnectivity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="amp2response.html">amp2response</a></li>
+<li class="toctree-l2"><a class="reference internal" href="amp2sh.html">amp2sh</a></li>
+<li class="toctree-l2"><a class="reference internal" href="connectome2tck.html">connectome2tck</a></li>
+<li class="toctree-l2"><a class="reference internal" href="connectomeedit.html">connectomeedit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="connectomestats.html">connectomestats</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dcmedit.html">dcmedit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dcminfo.html">dcminfo</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dirflip.html">dirflip</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dirgen.html">dirgen</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dirmerge.html">dirmerge</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dirorder.html">dirorder</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dirsplit.html">dirsplit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dirstat.html">dirstat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dwi2adc.html">dwi2adc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dwi2fod.html">dwi2fod</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dwi2mask.html">dwi2mask</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dwi2response.html">dwi2response</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dwi2response.html#dwi2response-dhollander">dwi2response dhollander</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dwi2response.html#dwi2response-fa">dwi2response fa</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dwi2response.html#dwi2response-manual">dwi2response manual</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dwi2response.html#dwi2response-msmt-5tt">dwi2response msmt_5tt</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dwi2response.html#dwi2response-tax">dwi2response tax</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dwi2response.html#dwi2response-tournier">dwi2response tournier</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dwi2tensor.html">dwi2tensor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dwibiascorrect.html">dwibiascorrect</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dwibiascorrect.html#dwibiascorrect-ants">dwibiascorrect ants</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dwibiascorrect.html#dwibiascorrect-fsl">dwibiascorrect fsl</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dwicat.html">dwicat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dwidenoise.html">dwidenoise</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dwiextract.html">dwiextract</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dwifslpreproc.html">dwifslpreproc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dwigradcheck.html">dwigradcheck</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dwinormalise.html">dwinormalise</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dwinormalise.html#dwinormalise-group">dwinormalise group</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dwinormalise.html#dwinormalise-individual">dwinormalise individual</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dwishellmath.html">dwishellmath</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fixel2peaks.html">fixel2peaks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fixel2sh.html">fixel2sh</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fixel2tsf.html">fixel2tsf</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fixel2voxel.html">fixel2voxel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fixelcfestats.html">fixelcfestats</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fixelconnectivity.html">fixelconnectivity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fixelconvert.html">fixelconvert</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fixelcorrespondence.html">fixelcorrespondence</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fixelcrop.html">fixelcrop</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fixelfilter.html">fixelfilter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fixelreorient.html">fixelreorient</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fod2dec.html">fod2dec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fod2fixel.html">fod2fixel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="for_each.html">for_each</a></li>
+<li class="toctree-l2"><a class="reference internal" href="label2colour.html">label2colour</a></li>
+<li class="toctree-l2"><a class="reference internal" href="label2mesh.html">label2mesh</a></li>
+<li class="toctree-l2"><a class="reference internal" href="labelconvert.html">labelconvert</a></li>
+<li class="toctree-l2"><a class="reference internal" href="labelsgmfix.html">labelsgmfix</a></li>
+<li class="toctree-l2"><a class="reference internal" href="labelstats.html">labelstats</a></li>
+<li class="toctree-l2"><a class="reference internal" href="maskdump.html">maskdump</a></li>
+<li class="toctree-l2"><a class="reference internal" href="maskfilter.html">maskfilter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mesh2voxel.html">mesh2voxel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="meshconvert.html">meshconvert</a></li>
+<li class="toctree-l2"><a class="reference internal" href="meshfilter.html">meshfilter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mraverageheader.html">mraverageheader</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mrcalc.html">mrcalc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mrcat.html">mrcat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mrcentroid.html">mrcentroid</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mrcheckerboardmask.html">mrcheckerboardmask</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mrclusterstats.html">mrclusterstats</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mrcolour.html">mrcolour</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mrconvert.html">mrconvert</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mrdegibbs.html">mrdegibbs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mrdump.html">mrdump</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mredit.html">mredit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mrfilter.html">mrfilter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mrgrid.html">mrgrid</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mrhistmatch.html">mrhistmatch</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mrhistogram.html">mrhistogram</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mrinfo.html">mrinfo</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mrmath.html">mrmath</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mrmetric.html">mrmetric</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mrregister.html">mrregister</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">mrstats</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#synopsis">Synopsis</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#usage">Usage</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#options">Options</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#statistics-options">Statistics options</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#additional-options-for-mrstats">Additional options for mrstats</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#standard-options">Standard options</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#references">References</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="mrthreshold.html">mrthreshold</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mrtransform.html">mrtransform</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mrtrix_cleanup.html">mrtrix_cleanup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mrview.html">mrview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mtnormalise.html">mtnormalise</a></li>
+<li class="toctree-l2"><a class="reference internal" href="peaks2amp.html">peaks2amp</a></li>
+<li class="toctree-l2"><a class="reference internal" href="peaks2fixel.html">peaks2fixel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="population_template.html">population_template</a></li>
+<li class="toctree-l2"><a class="reference internal" href="responsemean.html">responsemean</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sh2amp.html">sh2amp</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sh2peaks.html">sh2peaks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sh2power.html">sh2power</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sh2response.html">sh2response</a></li>
+<li class="toctree-l2"><a class="reference internal" href="shbasis.html">shbasis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="shconv.html">shconv</a></li>
+<li class="toctree-l2"><a class="reference internal" href="shview.html">shview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tck2connectome.html">tck2connectome</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tck2fixel.html">tck2fixel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tckconvert.html">tckconvert</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tckdfc.html">tckdfc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tckedit.html">tckedit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tckgen.html">tckgen</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tckglobal.html">tckglobal</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tckinfo.html">tckinfo</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tckmap.html">tckmap</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tckresample.html">tckresample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tcksample.html">tcksample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tcksift.html">tcksift</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tcksift2.html">tcksift2</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tckstats.html">tckstats</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tcktransform.html">tcktransform</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tensor2metric.html">tensor2metric</a></li>
+<li class="toctree-l2"><a class="reference internal" href="transformcalc.html">transformcalc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="transformcompose.html">transformcompose</a></li>
+<li class="toctree-l2"><a class="reference internal" href="transformconvert.html">transformconvert</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tsfdivide.html">tsfdivide</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tsfinfo.html">tsfinfo</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tsfmult.html">tsfmult</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tsfsmooth.html">tsfsmooth</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tsfthreshold.html">tsfthreshold</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tsfvalidate.html">tsfvalidate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="vectorstats.html">vectorstats</a></li>
+<li class="toctree-l2"><a class="reference internal" href="voxel2fixel.html">voxel2fixel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="voxel2mesh.html">voxel2mesh</a></li>
+<li class="toctree-l2"><a class="reference internal" href="warp2metric.html">warp2metric</a></li>
+<li class="toctree-l2"><a class="reference internal" href="warpconvert.html">warpconvert</a></li>
+<li class="toctree-l2"><a class="reference internal" href="warpcorrect.html">warpcorrect</a></li>
+<li class="toctree-l2"><a class="reference internal" href="warpinit.html">warpinit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="warpinvert.html">warpinvert</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../config_file_options.html">List of MRtrix3 configuration file options</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../environment_variables.html">List of MRtrix3 environment variables</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../mrtrix2_equivalent_commands.html">MRtrix 0.2 equivalent commands</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../references.html">References</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">MRtrix3</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../commands_list.html">List of MRtrix3 commands</a></li>
+      <li class="breadcrumb-item active">mrstats</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../_sources/reference/commands/mrstats.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="mrstats">
+<span id="id1"></span><h1>mrstats<a class="headerlink" href="#mrstats" title="Link to this heading"></a></h1>
+<section id="synopsis">
+<h2>Synopsis<a class="headerlink" href="#synopsis" title="Link to this heading"></a></h2>
+<p>Compute images statistics</p>
+</section>
+<section id="usage">
+<h2>Usage<a class="headerlink" href="#usage" title="Link to this heading"></a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">mrstats</span> <span class="p">[</span> <span class="n">options</span> <span class="p">]</span>  <span class="n">image</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p><em>image</em>: the input image from which statistics will be computed.</p></li>
+</ul>
+</section>
+<section id="options">
+<h2>Options<a class="headerlink" href="#options" title="Link to this heading"></a></h2>
+<section id="statistics-options">
+<h3>Statistics options<a class="headerlink" href="#statistics-options" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>-output field</strong> <em>(multiple uses permitted)</em> output only the field specified. Multiple such options can be supplied if required. Choices are: mean, median, std, std_rv, min, max, count. Useful for use in scripts. Both std options refer to the unbiased (sample) standard deviation. For complex data, min, max and std are calculated separately for real and imaginary parts, std_rv is based on the real valued variance (equals sqrt of sum of variances of imaginary and real parts).</p></li>
+<li><p><strong>-mask image</strong> only perform computation within the specified binary mask image.</p></li>
+<li><p><strong>-ignorezero</strong> ignore zero values during statistics calculation</p></li>
+</ul>
+</section>
+<section id="additional-options-for-mrstats">
+<h3>Additional options for mrstats<a class="headerlink" href="#additional-options-for-mrstats" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>-allvolumes</strong> generate statistics across all image volumes, rather than one set of statistics per image volume</p></li>
+</ul>
+</section>
+<section id="standard-options">
+<h3>Standard options<a class="headerlink" href="#standard-options" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>-info</strong> display information messages.</p></li>
+<li><p><strong>-quiet</strong> do not display information messages or progress status; alternatively, this can be achieved by setting the MRTRIX_QUIET environment variable to a non-empty string.</p></li>
+<li><p><strong>-debug</strong> display debugging messages.</p></li>
+<li><p><strong>-force</strong> force overwrite of output files (caution: using the same file as input and output might cause unexpected behaviour).</p></li>
+<li><p><strong>-nthreads number</strong> use this number of threads in multi-threaded applications (set to 0 to disable multi-threading).</p></li>
+<li><p><strong>-config key value</strong> <em>(multiple uses permitted)</em> temporarily set the value of an MRtrix config file entry.</p></li>
+<li><p><strong>-help</strong> display this information page and exit.</p></li>
+<li><p><strong>-version</strong> display version information and exit.</p></li>
+</ul>
+</section>
+<section id="references">
+<h3>References<a class="headerlink" href="#references" title="Link to this heading"></a></h3>
+<p>Tournier, J.-D.; Smith, R. E.; Raffelt, D.; Tabbara, R.; Dhollander, T.; Pietsch, M.; Christiaens, D.; Jeurissen, B.; Yeh, C.-H. &amp; Connelly, A. MRtrix3: A fast, flexible and open software framework for medical image processing and visualisation. NeuroImage, 2019, 202, 116137</p>
+<hr class="docutils" />
+<p><strong>Author:</strong> J-Donald Tournier (<a class="reference external" href="mailto:jdtournier&#37;&#52;&#48;gmail&#46;com">jdtournier<span>&#64;</span>gmail<span>&#46;</span>com</a>)</p>
+<p><strong>Copyright:</strong> Copyright (c) 2008-2026 the MRtrix3 contributors.</p>
+<p>This Source Code Form is subject to the terms of the Mozilla Public
+License, v. 2.0. If a copy of the MPL was not distributed with this
+file, You can obtain one at <a class="reference external" href="http://mozilla.org/MPL/2.0/">http://mozilla.org/MPL/2.0/</a>.</p>
+<p>Covered Software is provided under this License on an “as is”
+basis, without warranty of any kind, either expressed, implied, or
+statutory, including, without limitation, warranties that the
+Covered Software is free of defects, merchantable, fit for a
+particular purpose or non-infringing.
+See the Mozilla Public License v. 2.0 for more details.</p>
+<p>For more details, see <a class="reference external" href="http://www.mrtrix.org/">http://www.mrtrix.org/</a>.</p>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer class="site-footer text-center">
+
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="mrthreshold.html" class="btn btn-neutral float-right" title="mrthreshold" accesskey="n">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="mrregister.html" class="btn btn-neutral float-left" title="mrregister" accesskey="p"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+    <script type="text/javascript" src="http://www.mrtrix.org/javascript/bootstrap.js"></script>
+</footer>
+
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

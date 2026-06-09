@@ -1,0 +1,1084 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" />
+  <meta name="readthedocs-addons-api-version" content="1"><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Running XCP-D &mdash; xcp_d 26.0.3 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/theme_overrides.css" />
+      <link rel="stylesheet" type="text/css" href="_static/sphinx-design.min.css?v=95c83b7e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=1ca43036"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="https://cdn.rawgit.com/chrisfilo/zenodo.js/v0.1/zenodo.js"></script>
+      <script src="_static/design-tabs.js?v=f930bc37"></script>
+    <script src="_static/js/theme.js"></script>
+    <script src="_static/js/versions.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Processing Pipeline Details" href="workflows.html" />
+    <link rel="prev" title="Installation" href="installation.html" /> 
+<script async type="text/javascript" src="/_/static/javascript/readthedocs-addons.js"></script><meta name="readthedocs-project-slug" content="xcp-d" /><meta name="readthedocs-version-slug" content="stable" /><meta name="readthedocs-resolver-filename" content="/usage.html" /><meta name="readthedocs-http-status" content="200" /></head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            xcp_d
+          </a>
+              <div class="switch-menus">
+                <div class="version-switch"></div>
+                <div class="language-switch"></div>
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Running <em>XCP-D</em></a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#execution-and-input-formats">Execution and Input Formats</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#command-line-arguments">Command-Line Arguments</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#xcp_d.cli.parser-_build_parser-positional-arguments">Positional Arguments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#xcp_d.cli.parser-_build_parser-named-arguments">Named Arguments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#xcp_d.cli.parser-_build_parser-required-arguments">required arguments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#xcp_d.cli.parser-_build_parser-options-for-filtering-bids-queries">Options for filtering BIDS queries</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#xcp_d.cli.parser-_build_parser-options-for-resource-management">Options for resource management</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#xcp_d.cli.parser-_build_parser-input-flags">Input flags</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#xcp_d.cli.parser-_build_parser-postprocessing-parameters">Postprocessing parameters</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#xcp_d.cli.parser-_build_parser-motion-filtering-parameters">Motion filtering parameters</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#xcp_d.cli.parser-_build_parser-censoring-and-scrubbing-options">Censoring and scrubbing options</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#xcp_d.cli.parser-_build_parser-data-filtering-parameters">Data filtering parameters</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#xcp_d.cli.parser-_build_parser-parcellation-options">Parcellation options</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#xcp_d.cli.parser-_build_parser-abcd/hbcd-mode-options">abcd/hbcd mode options</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#xcp_d.cli.parser-_build_parser-linc-mode-options">linc mode options</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#xcp_d.cli.parser-_build_parser-other-options">Other options</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#xcp_d.cli.parser-_build_parser-experimental-options">Experimental options</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#minimal-inputs">Minimal Inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#filtering-inputs-with-bids-filter-files">Filtering Inputs with BIDS Filter Files</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#example-bids-filter-file">Example bids-filter-file</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#running-xcp-d-via-containers">Running <em>XCP-D</em> via containers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#run-apptainer">Apptainer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#run-docker">Docker</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#custom-confounds">Custom Confounds</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#including-signal-regressors">Including Signal Regressors</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#task-regression">Task Regression</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#command-line-xcp-d-with-custom-confounds">Command Line <em>XCP-D</em> with Custom Confounds</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#external-atlases">External Atlases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#advanced-applications">Advanced Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#preprocessing-requirements-for-xcp-d">Preprocessing Requirements for <em>XCP-D</em></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#fmriprep-nibabies">fMRIPrep/Nibabies</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#troubleshooting">Troubleshooting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#support-and-communication">Support and communication</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="workflows.html">Processing Pipeline Details</a></li>
+<li class="toctree-l1"><a class="reference internal" href="outputs.html">Outputs of <em>XCP-D</em></a></li>
+<li class="toctree-l1"><a class="reference internal" href="contributing.html">Contributing to <em>XCP-D</em></a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">Developers - API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="changes.html">What’s New</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">xcp_d</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Running <em>XCP-D</em></li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/usage.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="running-xcp-d">
+<h1>Running <em>XCP-D</em><a class="headerlink" href="#running-xcp-d" title="Link to this heading"></a></h1>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p><em>XCP-D</em> may not run correctly on <strong>M1 chips</strong>.</p>
+</div>
+<section id="execution-and-input-formats">
+<span id="usage-inputs"></span><h2>Execution and Input Formats<a class="headerlink" href="#execution-and-input-formats" title="Link to this heading"></a></h2>
+<p>The <em>XCP-D</em> workflow takes <a class="reference external" href="https://fmriprep.org">fMRIPrep</a>, <a class="reference external" href="https://nibabies.readthedocs.io">Nibabies</a>, <a class="reference external" href="https://humanconnectome.org/software/hcp-mr-pipelines/">HCP Pipelines</a>, <a class="reference external" href="https://github.com/DCAN-Labs/abcd-hcp-pipeline">ABCD-BIDS</a>,
+and <cite>UK Biobank</cite> outputs in the form of BIDS derivatives.
+In these examples, we use an fmriprep output directory.</p>
+<p>The outputs are required to include at least anatomical and functional outputs with at least one
+preprocessed BOLD image.
+Additionally, each of these should be in directories that can be parsed by the BIDS online validator
+(even if it is not BIDS valid - we do not require BIDS valid directories).
+The directories must also include a valid <cite>dataset_description.json</cite>.</p>
+<p>The exact command to run in <em>XCP-D</em> depends on the <a class="reference internal" href="installation.html"><span class="doc">Installation</span></a> method and data that needs to be processed.
+We start first with the <em>bare-metal</em> <a class="reference internal" href="installation.html#installation-manually-prepared-environment"><span class="std std-ref">Manually Prepared Environment (Python 3.10)</span></a>
+installation, as the command line is simpler.
+<em>XCP-D</em> can be executed on the command line, processesing fMRIPrep outputs, using the following
+command-line structure, for example:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>xcp_d<span class="w"> </span>/path/to/fmriprep_dir<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>/path/to/output_dir<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>participant<span class="w"> </span><span class="se">\ </span><span class="c1"># analysis_level</span>
+<span class="w">   </span>--mode<span class="w"> </span>&lt;mode&gt;<span class="w"> </span><span class="se">\ </span><span class="c1"># required</span>
+<span class="w">   </span>--participant-label<span class="w"> </span>&lt;label&gt;<span class="w"> </span><span class="c1"># optional</span>
+</pre></div>
+</div>
+<p>However, we strongly recommend using <a class="reference internal" href="installation.html#installation-container-technologies"><span class="std std-ref">Container Technologies</span></a>.
+Here, the command-line will be composed of a preamble to configure the container execution,
+followed by the <em>XCP-D</em> command-line options as if you were running it on a <em>bare-metal</em>
+installation.</p>
+</section>
+<section id="command-line-arguments">
+<span id="usage-cli"></span><h2>Command-Line Arguments<a class="headerlink" href="#command-line-arguments" title="Link to this heading"></a></h2>
+<p><p>XCP-D: Postprocessing Workflow of fMRI Data v26.0.3</p>
+</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">usage</span><span class="p">:</span> <span class="n">xcp_d</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span> <span class="o">--</span><span class="n">mode</span> <span class="p">{</span><span class="n">abcd</span><span class="p">,</span><span class="n">hbcd</span><span class="p">,</span><span class="n">linc</span><span class="p">,</span><span class="n">nichart</span><span class="p">,</span><span class="n">none</span><span class="p">}</span> <span class="p">[</span><span class="o">--</span><span class="n">version</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">participant</span><span class="o">-</span><span class="n">label</span> <span class="n">PARTICIPANT_LABEL</span> <span class="p">[</span><span class="n">PARTICIPANT_LABEL</span> <span class="o">...</span><span class="p">]]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">session</span><span class="o">-</span><span class="nb">id</span> <span class="n">SESSION_ID</span> <span class="p">[</span><span class="n">SESSION_ID</span> <span class="o">...</span><span class="p">]]</span>
+             <span class="p">[</span><span class="o">-</span><span class="n">t</span> <span class="n">TASK_ID</span> <span class="p">[</span><span class="n">TASK_ID</span> <span class="o">...</span><span class="p">]]</span> <span class="p">[</span><span class="o">--</span><span class="n">bids</span><span class="o">-</span><span class="nb">filter</span><span class="o">-</span><span class="n">file</span> <span class="n">FILE</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">-</span><span class="n">d</span> <span class="n">PACKAGE</span><span class="o">=</span><span class="n">PATH</span> <span class="p">[</span><span class="n">PACKAGE</span><span class="o">=</span><span class="n">PATH</span> <span class="o">...</span><span class="p">]]</span> <span class="p">[</span><span class="o">--</span><span class="n">bids</span><span class="o">-</span><span class="n">database</span><span class="o">-</span><span class="nb">dir</span> <span class="n">PATH</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">nprocs</span> <span class="n">NPROCS</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">omp</span><span class="o">-</span><span class="n">nthreads</span> <span class="n">OMP_NTHREADS</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">mem</span><span class="o">-</span><span class="n">mb</span> <span class="n">MEMORY_MB</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">low</span><span class="o">-</span><span class="n">mem</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">use</span><span class="o">-</span><span class="n">plugin</span> <span class="n">USE_PLUGIN</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">v</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">--</span><span class="nb">input</span><span class="o">-</span><span class="nb">type</span> <span class="p">{</span><span class="n">fmriprep</span><span class="p">,</span><span class="n">dcan</span><span class="p">,</span><span class="n">hcp</span><span class="p">,</span><span class="n">nibabies</span><span class="p">,</span><span class="n">ukb</span><span class="p">}]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">file</span><span class="o">-</span><span class="nb">format</span> <span class="p">{</span><span class="n">auto</span><span class="p">,</span><span class="n">cifti</span><span class="p">,</span><span class="n">nifti</span><span class="p">}]</span> <span class="p">[</span><span class="o">--</span><span class="n">dummy</span><span class="o">-</span><span class="n">scans</span> <span class="p">{{</span><span class="n">auto</span><span class="p">,</span><span class="n">INT</span><span class="p">}}]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">despike</span> <span class="p">[{</span><span class="n">y</span><span class="p">,</span><span class="n">n</span><span class="p">}]]</span> <span class="p">[</span><span class="o">-</span><span class="n">p</span> <span class="n">CONFOUNDS_CONFIG</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">smoothing</span> <span class="p">{{</span><span class="n">auto</span><span class="p">,</span><span class="n">FLOAT</span><span class="p">}}]</span> <span class="p">[</span><span class="o">-</span><span class="n">m</span> <span class="p">[{</span><span class="n">y</span><span class="p">,</span><span class="n">n</span><span class="p">}]]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">skip</span> <span class="p">{</span><span class="n">alff</span><span class="p">,</span><span class="n">reho</span><span class="p">,</span><span class="n">parcellation</span><span class="p">,</span><span class="n">connectivity</span><span class="p">}</span> <span class="p">[{</span><span class="n">alff</span><span class="p">,</span><span class="n">reho</span><span class="p">,</span><span class="n">parcellation</span><span class="p">,</span><span class="n">connectivity</span><span class="p">}</span> <span class="o">...</span><span class="p">]]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">motion</span><span class="o">-</span><span class="nb">filter</span><span class="o">-</span><span class="nb">type</span> <span class="p">{</span><span class="n">lp</span><span class="p">,</span><span class="n">notch</span><span class="p">,</span><span class="n">none</span><span class="p">}]</span> <span class="p">[</span><span class="o">--</span><span class="n">band</span><span class="o">-</span><span class="n">stop</span><span class="o">-</span><span class="nb">min</span> <span class="n">BPM</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">band</span><span class="o">-</span><span class="n">stop</span><span class="o">-</span><span class="nb">max</span> <span class="n">BPM</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">motion</span><span class="o">-</span><span class="nb">filter</span><span class="o">-</span><span class="n">order</span> <span class="n">MOTION_FILTER_ORDER</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">-</span><span class="n">r</span> <span class="n">HEAD_RADIUS</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">f</span> <span class="n">FD_THRESH</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="nb">min</span><span class="o">-</span><span class="n">time</span> <span class="n">MIN_TIME</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">output</span><span class="o">-</span><span class="nb">type</span> <span class="p">{</span><span class="n">auto</span><span class="p">,</span><span class="n">censored</span><span class="p">,</span><span class="n">interpolated</span><span class="p">}]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">disable</span><span class="o">-</span><span class="n">bandpass</span><span class="o">-</span><span class="nb">filter</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">lower</span><span class="o">-</span><span class="n">bpf</span> <span class="n">HIGH_PASS</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">upper</span><span class="o">-</span><span class="n">bpf</span> <span class="n">LOW_PASS</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">bpf</span><span class="o">-</span><span class="n">order</span> <span class="n">BPF_ORDER</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">atlases</span> <span class="n">ATLAS</span> <span class="p">[</span><span class="n">ATLAS</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="o">--</span><span class="n">skip</span><span class="o">-</span><span class="n">parcellation</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">--</span><span class="nb">min</span><span class="o">-</span><span class="n">coverage</span> <span class="p">{</span><span class="n">auto</span><span class="p">,</span><span class="n">FLOAT</span><span class="p">}]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">output</span><span class="o">-</span><span class="n">run</span><span class="o">-</span><span class="n">wise</span><span class="o">-</span><span class="n">correlations</span> <span class="p">[{</span><span class="n">y</span><span class="p">,</span><span class="n">n</span><span class="p">}]]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">create</span><span class="o">-</span><span class="n">matrices</span> <span class="n">CORRELATION_LENGTHS</span> <span class="p">[</span><span class="n">CORRELATION_LENGTHS</span> <span class="o">...</span><span class="p">]]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">random</span><span class="o">-</span><span class="n">seed</span> <span class="n">_RANDOM_SEED</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">linc</span><span class="o">-</span><span class="n">qc</span> <span class="p">[{</span><span class="n">y</span><span class="p">,</span><span class="n">n</span><span class="p">}]]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">abcc</span><span class="o">-</span><span class="n">qc</span> <span class="p">[{</span><span class="n">y</span><span class="p">,</span><span class="n">n</span><span class="p">}]]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">report</span><span class="o">-</span><span class="n">output</span><span class="o">-</span><span class="n">level</span> <span class="p">{</span><span class="n">root</span><span class="p">,</span><span class="n">subject</span><span class="p">,</span><span class="n">session</span><span class="p">}]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">aggregate</span><span class="o">-</span><span class="n">session</span><span class="o">-</span><span class="n">reports</span> <span class="n">AGGR_SES_REPORTS</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">output</span><span class="o">-</span><span class="n">layout</span> <span class="p">{</span><span class="n">bids</span><span class="p">,</span><span class="n">multiverse</span><span class="p">}]</span> <span class="p">[</span><span class="o">-</span><span class="n">w</span> <span class="n">WORK_DIR</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">clean</span><span class="o">-</span><span class="n">workdir</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">resource</span><span class="o">-</span><span class="n">monitor</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">config</span><span class="o">-</span><span class="n">file</span> <span class="n">FILE</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">write</span><span class="o">-</span><span class="n">graph</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">stop</span><span class="o">-</span><span class="n">on</span><span class="o">-</span><span class="n">first</span><span class="o">-</span><span class="n">crash</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">notrack</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">debug</span> <span class="p">{</span><span class="n">pdb</span><span class="p">,</span><span class="nb">all</span><span class="p">}</span> <span class="p">[{</span><span class="n">pdb</span><span class="p">,</span><span class="nb">all</span><span class="p">}</span> <span class="o">...</span><span class="p">]]</span> <span class="p">[</span><span class="o">--</span><span class="n">fs</span><span class="o">-</span><span class="n">license</span><span class="o">-</span><span class="n">file</span> <span class="n">FILE</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">md</span><span class="o">-</span><span class="n">only</span><span class="o">-</span><span class="n">boilerplate</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">boilerplate</span><span class="o">-</span><span class="n">only</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">reports</span><span class="o">-</span><span class="n">only</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">warp</span><span class="o">-</span><span class="n">surfaces</span><span class="o">-</span><span class="n">native2std</span> <span class="p">[{</span><span class="n">y</span><span class="p">,</span><span class="n">n</span><span class="p">}]]</span>
+             <span class="n">fmri_dir</span> <span class="n">output_dir</span> <span class="p">{</span><span class="n">participant</span><span class="p">}</span>
+</pre></div>
+</div>
+<section id="xcp_d.cli.parser-_build_parser-positional-arguments">
+<h3>Positional Arguments<a class="headerlink" href="#xcp_d.cli.parser-_build_parser-positional-arguments" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>fmri_dir</kbd></dt>
+<dd><p>The root folder of fMRI preprocessing derivatives. For example, ‘/path/to/dset/derivatives/fmriprep’.</p>
+</dd>
+<dt><kbd>output_dir</kbd></dt>
+<dd><p>The output path for XCP-D derivatives. If the output layout is “multiverse”, “xcp_d” will be appended to output_dir, with a hash built from the configuration. For example, setting output_dir to “/path/to/dset/derivatives” and output_layout to “multiverse” will result in the output directory being “/path/to/dset/derivatives/xcp_d-&lt;hash&gt;”.If the output layout is “bids”, “xcp_d” will not be appended to output_dir. For example, setting output_dir to “/path/to/dset/derivatives/xcp_d” and output_layout to “bids” will result in the output directory being “/path/to/dset/derivatives/xcp_d”.</p>
+</dd>
+<dt><kbd>analysis_level</kbd></dt>
+<dd><p>Possible choices: participant</p>
+<p>The analysis level for XCP-D. Must be specified as ‘participant’.</p>
+</dd>
+</dl>
+</section>
+<section id="xcp_d.cli.parser-_build_parser-named-arguments">
+<h3>Named Arguments<a class="headerlink" href="#xcp_d.cli.parser-_build_parser-named-arguments" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>--version</kbd></dt>
+<dd><p>show program’s version number and exit</p>
+</dd>
+</dl>
+</section>
+<section id="xcp_d.cli.parser-_build_parser-required-arguments">
+<h3>required arguments<a class="headerlink" href="#xcp_d.cli.parser-_build_parser-required-arguments" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>--mode</kbd></dt>
+<dd><p>Possible choices: abcd, hbcd, linc, nichart, none</p>
+<p>The mode of operation for XCP-D. The mode sets several parameters, with values specific to different pipelines. For more information, see the documentation at <a class="reference external" href="https://xcp-d.readthedocs.io/en/latest/workflows.html#modes">https://xcp-d.readthedocs.io/en/latest/workflows.html#modes</a>. the parameters manually.</p>
+</dd>
+</dl>
+</section>
+<section id="xcp_d.cli.parser-_build_parser-options-for-filtering-bids-queries">
+<h3>Options for filtering BIDS queries<a class="headerlink" href="#xcp_d.cli.parser-_build_parser-options-for-filtering-bids-queries" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>--participant-label, --participant_label</kbd></dt>
+<dd><p>A space-delimited list of participant identifiers, or a single identifier. The “sub-” prefix can be removed.</p>
+</dd>
+<dt><kbd>--session-id, --session_id</kbd></dt>
+<dd><p>A space-delimited list of session identifiers, or a single identifier. The “ses-” prefix can be removed. By default, all sessions will be postprocessed.</p>
+</dd>
+<dt><kbd>-t, --task-id, --task_id</kbd></dt>
+<dd><p>A space-delimited list of task identifiers, or a single identifier. The “task-” prefix can be removed. By default, all tasks will be postprocessed.</p>
+</dd>
+<dt><kbd>--bids-filter-file, --bids_filter_file</kbd></dt>
+<dd><p>A JSON file describing custom BIDS input filters using PyBIDS. For further details, please check out <a class="reference external" href="https://xcp-d.readthedocs.io/en/26.0.3/usage.html#filtering-inputs-with-bids-filter-files">https://xcp-d.readthedocs.io/en/26.0.3/usage.html#filtering-inputs-with-bids-filter-files</a></p>
+</dd>
+<dt><kbd>-d, --datasets</kbd></dt>
+<dd><p>Search PATH(s) for derivatives or atlas datasets. These may be provided as named folders (e.g., <cite>–datasets smriprep=/path/to/smriprep</cite>).</p>
+</dd>
+<dt><kbd>--bids-database-dir</kbd></dt>
+<dd><p>Path to a PyBIDS database folder, for faster indexing (especially useful for large datasets). Will be created if not present.</p>
+</dd>
+</dl>
+</section>
+<section id="xcp_d.cli.parser-_build_parser-options-for-resource-management">
+<h3>Options for resource management<a class="headerlink" href="#xcp_d.cli.parser-_build_parser-options-for-resource-management" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>--nprocs, --nthreads, --n-cpus, --n_cpus</kbd></dt>
+<dd><p>Maximum number of threads across all processes.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">2</span></code></p>
+</dd>
+<dt><kbd>--omp-nthreads, --omp_nthreads</kbd></dt>
+<dd><p>Maximum number of threads per process.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">1</span></code></p>
+</dd>
+<dt><kbd>--mem-mb, --mem_mb</kbd></dt>
+<dd><p>Upper bound memory limit, in megabytes, for XCP-D processes.</p>
+</dd>
+<dt><kbd>--low-mem</kbd></dt>
+<dd><p>Attempt to reduce memory usage (will increase disk usage in working directory). IMPORTANT: At the moment, this option has no effect.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--use-plugin, --use_plugin, --nipype-plugin-file, --nipype_plugin_file</kbd></dt>
+<dd><p>Nipype plugin configuration file. For more information, see <a class="reference external" href="https://nipype.readthedocs.io/en/0.11.0/users/plugins.html">https://nipype.readthedocs.io/en/0.11.0/users/plugins.html</a>.</p>
+</dd>
+<dt><kbd>-v, --verbose</kbd></dt>
+<dd><p>Increases log verbosity for each occurrence. Debug level is ‘-vvv’.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">0</span></code></p>
+</dd>
+</dl>
+</section>
+<section id="xcp_d.cli.parser-_build_parser-input-flags">
+<h3>Input flags<a class="headerlink" href="#xcp_d.cli.parser-_build_parser-input-flags" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>--input-type, --input_type</kbd></dt>
+<dd><p>Possible choices: fmriprep, dcan, hcp, nibabies, ukb</p>
+<p>The pipeline used to generate the preprocessed derivatives. The default pipeline is ‘fmriprep’. The ‘dcan’, ‘hcp’, ‘nibabies’, and ‘ukb’ pipelines are also supported. ‘nibabies’ assumes the same structure as ‘fmriprep’.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">'auto'</span></code></p>
+</dd>
+<dt><kbd>--file-format</kbd></dt>
+<dd><p>Possible choices: auto, cifti, nifti</p>
+<p>The file format of the input data. If ‘auto’, the file format will be inferred from the processing mode. If ‘cifti’, the input data are assumed to be in CIFTI format. If ‘nifti’, the input data are assumed to be in NIfTI format.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">'auto'</span></code></p>
+</dd>
+</dl>
+</section>
+<section id="xcp_d.cli.parser-_build_parser-postprocessing-parameters">
+<h3>Postprocessing parameters<a class="headerlink" href="#xcp_d.cli.parser-_build_parser-postprocessing-parameters" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>--dummy-scans, --dummy_scans</kbd></dt>
+<dd><p>Number of volumes to remove from the beginning of each run. If set to ‘auto’, XCP-D will extract non-steady-state volume indices from the preprocessing derivatives’ confounds file.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">0</span></code></p>
+</dd>
+<dt><kbd>--despike</kbd></dt>
+<dd><p>Possible choices: y, n</p>
+<p>Despike the BOLD data before postprocessing. If not provided, the despike option will be inferred from the ‘mode’. If provided without an argument, despiking will be enabled. If provided with an argument (y or n), the value of the argument will be used. ‘y’ enables despiking. ‘n’ disables despiking.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">'auto'</span></code></p>
+</dd>
+<dt><kbd>-p, --nuisance-regressors, --nuisance_regressors</kbd></dt>
+<dd><p>Nuisance parameters to be selected. This may be a string indicating one of XCP-D’s built-in nuisance regression strategies (e.g., ‘36P’) or a path to a YAML file formatted according to XCP-D’s confound configuration file format. Descriptions of each of the built-in options are included in XCP-D’s documentation.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">'auto'</span></code></p>
+</dd>
+<dt><kbd>--smoothing</kbd></dt>
+<dd><p>Full-width at half maximum (FWHM), in millimeters, of the Gaussian smoothing kernel to apply to the denoised BOLD data. Set to 0 to disable smoothing. The default value is “auto”, which uses the default smoothing value for the processing mode.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">auto</span></code></p>
+</dd>
+<dt><kbd>-m, --combine-runs, --combine_runs</kbd></dt>
+<dd><p>Possible choices: y, n</p>
+<p>After denoising, concatenate each derivative from each task across runs. If not provided, the combine_runs option will be inferred from the processing mode. If provided without an argument, concatenation will be enabled. If provided with an argument (y or n), the value of the argument will be used. ‘y’ enables concatenation. ‘n’ disables concatenation.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">'auto'</span></code></p>
+</dd>
+<dt><kbd>--skip</kbd></dt>
+<dd><p>Possible choices: alff, reho, parcellation, connectivity</p>
+<p>Skip specific outputs during postprocessing. Options include: ‘alff’ (skip ALFF calculation), ‘reho’ (skip ReHo calculation), ‘parcellation’ (skip parcellation and time series extraction), ‘connectivity’ (skip functional connectivity calculations). Multiple options can be specified. Note: Skipping ‘parcellation’ will also skip ‘connectivity’. Skipping ‘connectivity’ alone will still perform parcellation to extract time series, but will not compute correlation matrices. Skipping ‘alff’ is only relevant when bandpass filtering is enabled.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">[]</span></code></p>
+<p>The <code class="docutils literal notranslate"><span class="pre">--skip</span></code> parameter allows you to selectively skip certain postprocessing steps,
+which can significantly reduce processing time when you don’t need all outputs.</p>
+<p>Available options:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">alff</span></code>: Skip ALFF (Amplitude of Low-Frequency Fluctuation) calculation.
+Note that ALFF is only calculated when bandpass filtering is enabled (<code class="docutils literal notranslate"><span class="pre">--bandpass-filter</span></code>).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">reho</span></code>: Skip ReHo (Regional Homogeneity) calculation.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">parcellation</span></code>: Skip parcellation and time series extraction.
+This is equivalent to using <code class="docutils literal notranslate"><span class="pre">--atlases</span></code> with an empty list.
+<strong>This will automatically skip connectivity as well, since connectivity requires parcellated data.</strong></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">connectivity</span></code>: Skip functional connectivity matrix calculations.
+Parcellation will still be performed to extract time series,
+but correlation matrices will not be computed.</p></li>
+</ul>
+<p>You can specify multiple options to skip several steps at once.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Skip ALFF and ReHo calculations</span>
+xcp_d<span class="w"> </span>/path/to/fmriprep<span class="w"> </span>/path/to/output<span class="w"> </span>participant<span class="w"> </span>--mode<span class="w"> </span>linc<span class="w"> </span>--skip<span class="w"> </span>alff<span class="w"> </span>reho
+
+<span class="c1"># Skip only connectivity (parcellation still runs to extract time series)</span>
+xcp_d<span class="w"> </span>/path/to/fmriprep<span class="w"> </span>/path/to/output<span class="w"> </span>participant<span class="w"> </span>--mode<span class="w"> </span>linc<span class="w"> </span>--skip<span class="w"> </span>connectivity
+
+<span class="c1"># Skip parcellation (this automatically skips connectivity too)</span>
+xcp_d<span class="w"> </span>/path/to/fmriprep<span class="w"> </span>/path/to/output<span class="w"> </span>participant<span class="w"> </span>--mode<span class="w"> </span>linc<span class="w"> </span>--skip<span class="w"> </span>parcellation
+</pre></div>
+</div>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>Use <code class="docutils literal notranslate"><span class="pre">--skip</span></code> to optimize processing time when you only need specific outputs.
+For example, if you need parcellated time series but not connectivity matrices,
+use <code class="docutils literal notranslate"><span class="pre">--skip</span> <span class="pre">connectivity</span></code>. If you don’t need either, use <code class="docutils literal notranslate"><span class="pre">--skip</span> <span class="pre">parcellation</span></code>.</p>
+</div>
+</dd>
+</dl>
+</section>
+<section id="xcp_d.cli.parser-_build_parser-motion-filtering-parameters">
+<h3>Motion filtering parameters<a class="headerlink" href="#xcp_d.cli.parser-_build_parser-motion-filtering-parameters" title="Link to this heading"></a></h3>
+<p>These parameters enable and control a filter that will be applied to motion parameters. Motion parameters may be contaminated by non-motion noise, and applying a filter may reduce the impact of that contamination.</p>
+<dl class="option-list">
+<dt><kbd>--motion-filter-type, --motion_filter_type</kbd></dt>
+<dd><p>Possible choices: lp, notch, none</p>
+<p>Type of filter to use for removing respiratory artifact from motion regressors.
+If not set, no filter will be applied.</p>
+<p>If the filter type is set to “notch”, then both <code class="docutils literal notranslate"><span class="pre">band-stop-min</span></code> and <code class="docutils literal notranslate"><span class="pre">band-stop-max</span></code>
+must be defined.
+If the filter type is set to “lp”, then only <code class="docutils literal notranslate"><span class="pre">band-stop-min</span></code> must be defined.
+If the filter type is set to “none”, then no filter will be applied.</p>
+</dd>
+<dt><kbd>--band-stop-min, --band_stop_min</kbd></dt>
+<dd><p>Lower frequency for the motion parameter filter, in breaths-per-minute (bpm).
+Motion filtering is only performed if <code class="docutils literal notranslate"><span class="pre">motion-filter-type</span></code> is not None.
+If used with the “lp” <code class="docutils literal notranslate"><span class="pre">motion-filter-type</span></code>, this parameter essentially corresponds to a
+low-pass filter (the maximum allowed frequency in the filtered data).
+This parameter is used in conjunction with <code class="docutils literal notranslate"><span class="pre">motion-filter-order</span></code> and <code class="docutils literal notranslate"><span class="pre">band-stop-max</span></code>.</p>
+<p>When <code class="docutils literal notranslate"><span class="pre">motion-filter-type</span></code> is set to “lp” (low-pass filter), another commonly-used value for
+this parameter is 6 BPM (equivalent to 0.1 Hertz), based on Gratton et al. (2020).</p>
+</dd>
+<dt><kbd>--band-stop-max, --band_stop_max</kbd></dt>
+<dd><p>Upper frequency for the band-stop motion filter, in breaths-per-minute (bpm).
+Motion filtering is only performed if <code class="docutils literal notranslate"><span class="pre">motion-filter-type</span></code> is not None.
+This parameter is only used if <code class="docutils literal notranslate"><span class="pre">motion-filter-type</span></code> is set to “notch”.
+This parameter is used in conjunction with <code class="docutils literal notranslate"><span class="pre">motion-filter-order</span></code> and <code class="docutils literal notranslate"><span class="pre">band-stop-min</span></code>.</p>
+</dd>
+<dt><kbd>--motion-filter-order, --motion_filter_order</kbd></dt>
+<dd><p>Number of filter coefficients for the motion parameter filter. If the motion filter type is ‘lp’, the order is divided by 2 as filtfilt applies the filter twice. If the motion filter type is ‘notch’, the order is divided by 4 as iirnotch is a second-order filter and filtfilt applies the filter twice. Make sure to set this parameter to a multiple of 2 if you choose the ‘lp’ filter and a multiple of 4 if you choose the ‘notch’ filter.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">4</span></code></p>
+</dd>
+</dl>
+</section>
+<section id="xcp_d.cli.parser-_build_parser-censoring-and-scrubbing-options">
+<h3>Censoring and scrubbing options<a class="headerlink" href="#xcp_d.cli.parser-_build_parser-censoring-and-scrubbing-options" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>-r, --head-radius, --head_radius</kbd></dt>
+<dd><p>Head radius used to calculate framewise displacement, in mm. The default value is 50 mm, which is recommended for adults. For infants, we recommend a value of 35 mm. A value of ‘auto’ is also supported, in which case the brain radius is estimated from the preprocessed brain mask by treating the mask as a sphere. The auto option typically results in a higher estimate than the default.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">50</span></code></p>
+</dd>
+<dt><kbd>-f, --fd-thresh, --fd_thresh</kbd></dt>
+<dd><p>Framewise displacement (FD) threshold for censoring, in mm. Any volumes with an FD value greater than the threshold will be removed from the denoised BOLD data. A threshold of &lt;=0 will disable censoring completely. The default value is “auto”, which uses the default FD threshold for the processing mode.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">auto</span></code></p>
+</dd>
+<dt><kbd>--min-time, --min_time</kbd></dt>
+<dd><p>Post-scrubbing threshold to apply to individual runs in the dataset.
+This threshold determines the minimum amount of time, in seconds,
+needed to post-process a given run, once high-motion outlier volumes are removed.
+This will have no impact if scrubbing is disabled
+(i.e., if the FD threshold is zero or negative).
+This parameter can be disabled by providing a zero or a negative value.</p>
+<p>The default is 240 (4 minutes).</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">240</span></code></p>
+</dd>
+<dt><kbd>--output-type</kbd></dt>
+<dd><p>Possible choices: auto, censored, interpolated</p>
+<p>The type of output to generate. If ‘auto’, the output type will be inferred from the processing mode. If ‘censored’, the BOLD outputs (dense and parcellated time series) will be censored. If ‘interpolated’, the BOLD outputs (dense and parcellated time series) will be interpolated. This parameter has no effect on correlation matrix outputs.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">'auto'</span></code></p>
+</dd>
+</dl>
+</section>
+<section id="xcp_d.cli.parser-_build_parser-data-filtering-parameters">
+<h3>Data filtering parameters<a class="headerlink" href="#xcp_d.cli.parser-_build_parser-data-filtering-parameters" title="Link to this heading"></a></h3>
+<p>These parameters determine whether a bandpass filter will be applied to the BOLD data, after the censoring, denoising, and interpolation steps of the pipeline, but before recensoring.</p>
+<dl class="option-list">
+<dt><kbd>--disable-bandpass-filter, --disable_bandpass_filter</kbd></dt>
+<dd><p>Disable bandpass filtering. If bandpass filtering is disabled, then ALFF derivatives will not be calculated.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">True</span></code></p>
+</dd>
+<dt><kbd>--lower-bpf, --lower_bpf</kbd></dt>
+<dd><p>Lower cut-off frequency (Hz) for the Butterworth bandpass filter to be applied to the denoised BOLD data. Set to 0.0 or negative to disable high-pass filtering. See Satterthwaite et al. (2013).</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">0.01</span></code></p>
+</dd>
+<dt><kbd>--upper-bpf, --upper_bpf</kbd></dt>
+<dd><p>Upper cut-off frequency (Hz) for the Butterworth bandpass filter to be applied to the denoised BOLD data. Set to 0.0 or negative to disable low-pass filtering. See Satterthwaite et al. (2013).</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">0.08</span></code></p>
+</dd>
+<dt><kbd>--bpf-order, --bpf_order</kbd></dt>
+<dd><p>Number of filter coefficients for the Butterworth bandpass filter.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">2</span></code></p>
+</dd>
+</dl>
+</section>
+<section id="xcp_d.cli.parser-_build_parser-parcellation-options">
+<h3>Parcellation options<a class="headerlink" href="#xcp_d.cli.parser-_build_parser-parcellation-options" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>--atlases</kbd></dt>
+<dd><p>Selection of atlases to apply to the data. All of XCP-D’s built-in atlases are used by default.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">['4S1056Parcels',</span> <span class="pre">'4S156Parcels',</span> <span class="pre">'4S256Parcels',</span> <span class="pre">'4S356Parcels',</span> <span class="pre">'4S456Parcels',</span> <span class="pre">'4S556Parcels',</span> <span class="pre">'4S656Parcels',</span> <span class="pre">'4S756Parcels',</span> <span class="pre">'4S856Parcels',</span> <span class="pre">'4S956Parcels',</span> <span class="pre">'Glasser',</span> <span class="pre">'Gordon',</span> <span class="pre">'HCP',</span> <span class="pre">'MIDB',</span> <span class="pre">'MyersLabonte',</span> <span class="pre">'Tian']</span></code></p>
+</dd>
+<dt><kbd>--skip-parcellation, --skip_parcellation</kbd></dt>
+<dd><p>(Deprecated) Skip parcellation and correlation steps. Use the new ‘–skip parcellation’ option instead.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--min-coverage, --min_coverage</kbd></dt>
+<dd><p>Coverage threshold to apply to parcels in each atlas. Any parcels with lower coverage than the threshold will be replaced with NaNs. Must be a value between zero and one, indicating proportion of the parcel.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">auto</span></code></p>
+</dd>
+<dt><kbd>--output-run-wise-correlations, --output_run_wise_correlations</kbd></dt>
+<dd><p>Possible choices: y, n</p>
+<p>Output run-wise correlation matrices.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">'auto'</span></code></p>
+</dd>
+</dl>
+</section>
+<section id="xcp_d.cli.parser-_build_parser-abcd/hbcd-mode-options">
+<h3>abcd/hbcd mode options<a class="headerlink" href="#xcp_d.cli.parser-_build_parser-abcd/hbcd-mode-options" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>--create-matrices, --create_matrices</kbd></dt>
+<dd><p>If used, this parameter will produce correlation matrices limited to each requested amount of time.
+If there is more than the required amount of low-motion data,
+then volumes will be randomly selected to produce denoised outputs with the exact
+amounts of time requested.
+If there is less than the required amount of ‘good’ data,
+then the corresponding correlation matrix will not be produced.</p>
+<p>This option is only allowed for the “abcd” and “hbcd” modes.</p>
+</dd>
+<dt><kbd>--random-seed, --random_seed</kbd></dt>
+<dd><p>Initialize the random seed for the ‘–create-matrices’ option.</p>
+</dd>
+<dt><kbd>--linc-qc, --linc_qc</kbd></dt>
+<dd><p>Possible choices: y, n</p>
+<p>Run LINC QC.</p>
+<p>This will calculate QC metrics from the LINC pipeline.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">'auto'</span></code></p>
+</dd>
+</dl>
+</section>
+<section id="xcp_d.cli.parser-_build_parser-linc-mode-options">
+<h3>linc mode options<a class="headerlink" href="#xcp_d.cli.parser-_build_parser-linc-mode-options" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>--abcc-qc, --abcc_qc</kbd></dt>
+<dd><p>Possible choices: y, n</p>
+<p>Run ABCC QC.</p>
+<p>This will create the DCAN executive summary, including a brainsprite visualization of the
+anatomical tissue segmentation, and an HDF5 file containing motion levels at different thresholds.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">'auto'</span></code></p>
+</dd>
+</dl>
+</section>
+<section id="xcp_d.cli.parser-_build_parser-other-options">
+<h3>Other options<a class="headerlink" href="#xcp_d.cli.parser-_build_parser-other-options" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>--report-output-level</kbd></dt>
+<dd><p>Possible choices: root, subject, session</p>
+<p>Where should the html reports be written? “root” will write them to the –output-dir. “subject” will write them into each subject’s directory. “session” will write them into each session’s directory. The default is “auto”, which will default to “root” for “none”, “linc”, and “nichart” modes, and “session” for “abcd” and “hbcd” modes.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">'auto'</span></code></p>
+</dd>
+<dt><kbd>--aggregate-session-reports</kbd></dt>
+<dd><p>Maximum number of sessions aggregated in one subject’s visual report. If exceeded, visual reports are split by session.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">4</span></code></p>
+</dd>
+<dt><kbd>--output-layout</kbd></dt>
+<dd><p>Possible choices: bids, multiverse</p>
+<p>Output layout for the BOLD data. If “bids”, the output will be in BIDS format, similar to fMRIPrep output. If “multiverse”, “xcp_d” will be appended to output_dir, with a hash built from the configuration.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">'bids'</span></code></p>
+</dd>
+<dt><kbd>-w, --work-dir, --work_dir</kbd></dt>
+<dd><p>Path to working directory, where intermediate results should be stored.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">working_dir</span></code></p>
+</dd>
+<dt><kbd>--clean-workdir, --clean_workdir</kbd></dt>
+<dd><p>Clears working directory of contents. Use of this flag is not recommended when running concurrent processes of XCP-D.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--resource-monitor, --resource_monitor</kbd></dt>
+<dd><p>Enable Nipype’s resource monitoring to keep track of memory and CPU usage.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--config-file, --config_file</kbd></dt>
+<dd><p>Use pre-generated configuration file. Values in file will be overridden by command-line arguments.</p>
+</dd>
+<dt><kbd>--write-graph</kbd></dt>
+<dd><p>Write workflow graph.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--stop-on-first-crash</kbd></dt>
+<dd><p>Force stopping on first crash, even if a work directory was specified.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--notrack</kbd></dt>
+<dd><p>Opt out of sending tracking information.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--debug</kbd></dt>
+<dd><p>Possible choices: pdb, all</p>
+<p>Debug mode(s) to enable. ‘all’ is alias for all available modes.</p>
+</dd>
+<dt><kbd>--fs-license-file</kbd></dt>
+<dd><p>Path to FreeSurfer license key file. Get it (for free) by registering at <a class="reference external" href="https://surfer.nmr.mgh.harvard.edu/registration.html">https://surfer.nmr.mgh.harvard.edu/registration.html</a>. This is not currently required, but may be in the future.</p>
+</dd>
+<dt><kbd>--md-only-boilerplate</kbd></dt>
+<dd><p>Skip generation of HTML and LaTeX formatted citation with pandoc</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--boilerplate-only, --boilerplate_only</kbd></dt>
+<dd><p>generate boilerplate only</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+<dt><kbd>--reports-only</kbd></dt>
+<dd><p>only generate reports, don’t run workflows. This will only rerun report aggregation, not reportlet generation for specific nodes.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+</dl>
+</section>
+<section id="xcp_d.cli.parser-_build_parser-experimental-options">
+<h3>Experimental options<a class="headerlink" href="#xcp_d.cli.parser-_build_parser-experimental-options" title="Link to this heading"></a></h3>
+<dl class="option-list">
+<dt><kbd>--warp-surfaces-native2std, --warp_surfaces_native2std</kbd></dt>
+<dd><p>Possible choices: y, n</p>
+<p>If used, a workflow will be run to warp native-space (<code class="docutils literal notranslate"><span class="pre">fsnative</span></code>) reconstructed cortical
+surfaces (<code class="docutils literal notranslate"><span class="pre">surf.gii</span></code> files) produced by Freesurfer into standard (<code class="docutils literal notranslate"><span class="pre">fsLR</span></code>) space.
+Additionally, the fsLR-space surfaces will be warped such that they can be overlaid on the
+MNI152NLin6Asym template.
+These surface files are primarily used for visual quality assessment.</p>
+<p><strong>IMPORTANT</strong>: This parameter can only be run if the –file-format flag is set to cifti.</p>
+<p>Default: <code class="docutils literal notranslate"><span class="pre">'auto'</span></code></p>
+</dd>
+</dl>
+</section>
+<p><p>See <a class="reference external" href="https://xcp-d.readthedocs.io/en/latest/workflows.html">https://xcp-d.readthedocs.io/en/latest/workflows.html</a></p>
+</p>
+</section>
+<section id="minimal-inputs">
+<h2>Minimal Inputs<a class="headerlink" href="#minimal-inputs" title="Link to this heading"></a></h2>
+<p>The minimal inputs required to run <em>XCP-D</em> are:</p>
+<ul class="simple">
+<li><p>A native-space preprocessed T1w or T2w image.</p></li>
+<li><p>A preprocessed BOLD image in MNI152NLin6Asym, MNI152NLin2009cAsym,
+MNIInfant (nibabies derivatives), or fsLR (CIFTI processing) space.</p></li>
+<li><p>The functional brain mask and boldref image in the same space as the preprocessed BOLD data.</p></li>
+<li><p>The confounds associated with the BOLD image, along with the associated JSON file.</p></li>
+<li><p>The anatomical brain mask in the same space as the preprocessed BOLD data.</p></li>
+<li><p>The transform from the native anatomical space to the standard space the BOLD image is in,
+and its inverse.</p></li>
+</ul>
+<p>Surface files, such as the pial and white matter GIFTI files,
+may be required depending on the settings you use.</p>
+<p>Below are an example lists of inputs.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Please note that the filenames may differ based on the pipeline,
+or even version of the pipeline, used for preprocessing.</p>
+<p>The specific files required by <em>XCP-D</em> may also vary slightly depending on the settings you use.</p>
+</div>
+<p>For NIfTI processing:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dataset_description</span><span class="o">.</span><span class="n">json</span>
+<span class="n">sub</span><span class="o">-</span><span class="n">x</span><span class="o">/</span>
+   <span class="n">anat</span><span class="o">/</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_desc</span><span class="o">-</span><span class="n">preproc_T1w</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>  <span class="c1"># Can be T1w or T2w. Note that this is native anatomical space.</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_desc</span><span class="o">-</span><span class="n">preproc_T1w</span><span class="o">.</span><span class="n">json</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_space</span><span class="o">-</span><span class="n">MNI152NLin6Asym_desc</span><span class="o">-</span><span class="n">brain_mask</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_space</span><span class="o">-</span><span class="n">MNI152NLin6Asym_desc</span><span class="o">-</span><span class="n">brain_mask</span><span class="o">.</span><span class="n">json</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_from</span><span class="o">-</span><span class="n">MNI152NLin6Asym_to</span><span class="o">-</span><span class="n">T1w_mode</span><span class="o">-</span><span class="n">image_xfm</span><span class="o">.</span><span class="n">h5</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_from</span><span class="o">-</span><span class="n">T1w_to</span><span class="o">-</span><span class="n">MNI152NLin6Asym_mode</span><span class="o">-</span><span class="n">image_xfm</span><span class="o">.</span><span class="n">h5</span>
+   <span class="n">func</span><span class="o">/</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_task</span><span class="o">-</span><span class="n">rest_desc</span><span class="o">-</span><span class="n">confounds_timeseries</span><span class="o">.</span><span class="n">tsv</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_task</span><span class="o">-</span><span class="n">rest_desc</span><span class="o">-</span><span class="n">confounds_timeseries</span><span class="o">.</span><span class="n">json</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_task</span><span class="o">-</span><span class="n">rest_space</span><span class="o">-</span><span class="n">MNI152NLin6Asym_desc</span><span class="o">-</span><span class="n">preproc_bold</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_task</span><span class="o">-</span><span class="n">rest_space</span><span class="o">-</span><span class="n">MNI152NLin6Asym_desc</span><span class="o">-</span><span class="n">preproc_bold</span><span class="o">.</span><span class="n">json</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_task</span><span class="o">-</span><span class="n">rest_space</span><span class="o">-</span><span class="n">MNI152NLin6Asym_boldref</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_task</span><span class="o">-</span><span class="n">rest_space</span><span class="o">-</span><span class="n">MNI152NLin6Asym_boldref</span><span class="o">.</span><span class="n">json</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_task</span><span class="o">-</span><span class="n">rest_space</span><span class="o">-</span><span class="n">MNI152NLin6Asym_desc</span><span class="o">-</span><span class="n">brain_mask</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_task</span><span class="o">-</span><span class="n">rest_space</span><span class="o">-</span><span class="n">MNI152NLin6Asym_desc</span><span class="o">-</span><span class="n">brain_mask</span><span class="o">.</span><span class="n">json</span>
+</pre></div>
+</div>
+<p>For CIFTI processing:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dataset_description</span><span class="o">.</span><span class="n">json</span>
+<span class="n">sub</span><span class="o">-</span><span class="n">x</span><span class="o">/</span>
+   <span class="n">anat</span><span class="o">/</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_desc</span><span class="o">-</span><span class="n">preproc_T1w</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>  <span class="c1"># Can be T1w or T2w. Note that this is native anatomical space.</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_desc</span><span class="o">-</span><span class="n">preproc_T1w</span><span class="o">.</span><span class="n">json</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_space</span><span class="o">-</span><span class="n">MNI152NLin6Asym_desc</span><span class="o">-</span><span class="n">brain_mask</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_space</span><span class="o">-</span><span class="n">MNI152NLin6Asym_desc</span><span class="o">-</span><span class="n">brain_mask</span><span class="o">.</span><span class="n">json</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_from</span><span class="o">-</span><span class="n">MNI152NLin6Asym_to</span><span class="o">-</span><span class="n">T1w_mode</span><span class="o">-</span><span class="n">image_xfm</span><span class="o">.</span><span class="n">h5</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_from</span><span class="o">-</span><span class="n">T1w_to</span><span class="o">-</span><span class="n">MNI152NLin6Asym_mode</span><span class="o">-</span><span class="n">image_xfm</span><span class="o">.</span><span class="n">h5</span>
+   <span class="n">func</span><span class="o">/</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_task</span><span class="o">-</span><span class="n">rest_desc</span><span class="o">-</span><span class="n">confounds_timeseries</span><span class="o">.</span><span class="n">tsv</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_task</span><span class="o">-</span><span class="n">rest_desc</span><span class="o">-</span><span class="n">confounds_timeseries</span><span class="o">.</span><span class="n">json</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_task</span><span class="o">-</span><span class="n">rest_space</span><span class="o">-</span><span class="n">fsLR_den</span><span class="o">-</span><span class="mi">91</span><span class="n">k_bold</span><span class="o">.</span><span class="n">dtseries</span><span class="o">.</span><span class="n">nii</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_task</span><span class="o">-</span><span class="n">rest_space</span><span class="o">-</span><span class="n">fsLR_den</span><span class="o">-</span><span class="mi">91</span><span class="n">k_bold</span><span class="o">.</span><span class="n">json</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_task</span><span class="o">-</span><span class="n">rest_space</span><span class="o">-</span><span class="n">MNI152NLin6Asym_desc</span><span class="o">-</span><span class="n">preproc_bold</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>  <span class="c1"># Needed for QC figures</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_task</span><span class="o">-</span><span class="n">rest_space</span><span class="o">-</span><span class="n">MNI152NLin6Asym_boldref</span><span class="o">.</span><span class="n">nii</span><span class="o">.</span><span class="n">gz</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_task</span><span class="o">-</span><span class="n">rest_space</span><span class="o">-</span><span class="n">MNI152NLin6Asym_boldref</span><span class="o">.</span><span class="n">json</span>
+</pre></div>
+</div>
+<p>Surface files:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dataset_description</span><span class="o">.</span><span class="n">json</span>
+<span class="n">sub</span><span class="o">-</span><span class="n">x</span><span class="o">/</span>
+   <span class="n">anat</span><span class="o">/</span>
+      <span class="c1"># Mesh files in fsnative space, to be warped to fsLR space</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_hemi</span><span class="o">-</span><span class="n">L_pial</span><span class="o">.</span><span class="n">surf</span><span class="o">.</span><span class="n">gii</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_hemi</span><span class="o">-</span><span class="n">R_pial</span><span class="o">.</span><span class="n">surf</span><span class="o">.</span><span class="n">gii</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_hemi</span><span class="o">-</span><span class="n">L_white</span><span class="o">.</span><span class="n">surf</span><span class="o">.</span><span class="n">gii</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_hemi</span><span class="o">-</span><span class="n">R_white</span><span class="o">.</span><span class="n">surf</span><span class="o">.</span><span class="n">gii</span>
+
+      <span class="c1"># Sphere files for registration</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_hemi</span><span class="o">-</span><span class="n">L_space</span><span class="o">-</span><span class="n">fsaverage_desc</span><span class="o">-</span><span class="n">reg_sphere</span><span class="o">.</span><span class="n">surf</span><span class="o">.</span><span class="n">gii</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_hemi</span><span class="o">-</span><span class="n">R_space</span><span class="o">-</span><span class="n">fsaverage_desc</span><span class="o">-</span><span class="n">reg_sphere</span><span class="o">.</span><span class="n">surf</span><span class="o">.</span><span class="n">gii</span>
+
+      <span class="c1"># Morphometry files in fsLR space, to be parcellated</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_hemi</span><span class="o">-</span><span class="n">L_space</span><span class="o">-</span><span class="n">fsLR_den</span><span class="o">-</span><span class="mi">91</span><span class="n">k_curv</span><span class="o">.</span><span class="n">dscalar</span><span class="o">.</span><span class="n">nii</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_hemi</span><span class="o">-</span><span class="n">L_space</span><span class="o">-</span><span class="n">fsLR_den</span><span class="o">-</span><span class="mi">91</span><span class="n">k_sulc</span><span class="o">.</span><span class="n">dscalar</span><span class="o">.</span><span class="n">nii</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_hemi</span><span class="o">-</span><span class="n">L_space</span><span class="o">-</span><span class="n">fsLR_den</span><span class="o">-</span><span class="mi">91</span><span class="n">k_thickness</span><span class="o">.</span><span class="n">dscalar</span><span class="o">.</span><span class="n">nii</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_hemi</span><span class="o">-</span><span class="n">L_space</span><span class="o">-</span><span class="n">fsLR_den</span><span class="o">-</span><span class="mi">91</span><span class="n">k_myelinw</span><span class="o">.</span><span class="n">dscalar</span><span class="o">.</span><span class="n">nii</span>
+      <span class="n">sub</span><span class="o">-</span><span class="n">x_hemi</span><span class="o">-</span><span class="n">L_space</span><span class="o">-</span><span class="n">fsLR_den</span><span class="o">-</span><span class="mi">91</span><span class="n">k_desc</span><span class="o">-</span><span class="n">smoothed_myelinw</span><span class="o">.</span><span class="n">dscalar</span><span class="o">.</span><span class="n">nii</span>
+</pre></div>
+</div>
+</section>
+<section id="filtering-inputs-with-bids-filter-files">
+<span id="filter-files"></span><h2>Filtering Inputs with BIDS Filter Files<a class="headerlink" href="#filtering-inputs-with-bids-filter-files" title="Link to this heading"></a></h2>
+<p><em>XCP-D</em> allows users to choose which preprocessed files will be post-processed with the
+<code class="docutils literal notranslate"><span class="pre">--bids-filter-file</span></code> parameter.
+This argument must point to a JSON file, containing filters that will be fed into PyBIDS.</p>
+<p>The keys in this JSON file are unique to <em>XCP-D</em>.
+They are our internal terms for different inputs that will be selected from the preprocessed
+dataset.
+The full list of keys can be found in the file <code class="docutils literal notranslate"><span class="pre">xcp_d/data/io_spec.yaml</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">&quot;bold&quot;</span></code> determines which preprocessed BOLD files will be chosen.
+You can set a number of entities here, including “session”, “task”, “space”, “resolution”, and
+“density”.
+We recommend NOT setting the datatype, suffix, or file extension in the filter file.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>We do not recommend applying additional filters to any of the following fields.
+We have documented them here, for edge cases where they might be useful,
+but the only field that most users should filter is <code class="docutils literal notranslate"><span class="pre">&quot;bold&quot;</span></code>.</p>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">&quot;t1w&quot;</span></code> selects a native T1w-space, preprocessed T1w file.</p>
+<p><code class="docutils literal notranslate"><span class="pre">&quot;t2w&quot;</span></code> selects a native T1w-space, preprocessed T2w file.
+If a T1w file is not available, this file will be in T2w space.</p>
+<p><code class="docutils literal notranslate"><span class="pre">&quot;anat_brainmask&quot;</span></code> selects an anatomically-derived brain mask in the same space as the BOLD data.
+This file is used (1) to estimate head radius for FD calculation (after warping to native space)
+and (2) to calculate coregistration quality metrics.</p>
+<p><code class="docutils literal notranslate"><span class="pre">&quot;anat_to_template_xfm&quot;</span></code> selects a transform from T1w (or T2w, if no T1w image is available)
+space to standard space.
+The standard space that will be used depends on the <code class="docutils literal notranslate"><span class="pre">&quot;bold&quot;</span></code> files that are selected.</p>
+<p><code class="docutils literal notranslate"><span class="pre">&quot;template_to_anat_xfm&quot;</span></code> selects a transform from standard space to T1w/T2w space.
+Again, the standard space is determined based on other files.</p>
+<p>There are additional keys that control how mesh and morphometry files are selected.
+Please refer to <code class="docutils literal notranslate"><span class="pre">io_spec.yaml</span></code> for more information on them.</p>
+<p><code class="docutils literal notranslate"><span class="pre">atlas</span></code> selects atlases for parcellation.
+This is primarily useful for specifying spaces or resolutions.
+This field is not reflected in the <code class="docutils literal notranslate"><span class="pre">io_spec.yaml</span></code> file.</p>
+<section id="example-bids-filter-file">
+<h3>Example bids-filter-file<a class="headerlink" href="#example-bids-filter-file" title="Link to this heading"></a></h3>
+<p>In this example file, we only run <em>XCP-D</em> on resting-state preprocessed BOLD runs from session
+“01”.</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">   </span><span class="nt">&quot;bold&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;session&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;01&quot;</span><span class="p">],</span>
+<span class="w">      </span><span class="nt">&quot;task&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;rest&quot;</span><span class="p">]</span>
+<span class="w">   </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="running-xcp-d-via-containers">
+<h2>Running <em>XCP-D</em> via containers<a class="headerlink" href="#running-xcp-d-via-containers" title="Link to this heading"></a></h2>
+<section id="run-apptainer">
+<span id="id1"></span><h3>Apptainer<a class="headerlink" href="#run-apptainer" title="Link to this heading"></a></h3>
+<p>If you are computing on an <abbr title="High-Performance Computing">HPC</abbr>, we recommend using
+Apptainer.
+See <a class="reference internal" href="installation.html#installation-container-technologies"><span class="std std-ref">Container Technologies</span></a> for installation instructions.</p>
+<p>Once a user specifies the container options and the image to be run,
+the command line options are the same as the <em>bare-metal</em> installation.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>apptainer<span class="w"> </span>run<span class="w"> </span>--cleanenv<span class="w"> </span>xcp_d-&lt;version&gt;.simg<span class="w"> </span><span class="se">\ </span><span class="c1"># container args</span>
+<span class="w">   </span>/path/to/fmriprep_dir<span class="w"> </span><span class="se">\ </span><span class="c1">#xcpd args</span>
+<span class="w">   </span>/path/to/output_dir<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>participant<span class="w"> </span><span class="se">\ </span><span class="c1"># analysis_level</span>
+<span class="w">   </span>--mode<span class="w"> </span>&lt;mode&gt;<span class="w"> </span><span class="se">\ </span><span class="c1"># required</span>
+<span class="w">   </span>--participant-label<span class="w"> </span>&lt;label&gt;<span class="w"> </span><span class="c1"># optional</span>
+</pre></div>
+</div>
+<p>By default, Apptainer will mount (make accessible) your current working directory inside the container.
+If you need to access files from other locations on your system, you’ll need to explicitly bind those
+directories using the <code class="docutils literal notranslate"><span class="pre">-B</span></code> flag. For example:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>apptainer<span class="w"> </span>run<span class="w"> </span>-B<span class="w"> </span>/home/user/data<span class="w"> </span><span class="se">\ </span><span class="c1"># Mount data directory</span>
+<span class="w">   </span>--cleanenv<span class="w"> </span>xcp_d-&lt;version&gt;.simg<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>/home/user/data/fmriprep<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>/home/user/data/xcpd_output<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>participant<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--mode<span class="w"> </span>&lt;mode&gt;
+</pre></div>
+</div>
+</section>
+<section id="run-docker">
+<span id="id2"></span><h3>Docker<a class="headerlink" href="#run-docker" title="Link to this heading"></a></h3>
+<p>If you are running <em>XCP-D</em> locally, we recommend Docker.
+See <a class="reference internal" href="installation.html#installation-container-technologies"><span class="std std-ref">Container Technologies</span></a> for installation instructions.</p>
+<p>In order to run Docker smoothly, it is best to prevent permissions issues associated with the root
+file system.
+Running Docker as user on the host will ensure the ownership of files written during the container
+execution.</p>
+<p>A Docker container can be created using the following command:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-it<span class="w"> </span><span class="se">\ </span><span class="c1"># docker args</span>
+<span class="w">   </span>-v<span class="w"> </span>/home/user/data/fmriprep<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>-v<span class="w"> </span>/home/user/data/wkdir<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>-v<span class="w"> </span>/home/user/data/xcpd_output<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>pennlinc/xcp_d:&lt;version&gt;<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>/home/user/data/fmriprep<span class="w"> </span><span class="se">\ </span><span class="c1">#xcpd args</span>
+<span class="w">   </span>/home/user/data/xcpd_output<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>participant<span class="w"> </span><span class="se">\ </span><span class="c1"># analysis_level</span>
+<span class="w">   </span>--mode<span class="w"> </span>&lt;mode&gt;<span class="w"> </span><span class="se">\ </span><span class="c1"># required</span>
+<span class="w">   </span>--participant-label<span class="w"> </span>&lt;label&gt;<span class="w"> </span><span class="c1"># optional</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="custom-confounds">
+<h2>Custom Confounds<a class="headerlink" href="#custom-confounds" title="Link to this heading"></a></h2>
+<p>If you would like to denoise your data with confounds that are not included in the built-in
+confound strategies, you can create your own.
+Please see <a class="reference internal" href="workflows.html#confound-config"><span class="std std-ref">The confound configuration file format</span></a> for more info on the configuration file format.</p>
+<p>If you have a set of custom confounds that you would like to use, you need to organize them into a
+BIDS dataset.
+The dataset should only require the actual confound files, preferably with associated sidecar
+JSONs, and a <code class="docutils literal notranslate"><span class="pre">dataset_description.json</span></code> file.
+Using the same filenames as the fMRIPrep confound files is an easy way to organize this dataset.</p>
+<section id="including-signal-regressors">
+<h3>Including Signal Regressors<a class="headerlink" href="#including-signal-regressors" title="Link to this heading"></a></h3>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Signal regressors are not currently supported in combination with voxel-wise regressors.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Please be careful when including signal regressors.
+Most of the time this is probably a bad idea.
+For example, if you run tedana, only noise components from tedana should be orthogonalized
+with respect to signal components.
+You wouldn’t want to orthogonalize other noise signals (e.g., motion parameters) with respect
+to the signal components from tedana.</p>
+</div>
+<p>Let’s say you have some nuisance regressors that are not necessarily orthogonal to some associated
+regressors that are ostensibly signal.
+For example, if you want to denoise your data while still retaining task signal,
+you could include the predicted task signals in your confounds.</p>
+<p>For more information about different types of denoising,
+see <a class="reference external" href="https://tedana.readthedocs.io/en/latest/denoising.html">tedana’s documentation</a>,
+<a class="reference external" href="https://neurostars.org/t/aggressive-vs-nonaggressive-denoising/5612">this NeuroStars topic</a>,
+and/or <a class="reference external" href="https://doi.org/10.1016/j.neuroimage.2015.02.064">Pruim et al. (2015)</a>.</p>
+<p>So how do we implement this in <em>XCP-D</em>?
+In order to define regressors that should be treated as signal,
+and thus orthogonalize the noise regressors with respect to known signals instead of regressing
+them without modification,
+you should include those regressors in your custom confounds file,
+with column names starting with <code class="docutils literal notranslate"><span class="pre">signal__</span></code> (lower-case “signal”, followed by two underscores).</p>
+</section>
+<section id="task-regression">
+<h3>Task Regression<a class="headerlink" href="#task-regression" title="Link to this heading"></a></h3>
+<p>If you want to regress task-related signals out of your data, you can use a custom confound
+configuration.</p>
+<p>Here we document how to include task effects as confounds.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>The basic approach to task regression is to convolve your task regressors with an HRF,
+then save those regressors to a confounds file.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>This method is still under development.</p>
+</div>
+<p>We recommend using a tool like Nilearn to generate convolved regressors from BIDS events files.
+See
+<a class="reference external" href="https://nilearn.github.io/stable/auto_examples/04_glm_first_level/ plot_design_matrix.html#create-design-matrices">this example</a>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">nilearn.glm.first_level</span><span class="w"> </span><span class="kn">import</span> <span class="n">make_first_level_design_matrix</span>
+
+<span class="n">N_VOLUMES</span> <span class="o">=</span> <span class="mi">200</span>
+<span class="n">TR</span> <span class="o">=</span> <span class="mf">0.8</span>
+<span class="n">frame_times</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">N_VOLUMES</span><span class="p">)</span> <span class="o">*</span> <span class="n">TR</span>
+<span class="n">events_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_table</span><span class="p">(</span><span class="s2">&quot;sub-X_task-Z_events.tsv&quot;</span><span class="p">)</span>
+
+<span class="n">task_confounds</span> <span class="o">=</span> <span class="n">make_first_level_design_matrix</span><span class="p">(</span>
+   <span class="n">frame_times</span><span class="p">,</span>
+   <span class="n">events_df</span><span class="p">,</span>
+   <span class="n">drift_model</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+   <span class="n">add_regs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+   <span class="n">hrf_model</span><span class="o">=</span><span class="s2">&quot;spm&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># The design matrix will include a constant column, which we should drop</span>
+<span class="n">task_confounds</span> <span class="o">=</span> <span class="n">task_confounds</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="s2">&quot;constant&quot;</span><span class="p">)</span>
+
+<span class="c1"># Prepare the derivative dataset</span>
+<span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="s2">&quot;/my/project/directory/custom_confounds/sub-X/func&quot;</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="c1"># Include a dataset_description.json file</span>
+<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s2">&quot;/my/project/directory/custom_confounds/dataset_description.json&quot;</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">fo</span><span class="p">:</span>
+   <span class="n">json</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span>
+      <span class="p">{</span>
+         <span class="s2">&quot;Name&quot;</span><span class="p">:</span> <span class="s2">&quot;Custom Confounds&quot;</span><span class="p">,</span>
+         <span class="s2">&quot;BIDSVersion&quot;</span><span class="p">:</span> <span class="s2">&quot;1.6.0&quot;</span><span class="p">,</span>
+         <span class="s2">&quot;DatasetType&quot;</span><span class="p">:</span> <span class="s2">&quot;derivative&quot;</span>
+      <span class="p">},</span>
+      <span class="n">fo</span><span class="p">,</span>
+   <span class="p">)</span>
+
+<span class="c1"># Assuming that the fMRIPrep confounds file is named</span>
+<span class="c1"># &quot;sub-X_task-Z_desc-confounds_timeseries.tsv&quot;,</span>
+<span class="c1"># we will name the custom confounds file the same thing, in a separate folder.</span>
+<span class="n">task_confounds</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span>
+   <span class="s2">&quot;/my/project/directory/custom_confounds/sub-X/func/sub-X_task-Z_desc-confounds_timeseries.tsv&quot;</span><span class="p">,</span>
+   <span class="n">sep</span><span class="o">=</span><span class="s2">&quot;</span><span class="se">\t</span><span class="s2">&quot;</span><span class="p">,</span>
+   <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Then, create a confounds config file to include derivatives from <code class="docutils literal notranslate"><span class="pre">custom_confounds</span></code>.
+Something like this should work:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_custom_confounds</span>
+<span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">   </span><span class="no">Nuisance regressors were task regressors convolved with an HRF and motion parameters.</span>
+<span class="nt">confounds</span><span class="p">:</span>
+<span class="w">   </span><span class="nt">motion</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">dataset</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">preprocessed</span>
+<span class="w">      </span><span class="nt">query</span><span class="p">:</span>
+<span class="w">         </span><span class="nt">space</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">null</span>
+<span class="w">         </span><span class="nt">cohort</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">null</span>
+<span class="w">         </span><span class="nt">res</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">null</span>
+<span class="w">         </span><span class="nt">den</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">null</span>
+<span class="w">         </span><span class="nt">desc</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">confounds</span>
+<span class="w">         </span><span class="nt">extension</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">.tsv</span>
+<span class="w">         </span><span class="nt">suffix</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">timeseries</span>
+<span class="w">      </span><span class="nt">columns</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">trans_x</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">trans_y</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">trans_z</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rot_x</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rot_y</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rot_z</span>
+<span class="w">   </span><span class="nt">task</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">dataset</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">custom</span>
+<span class="w">      </span><span class="nt">query</span><span class="p">:</span>
+<span class="w">         </span><span class="nt">space</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">null</span>
+<span class="w">         </span><span class="nt">cohort</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">null</span>
+<span class="w">         </span><span class="nt">res</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">null</span>
+<span class="w">         </span><span class="nt">den</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">null</span>
+<span class="w">         </span><span class="nt">desc</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">confounds</span>
+<span class="w">         </span><span class="nt">extension</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">.tsv</span>
+<span class="w">         </span><span class="nt">suffix</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">timeseries</span>
+<span class="w">      </span><span class="nt">columns</span><span class="p">:</span><span class="w">  </span><span class="c1"># Assume the task regressors are called &quot;condition1&quot; and &quot;condition2&quot;</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">condition1</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">condition2</span>
+</pre></div>
+</div>
+</section>
+<section id="command-line-xcp-d-with-custom-confounds">
+<h3>Command Line <em>XCP-D</em> with Custom Confounds<a class="headerlink" href="#command-line-xcp-d-with-custom-confounds" title="Link to this heading"></a></h3>
+<p>Last, run <em>XCP-D</em> with your custom configuration file and the path to the custom derivatives dataset.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>apptainer<span class="w"> </span>run<span class="w"> </span>-B<span class="w"> </span>/home/user/data<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--cleanenv<span class="w"> </span>xcpd_&lt;version&gt;.simg<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>/home/user/data/path/to/fmriprep_dir<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>/home/user/data/path/to/output_dir<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>participant<span class="w"> </span><span class="se">\ </span><span class="c1"># analysis_level</span>
+<span class="w">   </span>--mode<span class="w"> </span>&lt;mode&gt;<span class="w"> </span><span class="se">\ </span><span class="c1"># required</span>
+<span class="w">   </span>--participant-label<span class="w"> </span>&lt;label&gt;<span class="w"> </span><span class="c1"># optional</span>
+<span class="w">   </span>--datasets<span class="w"> </span><span class="nv">custom</span><span class="o">=</span>/home/user/data/path/to/custom_confounds<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--nuisance-regressors<span class="w"> </span>/home/user/data/path/to/custom_config.yaml
+</pre></div>
+</div>
+</section>
+</section>
+<section id="external-atlases">
+<h2>External Atlases<a class="headerlink" href="#external-atlases" title="Link to this heading"></a></h2>
+<p>While <em>XCP-D</em> comes with many built-in parcellations,
+we understand that many users will want to use different ones.</p>
+<p>As long as the parcellation is organized according to BIDS v1.11.0 and is in
+fsLR-32k space (for CIFTI processing) or
+MNIInfant, MNI152NLin6Asym, or MNI152NLin2009cAsym space (for NIfTI processing),
+you can use it with <em>XCP-D</em>.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>The main elements from the BIDS-Atlas dataset that <em>XCP-D</em> uses are:</p>
+<ol class="arabic simple">
+<li><p>There must be a dataset_description.json file with DatasetType set to “derivative”.</p></li>
+<li><p>The atlas metadata files must have the same entities as the atlas image files,
+as PyBIDS does not support the inheritance principle when querying atlas datasets (yet).</p></li>
+<li><p>There must be a TSV file for the atlas, with “index” and “name” columns.</p></li>
+</ol>
+</div>
+<p>To do this, use the <code class="docutils literal notranslate"><span class="pre">--datasets</span></code> and <code class="docutils literal notranslate"><span class="pre">--atlases</span></code> parameters.
+The <code class="docutils literal notranslate"><span class="pre">--datasets</span></code> parameter should point to the directory containing the BIDS-Atlas dataset,
+and the <code class="docutils literal notranslate"><span class="pre">--atlases</span></code> parameter should include the names of the atlases in the dataset to use.</p>
+<p>For example, consider a scenario where you have two BIDS atlas datasets, one containing all of the
+Schaefer 2018 resolutions and one containing the AAL atlas.
+These datasets are in <code class="docutils literal notranslate"><span class="pre">/data/atlases/schaefer</span></code> and <code class="docutils literal notranslate"><span class="pre">/data/atlases/aal</span></code>, respectively.
+The file structure for these two datasets might look like this:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">/</span><span class="n">data</span><span class="o">/</span><span class="n">atlases</span><span class="o">/</span>
+   <span class="n">schaefer</span><span class="o">/</span>
+      <span class="n">dataset_description</span><span class="o">.</span><span class="n">json</span>
+      <span class="n">atlas</span><span class="o">-</span><span class="n">Schaefer100_description</span><span class="o">.</span><span class="n">json</span>
+      <span class="n">atlas</span><span class="o">-</span><span class="n">Schaefer200_description</span><span class="o">.</span><span class="n">json</span>
+      <span class="o">...</span>
+      <span class="n">atlas</span><span class="o">-</span><span class="n">Schaefer1000_description</span><span class="o">.</span><span class="n">json</span>
+      <span class="n">tpl</span><span class="o">-</span><span class="n">fsLR</span><span class="o">/</span>
+         <span class="n">tpl</span><span class="o">-</span><span class="n">fsLR_atlas</span><span class="o">-</span><span class="n">Schaefer100_den</span><span class="o">-</span><span class="mi">32</span><span class="n">k_dseg</span><span class="o">.</span><span class="n">dlabel</span><span class="o">.</span><span class="n">nii</span>
+         <span class="n">tpl</span><span class="o">-</span><span class="n">fsLR_atlas</span><span class="o">-</span><span class="n">Schaefer100_den</span><span class="o">-</span><span class="mi">32</span><span class="n">k_dseg</span><span class="o">.</span><span class="n">json</span>
+         <span class="n">tpl</span><span class="o">-</span><span class="n">fsLR_atlas</span><span class="o">-</span><span class="n">Schaefer100_den</span><span class="o">-</span><span class="mi">32</span><span class="n">k_dseg</span><span class="o">.</span><span class="n">tsv</span>
+         <span class="n">tpl</span><span class="o">-</span><span class="n">fsLR_atlas</span><span class="o">-</span><span class="n">Schaefer200_den</span><span class="o">-</span><span class="mi">32</span><span class="n">k_dseg</span><span class="o">.</span><span class="n">dlabel</span><span class="o">.</span><span class="n">nii</span>
+         <span class="n">tpl</span><span class="o">-</span><span class="n">fsLR_atlas</span><span class="o">-</span><span class="n">Schaefer200_den</span><span class="o">-</span><span class="mi">32</span><span class="n">k_dseg</span><span class="o">.</span><span class="n">json</span>
+         <span class="n">tpl</span><span class="o">-</span><span class="n">fsLR_atlas</span><span class="o">-</span><span class="n">Schaefer200_den</span><span class="o">-</span><span class="mi">32</span><span class="n">k_dseg</span><span class="o">.</span><span class="n">tsv</span>
+         <span class="o">...</span>
+         <span class="n">tpl</span><span class="o">-</span><span class="n">fsLR_atlas</span><span class="o">-</span><span class="n">Schaefer1000_den</span><span class="o">-</span><span class="mi">32</span><span class="n">k_dseg</span><span class="o">.</span><span class="n">dlabel</span><span class="o">.</span><span class="n">nii</span>
+         <span class="n">tpl</span><span class="o">-</span><span class="n">fsLR_atlas</span><span class="o">-</span><span class="n">Schaefer1000_den</span><span class="o">-</span><span class="mi">32</span><span class="n">k_dseg</span><span class="o">.</span><span class="n">json</span>
+         <span class="n">tpl</span><span class="o">-</span><span class="n">fsLR_atlas</span><span class="o">-</span><span class="n">Schaefer1000_den</span><span class="o">-</span><span class="mi">32</span><span class="n">k_dseg</span><span class="o">.</span><span class="n">tsv</span>
+   <span class="n">aal</span><span class="o">/</span>
+      <span class="n">dataset_description</span><span class="o">.</span><span class="n">json</span>
+      <span class="n">atlas</span><span class="o">-</span><span class="n">AAL_description</span><span class="o">.</span><span class="n">json</span>
+      <span class="n">tpl</span><span class="o">-</span><span class="n">fsLR</span><span class="o">/</span>
+         <span class="n">tpl</span><span class="o">-</span><span class="n">fsLR_atlas</span><span class="o">-</span><span class="n">AAL_den</span><span class="o">-</span><span class="mi">32</span><span class="n">k_dseg</span><span class="o">.</span><span class="n">dlabel</span><span class="o">.</span><span class="n">nii</span>
+         <span class="n">tpl</span><span class="o">-</span><span class="n">fsLR_atlas</span><span class="o">-</span><span class="n">AAL_den</span><span class="o">-</span><span class="mi">32</span><span class="n">k_dseg</span><span class="o">.</span><span class="n">json</span>
+         <span class="n">tpl</span><span class="o">-</span><span class="n">fsLR_atlas</span><span class="o">-</span><span class="n">AAL_den</span><span class="o">-</span><span class="mi">32</span><span class="n">k_dseg</span><span class="o">.</span><span class="n">tsv</span>
+</pre></div>
+</div>
+<p>You may want to only apply the Schaefer100 atlas from the <code class="docutils literal notranslate"><span class="pre">schaefer</span></code> dataset and the AAL atlas
+from the <code class="docutils literal notranslate"><span class="pre">aal</span></code> dataset, along with one of <em>XCP-D</em>’s built-in atlases (<code class="docutils literal notranslate"><span class="pre">4S156Parcels</span></code>).
+Here’s what the <em>XCP-D</em> call might look like:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>apptainer<span class="w"> </span>run<span class="w"> </span>-B<span class="w"> </span>/home/user/data<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--cleanenv<span class="w"> </span>xcpd_&lt;version&gt;.simg<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>/home/user/data/path/to/fmriprep_dir<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>/home/user/data/path/to/output_dir<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>participant<span class="w"> </span><span class="se">\ </span><span class="c1"># analysis_level</span>
+<span class="w">   </span>--mode<span class="w"> </span>&lt;mode&gt;<span class="w"> </span><span class="se">\ </span><span class="c1"># required</span>
+<span class="w">   </span>--datasets<span class="w"> </span><span class="nv">schaefer</span><span class="o">=</span>/data/atlases/schaefer<span class="w"> </span><span class="nv">aal</span><span class="o">==</span>/data/atlases/aal<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--atlases<span class="w"> </span>Schaefer100<span class="w"> </span>AAL<span class="w"> </span>4S156Parcels
+</pre></div>
+</div>
+<p><em>XCP-D</em> will search for <code class="docutils literal notranslate"><span class="pre">atlas-Schaefer100</span></code>, <code class="docutils literal notranslate"><span class="pre">atlas-AAL</span></code>, and <code class="docutils literal notranslate"><span class="pre">atlas-4S156Parcels</span></code> across the
+<code class="docutils literal notranslate"><span class="pre">schaefer</span></code>, <code class="docutils literal notranslate"><span class="pre">aal</span></code>, and <em>XCP-D</em>’s built-in atlas datasets.
+If the atlases are found, then they will be used for parcellation.</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>Atlas names must be unique across BIDS atlas datasets.
+If two atlases have the same name, <em>XCP-D</em> will raise an error.</p>
+</div>
+</section>
+<section id="advanced-applications">
+<h2>Advanced Applications<a class="headerlink" href="#advanced-applications" title="Link to this heading"></a></h2>
+<p><em>XCP-D</em> can be used in conjunction with other tools, such as <code class="docutils literal notranslate"><span class="pre">tedana</span></code> and <code class="docutils literal notranslate"><span class="pre">phys2denoise</span></code>.
+We have attempted to document these applications with working code in
+<a class="reference external" href="https://github.com/PennLINC/xcp_d-examples">PennLINC/xcp_d-examples</a>.
+If there is an application you think would be useful to document, please open an issue in that
+repository.</p>
+</section>
+<section id="preprocessing-requirements-for-xcp-d">
+<h2>Preprocessing Requirements for <em>XCP-D</em><a class="headerlink" href="#preprocessing-requirements-for-xcp-d" title="Link to this heading"></a></h2>
+<p><em>XCP-D</em> is designed to ingest data from a variety of different preprocessing pipelines.
+However, each supported pipeline must be explicitly supported within <em>XCP-D</em> in order for the
+workflow to select the correct files.</p>
+<p>Additionally, <em>XCP-D</em> may require files that are only created with specific settings in the
+preprocessing pipelines.</p>
+<section id="fmriprep-nibabies">
+<h3>fMRIPrep/Nibabies<a class="headerlink" href="#fmriprep-nibabies" title="Link to this heading"></a></h3>
+<p>In order to work on fMRIPrep or Nibabies derivatives, <em>XCP-D</em> needs derivatives in one of a few
+template spaces,
+including “MNI152NLin6Asym”, “MNI152NLin2009cAsym”, “MNIInfant”, and “fsLR”.
+We may add support for additional templates in the future, but currently you must have at least one
+of these among your output spaces.
+<em>XCP-D</em> does not have any specific requirements for resolution of volumetric derivatives,
+but we do require fsLR-space CIFTIs be outputted in 91k density.</p>
+</section>
+</section>
+<section id="troubleshooting">
+<h2>Troubleshooting<a class="headerlink" href="#troubleshooting" title="Link to this heading"></a></h2>
+<p>Logs and crashfiles are outputted into the <code class="docutils literal notranslate"><span class="pre">&lt;output</span> <span class="pre">dir&gt;/xcp_d/sub-&lt;participant_label&gt;/log</span></code>
+directory.
+Information on how to customize and understand these files can be found on the
+<a class="reference external" href="http://nipype.readthedocs.io/en/latest/users/debug.html">nipype debugging</a>
+page.</p>
+</section>
+<section id="support-and-communication">
+<h2>Support and communication<a class="headerlink" href="#support-and-communication" title="Link to this heading"></a></h2>
+<p>All bugs, concerns and enhancement requests for this software can be submitted here:
+<a class="reference external" href="https://github.com/PennLINC/xcp_d/issues">https://github.com/PennLINC/xcp_d/issues</a>.</p>
+<p>If you have a question about using <em>XCP-D</em>, please create a new topic on
+<a class="reference external" href="https://neurostars.org">NeuroStars</a> with <a class="reference external" href="https://neurostars.org/tags/c/software-support/234/xcp_d">the “Software Support” category and the “xcp_d” tag</a>.
+The <em>XCP-D</em> developers follow NeuroStars, and will be able to answer your question there.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="installation.html" class="btn btn-neutral float-left" title="Installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="workflows.html" class="btn btn-neutral float-right" title="Processing Pipeline Details" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2021-, {author}.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -29,4 +29,4 @@ Use after QSIPrep completes. It consumes QSIPrep-compatible output, not raw DWI 
 
 ## ALFF/fALFF
 
-ALFF and fALFF are resting-state fMRI amplitude metrics. In this MVP, discuss them as downstream metric calculation candidates after DeepPrep-BOLD preprocessing. They should not replace BOLD preprocessing in workflow descriptions.
+ALFF and fALFF are resting-state fMRI amplitude metrics. In this MVP, discuss them as single-subject BOLD downstream outputs after DeepPrep-BOLD preprocessing when backend output records show them. Other supported downstream outputs may include ReHo, DMN, and seed-to-ROI. Group-level BOLD analysis is a separate backend route.

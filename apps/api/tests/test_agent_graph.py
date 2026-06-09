@@ -1,0 +1,396 @@
+import json
+
+from app.agent.graph import AgentRunner
+from app.agent.incubation import IncubationLedger
+from app.agent.thread_store import AgentThreadStore
+
+
+class FakeGateway:
+    def __init__(self, decision):
+        self.decision = decision
+        self.messages = []
+
+    def complete_structured(self, messages, *, purpose, structured_schema=None):
+        self.messages.append((purpose, messages, structured_schema))
+        return self.decision
+
+    def complete_text(self, messages, *, purpose):
+        self.messages.append((purpose, messages))
+        return "final answer"
+
+
+class ToolCallingFakeGateway(FakeGateway):
+    def complete_structured_with_tools(self, messages, *, purpose, tool_context, structured_schema=None, max_tool_rounds=2):
+        self.messages.append((purpose, messages, tool_context, structured_schema))
+        return {
+            "decision": self.decision,
+            "tool_trace": [
+                {
+                    "status": "ok",
+                    "tool": "list_workflows",
+                    "call_id": "call_1",
+                    "result": [{"type": "bold_fmriprep_xcpd_report"}],
+                    "production_task_created": False,
+                }
+            ],
+            "tool_messages": [{"role": "user", "content": "Tool results JSON:\n[]"}],
+        }
+
+
+class SchemaRequiredGateway:
+    def __init__(self, decision):
+        self.decision = decision
+        self.structured_schema = None
+
+    def complete_structured_with_tools(self, messages, *, purpose, tool_context, structured_schema, max_tool_rounds=2):
+        self.structured_schema = structured_schema
+        return {"decision": self.decision, "tool_trace": [], "tool_messages": []}
+
+    def complete_text(self, messages, *, purpose):
+        return "final answer"
+
+
+class SchemaRequiredNoToolsGateway:
+    def __init__(self, decision):
+        self.decision = decision
+        self.structured_schema = None
+
+    def complete_structured(self, messages, *, purpose, structured_schema):
+        self.structured_schema = structured_schema
+        return self.decision
+
+    def complete_text(self, messages, *, purpose):
+        return "final answer"
+
+
+def _assert_planner_schema(schema):
+    assert schema["name"] == "agent_planner_decision"
+    assert schema["strict"] is True
+    assert schema["schema"]["type"] == "object"
+    assert schema["schema"]["additionalProperties"] is False
+    assert "intent" in schema["schema"]["required"]
+    assert "intent" in schema["schema"]["properties"]
+    assert "requires_confirmation" in schema["schema"]["required"]
+    assert schema["schema"]["properties"]["requires_confirmation"]["type"] == ["boolean", "null"]
+    assert set(schema["schema"]["properties"]) == set(schema["schema"]["required"])
+
+
+def test_agent_runner_passes_json_schema_to_tool_enabled_planner():
+    gateway = SchemaRequiredGateway({"intent": "answer_question", "summary": "Explain current state"})
+
+    result = AgentRunner(gateway=gateway).run(message="what happened", project_context={"tasks": []})
+
+    assert result["status"] == "answered"
+    _assert_planner_schema(gateway.structured_schema)
+
+
+def test_agent_runner_passes_json_schema_to_no_tools_planner_fallback():
+    gateway = SchemaRequiredNoToolsGateway({"intent": "answer_question", "summary": "Explain current state"})
+
+    result = AgentRunner(gateway=gateway).run(message="what happened", project_context={"tasks": []})
+
+    assert result["status"] == "answered"
+    _assert_planner_schema(gateway.structured_schema)
+
+
+def test_agent_runner_returns_confirmation_when_model_plans_workflow():
+    gateway = FakeGateway(
+        {
+            "intent": "run_workflow",
+            "action_lane": "fixed_workflow",
+            "series_id": 11,
+            "workflow_type": "bold_fmriprep_xcpd_report",
+            "summary": "Run BOLD fMRIPrep + XCP-D",
+        }
+    )
+    context = {
+        "project_id": 7,
+        "series": [{"id": 11, "modality": "BOLD", "supported_for_processing": 1}],
+        "workflows": [
+            {
+                "type": "bold_fmriprep_xcpd_report",
+                "label": "BOLD fMRIPrep + XCP-D",
+                "modality": "BOLD",
+                "lane": "fixed_workflow",
+                "agent_selectable": True,
+            }
+        ],
+    }
+
+    result = AgentRunner(gateway=gateway).run(message="run bold", project_context=context)
+
+    assert result["status"] == "confirmation_required"
+    assert result["thread_id"].startswith("agent_")
+    assert result["action_lane"] == "fixed_workflow"
+    assert result["confirmation"]["workflow_type"] == "bold_fmriprep_xcpd_report"
+    assert result["confirmation"]["series_id"] == 11
+    assert result["selected_skill"] == "image-agent-workflow-runner"
+    assert result["retrieved_context"]["tool"] == "retrieve_reference_context"
+
+
+def test_agent_runner_auto_selects_series_when_model_omits_series_id():
+    gateway = FakeGateway(
+        {
+            "intent": "run_workflow",
+            "action_lane": "fixed_workflow",
+            "workflow_type": "bold_fmriprep_xcpd_report",
+            "summary": "Run BOLD fMRIPrep + XCP-D",
+        }
+    )
+    context = {
+        "project_id": 7,
+        "series": [
+            {"id": 12, "modality": "T1", "supported_for_processing": 1, "format": "NIFTI"},
+            {
+                "id": 11,
+                "modality": "BOLD",
+                "supported_for_processing": 1,
+                "format": "NIFTI_BIDS",
+                "metadata": {"dataset_description": True},
+                "sequence_label": "rest_bold",
+            },
+        ],
+        "workflows": [
+            {
+                "type": "bold_fmriprep_xcpd_report",
+                "label": "BOLD fMRIPrep + XCP-D",
+                "modality": "BOLD",
+                "lane": "fixed_workflow",
+                "agent_selectable": True,
+            }
+        ],
+    }
+
+    result = AgentRunner(gateway=gateway).run(message="run bold on the best data", project_context=context)
+
+    assert result["status"] == "confirmation_required"
+    assert result["confirmation"]["series_id"] == 11
+    assert result["decision"]["series_auto_selected"] is True
+    assert "series_auto_selected" in result["confirmation"]["risks"]
+    assert result["data_candidate_selection"]["status"] == "selected"
+    assert result["data_candidate_selection"]["selected"]["series_id"] == 11
+    assert any(item.get("stage") == "data_selection" for item in result["tool_trace"])
+
+
+def test_agent_runner_uses_openai_tool_dispatch_when_gateway_supports_it():
+    gateway = ToolCallingFakeGateway(
+        {
+            "intent": "run_workflow",
+            "action_lane": "fixed_workflow",
+            "series_id": 11,
+            "workflow_type": "bold_fmriprep_xcpd_report",
+            "summary": "Run BOLD fMRIPrep + XCP-D",
+        }
+    )
+    context = {
+        "project_id": 7,
+        "series": [{"id": 11, "modality": "BOLD", "supported_for_processing": 1}],
+        "workflows": [
+            {
+                "type": "bold_fmriprep_xcpd_report",
+                "label": "BOLD fMRIPrep + XCP-D",
+                "modality": "BOLD",
+                "lane": "fixed_workflow",
+                "agent_selectable": True,
+            }
+        ],
+    }
+
+    result = AgentRunner(gateway=gateway).run(message="run bold", project_context=context)
+
+    assert result["status"] == "confirmation_required"
+    assert result["tool_trace"][0]["mode"] == "openai_function_tools_dispatched"
+    assert any(item.get("tool") == "list_workflows" for item in result["tool_trace"])
+    assert result["decision"]["intent"] == "run_workflow"
+
+
+def test_agent_runner_answers_when_model_selects_question_intent():
+    gateway = FakeGateway({"intent": "answer_question", "summary": "Explain current state"})
+
+    result = AgentRunner(gateway=gateway).run(message="what happened", project_context={"tasks": []})
+
+    assert result["status"] == "answered"
+    assert result["answer"] == "final answer"
+    assert result["selected_skill"] == "image-agent-operator"
+
+
+def test_agent_runner_resume_cancels_unapproved_confirmation():
+    result = AgentRunner(gateway=None).resume(
+        thread_id="thread-1",
+        approved=False,
+        confirmation={
+            "type": "workflow_execution",
+            "project_id": 1,
+            "series_id": 11,
+            "workflow_type": "t1_deepprep",
+        },
+    )
+
+    assert result["status"] == "cancelled"
+    assert result["thread_id"] == "thread-1"
+
+
+def test_agent_runner_resume_requires_server_side_pending_confirmation(tmp_path):
+    result = AgentRunner(gateway=None, thread_store=AgentThreadStore(tmp_path)).resume(
+        thread_id="thread-1",
+        approved=True,
+        confirmation={
+            "type": "workflow_execution",
+            "project_id": 1,
+            "series_id": 11,
+            "workflow_type": "t1_deepprep",
+        },
+    )
+
+    assert result["status"] == "blocked"
+    assert result["production_task_created"] is False
+
+
+def test_agent_runner_resume_marks_approved_server_confirmation_ready_to_launch_without_tool_executor(tmp_path):
+    store = AgentThreadStore(tmp_path)
+    confirmation = {
+        "type": "workflow_execution",
+        "action_lane": "fixed_workflow",
+        "project_id": 1,
+        "series_id": 11,
+        "workflow_type": "t1_deepprep_anat_report",
+    }
+    thread = store.create_pending_confirmation(
+        confirmation=confirmation,
+        decision={"intent": "run_workflow"},
+        selected_skill="image-agent-workflow-runner",
+        retrieved_context={},
+    )
+
+    result = AgentRunner(gateway=None, thread_store=store).resume(
+        thread_id=thread["thread_id"],
+        approved=True,
+        confirmation=confirmation,
+    )
+
+    assert result["status"] == "ready_to_launch"
+    assert result["backend_tool"] == "create_workflow_task"
+    assert result["tool_input"] == {"project_id": 1, "series_id": 11, "workflow_type": "t1_deepprep_anat_report"}
+
+
+def test_agent_runner_resume_consumes_pending_confirmation_without_tool_executor(tmp_path):
+    store = AgentThreadStore(tmp_path)
+    confirmation = {
+        "type": "workflow_execution",
+        "action_lane": "fixed_workflow",
+        "project_id": 1,
+        "series_id": 11,
+        "workflow_type": "t1_deepprep_anat_report",
+    }
+    thread = store.create_pending_confirmation(
+        confirmation=confirmation,
+        decision={"intent": "run_workflow"},
+        selected_skill="image-agent-workflow-runner",
+        retrieved_context={},
+    )
+
+    first = AgentRunner(gateway=None, thread_store=store).resume(
+        thread_id=thread["thread_id"],
+        approved=True,
+        confirmation=confirmation,
+    )
+    second = AgentRunner(gateway=None, thread_store=store).resume(
+        thread_id=thread["thread_id"],
+        approved=True,
+        confirmation=confirmation,
+    )
+
+    assert first["status"] == "ready_to_launch"
+    assert store.load(thread["thread_id"])["status"] == "ready_to_launch"
+    assert second["status"] == "blocked"
+    assert second["production_task_created"] is False
+
+
+def test_agent_runner_resume_blocks_expired_pending_confirmation(tmp_path):
+    store = AgentThreadStore(tmp_path)
+    confirmation = {
+        "type": "workflow_execution",
+        "action_lane": "fixed_workflow",
+        "project_id": 1,
+        "series_id": 11,
+        "workflow_type": "t1_deepprep_anat_report",
+    }
+    thread = store.create_pending_confirmation(
+        confirmation=confirmation,
+        decision={"intent": "run_workflow"},
+        selected_skill="image-agent-workflow-runner",
+        retrieved_context={},
+    )
+    record_path = tmp_path / f"{thread['thread_id']}.json"
+    record = json.loads(record_path.read_text(encoding="utf-8"))
+    assert record["expires_at"]
+    record["expires_at"] = "2000-01-01T00:00:00+00:00"
+    record_path.write_text(json.dumps(record), encoding="utf-8")
+
+    result = AgentRunner(gateway=None, thread_store=store).resume(
+        thread_id=thread["thread_id"],
+        approved=True,
+        confirmation=confirmation,
+    )
+
+    assert result["status"] == "blocked"
+    assert result["production_task_created"] is False
+    assert result["events"] == [{"type": "agent.confirmation_expired", "message": "Pending confirmation expired."}]
+    assert store.load(thread["thread_id"])["status"] == "expired"
+
+
+def test_agent_runner_returns_incubation_proposal_without_confirmation():
+    gateway = FakeGateway(
+        {
+            "intent": "run_workflow",
+            "action_lane": "toolchain_incubation",
+            "summary": "Try a new BOLD denoise and report chain",
+            "toolchain": ["stage_bids", "run_fmriprep", "run_xcpd", "make_report"],
+        }
+    )
+
+    result = AgentRunner(gateway=gateway).run(message="try a new toolchain", project_context={"project_id": 7})
+
+    assert result["status"] == "toolchain_proposed"
+    assert result["action_lane"] == "toolchain_incubation"
+    assert result["proposed_toolchain"]["production_task_created"] is False
+    assert result["proposed_toolchain"]["proposal_id"].startswith("inc_")
+    assert result["selected_skill"] == "image-agent-workflow-runner"
+
+
+def test_agent_runner_incubation_decomposes_container_script_text(tmp_path):
+    script_text = "\n".join(
+        [
+            "sudo -S docker run --rm --gpus all --network host \\",
+            "  -e TEMPLATEFLOW_HOME=/templateflow \\",
+            "  -v /project/task/bids:/data:ro \\",
+            "  nipreps/fmriprep:latest /data /out participant --participant-label 01",
+        ]
+    )
+    gateway = FakeGateway(
+        {
+            "intent": "run_workflow",
+            "action_lane": "toolchain_incubation",
+            "summary": "Inspect a remote fMRIPrep wrapper",
+            "modality": "BOLD",
+            "script_text": script_text,
+        }
+    )
+
+    result = AgentRunner(gateway=gateway, incubation_ledger=IncubationLedger(tmp_path / "ledger"), rag_root=tmp_path).run(
+        message="拆解这个容器脚本看看能不能孵化新工作流",
+        project_context={"project_id": 7},
+    )
+
+    chain = result["proposed_toolchain"]["primitive_chain"]
+    assert result["status"] == "toolchain_proposed"
+    assert len(chain) == 1
+    assert chain[0]["kind"] == "container"
+    assert chain[0]["image"] == "nipreps/fmriprep:latest"
+    assert chain[0]["uses_gpu"] is True
+    assert chain[0]["contract"]["stage"] == "fmriprep_preprocessing"
+    assert "composition_plan" in result["proposed_toolchain"]
+    assert "promotion_gate" in result["proposed_toolchain"]
+    assert "fMRIPrep HTML report" in result["proposed_toolchain"]["composition_plan"]["expected_outputs"]
+    assert result["proposed_toolchain"]["promotion_gate"]["production_task_created"] is False
+    assert result["proposed_toolchain"]["production_task_created"] is False

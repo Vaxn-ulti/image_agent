@@ -15,9 +15,9 @@ Update skills when execution or review exposes a repeatable failure point that a
 ## Current Recorded Failures
 
 - DWI QSIPrep tasks `46` and `47` used `eddy_cpu`, ran too long, were stopped, and are marked `failed`.
-- The remediation is not to retry CPU eddy. Use CUDA eddy config plus a CUDA-enabled QSIPrep/FSL image.
-- `pennlinc/qsiprep:latest` exposes `eddy_cuda11.0` at `/app/.pixi/envs/qsiprep/bin/`. Detection uses `eddy_cuda*` glob to accept versioned binaries. Backend symlinks `eddy_cuda` → `eddy_cuda11.0` for QSIPrep compatibility.
-- Real DWI tasks 61 and 62 are running with GPU/CUDA eddy.
+- The production remediation is not to retry CPU eddy and not to run full QSIPrep. Use the lightweight `dwi_fast_gpu_dti` path with host FSL GPU `eddy_cuda`, MRtrix tools from the QSIPrep image as a toolbox, and the 35 minute runtime target.
+- Legacy/experimental QSIPrep still requires CUDA eddy config plus a CUDA-enabled QSIPrep/FSL image when explicitly selected.
+- `pennlinc/qsiprep:latest` exposes `eddy_cuda11.0` at `/app/.pixi/envs/qsiprep/bin/` for legacy QSIPrep probing, but production fast DTI now probes host FSL under `/home/yyf/project/MCI_project/tools/fsl`.
 
 ### API Port 8000 Conflict (2026-05-14)
 
@@ -53,6 +53,8 @@ Update skills when execution or review exposes a repeatable failure point that a
 - Review/test matrix includes backend, desktop, and container validation checks.
 - Remaining blockers are assigned to the orchestrator rather than hidden in skill text.
 - Final acceptance requires real container processing (not validate-only) with real data and registered outputs.
+- Production DWI acceptance now has multiple known-good real tasks: task `107` on project 22 / series 38 completed in about 19 minutes 52 seconds (`runtime_sec=1156`), task `112` on project 23 / series 39 completed in about 18 minutes 2 seconds (`runtime_sec=1042`), and task `114` on mixed project 13 / series 24 completed with `runtime_sec=1021`. Keep this evidence in skills/planning with host FSL GPU `eddy_cuda`, MRtrix toolbox mode, native and MNI152 FA/MD/AD/RD maps, HarvardOxford regional DTI tables, and `validation_only=false`.
+- Scientific report display acceptance requires the remote verifier script against real outputs, preferably by task id: `python apps/api/scripts/verify_scientific_reports.py --projects-root data/projects --task-ids 41 111 114 --require-modalities T1 BOLD DWI --require-container-native-qc --min-native-qc-images 1`. This keeps derived presentation report assets separate from container-native QC and prevents generated PNG reports from being treated as native evidence.
 - QSIPrep commands include `--eddy-config /eddy_cuda_config.json` with `use_cuda: true`, `num_threads >= 2`, and `dont_peas: true`.
 - QSIRecon commands include `--recon-spec`.
 - Tests run with `apps/api/.venv/bin/pytest -q apps/api/tests` (currently 37 passed).

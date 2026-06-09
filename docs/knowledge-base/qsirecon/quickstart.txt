@@ -1,0 +1,560 @@
+Quick Start — qsirecon 26.1.0.dev1+g79953f538 documentation
+qsirecon
+Installation
+Quick Start
+Command-Line Arguments
+Positional Arguments
+Options for filtering input data
+Options to handle performance
+Options for performing only a subset of the workflow
+Workflow configuration
+Specific options for FreeSurfer preprocessing
+Options for recon workflows
+Parcellation options
+Other options
+Troubleshooting
+Available Models in
+QSIRecon
+Built-In Reconstruction Workflows
+Custom Reconstruction Workflows
+Outputs of
+QSIRecon
+Contributing to
+QSIRecon
+What’s New
+Comparisons to other pipelines
+Getting help
+License information
+API Documentation
+qsirecon
+Quick Start
+View page source
+Quick Start
+
+Before you can use
+QSIRecon
+, you must have some preprocessed dMRI data.
+See
+Input Data for QSIRecon
+The next step is to get a containerized version of
+QSIRecon
+. This can be
+done with
+Singularity
+,
+Apptainer
+or
+Docker
+. Most users run
+QSIRecon
+on
+a high performance computing cluster, so we will assume Apptainer is being
+used throughout this documentation. See
+Installation
+on how to create
+a
+sif
+file or pull the image with Docker.
+Next, you need to decide which workflow you’d like to run. You can pick
+from any of the
+Built-In Reconstruction Workflows
+or
+Custom Reconstruction Workflows
+.
+Here we’ll pick the
+dsi_studio_autotrack
+workflow.
+Finally, you’ll need to craft a command to set up your
+QSIRecon
+run.
+Suppose you’re in a directory where there are some qsiprep results in
+inputs/qsiprep
+. You’d like to save
+QSIRecon
+outputs in
+results
+. You
+have access to 8 cpus.  To run the from
+qsirecon-latest.sif
+you could use:
+apptainer
+run
+\
+--containall
+\
+--writable-tmpfs
+\
+-B
+"
+${
+PWD
+}
+"
+\
+qsirecon-latest.sif
+\
+"
+${
+PWD
+}
+/inputs/qsiprep"
+\
+"
+${
+PWD
+}
+/results/qsirecon"
+\
+participant
+\
+-w
+"
+${
+PWD
+}
+/work"
+\
+--nthreads
+8
+\
+--omp-nthreads
+8
+\
+--recon-spec
+dsi_studio_autotrack
+\
+-v
+-v
+Once this completes you will see a number of new directories written to
+results
+.
+You will find errors (if any occurred) and configuration files for each subject
+directly under
+results/sub-*
+. Each analysis also creates its own directory that
+contains results per subject. In the case of
+dsi_studio_autotrack
+we will see
+results/qsirecon-DSIStudio/sub-*
+containing the outputs from the ss3t_autotrack
+workflow. Some workflows produce multiple directories, particularly when multiple
+models are fit.
+Command-Line Arguments
+
+QSIRecon v26.1.0.dev1+g79953f538: q-Space Image Reconstruction Workflows
+usage
+:
+qsirecon
+[
+-
+h
+]
+[
+--
+participant
+-
+label
+PARTICIPANT_LABEL
+[
+PARTICIPANT_LABEL
+...
+]]
+[
+--
+session
+-
+id
+SESSION_ID
+[
+SESSION_ID
+...
+]]
+[
+-
+d
+PACKAGE
+=
+PATH
+[
+PACKAGE
+=
+PATH
+...
+]]
+[
+--
+bids
+-
+filter
+-
+file
+FILE
+]
+[
+--
+bids
+-
+database
+-
+dir
+PATH
+]
+[
+--
+nprocs
+NPROCS
+]
+[
+--
+omp
+-
+nthreads
+OMP_NTHREADS
+]
+[
+--
+mem
+MEMORY_MB
+]
+[
+--
+low
+-
+mem
+]
+[
+--
+use
+-
+plugin
+FILE
+]
+[
+--
+sloppy
+]
+[
+--
+boilerplate
+-
+only
+]
+[
+--
+reports
+-
+only
+]
+[
+--
+report
+-
+output
+-
+level
+{
+root
+,
+subject
+,
+session
+}]
+[
+--
+infant
+]
+[
+--
+b0
+-
+threshold
+B0_THRESHOLD
+]
+[
+--
+output
+-
+resolution
+OUTPUT_RESOLUTION
+]
+[
+--
+fs
+-
+license
+-
+file
+PATH
+]
+--
+recon
+-
+spec
+RECON_SPEC
+[
+--
+input
+-
+type
+{
+qsiprep
+,
+ukb
+,
+hcpya
+}]
+[
+--
+fs
+-
+subjects
+-
+dir
+PATH
+]
+[
+--
+skip
+-
+odf
+-
+reports
+]
+[
+--
+recon
+-
+spec
+-
+aux
+-
+files
+RECON_SPEC_AUX_FILES
+]
+[
+--
+atlases
+ATLAS
+[
+ATLAS
+...
+]]
+[
+--
+version
+]
+[
+-
+v
+]
+[
+-
+w
+WORK_DIR
+]
+[
+--
+resource
+-
+monitor
+]
+[
+--
+config
+-
+file
+FILE
+]
+[
+--
+write
+-
+graph
+]
+[
+--
+stop
+-
+on
+-
+first
+-
+crash
+]
+[
+--
+notrack
+]
+[
+--
+debug
+{
+pdb
+,
+all
+}
+[{
+pdb
+,
+all
+}
+...
+]]
+input_dir
+output_dir
+{
+participant
+}
+Positional Arguments
+
+input_dir
+The root folder of the input dataset  (subject-level folders should be found at the top level in this folder). If the dataset is not BIDS-valid, then a BIDS-compliant version will be created based on the –input-type value.
+output_dir
+The output path for the outcomes of postprocessing and visual reports
+analysis_level
+Possible choices: participant
+Processing stage to be run, only “participant” in the case of QSIRecon (for now).
+Options for filtering input data
+
+--participant-label
+A space delimited list of participant identifiers or a single identifier (the sub- prefix can be removed)
+--session-id
+A space delimited list of session identifiers or a single identifier (the ses- prefix can be removed)
+-d, --datasets
+Search PATH(s) for derivatives or atlas datasets. These may be provided as named folders (e.g.,
+--datasets
+smriprep=/path/to/smriprep
+).
+--bids-filter-file
+A JSON file describing custom BIDS input filters using PyBIDS. For further details, please check out
+https://fmriprep.readthedocs.io/en/latest/faq.html#how-do-I-select-only-certain-files-to-be-input-to-fMRIPrep
+--bids-database-dir
+Path to a PyBIDS database folder, for faster indexing (especially useful for large datasets). Will be created if not present.
+Options to handle performance
+
+--nprocs, --nthreads, --n-cpus
+Maximum number of threads across all processes
+--omp-nthreads
+Maximum number of threads per-process
+--mem, --mem-mb
+Upper bound memory limit for QSIRecon processes
+--low-mem
+Attempt to reduce memory usage (will increase disk usage in working directory)
+Default:
+False
+--use-plugin, --nipype-plugin-file
+Nipype plugin configuration file
+--sloppy
+Use low-quality tools for speed - TESTING ONLY
+Default:
+False
+Options for performing only a subset of the workflow
+
+--boilerplate-only, --boilerplate
+Generate boilerplate only
+Default:
+False
+--reports-only
+Only generate reports, don’t run workflows. This will only rerun report aggregation, not reportlet generation for specific nodes.
+Default:
+False
+--report-output-level
+Possible choices: root, subject, session
+Where should the html reports be written? By default root will write them to the –output-dir. Other options will write them into their subject or session directory.
+Default:
+'root'
+Workflow configuration
+
+--infant
+configure pipelines to process infant brains
+Default:
+False
+--b0-threshold
+any value in the .bval file less than this will be considered a b=0 image. Current default threshold = 100; this threshold can be lowered or increased. Note, setting this too high can result in inaccurate results.
+Default:
+100
+--output-resolution
+the isotropic voxel size in mm the data will be resampled to after preprocessing. If set to a lower value than the original voxel size, your data will be upsampled using BSpline interpolation.
+Specific options for FreeSurfer preprocessing
+
+--fs-license-file
+Path to FreeSurfer license key file. Get it (for free) by registering at
+https://surfer.nmr.mgh.harvard.edu/registration.html
+. If not provided, QSIRecon will look for a license file in the following locations: 1)
+$FS_LICENSE
+environment variable; and 2) the
+$FREESURFER_HOME/license.txt
+path.
+Options for recon workflows
+
+--recon-spec
+YAML file specifying a reconstruction pipeline to be run.
+--input-type
+Possible choices: qsiprep, ukb, hcpya
+Specify which pipeline was used to create the data specified as the input_dir.Not necessary to specify if the data was processed by QSIPrep. Other options include “ukb” for data processed with the UK BioBank minimal preprocessing pipeline and “hcpya” for the HCP young adult minimal preprocessing pipeline.
+Default:
+'qsiprep'
+--fs-subjects-dir
+Directory containing Freesurfer outputs to be integrated into recon. Freesurfer must already be run. QSIRecon will not run Freesurfer.
+--skip-odf-reports
+run only reconstruction, assumes preprocessing has already completed.
+Default:
+False
+--recon-spec-aux-files
+Path to a directory containing auxiliary files for the reconstruction pipeline. This is currently only used to provide common response functions for a subset of the built-in recon specs.
+Parcellation options
+
+--atlases
+Selection of atlases to apply to the data. Built-in atlases include: AAL116, AICHA384Ext, Brainnetome246Ext, Gordon333Ext, and the 4S atlases.
+Other options
+
+--version
+show program’s version number and exit
+-v, --verbose
+Increases log verbosity for each occurrence, debug level is -vvv
+Default:
+0
+-w, --work-dir
+Path where intermediate results should be stored
+Default:
+/home/docs/checkouts/readthedocs.org/user_builds/qsirecon/checkouts/latest/docs/work
+--resource-monitor
+Enable Nipype’s resource monitoring to keep track of memory and CPU usage
+Default:
+False
+--config-file
+Use pre-generated configuration file. Values in file will be overridden by command-line arguments. This is not currently used by QSIRecon.
+--write-graph
+Write workflow graph.
+Default:
+False
+--stop-on-first-crash
+Force stopping on first crash, even if a work directory was specified.
+Default:
+False
+--notrack
+Opt-out of sending tracking information of this run to the QSIRecon developers. This information helps to improve QSIRecon and provides an indicator of real world usage crucial for obtaining funding.
+Default:
+False
+--debug
+Possible choices: pdb, all
+Debug mode(s) to enable. ‘all’ is alias for all available modes.
+Troubleshooting
+
+Logs and crashfiles are outputted into the
+<output
+dir>/qsirecon/sub-<participant_label>/log
+directory.
+Information on how to customize and understand these files can be found on the
+nipype debugging
+page.
+Previous
+Next
+© Copyright 2021-2026, qsirecon team.
+Built with
+Sphinx
+using a
+theme
+provided by
+Read the Docs
+.
