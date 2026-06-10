@@ -49,6 +49,8 @@ Update skills when execution or review exposes a repeatable failure point that a
 ## Acceptance Checklist
 
 - Agent role boundaries are clear.
+- Skill routing is machine-readable in `docs/skills/maintenance/routing-matrix.json`.
+- Static skill maintenance audit passes: `python apps/api/scripts/audit_skill_maintenance.py --json`.
 - DWI/QSI GPU policy names both command behavior and the eddy_cuda* versioned binary strategy.
 - Review/test matrix includes backend, desktop, and container validation checks.
 - Remaining blockers are assigned to the orchestrator rather than hidden in skill text.

@@ -1,0 +1,152 @@
+{
+  "schema_version": 1,
+  "purpose": "Route Image Agent work to the narrowest skill and make trigger overlap auditable.",
+  "skills": [
+    {
+      "skill_name": "image-agent-operator",
+      "primary_triggers": [
+        "user-facing chat reply",
+        "workflow eligibility explanation",
+        "task status or output availability",
+        "safe next-step guidance"
+      ],
+      "owns": [
+        "chat wording",
+        "backend-record grounding",
+        "non-diagnostic user explanations",
+        "supported versus unsupported workflow replies"
+      ],
+      "defers_to": [
+        "image-agent-workflow-runner",
+        "image-agent-rag-curator",
+        "image-agent-result-reviewer"
+      ],
+      "workflow_boundary": "Mention legacy QSIPrep/QSIRecon only when explicitly selected or present in backend records; production DWI is dwi_fast_gpu_dti."
+    },
+    {
+      "skill_name": "image-agent-architect",
+      "primary_triggers": [
+        "API contract design",
+        "module boundary review",
+        "agent orchestration change",
+        "frontend/backend data flow"
+      ],
+      "owns": [
+        "contract-first architecture",
+        "OpenAI SDK-like agent boundaries",
+        "workflow launch separation from free-form chat",
+        "compatibility and migration risks"
+      ],
+      "defers_to": [
+        "image-agent-developer",
+        "image-agent-workflow-runner",
+        "image-agent-rag-curator"
+      ],
+      "workflow_boundary": "Design APIs and state contracts before UI or runner changes; never let RAG text decide launchability."
+    },
+    {
+      "skill_name": "image-agent-developer",
+      "primary_triggers": [
+        "backend implementation",
+        "test repair",
+        "remote deployment evidence",
+        "skill or RAG maintenance"
+      ],
+      "owns": [
+        "FastAPI and workflow code changes",
+        "focused tests",
+        "work logs and checkpoint discipline",
+        "remote-only runtime verification planning"
+      ],
+      "defers_to": [
+        "image-agent-architect",
+        "image-agent-workflow-runner",
+        "image-agent-result-reviewer"
+      ],
+      "workflow_boundary": "Production DWI remains dwi_fast_gpu_dti; legacy QSIPrep/QSIRecon changes require explicit tests and docs."
+    },
+    {
+      "skill_name": "image-agent-workflow-runner",
+      "primary_triggers": [
+        "workflow validation",
+        "workflow launch plan",
+        "container command review",
+        "task events and output registration"
+      ],
+      "owns": [
+        "registry and preflight behavior",
+        "server-side confirmation boundaries",
+        "artifact registration",
+        "container-native QC discovery"
+      ],
+      "defers_to": [
+        "neuroimaging-workflow-runner",
+        "image-agent-result-reviewer",
+        "image-agent-developer"
+      ],
+      "workflow_boundary": "Use this for Image Agent workflow contracts; defer deep legacy QSIPrep/QSIRecon command detail to neuroimaging-workflow-runner."
+    },
+    {
+      "skill_name": "image-agent-result-reviewer",
+      "primary_triggers": [
+        "result-summary review",
+        "artifact-manifest review",
+        "scientific report readiness",
+        "container-native QC evidence"
+      ],
+      "owns": [
+        "artifact completeness",
+        "derived scientific report versus native QC separation",
+        "non-diagnostic evidence review",
+        "frontend-readiness artifact checks"
+      ],
+      "defers_to": [
+        "image-agent-workflow-runner",
+        "image-agent-rag-curator"
+      ],
+      "workflow_boundary": "Derived scientific report assets are presentation evidence and do not replace container-native QC."
+    },
+    {
+      "skill_name": "image-agent-rag-curator",
+      "primary_triggers": [
+        "RAG source ingestion",
+        "official container documentation curation",
+        "source conflict resolution",
+        "retrieval metadata update"
+      ],
+      "owns": [
+        "official-source provenance",
+        "workflow frontmatter",
+        "raw-source exclusion",
+        "answer boundary wording"
+      ],
+      "defers_to": [
+        "image-agent-operator",
+        "image-agent-workflow-runner",
+        "image-agent-result-reviewer"
+      ],
+      "workflow_boundary": "Curate current backend product facts over stale workflow docs and mark legacy QSIPrep/QSIRecon explicitly."
+    },
+    {
+      "skill_name": "neuroimaging-workflow-runner",
+      "primary_triggers": [
+        "neuroimaging container execution detail",
+        "BIDS-like input staging",
+        "legacy QSIPrep/QSIRecon command review",
+        "remote runtime workflow monitoring"
+      ],
+      "owns": [
+        "modality-specific workflow execution checklists",
+        "container bind mounts",
+        "legacy QSI command constraints",
+        "remote task status interpretation"
+      ],
+      "defers_to": [
+        "image-agent-workflow-runner",
+        "image-agent-result-reviewer",
+        "image-agent-developer"
+      ],
+      "workflow_boundary": "Use host FSL GPU eddy plus MRtrix toolbox for production dwi_fast_gpu_dti; full QSIPrep/QSIRecon remains legacy or explicit."
+    }
+  ]
+}

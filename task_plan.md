@@ -34,7 +34,7 @@ Continue developing Image Agent until the agent product is mature and stable eno
 | 3. Agent API Contract Hardening | in_progress | `/agent/runs`, run lookup, resume, project history, and legacy `/chat` boundaries have stable contract versions, response models, status enums, and tests. |
 | 4. Official RAG Metadata Standardization | in_progress | Workflow docs expose machine-readable official grounding, expected artifacts, unsupported boundaries, source ids, and answer-boundary tests. |
 | 5. Workflow Artifact Contract Hardening | in_progress | `/artifact-manifest` is the frontend source of truth and separates container-native QC, derived scientific reports, and preview assets. |
-| 6. Skill Maintenance | pending | Image Agent skills follow skill-creator structure and have routing, audit, eval, and stale-name coverage. |
+| 6. Skill Maintenance | in_progress | Image Agent skills follow skill-creator structure and have routing, audit, eval, and stale-name coverage. |
 | 7. Remote Verification Loop | pending | Remote server install/test/run evidence is logged; local-only execution is avoided. |
 | 8. Product Maturity Gate | pending | Stability/readiness checklist passes; only then notify user that frontend page design can begin. |
 
@@ -84,6 +84,12 @@ Continue developing Image Agent until the agent product is mature and stable eno
 - Unlabeled `reports/*` preview assets default to derived scientific report metadata and cannot count as `container_native_qc`.
 - Manifest envelope includes `counts_by_artifact_category`.
 - RAG and skill references now state that derived scientific report assets are useful for presentation but do not replace native QC evidence.
+
+## Current Skill Maintenance Progress
+
+- Added `docs/skills/maintenance/routing-matrix.json` to make skill ownership, trigger families, and deferrals machine-readable.
+- Added `apps/api/scripts/audit_skill_maintenance.py` and tests for routing coverage, skill sections, reference targets, eval category coverage, and secret-token patterns.
+- Current audit command: `python apps/api/scripts/audit_skill_maintenance.py --json`.
 
 ## Remote Runtime Notes
 

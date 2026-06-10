@@ -101,3 +101,9 @@
   - Preserved explicit container-native metadata when `native_artifact=true` and the item is not report-layer derived.
   - Updated result-summary/container-QC RAG contracts and workflow/result-reviewer skill references so agents and frontend consumers distinguish native QC evidence from derived report assets.
   - Verification: `python -m pytest apps/api/tests/test_artifact_manifest_contract.py apps/api/tests/test_result_contract.py apps/api/tests/test_skill_and_rag_docs.py::test_rag_corpus_contains_required_sections_and_vendor_metadata -q` returned `11 passed`; `python -m py_compile apps/api/app/workflows/artifact_manifest.py apps/api/tests/test_artifact_manifest_contract.py` passed.
+- Added skill maintenance routing/audit scaffolding:
+  - Added `docs/skills/maintenance/routing-matrix.json` covering seven Image Agent skills, ownership, deferrals, trigger families, and production DWI versus legacy QSIPrep/QSIRecon boundaries.
+  - Added `apps/api/scripts/audit_skill_maintenance.py` for deterministic checks of routing matrix coverage, skill frontmatter/sections, reference target existence, eval category coverage, and obvious secret-token patterns.
+  - Added `apps/api/tests/test_skill_maintenance_audit.py`.
+  - Updated `docs/skills/image-agent-developer/references/skill-maintenance.md` with the audit command.
+  - Verification: `python -m pytest apps/api/tests/test_skill_maintenance_audit.py -q` returned `2 passed`; `python apps/api/scripts/audit_skill_maintenance.py --json` returned `status=passed` with no findings.
