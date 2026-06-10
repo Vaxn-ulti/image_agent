@@ -54,16 +54,22 @@ Use the BMAD Method as process guidance, not as a local installation requirement
 
 ## Current Status
 
-As of 2026-06-11, the first formal live-port strict remote acceptance evidence
-has passed for committed release `7e7ff94` on the remote API surface at port
-`8000`. The saved evidence cited in `docs/work-log-2026-06-10.md` includes real
-project/upload/task ids, configured OpenAI-compatible Responses gateway smoke,
-RAG provenance and launchability citation, safe artifact manifest,
-container-native QC, derived scientific report provenance, route-served
-artifacts, and an offline verifier result of `status=passed`.
+As of 2026-06-11, the live remote API is serving committed release `f57a2ea`
+from release overlay
+`/home/yyf/project/image_agent_releases/codex-f57a2ea-20260611T023456/apps/api`.
+The dirty remote main worktree is no longer the serving path for the accepted
+API process.
 
-The product is still in final operational hardening mode before frontend page
-design is released. The remaining readiness condition is to make the accepted
-release overlay the durable normal restart/service path, keep the dirty remote
-main worktree out of the serving path, and refresh or explicitly preserve the
-strict remote acceptance evidence after that operational path is used.
+Fresh strict remote acceptance passed after that release-overlay restart. The
+saved evidence is
+`/tmp/image_agent_task118_live8000_post_restart_f57a2ea_20260611.json`, and the
+offline verifier reported `status=passed` for model smoke, real evidence ids,
+RAG vendor pointer integrity, launchability query citation, project/upload
+contracts, artifact manifest, container-native QC, and derived scientific report
+artifacts.
+
+Frontend design is still held until the final operational cleanup is resolved:
+the restart used `IMAGE_AGENT_ALLOW_RESTART_WITH_ACTIVE_TASKS=1` because legacy
+tasks `83` and `84` remain in `running` state even though they appear stale. The
+next maturity slice should add or run an auditable stale-task reconciliation path
+so normal restarts do not require overriding the active-task drain gate.
