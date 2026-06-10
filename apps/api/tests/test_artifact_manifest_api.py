@@ -53,6 +53,11 @@ def _seed_completed_task(tmp_path, monkeypatch, *, task_id=221):
                             "artifact_origin": "container_output",
                             "source_stage": "fmriprep",
                             "official_source_ids": ["docs/rag/vendor/fmriprep_official_outputs.md"],
+                            "provenance": {
+                                "generated_from": "container_native_qc",
+                                "replaces_native_qc": False,
+                                "official_source_ids": ["docs/rag/vendor/fmriprep_official_outputs.md"],
+                            },
                         },
                         {
                             "name": "t1_qc.png",
@@ -84,6 +89,11 @@ def _seed_completed_task(tmp_path, monkeypatch, *, task_id=221):
                             "artifact_origin": "container_output",
                             "source_stage": "xcpd",
                             "official_source_ids": ["docs/rag/vendor/xcp_d_official_outputs.md"],
+                            "provenance": {
+                                "generated_from": "container_native_qc",
+                                "replaces_native_qc": False,
+                                "official_source_ids": ["docs/rag/vendor/xcp_d_official_outputs.md"],
+                            },
                         }
                     ],
                 },

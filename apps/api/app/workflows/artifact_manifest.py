@@ -210,6 +210,7 @@ def _artifact_classification(relative_path: str, item: dict[str, Any]) -> dict[s
     artifact_role = str(item.get("artifact_role") or "")
     artifact_origin = str(item.get("artifact_origin") or "")
     native_declared = item.get("native_artifact") is True
+    provenance = item.get("provenance") if isinstance(item.get("provenance"), dict) else {}
     normalized = relative_path.replace("\\", "/").lower()
     derived_report = (
         source_stage == "scientific_report"
@@ -217,7 +218,7 @@ def _artifact_classification(relative_path: str, item: dict[str, Any]) -> dict[s
         or artifact_origin == "generated_from_result_summary"
         or (not native_declared and normalized.startswith("reports/"))
     )
-    container_native_qc = native_declared and not derived_report
+    container_native_qc = native_declared and not derived_report and _has_strict_native_qc_provenance(item, provenance)
     frontend_preview_asset = preview_kind in {"image", "html", "table", "json"}
 
     if container_native_qc:
@@ -243,11 +244,30 @@ def _artifact_classification(relative_path: str, item: dict[str, Any]) -> dict[s
         if not item.get("artifact_origin"):
             updates["artifact_origin"] = "generated_from_result_summary"
         updates["native_artifact"] = False
-        provenance = item.get("provenance") if isinstance(item.get("provenance"), dict) else {}
         updates["provenance"] = {**provenance, "replaces_native_qc": False}
+    elif native_declared and not container_native_qc:
+        updates["native_artifact"] = False
     elif "native_artifact" not in item:
         updates["native_artifact"] = False
     return updates
+
+
+def _has_strict_native_qc_provenance(item: dict[str, Any], provenance: dict[str, Any]) -> bool:
+    top_level_ids = item.get("official_source_ids")
+    provenance_ids = provenance.get("official_source_ids")
+    if item.get("artifact_origin") != "container_output":
+        return False
+    if provenance.get("generated_from") != "container_native_qc":
+        return False
+    if provenance.get("replaces_native_qc") is not False:
+        return False
+    if item.get("artifact_role") not in {"container_native_html_report", "container_native_qc_figure"}:
+        return False
+    if not isinstance(top_level_ids, list) or not top_level_ids:
+        return False
+    if not isinstance(provenance_ids, list) or not provenance_ids:
+        return False
+    return set(top_level_ids) == set(provenance_ids)
 
 
 def _summary_relative_path(output_dir: Path, result_summary: dict[str, Any]) -> str | None:

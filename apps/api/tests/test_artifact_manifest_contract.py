@@ -33,9 +33,15 @@ def test_artifact_manifest_classifies_native_qc_scientific_reports_and_preview_a
                     "relative_path": "fmriprep/sub-01.html",
                     "content_type": "text/html",
                     "native_artifact": True,
+                    "artifact_origin": "container_output",
                     "source_stage": "fmriprep",
                     "artifact_role": "container_native_html_report",
                     "official_source_ids": ["docs/rag/vendor/fmriprep_official_outputs.md"],
+                    "provenance": {
+                        "generated_from": "container_native_qc",
+                        "replaces_native_qc": False,
+                        "official_source_ids": ["docs/rag/vendor/fmriprep_official_outputs.md"],
+                    },
                 },
                 {
                     "name": "t1_qc.png",
@@ -97,3 +103,43 @@ def test_artifact_manifest_classifies_native_qc_scientific_reports_and_preview_a
         "source_artifact": 1,
     }
     assert '"path":' not in json.dumps(manifest)
+
+
+def test_artifact_manifest_demotes_native_qc_without_strict_container_provenance(tmp_path):
+    output_dir = tmp_path / "output"
+    native_like_report = output_dir / "fmriprep" / "sub-01.html"
+    native_like_report.parent.mkdir(parents=True)
+    native_like_report.write_text("<html>native-looking</html>", encoding="utf-8")
+
+    result_summary = {
+        "contract_version": "1.0",
+        "modality": "T1",
+        "outputs": {
+            "reports": [
+                {
+                    "name": "sub-01.html",
+                    "path": str(native_like_report),
+                    "relative_path": "fmriprep/sub-01.html",
+                    "content_type": "text/html",
+                    "native_artifact": True,
+                    "source_stage": "fmriprep",
+                    "artifact_role": "container_native_html_report",
+                    "official_source_ids": ["docs/rag/vendor/fmriprep_official_outputs.md"],
+                },
+            ],
+        },
+    }
+
+    manifest = build_artifact_manifest(
+        {"id": 8, "project_id": 1, "workflow_type": "t1_deepprep", "status": "completed"},
+        output_dir,
+        result_summary,
+        registered_outputs=[],
+    )
+
+    artifact = manifest["artifacts"][0]
+    assert artifact["artifact_category"] == "frontend_preview_asset"
+    assert artifact["container_native_qc"] is False
+    assert artifact["native_artifact"] is False
+    assert artifact["frontend_preview_asset"] is True
+    assert manifest["counts_by_artifact_category"] == {"frontend_preview_asset": 1}
