@@ -53,6 +53,7 @@ print(json.dumps([dict(row) for row in rows], ensure_ascii=False))
 PY
   )"
   if [[ "$active" != "[]" ]]; then
+    printf 'active_task_drain:remediation run scoped dry-run before override: cd %s && PYTHONPATH=. %s scripts/reconcile_stale_tasks.py --max-age-hours 24 --check-containers --task-id <task_id>\n' "$API_DIR" "$PYTHON_BIN" >&2
     fail "refusing restart with active tasks:$active"
   fi
   printf 'active_task_drain:ok\n'

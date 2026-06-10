@@ -98,6 +98,10 @@ release's `apps/api` directory. By default, the restart wrapper still reads
 keeps the dirty remote main worktree out of the serving path while still reusing
 the operator-managed environment and dependencies.
 
+When active tasks block restart, the script prints a stale-task dry-run hint
+using `scripts/reconcile_stale_tasks.py --check-containers`. Treat that as an
+audit prompt, not as permission to override the drain gate.
+
 Example live release-overlay restart:
 
 ```bash

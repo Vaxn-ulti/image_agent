@@ -20,6 +20,8 @@ def test_remote_restart_script_has_drain_port_and_health_safety_gates():
         "IMAGE_AGENT_START_TIMEOUT_SECONDS",
         "/health",
         "app=image_agent",
+        "reconcile_stale_tasks.py",
+        "--check-containers",
     ):
         assert phrase in script
 
