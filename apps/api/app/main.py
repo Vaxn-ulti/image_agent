@@ -13,6 +13,17 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.agent.graph import AgentRunner
+from app.agent.contracts import (
+    AGENT_RUN_LOOKUP_CONTRACT_VERSION,
+    AgentRunLookupResponse,
+    AgentRunResponse,
+    ChatCompatibilityResponse,
+    ProjectAgentRunHistoryResponse,
+    build_agent_run_response_payload,
+    build_chat_compatibility_response,
+    build_project_agent_run_history_response,
+    normalize_agent_run_result,
+)
 from app.agent.model_gateway import ModelGateway, ModelGatewayError, provider_status as model_provider_status
 from app.agent.run_ledger import finish_agent_run, list_project_agent_runs, load_agent_run, start_agent_run
 from app.agent.tools import read_project_context
@@ -395,7 +406,7 @@ def agent_model_status():
     return model_provider_status()
 
 
-@app.post("/agent/runs")
+@app.post("/agent/runs", response_model=AgentRunResponse)
 def agent_run(req: AgentRunRequest):
     message = req.message.strip()
     if not message:
@@ -403,10 +414,16 @@ def agent_run(req: AgentRunRequest):
     agent_run_id = start_agent_run(request_type="run", project_id=req.project_id, message=message)
     project_context = read_project_context(req.project_id, rows_fn=rows, workflows=WORKFLOWS)
     try:
-        result = dict(AgentRunner().run(message=message, project_context=project_context))
+        result = normalize_agent_run_result(dict(AgentRunner().run(message=message, project_context=project_context)))
         result["agent_run_id"] = agent_run_id
         finish_agent_run(agent_run_id, result=result)
-        return result
+        ledger = load_agent_run(agent_run_id) or {}
+        return build_agent_run_response_payload(
+            result,
+            ledger=ledger,
+            request_type="run",
+            project_id=req.project_id,
+        )
     except HTTPException as exc:
         finish_agent_run(agent_run_id, error=exc)
         raise
@@ -418,15 +435,19 @@ def agent_run(req: AgentRunRequest):
         ) from exc
 
 
-@app.get("/agent/runs/{agent_run_id}")
+@app.get("/agent/runs/{agent_run_id}", response_model=AgentRunLookupResponse)
 def agent_run_lookup(agent_run_id: str):
     run = load_agent_run(agent_run_id)
     if run is None:
         raise HTTPException(404, "Agent run not found")
-    return run
+    return build_agent_run_response_payload(
+        run,
+        ledger=run,
+        contract_version=AGENT_RUN_LOOKUP_CONTRACT_VERSION,
+    )
 
 
-@app.post("/agent/runs/{thread_id}/resume")
+@app.post("/agent/runs/{thread_id}/resume", response_model=AgentRunResponse)
 def agent_resume(thread_id: str, req: AgentResumeRequest):
     def _create_task(series_id: int, workflow_type: str, qsiprep_task_id: int | None = None) -> dict:
         return create_series_task(series_id, RunRequest(workflow_type=workflow_type, qsiprep_task_id=qsiprep_task_id))
@@ -439,15 +460,20 @@ def agent_resume(thread_id: str, req: AgentResumeRequest):
         confirmation=req.confirmation,
     )
     try:
-        result = dict(AgentRunner().resume(
+        result = normalize_agent_run_result(dict(AgentRunner().resume(
             thread_id=thread_id,
             approved=req.approved,
             confirmation=req.confirmation,
             create_task_fn=_create_task,
-        ))
+        )))
         result["agent_run_id"] = agent_run_id
         finish_agent_run(agent_run_id, result=result)
-        return result
+        ledger = load_agent_run(agent_run_id) or {}
+        return build_agent_run_response_payload(
+            result,
+            ledger=ledger,
+            request_type="resume",
+        )
     except HTTPException as exc:
         finish_agent_run(agent_run_id, error=exc)
         raise
@@ -698,9 +724,9 @@ def get_inventory(project_id: int, upload_session_id: int):
 def list_series(project_id: int):
     return [parse_series_row(r) for r in rows("SELECT * FROM imaging_series WHERE project_id=? ORDER BY id DESC", (project_id,))]
 
-@app.get("/projects/{project_id}/agent-runs")
+@app.get("/projects/{project_id}/agent-runs", response_model=ProjectAgentRunHistoryResponse)
 def list_project_agent_run_history(project_id: int):
-    return {"project_id": project_id, "agent_runs": list_project_agent_runs(project_id)}
+    return build_project_agent_run_history_response(project_id, list_project_agent_runs(project_id))
 
 @app.get("/projects/{project_id}/tasks")
 def list_project_tasks(project_id: int):
@@ -955,7 +981,7 @@ def bold_descriptive_review(project_id: int, req: BoldDescriptiveReviewRequest):
         raise HTTPException(400, str(exc)) from exc
 
 
-@app.post("/chat")
+@app.post("/chat", response_model=ChatCompatibilityResponse)
 def chat(req: ChatRequest):
     message = req.message.lower()
     reply = "I can list series, check task status, and explain DICOM, DeepPrep, QSIPrep, QSIRecon, and BOLD workflow results."
@@ -1055,14 +1081,16 @@ def chat(req: ChatRequest):
     with connect() as conn:
         conn.execute("INSERT INTO chat_messages(project_id, role, content, created_at) VALUES(?,?,?,?)", (req.project_id, "user", req.message, now_iso()))
         conn.execute("INSERT INTO chat_messages(project_id, role, content, created_at) VALUES(?,?,?,?)", (req.project_id, "assistant", reply, now_iso()))
-    return {
-        "reply": reply,
-        "references": refs,
-        "provider": used_provider,
-        "provider_error": provider_error,
-        "intent": intent,
-        "recommended_next_step": recommended_next_step,
-        "tool_chain_hint": rag_response.get("tool_chain_hint"),
-        "tool_invocations": rag_response.get("tool_invocations", []),
-        "rag_mode": rag_response.get("mode"),
-    }
+    return build_chat_compatibility_response(
+        {
+            "reply": reply,
+            "references": refs,
+            "provider": used_provider,
+            "provider_error": provider_error,
+            "intent": intent,
+            "recommended_next_step": recommended_next_step,
+            "tool_chain_hint": rag_response.get("tool_chain_hint"),
+            "tool_invocations": rag_response.get("tool_invocations", []),
+            "rag_mode": rag_response.get("mode"),
+        }
+    )

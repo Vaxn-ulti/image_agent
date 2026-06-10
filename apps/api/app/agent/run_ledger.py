@@ -272,6 +272,10 @@ def _safe_result_metadata(result: dict[str, Any]) -> dict[str, Any]:
     confirmation = result.get("confirmation") if isinstance(result.get("confirmation"), dict) else None
     if confirmation:
         metadata["confirmation_fingerprint"] = confirmation_fingerprint(confirmation)
+    safe_metadata = result.get("safe_metadata") if isinstance(result.get("safe_metadata"), dict) else {}
+    normalized_from = _safe_symbol_value(safe_metadata.get("contract_status_normalized_from"))
+    if normalized_from:
+        metadata["contract_status_normalized_from"] = normalized_from
     return {key: value for key, value in metadata.items() if value is not None}
 
 
@@ -377,6 +381,9 @@ def _sanitize_safe_metadata(value: dict[str, Any]) -> dict[str, Any]:
     error_type = _safe_symbol_value(value.get("error_type"))
     if error_type:
         safe["error_type"] = error_type
+    normalized_from = _safe_symbol_value(value.get("contract_status_normalized_from"))
+    if normalized_from:
+        safe["contract_status_normalized_from"] = normalized_from
     return safe
 
 

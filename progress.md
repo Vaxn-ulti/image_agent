@@ -43,3 +43,46 @@
   - Added a helper-level red/green test proving workflow citations can expose vendor raw-source evidence even when the vendor doc is not directly cited.
   - Updated `apps/api/app/agent/rag_orchestration.py` to read `official_grounding` from citation metadata, accept list or comma-separated values, and merge those vendor docs with direct vendor citations.
   - Verification: new helper test passed after failing first; related RAG query focused tests passed (`3 passed`), RAG metadata focused tests passed (`2 passed`), and full `apps/api/tests/test_rag_query.py` passed (`13 passed`).
+
+## 2026-06-10
+
+- Checkpointed the prior RAG metadata/provenance slice:
+  - Scoped backup: `C:\Users\A\Documents\New project 2_repo_archive\2026-06-10-rag-metadata-checkpoint-20260610T130712`.
+  - Backup includes status, diff stat, unstaged diff, changed-file snapshots, recent commits, `head.bundle`, bundle verification, and SHA-256 manifest.
+  - Verification before commit: `python -m pytest apps/api/tests/test_agent_state_and_rag_index.py apps/api/tests/test_rag_query.py -q` returned `31 passed`.
+  - Commit: `1901f13 Checkpoint RAG metadata provenance hardening`.
+- Recorded updated remote/model constraints:
+  - Remote server target: `yyf@10.2.32.14`.
+  - Remote project path: `/home/yyf/project/image_agent`.
+  - Model gateway: OpenAI-compatible Responses-style access with `OPENAI_MODEL=gpt-5.5`, `OPENAI_BASE_URL=https://rawchat.cn/codex`, and high reasoning effort.
+  - API key must stay outside the repo and logs; it must not be passed to workflow child scripts or written into RAG/docs.
+- Reconfirmed goal direction:
+  - Keep frontend page design blocked until Agent API contracts, RAG provenance, workflow artifact contracts, skill maintenance, and strict remote acceptance pass together.
+  - Treat strict remote acceptance as the release gate; local tests alone and `skipped_missing_model_config` do not pass the gate.
+- Dispatched five BMAD-style read-only explorer subagents:
+  - Architect/API: Gauss (`019eaff1-f31b-7270-8d39-8d9b307b8187`) for `/agent/runs` contract hardening and `/chat` compatibility risks.
+  - RAG Curator: Darwin (`019eaff2-3376-7d62-be51-86d95e5119d4`) for workflow frontmatter, official grounding, expected artifacts, unsupported boundaries, and provenance tests.
+  - Product/Workflow Strategy: Linnaeus (`019eaff2-7cdb-7e00-bb0b-8acfc3140652`) for DWI production wording and QSI legacy/incubation boundary cleanup.
+  - Skill Maintainer: Anscombe (`019eaff2-c389-7b01-92f2-5ad7ecd2ac8e`) for routing matrix, static audit, eval shape, TOCs, stale workflow names, and leakage checks.
+  - Operations/Remote Acceptance: Hegel (`019eaff3-0958-7f93-8d40-74a3d62a7a59`) for remote env, smoke commands, acceptance JSON, verifier gaps, backup/git steps, and secret-safety boundaries.
+- Updated `task_plan.md` with the new priority order:
+  - Agent API contract hardening first.
+  - DWI production wording correction.
+  - RAG metadata standardization before adding more corpus content.
+  - Artifact manifest/native QC hardening.
+  - Skill routing/audit improvements.
+  - Strict remote acceptance as the only release gate.
+- Integrated read-only explorer findings into `findings.md`:
+  - Gauss: Agent endpoints need contract versions, response models, status enums, `/chat` compatibility/deprecation contract, and stricter remote contract checks.
+  - Linnaeus: DWI product wording must be unified so production DWI is `dwi_fast_gpu_dti`; QSI/QSIPrep/QSIRecon remain legacy/incubation.
+  - Anscombe: skills should next receive a routing matrix, static audit script, eval-shape adapter, and targeted long-reference TOCs.
+  - Hegel: remote acceptance should use direct `OPENAI_BASE_URL=https://rawchat.cn/codex`, secret-in-shell-only env, strict smoke JSON, verifier `passed`, and added model/host/commit/freshness checks.
+  - Darwin: workflow RAG docs need standardized frontmatter and `rag_orchestration.py` fallback metadata parsing must preserve YAML-list `official_grounding`.
+- Began Agent API Contract v1 implementation:
+  - Added RED contract tests for `/agent/runs`, run lookup, resume, project history, and legacy `/chat` compatibility.
+  - Added `apps/api/app/agent/contracts.py` with stable contract versions, `AgentRunStatus`, response models, status normalization, project history wrapper, and `/chat` compatibility wrapper.
+  - Wired FastAPI `response_model` declarations for the agent run family and `/chat`.
+  - Added route-level response shaping so raw runner internals such as `retrieved_context`, `decision`, and raw tool traces are not the public contract.
+  - Extended the ledger safe metadata whitelist for `contract_status_normalized_from`.
+  - Updated `docs/api.md` so `/agent/runs` is the primary product contract and `/chat` is explicitly compatibility-only.
+  - Local focused API tests are blocked in the current interpreter by missing declared API dependency `python-multipart`; no local dependency installation was performed because remote remains authoritative. Lightweight checks passed: `python -m py_compile ...`, contract helper self-checks, and `python -m pytest apps/api/tests/test_model_gateway.py -q` (`16 passed`).

@@ -180,3 +180,235 @@ Suggested parallel file ownership:
 - `docs/skills/image-agent-developer/references/contracts.md`
 - `docs/skills/image-agent-developer/references/testing-matrix.md`, `gpu-workflow-strategy.md`, and `operational-recovery.md`
 - `docs/skills/evals/evals.json`
+
+## Agent API Contract Explorer Findings
+
+Status: read-only review completed by Gauss on 2026-06-10.
+
+Summary:
+
+- `/agent/runs`, `/agent/runs/{agent_run_id}`, `/agent/runs/{thread_id}/resume`, and project run history exist, but they are still raw dictionaries rather than frozen response contracts.
+- `docs/api.md` is stale and still centers the legacy `/chat` contract instead of the newer agent run surfaces.
+- Remote smoke and acceptance verification do not yet require agent contract versions, enum membership, lookup schema, project history schema, or `/chat` deprecation fields.
+- Ledger sanitization is a strength, but public API shape is not schema-owned enough to prevent accidental future unsafe fields.
+- Pending confirmations are JSON-backed while run history is SQLite-backed; resume/thread authority needs a durable contract boundary.
+- Legacy `/chat` remains public and frontend-visible in console/desktop clients, so it needs a stable compatibility contract or deprecation path before frontend freeze.
+
+Recommended first implementation slice:
+
+1. Add `apps/api/app/agent/contracts.py` with Pydantic v2 models and centralized status enums.
+2. Add `contract_version` to public agent envelopes:
+   - `agent_run.v1`
+   - `agent_run_ledger.v1`
+   - `agent_run_history.v1`
+   - `legacy_chat.v1`
+3. Attach `response_model=` to:
+   - `POST /agent/runs`
+   - `GET /agent/runs/{agent_run_id}`
+   - `POST /agent/runs/{thread_id}/resume`
+   - `GET /projects/{project_id}/agent-runs`
+   - `POST /chat`
+4. Add mapper helpers that convert existing runner and ledger dictionaries into safe public models.
+5. Mark `/chat` as deprecated with `replacement_endpoint="/agent/runs"` while keeping a stable compatibility response during migration.
+6. Extend local tests and remote acceptance scripts so strict remote acceptance proves the contract, not only ad hoc `status` and `agent_run_id` fields.
+
+Suggested tests:
+
+- `test_openapi_declares_agent_response_models`
+- `test_agent_run_response_contract_filters_unexpected_fields`
+- `test_agent_run_status_enum_rejects_unknown_status`
+- `test_agent_lookup_contract_is_ledger_only`
+- `test_project_agent_run_history_contract_version_and_exact_keys`
+- `test_agent_resume_contract_for_task_created_ready_blocked_cancelled`
+- `test_legacy_chat_contract_marks_deprecated`
+- `test_docs_api_documents_agent_contracts`
+
+Migration risk:
+
+- Removing ad hoc fields too aggressively can break current console/desktop consumers. Safer path: define `v1` envelopes with only safe compatibility fields, deprecate `/chat`, then move frontend consumers after strict remote acceptance proves `/agent/runs`.
+
+## DWI Product Wording Explorer Findings
+
+Status: read-only review completed by Linnaeus on 2026-06-10.
+
+Summary:
+
+- Canonical product line is already strongest in `docs/rag/workflows/workflow_launchability_matrix.md`: production DWI is `dwi_fast_gpu_dti`; `dwi_qsiprep`, `dwi_qsirecon`, and `dwi_qsi_full` are incubation/legacy references.
+- Several docs and UI/chat strings still imply QSIPrep/QSIRecon are normal DWI product paths. This can mislead the agent, RAG, frontend buttons, and remote acceptance wording.
+- `apps/api/app/workflows/registry.py` marks `dwi_fast_gpu_dti` with `profile="production"` but `status="legacy_supported"`, which contradicts the matrix.
+- Some workflow docs contain stale operational wording such as old running task ids and QSI-centric DWI instructions.
+
+Canonical wording:
+
+> Production DWI is `dwi_fast_gpu_dti`: bounded-runtime fast DTI using host FSL GPU `eddy_cuda` plus MRtrix tools from the QSIPrep image as a toolbox. It requires DWI NIfTI, `.bval`, `.bvec`, and JSON sidecar metadata with `PhaseEncodingDirection` and `TotalReadoutTime`. QSIPrep, QSIRecon, and `dwi_qsi_full` are advanced legacy/incubation workflows and must not be the default DWI recommendation or exposed as production launch options unless explicitly selected under an advanced legacy path.
+
+Priority files to update:
+
+- `apps/api/app/workflows/registry.py`: align `dwi_fast_gpu_dti` and validate status with production wording.
+- `docs/workflows/dwi-qsi-workflow.md`: mark as advanced legacy/incubation rather than current DWI product guidance.
+- `docs/workflows/dataset-ingest-workflow.md`: replace DWI mapping to `dwi_qsiprep`/`dwi_qsi_full` with production `dwi_fast_gpu_dti` requirements.
+- `apps/api/app/workflows/pipeline.py`: change QSIPrep comments from "production DWI runs" to "legacy QSIPrep/QSI runs".
+- `apps/api/app/main.py`: fallback chat and QSIPrep/QSIRecon explanations should include legacy/advanced boundaries.
+- `apps/desktop/src/main.jsx`: initial chat and QSI prerequisite errors should not imply QSI is default production DWI.
+- `docs/skills/image-agent-developer/SKILL.md`: update evidence task count wording to match current matrix/neuro runner references.
+- `docs/skills/image-agent-operator/references/product-context.md`, `docs/skills/image-agent-workflow-runner/references/registry-and-preflight.md`, and `docs/skills/neuroimaging-workflow-runner/references/bids-inputs.md`: add explicit QSI legacy/incubation status labels.
+
+Suggested tests:
+
+- Registry assertions that `dwi_fast_gpu_dti` is production/status-aligned and QSI rows remain `toolchain_incubation` and not runtime-allowed.
+- Docs tests rejecting DWI ingest guidance that maps default DWI to `dwi_qsiprep` or `dwi_qsi_full`.
+- Agent/chat tests requiring QSIPrep/QSIRecon answers to say legacy/advanced/incubation, not default production DWI.
+- Frontend tests ensuring DWI default/fallback buttons show `dwi_fast_gpu_dti(_validate)` unless an explicit advanced legacy flag is enabled.
+
+Risk if unfixed:
+
+- The frontend can expose legacy QSI as normal DWI, the agent can recommend long QSIPrep/QSI runs instead of fast DTI, and product docs can contradict `workflow_eligibility`.
+
+## Skill Maintenance Explorer Findings
+
+Status: read-only review completed by Anscombe on 2026-06-10.
+
+Summary:
+
+- Existing skill checks pass, but next value is in routing and audit rather than more long prose.
+- A first slice should add a compact machine-readable routing matrix, a static maintenance audit, a pytest gate, and a short command note.
+- Sensitive path/key detection needs allowlists because remote runtime paths such as `/home/yyf/project/...` can be intentional facts, while API keys/passwords must be blocking findings.
+
+Minimal first slice:
+
+1. Add `docs/skills/maintenance/routing-matrix.json` with runtime skills, external-only skills, negative routes, overlap keywords, and workflow-name allowlist.
+2. Add `apps/api/scripts/audit_skill_maintenance.py` to check skill metadata, references, trigger overlap, eval shape, workflow names, long refs without TOCs, and sensitive path/key patterns.
+3. Add `apps/api/tests/test_skill_maintenance_audit.py` asserting zero blocking findings.
+4. Add a short "Maintenance Audit" command block to `docs/skills/image-agent-developer/references/skill-maintenance.md`.
+
+Follow-up slices:
+
+- Add compact TOCs to long references, starting with `contracts.md`, `testing-matrix.md`, `operational-recovery.md`, `gpu-workflow-strategy.md`, and `neuroimaging-workflow-runner/references/container-contracts.md`.
+- Keep `docs/skills/evals/evals.json` as the repo-level suite, but add an adapter that can emit skill-creator-compatible per-skill JSON.
+- Detect stale workflow names against `WORKFLOW_REGISTRY`, while explicitly allowing legacy/incubation names.
+
+Suggested commands:
+
+- `python apps/api/scripts/audit_skill_maintenance.py --strict`
+- `python apps/api/scripts/audit_skill_maintenance.py --json`
+- `python apps/api/scripts/audit_skill_maintenance.py --emit-skill-creator-evals image-agent-developer`
+
+## Remote Acceptance Explorer Findings
+
+Status: read-only review completed by Hegel on 2026-06-10.
+
+Summary:
+
+- For the current target, use direct OpenAI-compatible gateway settings rather than the older reverse-tunnel production-doc default.
+- `OPENAI_API_KEY` must be entered interactively or injected by a secret manager. It must not be written to repo `.env`, source, docs, RAG, logs, command transcripts, shell history, workflow child environments, or acceptance JSON.
+- Strict remote acceptance should be a saved smoke JSON plus offline verifier `passed`, with real project/upload/task/run ids and native artifact evidence.
+- Current verifier is useful but should be extended to bind acceptance to model config, direct base URL, host/path/commit/package identity, freshness, and agent-run lookup.
+
+Remote environment shape:
+
+- `BACKEND_RUNTIME_MODE=remote`
+- `MODEL_PROVIDER=OpenAI`
+- `OPENAI_MODEL=gpt-5.5`
+- `OPENAI_REVIEW_MODEL=gpt-5.5`
+- `OPENAI_BASE_URL=https://rawchat.cn/codex`
+- `OPENAI_WIRE_API=responses`
+- `OPENAI_REASONING_EFFORT=high`
+- `MODEL_REASONING_EFFORT=high`
+- `OPENAI_DISABLE_RESPONSE_STORAGE=true`
+- `DISABLE_RESPONSE_STORAGE=true`
+- `OPENAI_TIMEOUT_SECONDS=120`
+- `OPENAI_CONTEXT_WINDOW=1000000`
+- `OPENAI_AUTO_COMPACT_TOKEN_LIMIT=900000`
+- `OPENAI_API_KEY` configured out of repo/logging paths.
+
+Remote preflight sequence:
+
+1. SSH to `yyf@10.2.32.14`.
+2. `cd /home/yyf/project/image_agent`.
+3. Record `git status --short --branch` and `git rev-parse HEAD`.
+4. Activate `apps/api/.venv`.
+5. Run focused tests:
+   - `tests/test_model_gateway.py`
+   - `tests/test_agent_api.py`
+   - `tests/test_remote_scripts.py`
+   - `tests/test_smoke_remote_agent.py`
+   - `tests/test_verify_remote_smoke_acceptance.py`
+6. Run `python -m compileall -q app scripts`.
+7. Check `/health`, `/agent/model/status`, and `/agent/rag/status`.
+
+Strict smoke requirements:
+
+- Use `scripts/smoke_remote_agent.py` with `--require-model`, RAG thresholds, raw-source policy, vendor pointer integrity, real evidence ids, launchability matrix, container-native QC, and scientific report artifacts.
+- Save JSON under `docs/deployment/remote-smoke-acceptance-<timestamp>.json`.
+- Run `scripts/verify_remote_smoke_acceptance.py` on the exact saved JSON.
+- Accept only verifier output with `status=passed`.
+
+Verifier gaps to close:
+
+- Require `model_status.base_url=https://rawchat.cn/codex`, `model=gpt-5.5`, `wire_api=responses`, `reasoning_effort=high`, and `store=false`.
+- Bind acceptance to remote host/path, branch, commit, package hash, and script hashes.
+- Enforce freshness of `generated_at_utc`.
+- Verify `agent_run_id` through `GET /agent/runs/{agent_run_id}`.
+- Decide how remote smoke proves served artifact bytes beyond route checks.
+- Update docs that still show reverse-tunnel `OPENAI_BASE_URL=http://127.0.0.1:18081` as the default for this deployment.
+- Review `tools/restart_remote_image_agent_api.sh` because sourcing repo `.env` can clobber externally supplied OpenAI env; prefer outside-repo secret/env path or preserve-external-env mode.
+
+Safety rules:
+
+- `skipped_missing_model_config` is a hard fail for production acceptance.
+- Do not restart while tasks are queued/running.
+- Do not pass `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, or `IMAGE_AGENT_SUDO_PASSWORD` into workflow child scripts.
+- Do not attach raw logs if they may contain keys, bearer tokens, patient identifiers, host paths, or license content.
+
+## RAG Workflow Metadata Explorer Findings
+
+Status: read-only review completed by Darwin on 2026-06-10.
+
+Summary:
+
+- Raw-source health is strong: manifest schema `1`, `55` raw sources, `21` curated vendor docs, and curated provenance is healthy.
+- Vendor pointer integrity is green: `35` pointers, `0` issues.
+- The local RAG index parser already supports simple YAML lists, but `rag_orchestration.py` fallback frontmatter parsing can still drop YAML-list metadata when `.rag_index` is absent or stale.
+- Next patch should standardize workflow frontmatter and fix fallback parsing so `official_grounding` consistently propagates raw-source evidence.
+
+Per-workflow gaps:
+
+| Workflow doc | Current gap | Proposed status |
+| --- | --- | --- |
+| `docs/rag/workflows/t1_deepprep_anat_report.md` | No frontmatter; missing `source_type`, `workflow_type`, `status`, `official_grounding`, `expected_artifacts`, and `unsupported_boundaries`; absent from pointer-integrity `pointers_by_doc`. | `production_supported` |
+| `docs/rag/workflows/bold_fmriprep_xcpd_report.md` | Has basic metadata, but lacks `official_grounding`, `expected_artifacts`, and `unsupported_boundaries`; current `status: current_contract` conflicts with launch matrix incubation wording. | `incubation_reference` |
+| `docs/rag/workflows/dwi_fast_gpu_dti.md` | Has `official_grounding`, but lacks `expected_artifacts` and `unsupported_boundaries`; should add BIDS/BIDS-validator grounding for sidecar requirements. | `production_supported` |
+| `docs/rag/workflows/workflow_launchability_matrix.md` | Has grounding, but lacks `expected_artifacts` and `unsupported_boundaries`; grounding omits some docs named in body. | `policy_matrix` or `current_contract` |
+
+Official grounding to add:
+
+- T1: `deepprep_official_container_usage.md`, `freesurfer_official_container_reconall.md`, `freesurfer_official_license.md`.
+- BOLD: `fmriprep_official_container_usage.md`, `fmriprep_official_outputs.md`, `xcp_d_official_container_usage.md`, `xcp_d_official_outputs.md`, `templateflow_official_cache_archive_client.md`, optionally `bids_official_mri_derivatives.md`.
+- DWI: keep `fsl_official_fast_dti_tools.md`, `mrtrix3_official_dti_toolbox.md`, `qsiprep_official_container_usage_outputs.md`; add `bids_official_mri_derivatives.md` and possibly `bids_validator_official_cli_docker.md`.
+- Launchability matrix: add FreeSurfer recon-all, fMRIPrep usage, XCP-D usage, and optionally TemplateFlow docs to match body claims.
+
+Expected artifact candidates:
+
+- T1: `summary/t1_result_summary.json`, `summary/t1_scientific_report_summary.json`, DeepPrep `QC/` HTML reports, FreeSurfer `stats/*.stats`, regional TSVs, segmentation/maps, masks, transforms, preview figures, and `scripts/recon-all.log`.
+- BOLD: fMRIPrep HTML report, preprocessed BOLD, masks, boldref, confounds TSV/JSON, transforms, XCP-D denoised BOLD, FD/DVARS, parcellated time series, connectivity matrices, optional ALFF/ReHo outputs, XCP-D reports, redacted logs, artifact manifest/result-summary entries.
+- DWI: native FA/MD/AD/RD maps, MNI152 FA/MD/AD/RD maps, atlas regional TSVs, combined regional tables, `qc/qc_report.tsv`, `qc/dwi_fast_gpu_dti_provenance.json`, `summary/dwi_result_summary.json`, `dwi_tensor_metrics.png`, and `dwi_atlas_region_means.png`.
+- Launchability matrix: policy artifacts such as `workflow_status_rows`, `launch_boundaries`, `promotion_evidence_requirements`, and `answering_rules`.
+
+Unsupported boundaries:
+
+- T1: do not launch on FLAIR/T2/DWI/BOLD unless backend marks T1-compatible; no diagnosis; distinguish real stats from placeholder/validation-only outputs; do not expose license contents.
+- BOLD: do not call `bold_fmriprep_xcpd_report` production-ready without remote-wrapper evidence; XCP-D handoff is fMRIPrep-compatible derivatives, not raw BIDS; no diagnosis/cognition claims; no group inference.
+- DWI: not full QSIPrep/QSIRecon; do not fabricate acquisition parameters, phase encoding, or readout timing; block missing sidecars; no diagnosis/prognosis/treatment claims; do not replace missing QC with generated images.
+- Launchability matrix: do not create tasks from the matrix; `workflow_eligibility` and backend records remain authoritative; incubation docs do not prove production readiness; DPABI remains unsupported external.
+
+Suggested tests:
+
+- Add `test_workflow_docs_declare_standard_frontmatter_metadata` in `apps/api/tests/test_skill_and_rag_docs.py`.
+- Update pointer tests to require `docs/rag/workflows/t1_deepprep_anat_report.md` in `pointers_by_doc`.
+- Add a fallback propagation test in `apps/api/tests/test_rag_query.py` for YAML-list `official_grounding` without persistent `.rag_index`.
+- Add a frontmatter-pointer test in `apps/api/tests/test_agent_state_and_rag_index.py` to ensure `rag_vendor_pointer_integrity` catches vendor paths in `official_grounding`, not just body prose.
+
+Answer contract risk:
+
+- Mostly additive: RAG responses will expose richer `raw_source_evidence` for workflow citations.
+- The biggest care point is changing workflow `status` vocabulary. Align BOLD with launch matrix as `incubation_reference` to avoid accidental production-readiness claims.

@@ -5,10 +5,11 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
-from openai import OpenAI
-
 from app.agent.tool_dispatcher import dispatch_model_tool_calls, tool_trace_message, tool_trace_response_items
 from app.agent.tool_registry import openai_tool_specs
+
+
+OpenAI = None
 
 
 class ModelGatewayError(RuntimeError):
@@ -209,6 +210,16 @@ def _response_to_dict(response: Any) -> dict[str, Any]:
     raise ModelGatewayError("Responses SDK result was not a dictionary-like object")
 
 
+def _openai_client_class() -> Any:
+    if OpenAI is not None:
+        return OpenAI
+    try:
+        from openai import OpenAI as imported_openai
+    except ModuleNotFoundError as exc:
+        raise ModelGatewayError("openai package is not installed") from exc
+    return imported_openai
+
+
 class ModelGateway:
     def __init__(self, config: ModelConfig | None = None) -> None:
         self.config = config or ModelConfig.from_env()
@@ -291,7 +302,8 @@ class ModelGateway:
             structured_schema=structured_schema,
         )
         payload["metadata"] = {"purpose": purpose}
-        client = OpenAI(api_key=self.config.api_key, base_url=self.config.base_url, timeout=self.config.timeout_seconds)
+        client_class = _openai_client_class()
+        client = client_class(api_key=self.config.api_key, base_url=self.config.base_url, timeout=self.config.timeout_seconds)
         try:
             return _response_to_dict(client.responses.create(**payload))
         except Exception as exc:

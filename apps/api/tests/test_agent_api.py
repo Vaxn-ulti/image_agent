@@ -57,6 +57,8 @@ def test_agent_run_returns_answer_and_persists_privacy_safe_ledger(tmp_path, mon
 
     assert result.status_code == 200
     body = result.json()
+    assert body["contract_version"] == "agent_run.v1"
+    assert body["status"] == "answered"
     assert body["answer"] == "hello"
     assert body["agent_run_id"]
 
@@ -80,6 +82,72 @@ def test_agent_run_returns_answer_and_persists_privacy_safe_ledger(tmp_path, mon
     assert "message" not in row.keys()
     assert "hi" not in json.dumps(dict(row), ensure_ascii=False)
     assert event_types == ["agent_run_created", "agent_run_started", "agent_run_completed"]
+
+
+def test_agent_api_openapi_declares_stable_response_contracts():
+    from app.main import app
+
+    schema = TestClient(app).get("/openapi.json").json()
+
+    assert (
+        schema["paths"]["/agent/runs"]["post"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
+        == "#/components/schemas/AgentRunResponse"
+    )
+    assert (
+        schema["paths"]["/agent/runs/{agent_run_id}"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
+        == "#/components/schemas/AgentRunLookupResponse"
+    )
+    assert (
+        schema["paths"]["/agent/runs/{thread_id}/resume"]["post"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
+        == "#/components/schemas/AgentRunResponse"
+    )
+    assert (
+        schema["paths"]["/projects/{project_id}/agent-runs"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
+        == "#/components/schemas/ProjectAgentRunHistoryResponse"
+    )
+    assert (
+        schema["paths"]["/chat"]["post"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
+        == "#/components/schemas/ChatCompatibilityResponse"
+    )
+
+
+def test_agent_run_contract_normalizes_unknown_runner_status(tmp_path, monkeypatch):
+    from app.core import config
+    from app.db import database
+    from app import main
+    from app.main import app
+
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
+    database.init_db()
+
+    class FakeRunner:
+        def run(self, *, message, project_context):
+            return {
+                "status": "surprising_new_status",
+                "answer": "hello",
+                "intent": "answer_question",
+                "selected_skill": "image-agent-operator",
+            }
+
+    monkeypatch.setattr(main, "AgentRunner", lambda: FakeRunner())
+    monkeypatch.setattr(
+        main,
+        "read_project_context",
+        lambda project_id, *, rows_fn, workflows: {"project_id": project_id, "workflows": workflows},
+    )
+
+    result = TestClient(app).post("/agent/runs", json={"project_id": 7, "message": "hi"})
+
+    assert result.status_code == 200
+    body = result.json()
+    assert body["contract_version"] == "agent_run.v1"
+    assert body["status"] == "failed"
+    assert body["safe_metadata"]["contract_status_normalized_from"] == "surprising_new_status"
+
+    with database.connect() as conn:
+        row = conn.execute("SELECT * FROM agent_runs WHERE agent_run_id=?", (body["agent_run_id"],)).fetchone()
+    assert row["status"] == "failed"
 
 
 def test_agent_rag_rebuild_endpoint_builds_persistent_index(tmp_path, monkeypatch):
@@ -354,6 +422,7 @@ def test_agent_run_lookup_returns_safe_ledger_trace(tmp_path, monkeypatch):
 
     assert lookup.status_code == 200
     body = lookup.json()
+    assert body["contract_version"] == "agent_run_lookup.v1"
     assert body["agent_run_id"] == run_result.json()["agent_run_id"]
     assert body["status"] == "answered"
     assert body["request_type"] == "run"
@@ -659,6 +728,7 @@ def test_project_agent_runs_lists_only_safe_project_history(tmp_path, monkeypatc
 
     assert result.status_code == 200
     body = result.json()
+    assert body["contract_version"] == "project_agent_run_history.v1"
     assert body["project_id"] == 7
     ids = {item["agent_run_id"] for item in body["agent_runs"]}
     assert ids == {first["agent_run_id"], second["agent_run_id"]}
@@ -688,7 +758,11 @@ def test_project_agent_runs_empty_history_returns_empty_list(tmp_path, monkeypat
     result = TestClient(app).get("/projects/7/agent-runs")
 
     assert result.status_code == 200
-    assert result.json() == {"project_id": 7, "agent_runs": []}
+    assert result.json() == {
+        "contract_version": "project_agent_run_history.v1",
+        "project_id": 7,
+        "agent_runs": [],
+    }
 
 
 def test_legacy_chat_prefers_openai_model_gateway_for_freeform_answers(tmp_path, monkeypatch):
@@ -719,6 +793,9 @@ def test_legacy_chat_prefers_openai_model_gateway_for_freeform_answers(tmp_path,
     project = client.post("/projects", json={"name": "P-openai-chat"}).json()
     result = client.post("/chat", json={"project_id": project["id"], "message": "please explain this workspace"}).json()
 
+    assert result["contract_version"] == "chat_compat.v1"
+    assert result["legacy_endpoint"] is True
+    assert result["primary_endpoint"] == "/agent/runs"
     assert result["provider"] == "OpenAI"
     assert result["reply"] == "OpenAI SDK chat response"
 
@@ -851,6 +928,9 @@ def test_chat_launchability_uses_rules_and_does_not_call_model_gateway(tmp_path,
         json={"project_id": project["id"], "message": "Can Image Agent run MRIQC DPABI QSIPrep in production?"},
     ).json()
 
+    assert result["contract_version"] == "chat_compat.v1"
+    assert result["legacy_endpoint"] is True
+    assert result["primary_endpoint"] == "/agent/runs"
     assert result["provider"] == "rules"
     assert result["intent"] == "launchability"
     assert "workflow_eligibility remains authoritative" in result["reply"]
