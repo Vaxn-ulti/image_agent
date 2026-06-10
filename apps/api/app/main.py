@@ -741,7 +741,32 @@ def get_inventory(project_id: int, upload_session_id: int):
         raise HTTPException(404, "Upload session not found")
     session = found[0]
     inventory = json.loads(session["inventory_json"] or "{}")
+    inventory = enrich_inventory_workflow_eligibility(inventory)
     return {"upload_session_id": upload_session_id, "status": session["status"], "progress": session["progress"], "inventory": inventory, "error_message": session.get("error_message")}
+
+
+def enrich_inventory_workflow_eligibility(inventory: dict) -> dict:
+    if not isinstance(inventory, dict):
+        return inventory
+    series = inventory.get("series")
+    if not isinstance(series, list):
+        return inventory
+    enriched_series = []
+    changed = False
+    for item in series:
+        if not isinstance(item, dict):
+            enriched_series.append(item)
+            continue
+        eligibility = item.get("workflow_eligibility")
+        if isinstance(eligibility, dict) and eligibility.get("policy_version") == "workflow_eligibility_v1":
+            enriched_series.append(item)
+            continue
+        enriched_series.append({**item, "workflow_eligibility": build_workflow_eligibility(item)})
+        changed = True
+    if not changed:
+        return inventory
+    return {**inventory, "series": enriched_series}
+
 
 @app.get("/projects/{project_id}/series")
 def list_series(project_id: int):

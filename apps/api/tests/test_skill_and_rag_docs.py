@@ -264,6 +264,12 @@ def test_vendor_raw_sources_manifest_covers_curated_summaries():
         assert source_id in source_ids
 
 
+def test_vendor_raw_sources_are_not_text_normalized_in_git_archives():
+    attributes = (REPO_ROOT / ".gitattributes").read_text(encoding="utf-8")
+
+    assert "docs/rag/vendor/raw-sources/** -text" in attributes
+
+
 def test_curated_vendor_docs_declare_manifest_backed_raw_source_ids_and_urls():
     vendor_root = REPO_ROOT / "docs" / "rag" / "vendor"
     raw_manifest = json.loads((vendor_root / "raw-sources" / "manifest.json").read_text(encoding="utf-8"))

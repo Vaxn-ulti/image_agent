@@ -126,6 +126,21 @@ def test_responses_payload_preserves_function_call_output_items(monkeypatch):
     assert payload["input"][1] == output_item
 
 
+def test_responses_payload_preserves_function_call_items(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "secret-value")
+    config = model_gateway.ModelConfig.from_env()
+    call_item = {
+        "type": "function_call",
+        "call_id": "call_123",
+        "name": "list_workflows",
+        "arguments": '{"lane":"fixed_workflow"}',
+    }
+
+    payload = model_gateway._responses_payload([{"role": "user", "content": "hi"}, call_item], config)
+
+    assert payload["input"][1] == call_item
+
+
 def test_parse_responses_text_output():
     body = {
         "output": [
@@ -233,6 +248,7 @@ def test_complete_structured_with_tools_dispatches_tool_calls_before_final_json(
         tool_context={},
     )
 
+    assert result["tool_messages"][0]["type"] == "function_call"
     assert result["decision"]["intent"] == "answer_question"
     assert result["tool_trace"][0]["tool"] == "list_workflows"
     assert result["tool_messages"][-1]["type"] == "function_call_output"
@@ -388,6 +404,50 @@ def test_request_forwards_json_schema_to_openai_sdk_responses_client(monkeypatch
 
     assert calls["payload"]["text"]["format"] == {"type": "json_schema", **schema}
     assert body["output"][0]["content"][0]["text"] == '{"intent":"status"}'
+
+
+def test_request_retries_without_metadata_for_openai_compatible_responses(monkeypatch):
+    calls = []
+
+    class FakeResponses:
+        def create(self, **payload):
+            calls.append(payload)
+            if "metadata" in payload:
+                raise RuntimeError("Unsupported parameter: metadata")
+            return {
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [{"type": "output_text", "text": "hello"}],
+                    }
+                ]
+            }
+
+    class FakeOpenAI:
+        def __init__(self, **_kwargs):
+            self.responses = FakeResponses()
+
+    monkeypatch.setattr(model_gateway, "OpenAI", FakeOpenAI, raising=False)
+    config = model_gateway.ModelConfig(
+        provider="OpenAI",
+        api_key="secret-value",
+        base_url="https://openai-compatible.example",
+        model="gpt-5.5",
+        review_model="gpt-5.5",
+        wire_api="responses",
+        reasoning_effort="high",
+        store=False,
+        timeout_seconds=12,
+        context_window=1000000,
+        auto_compact_token_limit=900000,
+    )
+
+    body = model_gateway.ModelGateway(config)._request([{"role": "user", "content": "hi"}], structured=False, purpose="agent_plan")
+
+    assert len(calls) == 2
+    assert calls[0]["metadata"] == {"purpose": "agent_plan"}
+    assert "metadata" not in calls[1]
+    assert body["output"][0]["content"][0]["text"] == "hello"
 
 
 def test_request_accepts_openai_sdk_model_dump_response(monkeypatch):

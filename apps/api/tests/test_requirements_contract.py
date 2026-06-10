@@ -5,7 +5,7 @@ from pathlib import Path
 def test_backend_requirements_include_neuroimaging_and_agent_dependencies():
     requirements = (Path(__file__).resolve().parents[1] / "requirements.txt").read_text(encoding="utf-8")
 
-    for package in ("numpy", "nibabel", "scipy", "nilearn", "langgraph", "llama-index"):
+    for package in ("numpy", "nibabel", "scipy", "nilearn", "langgraph", "llama-index", "openai", "httpx", "socksio"):
         assert package in requirements
 
 

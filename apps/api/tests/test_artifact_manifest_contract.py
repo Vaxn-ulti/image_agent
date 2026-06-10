@@ -107,7 +107,7 @@ def test_artifact_manifest_classifies_native_qc_scientific_reports_and_preview_a
 
 def test_artifact_manifest_demotes_native_qc_without_strict_container_provenance(tmp_path):
     output_dir = tmp_path / "output"
-    native_like_report = output_dir / "fmriprep" / "sub-01.html"
+    native_like_report = output_dir / "reports" / "fake-native.html"
     native_like_report.parent.mkdir(parents=True)
     native_like_report.write_text("<html>native-looking</html>", encoding="utf-8")
 
@@ -119,11 +119,9 @@ def test_artifact_manifest_demotes_native_qc_without_strict_container_provenance
                 {
                     "name": "sub-01.html",
                     "path": str(native_like_report),
-                    "relative_path": "fmriprep/sub-01.html",
+                    "relative_path": "reports/fake-native.html",
                     "content_type": "text/html",
                     "native_artifact": True,
-                    "source_stage": "fmriprep",
-                    "artifact_role": "container_native_html_report",
                     "official_source_ids": ["docs/rag/vendor/fmriprep_official_outputs.md"],
                 },
             ],
@@ -143,3 +141,44 @@ def test_artifact_manifest_demotes_native_qc_without_strict_container_provenance
     assert artifact["native_artifact"] is False
     assert artifact["frontend_preview_asset"] is True
     assert manifest["counts_by_artifact_category"] == {"frontend_preview_asset": 1}
+
+
+def test_artifact_manifest_enriches_legacy_native_qc_stage_and_role(tmp_path):
+    output_dir = tmp_path / "output"
+    legacy_native_report = output_dir / "fmriprep" / "sub-01.html"
+    legacy_native_report.parent.mkdir(parents=True)
+    legacy_native_report.write_text("<html>legacy native</html>", encoding="utf-8")
+
+    result_summary = {
+        "contract_version": "1.0",
+        "modality": "BOLD",
+        "outputs": {
+            "reports": [
+                {
+                    "name": "sub-01.html",
+                    "path": str(legacy_native_report),
+                    "relative_path": "fmriprep/sub-01.html",
+                    "content_type": "text/html",
+                    "source_stage": "fmriprep",
+                    "artifact_role": "container_native_html_report",
+                },
+            ],
+        },
+    }
+
+    manifest = build_artifact_manifest(
+        {"id": 9, "project_id": 1, "workflow_type": "bold_fmriprep_xcpd_report", "status": "completed"},
+        output_dir,
+        result_summary,
+        registered_outputs=[],
+    )
+
+    artifact = manifest["artifacts"][0]
+    assert artifact["artifact_category"] == "container_native_qc"
+    assert artifact["container_native_qc"] is True
+    assert artifact["native_artifact"] is True
+    assert artifact["artifact_origin"] == "container_output"
+    assert artifact["official_source_ids"] == ["docs/rag/vendor/fmriprep_official_outputs.md"]
+    assert artifact["provenance"]["generated_from"] == "container_native_qc"
+    assert artifact["provenance"]["replaces_native_qc"] is False
+    assert artifact["provenance"]["official_source_ids"] == artifact["official_source_ids"]

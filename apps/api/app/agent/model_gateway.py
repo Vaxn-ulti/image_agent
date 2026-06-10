@@ -100,6 +100,16 @@ def _responses_payload(
 ) -> dict[str, Any]:
     text_parts = []
     for message in messages:
+        if message.get("type") in {"function_call", "tool_call"}:
+            text_parts.append(
+                {
+                    "type": "function_call",
+                    "call_id": str(message.get("call_id") or message.get("id") or ""),
+                    "name": str(message.get("name") or ""),
+                    "arguments": message.get("arguments") or "{}",
+                }
+            )
+            continue
         if message.get("type") == "function_call_output":
             text_parts.append(
                 {
@@ -273,7 +283,11 @@ class ModelGateway:
                 }
             trace = dispatch_model_tool_calls(calls, **(tool_context or {}))
             all_trace.extend(trace)
+            call_items = response_function_call_items(calls)
             response_items = tool_trace_response_items(trace)
+            if call_items:
+                tool_messages.extend(call_items)
+                current_messages.extend(call_items)
             if response_items:
                 tool_messages.extend(response_items)
                 current_messages.extend(response_items)
@@ -307,4 +321,33 @@ class ModelGateway:
         try:
             return _response_to_dict(client.responses.create(**payload))
         except Exception as exc:
+            if _is_unsupported_metadata_error(exc):
+                fallback_payload = {key: value for key, value in payload.items() if key != "metadata"}
+                try:
+                    return _response_to_dict(client.responses.create(**fallback_payload))
+                except Exception as fallback_exc:
+                    raise ModelGatewayError(f"Model gateway request failed: {fallback_exc}") from fallback_exc
             raise ModelGatewayError(f"Model gateway request failed: {exc}") from exc
+
+
+def _is_unsupported_metadata_error(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return "metadata" in text and "unsupported parameter" in text
+
+
+def response_function_call_items(calls: list[dict[str, Any]]) -> list[dict[str, str]]:
+    items: list[dict[str, str]] = []
+    for call in calls:
+        call_id = call.get("id") or call.get("call_id")
+        name = call.get("name")
+        if not call_id or not name:
+            continue
+        items.append(
+            {
+                "type": "function_call",
+                "call_id": str(call_id),
+                "name": str(name),
+                "arguments": str(call.get("arguments") or "{}"),
+            }
+        )
+    return items

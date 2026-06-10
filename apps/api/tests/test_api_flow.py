@@ -1120,6 +1120,46 @@ def test_mixed_dataset_ingest_inventory_and_bids(tmp_path, monkeypatch):
     assert client.get(f"/projects/{project['id']}/tasks").json() == []
 
 
+def test_dataset_inventory_endpoint_enriches_legacy_series_workflow_eligibility(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
+    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
+    from app.db import database
+    import app.main as main
+    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(main, 'PROJECTS_ROOT', tmp_path / 'projects')
+    database.init_db()
+    inventory = {
+        "upload_session_id": 1,
+        "project_id": 1,
+        "inventory_status": "completed",
+        "series": [
+            {
+                "series_id": 1,
+                "modality": "T1",
+                "sequence_label": "T1w_MPRAGE",
+                "supported_for_processing": True,
+                "unsupported_reason": "",
+            }
+        ],
+    }
+    with database.connect() as conn:
+        now = database.now_iso()
+        conn.execute("INSERT INTO projects(id, name, description, created_at) VALUES(?,?,?,?)", (1, "P", "", now))
+        conn.execute(
+            "INSERT INTO upload_sessions(id, project_id, label, source_type, status, progress, inventory_json, created_at) VALUES(?,?,?,?,?,?,?,?)",
+            (1, 1, "legacy", "folder_or_archive", "completed", 100, json.dumps(inventory), now),
+        )
+
+    response = TestClient(app).get("/projects/1/datasets/1/inventory")
+
+    assert response.status_code == 200
+    series = response.json()["inventory"]["series"][0]
+    assert series["workflow_eligibility"]["policy_version"] == "workflow_eligibility_v1"
+    assert series["workflow_eligibility"]["production_task_created"] is False
+    assert series["workflow_eligibility"]["primary_recommendation"]["workflow_type"] == "t1_deepprep_anat_report"
+
+
 def test_mixed_dataset_ingest_keeps_nifti_inventory_when_dcm2niix_missing(tmp_path, monkeypatch):
     monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
     monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')

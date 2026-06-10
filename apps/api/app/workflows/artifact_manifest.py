@@ -7,6 +7,17 @@ from urllib.parse import quote
 
 
 ARTIFACT_MANIFEST_VERSION = "artifact_manifest_v1"
+CONTAINER_NATIVE_QC_SOURCE_IDS_BY_STAGE = {
+    "deepprep": ["docs/rag/vendor/deepprep_official_container_usage.md"],
+    "fmriprep": ["docs/rag/vendor/fmriprep_official_outputs.md"],
+    "freesurfer": ["docs/rag/vendor/freesurfer_official_container_reconall.md"],
+    "fsl": ["docs/rag/vendor/fsl_official_fast_dti_tools.md"],
+    "mrtrix": ["docs/rag/vendor/mrtrix3_official_dti_toolbox.md"],
+    "qsiprep": ["docs/rag/vendor/qsiprep_official_container_usage_outputs.md"],
+    "qsirecon": ["docs/rag/vendor/qsirecon_official_container_usage_workflows.md"],
+    "xcpd": ["docs/rag/vendor/xcp_d_official_outputs.md"],
+}
+CONTAINER_NATIVE_QC_ROLES = {"container_native_html_report", "container_native_qc_figure"}
 
 
 def build_artifact_manifest(
@@ -149,6 +160,7 @@ def _append_manifest_item(
     ):
         if key in item:
             manifest_item[key] = item[key]
+    manifest_item.update(_legacy_native_qc_provenance_updates(manifest_item))
     manifest_item.update(_artifact_classification(normalized_relative_path, manifest_item))
     artifacts.append(manifest_item)
 
@@ -250,6 +262,36 @@ def _artifact_classification(relative_path: str, item: dict[str, Any]) -> dict[s
     elif "native_artifact" not in item:
         updates["native_artifact"] = False
     return updates
+
+
+def _legacy_native_qc_provenance_updates(item: dict[str, Any]) -> dict[str, Any]:
+    source_stage = str(item.get("source_stage") or "")
+    artifact_role = str(item.get("artifact_role") or "")
+    artifact_origin = str(item.get("artifact_origin") or "")
+    if source_stage not in CONTAINER_NATIVE_QC_SOURCE_IDS_BY_STAGE:
+        return {}
+    if artifact_role not in CONTAINER_NATIVE_QC_ROLES:
+        return {}
+    if source_stage == "scientific_report" or artifact_origin == "generated_from_result_summary":
+        return {}
+    existing_ids = item.get("official_source_ids")
+    source_ids = existing_ids if isinstance(existing_ids, list) and existing_ids else CONTAINER_NATIVE_QC_SOURCE_IDS_BY_STAGE[source_stage]
+    provenance = item.get("provenance") if isinstance(item.get("provenance"), dict) else {}
+    return {
+        "artifact_origin": "container_output",
+        "native_artifact": True,
+        "official_source_ids": source_ids,
+        "official_source_scope": item.get("official_source_scope") or "curated_vendor_docs",
+        "provenance": {
+            **provenance,
+            "generated_from": "container_native_qc",
+            "replaces_native_qc": False,
+            "official_source_ids": source_ids,
+            "official_source_scope": provenance.get("official_source_scope")
+            or item.get("official_source_scope")
+            or "curated_vendor_docs",
+        },
+    }
 
 
 def _has_strict_native_qc_provenance(item: dict[str, Any], provenance: dict[str, Any]) -> bool:
