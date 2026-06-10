@@ -25,11 +25,25 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
     raw = text[3:end].strip()
     body = text[end + 4 :].lstrip()
     metadata: dict[str, Any] = {}
+    list_key: str | None = None
     for line in raw.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if list_key and stripped.startswith("- "):
+            metadata[list_key].append(stripped[2:].strip().strip('"').strip("'"))
+            continue
+        list_key = None
         if ":" not in line:
             continue
         key, value = line.split(":", 1)
-        metadata[key.strip()] = value.strip().strip('"').strip("'")
+        key = key.strip()
+        value = value.strip()
+        if value:
+            metadata[key] = value.strip('"').strip("'")
+            continue
+        metadata[key] = []
+        list_key = key
     return metadata, body
 
 
@@ -37,6 +51,8 @@ def _source_type_for(source: str, metadata: dict[str, Any]) -> str:
     if metadata.get("source_type"):
         return str(metadata["source_type"])
     normalized = source.replace("\\", "/")
+    if normalized.startswith("docs/rag/vendor/") and not normalized.startswith(VENDOR_RAW_SOURCES_PREFIX):
+        return "rag_vendor"
     if "/docs/skills/" in "/" + normalized:
         return "skill_reference"
     if "/docs/rag/" in "/" + normalized:
@@ -591,7 +607,15 @@ def _load_chunks(persist_path: Path) -> list[dict[str, Any]]:
 
 
 def _passes_filters(metadata: dict[str, Any], filters: dict[str, Any]) -> bool:
-    return all(str(metadata.get(key)) == str(value) for key, value in filters.items())
+    for key, value in filters.items():
+        current = metadata.get(key)
+        if isinstance(current, list):
+            if str(value) not in {str(item) for item in current}:
+                return False
+            continue
+        if str(current) != str(value):
+            return False
+    return True
 
 
 def _score(query_terms: list[str], chunk: dict[str, Any]) -> float:

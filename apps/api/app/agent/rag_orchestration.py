@@ -251,14 +251,26 @@ def _citation_hits(query: str, root: Path | str | None = None, limit: int = 5) -
 def _raw_source_evidence_for_citations(citations: list[dict[str, Any]], root: Path | str | None = None) -> dict[str, Any]:
     root_path = Path(root or Path.cwd())
     cited_vendor_docs = []
-    for hit in citations:
-        source = str(hit.get("source") or hit.get("path") or "").replace("\\", "/")
+
+    def add_vendor_path(value: Any) -> None:
+        source = str(value or "").replace("\\", "/")
         prefix = "docs/rag/vendor/"
         if not source.startswith(prefix) or "/raw-sources/" in source or not source.endswith(".md"):
-            continue
+            return
         vendor_doc = source.removeprefix(prefix)
         if vendor_doc not in cited_vendor_docs:
             cited_vendor_docs.append(vendor_doc)
+
+    for hit in citations:
+        add_vendor_path(hit.get("source") or hit.get("path"))
+        metadata = hit.get("metadata") or {}
+        grounding = metadata.get("official_grounding") if isinstance(metadata, dict) else None
+        if isinstance(grounding, list):
+            for value in grounding:
+                add_vendor_path(value)
+        elif grounding:
+            for value in str(grounding).split(","):
+                add_vendor_path(value.strip())
     status = vendor_raw_source_status(root=root_path, indexed_sources=[])
     curated_by_doc = {
         str(item.get("vendor_doc") or ""): item

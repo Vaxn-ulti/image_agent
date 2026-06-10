@@ -141,6 +141,71 @@ def test_local_rag_index_excludes_vendor_raw_sources_even_when_markdown(tmp_path
     assert all("docs/rag/vendor/raw-sources" not in item["source"] for item in result["results"])
 
 
+def test_local_rag_index_infers_vendor_source_type_from_vendor_path(tmp_path):
+    root = tmp_path / "repo"
+    vendor_doc = root / "docs" / "rag" / "vendor" / "fsl_official_fast_dti_tools.md"
+    vendor_doc.parent.mkdir(parents=True)
+    vendor_doc.write_text(
+        "# FSL Official Fast DTI Tools\n"
+        "Official FSL dtifit and eddy references for fast DTI workflow grounding.\n",
+        encoding="utf-8",
+    )
+
+    manifest = build_local_rag_index(root=root, persist_dir=root / ".rag_index")
+    result = retrieve_from_local_rag_index(
+        "FSL dtifit eddy",
+        root=root,
+        persist_dir=root / ".rag_index",
+        filters={"source_type": "rag_vendor"},
+        limit=3,
+    )
+
+    document = manifest["documents"][0]
+    assert document["metadata"]["source_type"] == "rag_vendor"
+    assert document["metadata"]["priority_score"] == 50
+    assert result["results"]
+    assert result["results"][0]["metadata"]["source_type"] == "rag_vendor"
+
+
+def test_local_rag_index_parses_frontmatter_lists_for_workflow_grounding(tmp_path):
+    root = tmp_path / "repo"
+    workflow_doc = root / "docs" / "rag" / "workflows" / "t1_deepprep_anat_report.md"
+    workflow_doc.parent.mkdir(parents=True)
+    workflow_doc.write_text(
+        "---\n"
+        "source_type: rag_workflow\n"
+        "workflow_type: t1_deepprep_anat_report\n"
+        "official_grounding:\n"
+        "  - docs/rag/vendor/deepprep_official_container_usage.md\n"
+        "  - docs/rag/vendor/freesurfer_official_container_reconall.md\n"
+        "expected_artifacts:\n"
+        "  - reports/index.html\n"
+        "  - reports/report_manifest.json\n"
+        "---\n"
+        "# T1 DeepPrep Anatomy Report\n"
+        "DeepPrep and FreeSurfer outputs ground native anatomy QC and report artifacts.\n",
+        encoding="utf-8",
+    )
+
+    manifest = build_local_rag_index(root=root, persist_dir=root / ".rag_index")
+    result = retrieve_from_local_rag_index(
+        "DeepPrep FreeSurfer anatomy QC",
+        root=root,
+        persist_dir=root / ".rag_index",
+        filters={"official_grounding": "docs/rag/vendor/deepprep_official_container_usage.md"},
+        limit=3,
+    )
+
+    metadata = manifest["documents"][0]["metadata"]
+    assert metadata["official_grounding"] == [
+        "docs/rag/vendor/deepprep_official_container_usage.md",
+        "docs/rag/vendor/freesurfer_official_container_reconall.md",
+    ]
+    assert metadata["expected_artifacts"] == ["reports/index.html", "reports/report_manifest.json"]
+    assert result["results"]
+    assert result["results"][0]["metadata"]["official_grounding"] == metadata["official_grounding"]
+
+
 def test_vendor_raw_source_status_verifies_hashes_without_indexing_raw_html(tmp_path):
     root = tmp_path / "repo"
     vendor_root = root / "docs" / "rag" / "vendor"

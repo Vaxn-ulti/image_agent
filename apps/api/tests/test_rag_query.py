@@ -1,7 +1,7 @@
 import hashlib
 import json
 
-from app.agent.rag_orchestration import build_rag_response, query_local_knowledge, retrieve_reference_context, run_agent_tool_chain
+from app.agent.rag_orchestration import _raw_source_evidence_for_citations, build_rag_response, query_local_knowledge, retrieve_reference_context, run_agent_tool_chain
 from app.agent.rag_index import build_local_rag_index
 
 
@@ -129,6 +129,177 @@ def test_build_rag_response_exposes_raw_source_evidence_for_curated_vendor_citat
     ]
     assert evidence["unmatched_citations"] == []
     assert evidence["raw_sources_indexed"] is False
+
+
+def test_build_rag_response_exposes_raw_source_evidence_for_workflow_grounding(tmp_path):
+    workflow_doc = tmp_path / "docs" / "rag" / "workflows" / "t1_deepprep_anat_report.md"
+    vendor_doc = tmp_path / "docs" / "rag" / "vendor" / "deepprep_official_container_usage.md"
+    raw_root = vendor_doc.parent / "raw-sources"
+    raw_source = raw_root / "deepprep_usage_local.html"
+    workflow_doc.parent.mkdir(parents=True)
+    vendor_doc.parent.mkdir(parents=True)
+    raw_root.mkdir()
+    raw_source.write_text("<html>DeepPrep local usage official container documentation</html>", encoding="utf-8")
+    raw_bytes = raw_source.read_bytes()
+    raw_sha256 = hashlib.sha256(raw_bytes).hexdigest()
+    vendor_doc.write_text(
+        "---\n"
+        "source_url: https://deepprep.readthedocs.io/en/latest/local.html\n"
+        "raw_source_ids: deepprep_usage_local\n"
+        "retrieved_date: 2026-06-07\n"
+        "status: curated_summary\n"
+        "---\n"
+        "# DeepPrep Official Container Usage\n"
+        "Official container command usage and runtime arguments are summarized here.\n",
+        encoding="utf-8",
+    )
+    workflow_doc.write_text(
+        "---\n"
+        "source_type: rag_workflow\n"
+        "workflow_type: t1_deepprep_anat_report\n"
+        "official_grounding:\n"
+        "  - docs/rag/vendor/deepprep_official_container_usage.md\n"
+        "expected_artifacts:\n"
+        "  - reports/index.html\n"
+        "---\n"
+        "# T1 DeepPrep Anatomy Report\n"
+        "unique_t1_workflow_grounding_phrase depends on native QC and container outputs.\n",
+        encoding="utf-8",
+    )
+    (raw_root / "manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "generated_at": "2026-06-07T00:00:00Z",
+                "sources": [
+                    {
+                        "id": "deepprep_usage_local",
+                        "vendor_doc": "deepprep_official_container_usage.md",
+                        "url": "https://deepprep.readthedocs.io/en/latest/local.html",
+                        "file": raw_source.name,
+                        "source_type": "official_docs",
+                        "retrieved_at": "2026-06-07T00:00:00Z",
+                        "sha256": raw_sha256,
+                        "bytes": len(raw_bytes),
+                        "status": "downloaded",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    build_local_rag_index(root=tmp_path, persist_dir=tmp_path / ".rag_index")
+
+    response = build_rag_response("unique_t1_workflow_grounding_phrase", root=tmp_path, backend_context={"tasks": []})
+
+    assert response["citations"][0]["path"].endswith("t1_deepprep_anat_report.md")
+    evidence = response["raw_source_evidence"]
+    assert evidence["sources"] == [
+        {
+            "vendor_doc": "deepprep_official_container_usage.md",
+            "curated_source": "docs/rag/vendor/deepprep_official_container_usage.md",
+            "raw_source_ids": ["deepprep_usage_local"],
+            "source_urls": ["https://deepprep.readthedocs.io/en/latest/local.html"],
+            "raw_files": ["docs/rag/vendor/raw-sources/deepprep_usage_local.html"],
+            "source_types": ["official_docs"],
+            "raw_snapshots": [
+                {
+                    "id": "deepprep_usage_local",
+                    "file": "docs/rag/vendor/raw-sources/deepprep_usage_local.html",
+                    "url": "https://deepprep.readthedocs.io/en/latest/local.html",
+                    "sha256": raw_sha256,
+                    "bytes": len(raw_bytes),
+                    "retrieved_at": "2026-06-07T00:00:00Z",
+                    "source_type": "official_docs",
+                    "status": "downloaded",
+                }
+            ],
+            "complete": True,
+        }
+    ]
+    assert evidence["unmatched_citations"] == []
+
+
+def test_raw_source_evidence_uses_workflow_official_grounding_metadata(tmp_path):
+    vendor_doc = tmp_path / "docs" / "rag" / "vendor" / "deepprep_official_container_usage.md"
+    raw_root = vendor_doc.parent / "raw-sources"
+    raw_source = raw_root / "deepprep_usage_local.html"
+    vendor_doc.parent.mkdir(parents=True)
+    raw_root.mkdir()
+    raw_source.write_text("<html>DeepPrep local usage official container documentation</html>", encoding="utf-8")
+    raw_bytes = raw_source.read_bytes()
+    raw_sha256 = hashlib.sha256(raw_bytes).hexdigest()
+    vendor_doc.write_text(
+        "---\n"
+        "source_url: https://deepprep.readthedocs.io/en/latest/local.html\n"
+        "raw_source_ids: deepprep_usage_local\n"
+        "retrieved_date: 2026-06-07\n"
+        "status: curated_summary\n"
+        "---\n"
+        "# DeepPrep Official Container Usage\n"
+        "Official container command usage and runtime arguments are summarized here.\n",
+        encoding="utf-8",
+    )
+    (raw_root / "manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "generated_at": "2026-06-07T00:00:00Z",
+                "sources": [
+                    {
+                        "id": "deepprep_usage_local",
+                        "vendor_doc": "deepprep_official_container_usage.md",
+                        "url": "https://deepprep.readthedocs.io/en/latest/local.html",
+                        "file": raw_source.name,
+                        "source_type": "official_docs",
+                        "retrieved_at": "2026-06-07T00:00:00Z",
+                        "sha256": raw_sha256,
+                        "bytes": len(raw_bytes),
+                        "status": "downloaded",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    evidence = _raw_source_evidence_for_citations(
+        [
+            {
+                "source": "docs/rag/workflows/t1_deepprep_anat_report.md",
+                "metadata": {
+                    "source_type": "rag_workflow",
+                    "official_grounding": ["docs/rag/vendor/deepprep_official_container_usage.md"],
+                },
+            }
+        ],
+        root=tmp_path,
+    )
+
+    assert evidence["sources"] == [
+        {
+            "vendor_doc": "deepprep_official_container_usage.md",
+            "curated_source": "docs/rag/vendor/deepprep_official_container_usage.md",
+            "raw_source_ids": ["deepprep_usage_local"],
+            "source_urls": ["https://deepprep.readthedocs.io/en/latest/local.html"],
+            "raw_files": ["docs/rag/vendor/raw-sources/deepprep_usage_local.html"],
+            "source_types": ["official_docs"],
+            "raw_snapshots": [
+                {
+                    "id": "deepprep_usage_local",
+                    "file": "docs/rag/vendor/raw-sources/deepprep_usage_local.html",
+                    "url": "https://deepprep.readthedocs.io/en/latest/local.html",
+                    "sha256": raw_sha256,
+                    "bytes": len(raw_bytes),
+                    "retrieved_at": "2026-06-07T00:00:00Z",
+                    "source_type": "official_docs",
+                    "status": "downloaded",
+                }
+            ],
+            "complete": True,
+        }
+    ]
+    assert evidence["unmatched_citations"] == []
 
 
 def test_build_rag_response_grounds_launchability_questions_in_matrix(tmp_path):

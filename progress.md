@@ -27,3 +27,19 @@
   - Green: the same test passed after adding the gate document.
   - Focused docs/RAG check: three selected `test_skill_and_rag_docs.py` tests passed.
 - Created the heartbeat automation `image-agent-commit-cadence-check`, scheduled every 60 minutes, to inspect commit/backup cadence and recommend checkpoint commits or scoped backups without staging, committing, resetting, cleaning, pushing, or deleting unless explicitly asked.
+- After checkpoint commit `d567043`, continued a narrow official-source RAG metadata hardening slice.
+- Added RAG index tests for:
+  - inferring `source_type=rag_vendor` from `docs/rag/vendor/*.md` paths even when frontmatter omits `source_type`;
+  - parsing simple YAML-like frontmatter lists such as `official_grounding` and `expected_artifacts`;
+  - filtering list metadata by membership during local index retrieval.
+- Updated `apps/api/app/agent/rag_index.py` to support those metadata behaviors.
+- Verification:
+  - Red: the two new tests failed with `rag_document` instead of `rag_vendor` and empty list metadata.
+  - Green: the two new tests passed after the index change.
+  - Focused suite: `apps/api/tests/test_agent_state_and_rag_index.py` passed with 18 tests.
+  - RAG response guard: `test_build_rag_response_exposes_raw_source_evidence_for_curated_vendor_citations` passed.
+- Extended workflow-to-vendor provenance:
+  - Added a RAG response test for workflow `official_grounding` metadata.
+  - Added a helper-level red/green test proving workflow citations can expose vendor raw-source evidence even when the vendor doc is not directly cited.
+  - Updated `apps/api/app/agent/rag_orchestration.py` to read `official_grounding` from citation metadata, accept list or comma-separated values, and merge those vendor docs with direct vendor citations.
+  - Verification: new helper test passed after failing first; related RAG query focused tests passed (`3 passed`), RAG metadata focused tests passed (`2 passed`), and full `apps/api/tests/test_rag_query.py` passed (`13 passed`).
