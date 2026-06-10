@@ -133,3 +133,36 @@ CREATE TABLE IF NOT EXISTS agent_run_events (
   created_at TEXT NOT NULL,
   FOREIGN KEY(agent_run_id) REFERENCES agent_runs(agent_run_id)
 );
+CREATE TABLE IF NOT EXISTS agent_confirmations (
+  thread_id TEXT PRIMARY KEY,
+  status TEXT NOT NULL,
+  project_id INTEGER,
+  series_id INTEGER,
+  workflow_type TEXT,
+  qsiprep_task_id INTEGER,
+  action_lane TEXT,
+  confirmation_fingerprint TEXT NOT NULL,
+  confirmation_json TEXT NOT NULL,
+  decision_json TEXT NOT NULL DEFAULT '{}',
+  selected_skill TEXT,
+  retrieved_context_json TEXT NOT NULL DEFAULT '{}',
+  extra_json TEXT NOT NULL DEFAULT '{}',
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  consumed_at TEXT,
+  terminal_agent_run_id TEXT,
+  safe_metadata_json TEXT NOT NULL DEFAULT '{}'
+);
+CREATE TABLE IF NOT EXISTS agent_confirmation_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  thread_id TEXT NOT NULL,
+  agent_run_id TEXT,
+  event_type TEXT NOT NULL,
+  from_status TEXT,
+  to_status TEXT NOT NULL,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(thread_id) REFERENCES agent_confirmations(thread_id),
+  FOREIGN KEY(agent_run_id) REFERENCES agent_runs(agent_run_id)
+);

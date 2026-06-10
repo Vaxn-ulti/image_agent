@@ -6,6 +6,12 @@ The agent-run ledger is the durable agent-run trace for Image Agent orchestratio
 
 The ledger is not the source of truth for workflow outputs. Backend task rows remain the task-state source of truth; backend task rows remain authoritative. The result-summary JSON remains the output source of truth; result-summary JSON remains authoritative for completed workflow outputs.
 
+Pending server-side confirmations use the SQLite `agent_confirmations` table as
+their durable source of truth when the database has been initialized. The legacy
+JSON thread file is only a compatibility mirror/fallback for lightweight tests
+and older records. Confirmation transitions are audited in
+`agent_confirmation_events`.
+
 ## Durable Identity
 
 Each run row should include:
@@ -17,6 +23,16 @@ Each run row should include:
 - `created_at`, `updated_at`, and `finished_at`
 - `model_gateway_access`
 - `message_sha256` or another redacted user message summary, never raw prompt text
+
+Each confirmation row should include:
+
+- `thread_id`
+- `status`
+- `project_id`, `series_id`, `workflow_type`, `qsiprep_task_id`, and `action_lane` when known
+- `confirmation_fingerprint`
+- `expires_at`, `created_at`, `updated_at`, and `consumed_at`
+- server-side confirmation, decision, selected skill, and retrieved-context JSON for resume validation only
+- safe metadata, never API keys, patient identifiers, host paths, or raw image contents
 
 ## Lifecycle Events
 
@@ -46,6 +62,15 @@ The ledger may store safe trace metadata:
 Production task creation remains backend-gated; production task creation remains gated outside the planner loop. Planner function tools may read, retrieve, and preflight, but `create_workflow_task` runs only after the server-side resume confirmation path verifies a matching server-side confirmation.
 
 Pending confirmations are single-use. A successful approved resume must move the thread out of `pending_confirmation`, even when the caller only reaches `ready_to_launch` without a task executor. Expired confirmations return blocked with `production_task_created=false` and an `agent.confirmation_expired` event.
+
+Confirmation event names:
+
+- `confirmation_created`
+- `confirmation_marked`
+
+Events should record `from_status`, `to_status`, redacted metadata, and
+`created_at`. Consumers should use these events for auditability instead of
+reading legacy JSON files directly.
 
 ## Query Endpoint
 

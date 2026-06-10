@@ -339,6 +339,145 @@ def test_agent_runner_resume_blocks_expired_pending_confirmation(tmp_path):
     assert store.load(thread["thread_id"])["status"] == "expired"
 
 
+def test_agent_thread_store_persists_pending_confirmation_in_sqlite(tmp_path, monkeypatch):
+    from app.core import config
+    from app.db import database
+
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
+    database.init_db()
+
+    store = AgentThreadStore(tmp_path / "agent_threads")
+    confirmation = {
+        "type": "workflow_execution",
+        "action_lane": "fixed_workflow",
+        "project_id": 1,
+        "series_id": 11,
+        "workflow_type": "t1_deepprep_anat_report",
+    }
+
+    thread = store.create_pending_confirmation(
+        confirmation=confirmation,
+        decision={"intent": "run_workflow"},
+        selected_skill="image-agent-workflow-runner",
+        retrieved_context={},
+    )
+
+    with database.connect() as conn:
+        row = conn.execute(
+            "SELECT thread_id, status, project_id, series_id, workflow_type, action_lane, expires_at "
+            "FROM agent_confirmations WHERE thread_id=?",
+            (thread["thread_id"],),
+        ).fetchone()
+        events = conn.execute(
+            "SELECT event_type, from_status, to_status FROM agent_confirmation_events WHERE thread_id=? ORDER BY id",
+            (thread["thread_id"],),
+        ).fetchall()
+
+    assert dict(row) == {
+        "thread_id": thread["thread_id"],
+        "status": "pending_confirmation",
+        "project_id": 1,
+        "series_id": 11,
+        "workflow_type": "t1_deepprep_anat_report",
+        "action_lane": "fixed_workflow",
+        "expires_at": thread["expires_at"],
+    }
+    assert [dict(event) for event in events] == [
+        {
+            "event_type": "confirmation_created",
+            "from_status": None,
+            "to_status": "pending_confirmation",
+        }
+    ]
+
+
+def test_agent_thread_store_loads_pending_confirmation_from_sqlite_after_json_missing(tmp_path, monkeypatch):
+    from app.core import config
+    from app.db import database
+
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
+    database.init_db()
+
+    store = AgentThreadStore(tmp_path / "agent_threads")
+    confirmation = {
+        "type": "workflow_execution",
+        "action_lane": "fixed_workflow",
+        "project_id": 1,
+        "series_id": 11,
+        "workflow_type": "t1_deepprep_anat_report",
+    }
+    thread = store.create_pending_confirmation(
+        confirmation=confirmation,
+        decision={"intent": "run_workflow"},
+        selected_skill="image-agent-workflow-runner",
+        retrieved_context={"mode": "local_persistent_index"},
+    )
+    (tmp_path / "agent_threads" / f"{thread['thread_id']}.json").unlink()
+
+    reloaded = AgentThreadStore(tmp_path / "agent_threads").load(thread["thread_id"])
+
+    assert reloaded is not None
+    assert reloaded["status"] == "pending_confirmation"
+    assert reloaded["expires_at"] == thread["expires_at"]
+    assert reloaded["confirmation"] == confirmation
+    assert reloaded["decision"] == {"intent": "run_workflow"}
+    assert reloaded["selected_skill"] == "image-agent-workflow-runner"
+    assert reloaded["retrieved_context"] == {"mode": "local_persistent_index"}
+
+
+def test_agent_thread_store_marks_confirmation_transition_in_sqlite(tmp_path, monkeypatch):
+    from app.core import config
+    from app.db import database
+
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
+    database.init_db()
+
+    store = AgentThreadStore(tmp_path / "agent_threads")
+    thread = store.create_pending_confirmation(
+        confirmation={
+            "type": "workflow_execution",
+            "action_lane": "fixed_workflow",
+            "project_id": 1,
+            "series_id": 11,
+            "workflow_type": "t1_deepprep_anat_report",
+        },
+        decision={"intent": "run_workflow"},
+        selected_skill="image-agent-workflow-runner",
+        retrieved_context={},
+    )
+
+    marked = store.mark(thread["thread_id"], status="ready_to_launch", extra={"tool_input": {"series_id": 11}})
+
+    with database.connect() as conn:
+        row = conn.execute(
+            "SELECT status, consumed_at FROM agent_confirmations WHERE thread_id=?",
+            (thread["thread_id"],),
+        ).fetchone()
+        events = conn.execute(
+            "SELECT event_type, from_status, to_status FROM agent_confirmation_events WHERE thread_id=? ORDER BY id",
+            (thread["thread_id"],),
+        ).fetchall()
+
+    assert marked["status"] == "ready_to_launch"
+    assert row["status"] == "ready_to_launch"
+    assert row["consumed_at"] is not None
+    assert [dict(event) for event in events] == [
+        {
+            "event_type": "confirmation_created",
+            "from_status": None,
+            "to_status": "pending_confirmation",
+        },
+        {
+            "event_type": "confirmation_marked",
+            "from_status": "pending_confirmation",
+            "to_status": "ready_to_launch",
+        },
+    ]
+
+
 def test_agent_runner_returns_incubation_proposal_without_confirmation():
     gateway = FakeGateway(
         {
