@@ -86,3 +86,11 @@
   - Extended the ledger safe metadata whitelist for `contract_status_normalized_from`.
   - Updated `docs/api.md` so `/agent/runs` is the primary product contract and `/chat` is explicitly compatibility-only.
   - Local focused API tests are blocked in the current interpreter by missing declared API dependency `python-multipart`; no local dependency installation was performed because remote remains authoritative. Lightweight checks passed: `python -m py_compile ...`, contract helper self-checks, and `python -m pytest apps/api/tests/test_model_gateway.py -q` (`16 passed`).
+- Advanced official RAG workflow metadata standardization:
+  - Updated `docs/rag/workflows/t1_deepprep_anat_report.md` with machine-readable frontmatter for `source_type`, `workflow_type`, `status=production_supported`, official DeepPrep/FreeSurfer/BIDS grounding, expected artifacts, and unsupported boundaries.
+  - Updated `docs/rag/workflows/bold_fmriprep_xcpd_report.md` to `status=incubation_reference` with fMRIPrep/XCP-D/TemplateFlow/BIDS grounding, expected artifact families, and remote-wrapper restrictions.
+  - Updated `docs/rag/workflows/dwi_fast_gpu_dti.md` to `status=production_supported` with FSL/MRtrix/QSIPrep-toolbox/BIDS grounding, expected artifacts, and explicit non-QSIPrep/non-QSIRecon boundaries.
+  - Added `expected_artifacts` and `unsupported_boundaries` to `docs/rag/workflows/workflow_launchability_matrix.md`.
+  - Fixed `rag_orchestration.py` fallback frontmatter parsing so YAML-list metadata survives when `.rag_index` is absent or stale.
+  - Added tests for fallback YAML-list preservation and required workflow frontmatter fields.
+  - Verification: `python -m pytest apps/api/tests/test_agent_state_and_rag_index.py apps/api/tests/test_rag_query.py apps/api/tests/test_skill_and_rag_docs.py::test_workflow_rag_docs_have_machine_readable_frontmatter -q` returned `33 passed`.

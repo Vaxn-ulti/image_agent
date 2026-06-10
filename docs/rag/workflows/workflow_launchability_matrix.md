@@ -13,6 +13,18 @@ official_grounding:
   - docs/rag/vendor/qsirecon_official_container_usage_workflows.md
   - docs/rag/vendor/mriqc_official_container_usage_outputs.md
   - docs/rag/vendor/dpabi_official_container_boundary.md
+expected_artifacts:
+  - backend workflow_eligibility envelope for runnable and blocked workflow lists
+  - real task ids and task states for any success claim
+  - /tasks/{task_id}/result-summary for completed outputs
+  - /tasks/{task_id}/artifact-manifest for frontend preview and download surfaces
+  - strict remote smoke acceptance JSON and verifier passed evidence before release readiness
+unsupported_boundaries:
+  - do not create production tasks from this matrix alone
+  - do not present incubation_reference rows as production-supported launch options
+  - do not treat official container documentation as proof of Image Agent runtime support
+  - do not count skipped_missing_model_config or local-only checks as release acceptance
+  - do not expose backend absolute paths, secrets, or patient identifiers in readiness evidence
 ---
 
 # Workflow Launchability Matrix

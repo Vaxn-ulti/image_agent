@@ -220,6 +220,39 @@ def test_build_rag_response_exposes_raw_source_evidence_for_workflow_grounding(t
     assert evidence["unmatched_citations"] == []
 
 
+def test_fallback_retrieve_reference_context_preserves_yaml_list_metadata(tmp_path):
+    workflow_doc = tmp_path / "docs" / "rag" / "workflows" / "t1_deepprep_anat_report.md"
+    workflow_doc.parent.mkdir(parents=True)
+    workflow_doc.write_text(
+        "---\n"
+        "source_type: rag_workflow\n"
+        "workflow_type: t1_deepprep_anat_report\n"
+        "status: production_supported\n"
+        "official_grounding:\n"
+        "  - docs/rag/vendor/deepprep_official_container_usage.md\n"
+        "  - docs/rag/vendor/freesurfer_official_container_reconall.md\n"
+        "expected_artifacts:\n"
+        "  - summary/t1_result_summary.json\n"
+        "unsupported_boundaries:\n"
+        "  - no clinical diagnosis\n"
+        "---\n"
+        "# T1 DeepPrep Anatomy Report\n"
+        "unique fallback metadata phrase for native DeepPrep QC.\n",
+        encoding="utf-8",
+    )
+
+    result = retrieve_reference_context("unique fallback metadata phrase", root=tmp_path, limit=1)
+
+    assert result["mode"] == "local_file_search"
+    metadata = result["results"][0]["metadata"]
+    assert metadata["official_grounding"] == [
+        "docs/rag/vendor/deepprep_official_container_usage.md",
+        "docs/rag/vendor/freesurfer_official_container_reconall.md",
+    ]
+    assert metadata["expected_artifacts"] == ["summary/t1_result_summary.json"]
+    assert metadata["unsupported_boundaries"] == ["no clinical diagnosis"]
+
+
 def test_raw_source_evidence_uses_workflow_official_grounding_metadata(tmp_path):
     vendor_doc = tmp_path / "docs" / "rag" / "vendor" / "deepprep_official_container_usage.md"
     raw_root = vendor_doc.parent / "raw-sources"

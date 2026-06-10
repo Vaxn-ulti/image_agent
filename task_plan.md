@@ -32,7 +32,7 @@ Continue developing Image Agent until the agent product is mature and stable eno
 | 1. Repository Goal Setup | complete | Goal files and work-log created; development branch active; prior BMAD-style findings recorded. |
 | 2. Readiness Audit | in_progress | Subagent findings merged into findings.md; prioritized epics and first stories selected. |
 | 3. Agent API Contract Hardening | in_progress | `/agent/runs`, run lookup, resume, project history, and legacy `/chat` boundaries have stable contract versions, response models, status enums, and tests. |
-| 4. Official RAG Metadata Standardization | pending | Workflow docs expose machine-readable official grounding, expected artifacts, unsupported boundaries, source ids, and answer-boundary tests. |
+| 4. Official RAG Metadata Standardization | in_progress | Workflow docs expose machine-readable official grounding, expected artifacts, unsupported boundaries, source ids, and answer-boundary tests. |
 | 5. Workflow Artifact Contract Hardening | pending | `/artifact-manifest` is the frontend source of truth and separates container-native QC, derived scientific reports, and preview assets. |
 | 6. Skill Maintenance | pending | Image Agent skills follow skill-creator structure and have routing, audit, eval, and stale-name coverage. |
 | 7. Remote Verification Loop | pending | Remote server install/test/run evidence is logged; local-only execution is avoided. |
@@ -65,8 +65,18 @@ Continue developing Image Agent until the agent product is mature and stable eno
 
 - Which existing WIP changes are already intended for the current product-maturity goal?
 - Which remote server commands and paths are authoritative for smoke testing?
-- Which official vendor/container docs are already complete enough, and which need new source ingestion?
+- Which official vendor/container docs beyond the current T1/BOLD/DWI/launchability set need new source ingestion?
 - Which agent API surfaces are mature enough to freeze for frontend consumption?
+
+## Current RAG Metadata Progress
+
+- First workflow frontmatter slice completed for:
+  - `docs/rag/workflows/t1_deepprep_anat_report.md`
+  - `docs/rag/workflows/bold_fmriprep_xcpd_report.md`
+  - `docs/rag/workflows/dwi_fast_gpu_dti.md`
+  - `docs/rag/workflows/workflow_launchability_matrix.md`
+- Required machine fields are now tested: `source_type`, `workflow_type`, `status`, `official_grounding`, `expected_artifacts`, and `unsupported_boundaries`.
+- `rag_orchestration.py` fallback retrieval now preserves YAML-list metadata when `.rag_index` is missing or stale.
 
 ## Remote Runtime Notes
 

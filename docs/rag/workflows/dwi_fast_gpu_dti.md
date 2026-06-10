@@ -2,12 +2,28 @@
 source_type: rag_workflow
 workflow_type: dwi_fast_gpu_dti
 modality: DWI
-status: current_contract
+status: production_supported
 retrieved_date: 2026-06-07
 official_grounding:
   - docs/rag/vendor/fsl_official_fast_dti_tools.md
   - docs/rag/vendor/mrtrix3_official_dti_toolbox.md
   - docs/rag/vendor/qsiprep_official_container_usage_outputs.md
+  - docs/rag/vendor/bids_validator_official_cli_docker.md
+  - docs/rag/vendor/bids_official_mri_derivatives.md
+expected_artifacts:
+  - native FA/MD/AD/RD scalar maps
+  - MNI152 FA/MD/AD/RD maps when registration or fallback resampling succeeds
+  - atlas regional TSV tables and combined regional DTI tables
+  - qc/qc_report.tsv
+  - qc/dwi_fast_gpu_dti_provenance.json
+  - summary/dwi_result_summary.json
+  - dwi_tensor_metrics.png and dwi_atlas_region_means.png when report-builder output is registered
+unsupported_boundaries:
+  - not full QSIPrep and not full QSIRecon
+  - do not launch without DWI NIfTI, bval, bvec, and JSON phase-encoding/readout metadata
+  - do not fabricate acqparams, index files, phase-encoding direction, or readout timing
+  - do not replace missing native DWI QC or report artifacts with generated images
+  - do not infer diagnosis, prognosis, dementia status, or treatment recommendations from DTI scalars
 ---
 
 # DWI Fast GPU DTI Workflow RAG

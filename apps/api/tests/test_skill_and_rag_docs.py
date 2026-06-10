@@ -3,6 +3,8 @@ import importlib.util
 import json
 from pathlib import Path
 
+from app.agent.rag_index import _parse_frontmatter
+
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -118,6 +120,26 @@ REQUIRED_VENDOR_SOURCE_IDS = [
 ]
 
 
+REQUIRED_WORKFLOW_METADATA = {
+    "workflows/t1_deepprep_anat_report.md": {
+        "workflow_type": "t1_deepprep_anat_report",
+        "status": "production_supported",
+    },
+    "workflows/bold_fmriprep_xcpd_report.md": {
+        "workflow_type": "bold_fmriprep_xcpd_report",
+        "status": "incubation_reference",
+    },
+    "workflows/dwi_fast_gpu_dti.md": {
+        "workflow_type": "dwi_fast_gpu_dti",
+        "status": "production_supported",
+    },
+    "workflows/workflow_launchability_matrix.md": {
+        "workflow_type": "workflow_launchability_matrix",
+        "status": "current_contract",
+    },
+}
+
+
 def _frontmatter(text: str) -> dict[str, str]:
     if not text.startswith("---\n"):
         return {}
@@ -171,6 +193,30 @@ def test_rag_corpus_contains_required_sections_and_vendor_metadata():
         assert "status: curated_summary" in text
         assert "## Container/CLI Usage" in text
         assert "## image_agent Notes" in text or "## Image Agent Notes" in text
+
+
+def test_workflow_rag_docs_have_machine_readable_frontmatter():
+    rag_root = REPO_ROOT / "docs" / "rag"
+    required_keys = {
+        "source_type",
+        "workflow_type",
+        "status",
+        "official_grounding",
+        "expected_artifacts",
+        "unsupported_boundaries",
+    }
+
+    for relative, expected in REQUIRED_WORKFLOW_METADATA.items():
+        metadata, _body = _parse_frontmatter((rag_root / relative).read_text(encoding="utf-8"))
+        assert required_keys <= set(metadata), relative
+        assert metadata["source_type"] == "rag_workflow"
+        assert metadata["workflow_type"] == expected["workflow_type"]
+        assert metadata["status"] == expected["status"]
+        for list_key in ("official_grounding", "expected_artifacts", "unsupported_boundaries"):
+            assert isinstance(metadata[list_key], list), f"{relative} {list_key}"
+            assert metadata[list_key], f"{relative} {list_key}"
+        for grounded_source in metadata["official_grounding"]:
+            assert (REPO_ROOT / grounded_source).exists(), f"{relative} missing {grounded_source}"
 
 
 def test_vendor_raw_sources_manifest_covers_curated_summaries():

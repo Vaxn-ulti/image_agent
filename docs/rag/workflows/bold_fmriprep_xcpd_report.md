@@ -2,8 +2,26 @@
 source_type: rag_workflow
 workflow_type: bold_fmriprep_xcpd_report
 modality: BOLD
-status: current_contract
+status: incubation_reference
 retrieved_date: 2026-06-06
+official_grounding:
+  - docs/rag/vendor/fmriprep_official_container_usage.md
+  - docs/rag/vendor/fmriprep_official_outputs.md
+  - docs/rag/vendor/xcp_d_official_container_usage.md
+  - docs/rag/vendor/xcp_d_official_outputs.md
+  - docs/rag/vendor/templateflow_official_cache_archive_client.md
+  - docs/rag/vendor/bids_official_mri_derivatives.md
+expected_artifacts:
+  - fMRIPrep-style visual reports and derivatives when wrapper evidence proves native generation
+  - XCP-D denoised BOLD outputs
+  - XCP-D QC time series and reports
+  - parcellated time series and connectivity matrices
+  - task-scoped result-summary and artifact-manifest entries after promotion
+unsupported_boundaries:
+  - not production-ready without real remote-wrapper task evidence
+  - XCP-D input is fMRIPrep-compatible derivatives, not raw BIDS
+  - do not pass API keys, sudo passwords, or fixed evidence-project paths into child scripts
+  - do not infer diagnosis, cognition, psychiatric status, or group effects from BOLD metrics
 ---
 
 # BOLD fMRIPrep + XCP-D Report RAG

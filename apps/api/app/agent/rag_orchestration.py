@@ -83,11 +83,25 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
     raw = text[3:end].strip()
     body = text[end + 4 :].lstrip()
     metadata: dict[str, Any] = {}
+    list_key: str | None = None
     for line in raw.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if list_key and stripped.startswith("- "):
+            metadata[list_key].append(stripped[2:].strip().strip('"').strip("'"))
+            continue
+        list_key = None
         if ":" not in line:
             continue
         key, value = line.split(":", 1)
-        metadata[key.strip()] = value.strip().strip('"')
+        key = key.strip()
+        value = value.strip()
+        if value:
+            metadata[key] = value.strip('"').strip("'")
+            continue
+        metadata[key] = []
+        list_key = key
     return metadata, body
 
 

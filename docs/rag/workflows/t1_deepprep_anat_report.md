@@ -1,3 +1,27 @@
+---
+source_type: rag_workflow
+workflow_type: t1_deepprep_anat_report
+modality: T1
+status: production_supported
+retrieved_date: 2026-06-10
+official_grounding:
+  - docs/rag/vendor/deepprep_official_container_usage.md
+  - docs/rag/vendor/freesurfer_official_container_reconall.md
+  - docs/rag/vendor/freesurfer_official_license.md
+  - docs/rag/vendor/bids_official_mri_derivatives.md
+expected_artifacts:
+  - summary/t1_result_summary.json
+  - summary/t1_scientific_report_summary.json
+  - DeepPrep QC HTML reports
+  - FreeSurfer stats tables
+  - registered maps, figures, reports, tables, and logs
+unsupported_boundaries:
+  - no diagnosis, prognosis, dementia, tumor, or treatment advice
+  - do not launch on FLAIR, T2, DWI, or BOLD unless backend marks the series T1-compatible
+  - do not treat placeholder contracts as real DeepPrep/FreeSurfer measurements
+  - do not replace missing container-native QC with generated images
+---
+
 # T1 DeepPrep Anatomical Report RAG
 
 ## Scope / 范围
