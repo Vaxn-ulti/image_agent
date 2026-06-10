@@ -22,10 +22,13 @@ export OPENAI_BASE_URL=http://127.0.0.1:18081
 export OPENAI_WIRE_API=responses
 export MODEL_REASONING_EFFORT=high
 export OPENAI_DISABLE_RESPONSE_STORAGE=true
+export OPENAI_DISABLE_METADATA=true
 export OPENAI_API_KEY=<provided-by-operator>
 ```
 
-`/agent/model/status` reports whether the key is configured and how the remote backend reaches the gateway. It never returns the API key.
+`OPENAI_DISABLE_METADATA=true` is required for OpenAI-compatible gateways that reject the Responses `metadata` field but wrap the upstream validation error as a generic 502. Leave it unset for gateways that accept Responses metadata.
+
+`/agent/model/status` reports whether the key is configured, whether request metadata is enabled, and how the remote backend reaches the gateway. It never returns the API key.
 
 ## BOLD fMRIPrep + XCP-D Remote Scripts
 

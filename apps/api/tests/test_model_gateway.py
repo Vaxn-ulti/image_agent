@@ -74,6 +74,16 @@ def test_provider_status_reports_remote_reverse_tunnel_hint(monkeypatch):
     assert "ssh -N -R 18080:127.0.0.1:8080" in status["deployment"]["reverse_tunnel_command"]
 
 
+def test_provider_status_reports_metadata_disabled_without_secrets(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "secret-value")
+    monkeypatch.setenv("OPENAI_DISABLE_METADATA", "true")
+
+    status = model_gateway.provider_status()
+
+    assert status["metadata_enabled"] is False
+    assert "secret-value" not in json.dumps(status)
+
+
 def test_responses_payload_includes_openai_style_function_tools(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "secret-value")
     config = model_gateway.ModelConfig.from_env()
@@ -447,6 +457,37 @@ def test_request_retries_without_metadata_for_openai_compatible_responses(monkey
     assert len(calls) == 2
     assert calls[0]["metadata"] == {"purpose": "agent_plan"}
     assert "metadata" not in calls[1]
+    assert body["output"][0]["content"][0]["text"] == "hello"
+
+
+def test_request_can_disable_metadata_for_opaque_openai_compatible_gateways(monkeypatch):
+    calls = {}
+
+    class FakeResponses:
+        def create(self, **payload):
+            calls["payload"] = payload
+            return {
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [{"type": "output_text", "text": "hello"}],
+                    }
+                ]
+            }
+
+    class FakeOpenAI:
+        def __init__(self, **_kwargs):
+            self.responses = FakeResponses()
+
+    monkeypatch.setattr(model_gateway, "OpenAI", FakeOpenAI, raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "secret-value")
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://127.0.0.1:18081")
+    monkeypatch.setenv("OPENAI_DISABLE_METADATA", "true")
+
+    config = model_gateway.ModelConfig.from_env()
+    body = model_gateway.ModelGateway(config)._request([{"role": "user", "content": "hi"}], structured=False, purpose="agent_plan")
+
+    assert "metadata" not in calls["payload"]
     assert body["output"][0]["content"][0]["text"] == "hello"
 
 

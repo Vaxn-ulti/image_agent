@@ -36,6 +36,7 @@ class ModelConfig:
     timeout_seconds: int
     context_window: int
     auto_compact_token_limit: int
+    send_metadata: bool = True
 
     @classmethod
     def from_env(cls) -> "ModelConfig":
@@ -60,6 +61,10 @@ class ModelConfig:
                 os.environ.get("OPENAI_AUTO_COMPACT_TOKEN_LIMIT")
                 or os.environ.get("MODEL_AUTO_COMPACT_TOKEN_LIMIT", "900000")
             ),
+            send_metadata=not (
+                _env_bool("OPENAI_DISABLE_METADATA", False)
+                or _env_bool("OPENAI_RESPONSES_DISABLE_METADATA", False)
+            ),
         )
 
 
@@ -81,6 +86,7 @@ def provider_status(config: ModelConfig | None = None) -> dict[str, Any]:
         "wire_api": cfg.wire_api,
         "reasoning_effort": cfg.reasoning_effort,
         "store": cfg.store,
+        "metadata_enabled": cfg.send_metadata,
         "context_window": cfg.context_window,
         "auto_compact_token_limit": cfg.auto_compact_token_limit,
         "deployment": {
@@ -315,7 +321,8 @@ class ModelGateway:
             structured=structured,
             structured_schema=structured_schema,
         )
-        payload["metadata"] = {"purpose": purpose}
+        if self.config.send_metadata:
+            payload["metadata"] = {"purpose": purpose}
         client_class = _openai_client_class()
         client = client_class(api_key=self.config.api_key, base_url=self.config.base_url, timeout=self.config.timeout_seconds)
         try:

@@ -69,6 +69,7 @@ Inputs:
 - `OPENAI_API_KEY`, never returned by status endpoints or RAG;
 - `OPENAI_BASE_URL`, often the local reverse-tunnel URL on the remote backend;
 - `OPENAI_MODEL` and `OPENAI_REVIEW_MODEL`;
+- `OPENAI_DISABLE_METADATA`, only for OpenAI-compatible gateways that reject the Responses `metadata` field and hide the upstream validation detail behind a generic gateway error;
 - backend-generated function tool specs from `app.agent.tool_registry`.
 
 Outputs:
@@ -82,6 +83,7 @@ Outputs:
 
 - Use the OpenAI SDK `responses.create` path with the Responses API shape. Do not reintroduce hand-rolled `/responses` HTTP transport or Chat-Completions-style nested tool specs such as `{"type":"function","function":{...}}`.
 - Keep the SDK boundary explicit in reviews: the implementation should import the official OpenAI Python SDK, construct an `OpenAI client`, and call `client.responses.create(...)`.
+- Default to sending Responses `metadata` for first-party compatible behavior; disable it explicitly with `OPENAI_DISABLE_METADATA=true` when an OpenAI-compatible gateway rejects or masks that parameter. `/agent/model/status` may expose the resulting `metadata_enabled` boolean but must never expose secrets.
 - Keep tool execution backend-first. The model requests a registered function; backend code enforces arguments, project scope, production gating, and redaction.
 - `create_workflow_task` is not a normal planner-loop action. It may execute only through the server-side resume confirmation path after explicit user approval.
 - Return function call results with `function_call_output` and the original `call_id`. A plain text `Tool results JSON` message is only a compatibility fallback for malformed calls without a call id.
