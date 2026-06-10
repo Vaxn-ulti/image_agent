@@ -127,11 +127,19 @@ set +a
 PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/reconcile_stale_tasks.py --max-age-hours 24 --check-containers
 ```
 
+For scoped approval, repeat `--task-id` for the exact rows the operator intends
+to reconcile. The report keeps other stale rows in
+`out_of_scope_stale_task_ids`:
+
+```bash
+PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/reconcile_stale_tasks.py --max-age-hours 24 --check-containers --task-id 83 --task-id 84
+```
+
 Only after operator review, run apply with Docker label checking enabled by
 default:
 
 ```bash
-PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/reconcile_stale_tasks.py --apply --max-age-hours 24 --reason "operator confirmed no matching running Image Agent container"
+PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/reconcile_stale_tasks.py --apply --max-age-hours 24 --task-id 83 --task-id 84 --reason "operator confirmed no matching running Image Agent container"
 ```
 
 The apply mode marks stale active task rows as `failed`, writes a concise audit

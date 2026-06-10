@@ -84,6 +84,7 @@ def reconcile_stale_active_tasks(
     now: datetime | None = None,
     running_container_task_ids: Iterable[int] | None = None,
     container_check_status: str | None = None,
+    task_ids: Iterable[int] | None = None,
     reason: str = "operator confirmed no matching running Image Agent container",
 ) -> dict:
     """Report or fail stale active task rows.
@@ -94,6 +95,7 @@ def reconcile_stale_active_tasks(
 
     now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     running_ids = None if running_container_task_ids is None else {int(task_id) for task_id in running_container_task_ids}
+    target_ids = None if task_ids is None else {int(task_id) for task_id in task_ids}
     if apply and running_ids is None:
         raise ValueError("running_container_task_ids is required when apply=True")
     if container_check_status is None:
@@ -103,8 +105,10 @@ def reconcile_stale_active_tasks(
     summaries = [_candidate_summary(task, now=now, max_age_hours=max_age_hours) for task in active]
     by_id = {task["id"]: task for task in active}
     stale = [summary for summary in summaries if summary["is_stale"]]
-    blocked = [summary for summary in stale if running_ids is not None and summary["id"] in running_ids]
-    candidates = [summary for summary in stale if running_ids is None or summary["id"] not in running_ids]
+    scoped_stale = [summary for summary in stale if target_ids is None or summary["id"] in target_ids]
+    out_of_scope_stale = [summary for summary in stale if target_ids is not None and summary["id"] not in target_ids]
+    blocked = [summary for summary in scoped_stale if running_ids is not None and summary["id"] in running_ids]
+    candidates = [summary for summary in scoped_stale if running_ids is None or summary["id"] not in running_ids]
 
     updated_task_ids: list[int] = []
     if apply:
@@ -132,6 +136,8 @@ def reconcile_stale_active_tasks(
         "active_task_count": len(active),
         "active_tasks": summaries,
         "stale_candidates": candidates,
+        "target_task_ids": None if target_ids is None else sorted(target_ids),
+        "out_of_scope_stale_task_ids": [int(task["id"]) for task in out_of_scope_stale],
         "blocked_task_ids": [int(task["id"]) for task in blocked],
         "container_check_status": container_check_status,
         "running_container_task_ids": None if running_ids is None else sorted(running_ids),

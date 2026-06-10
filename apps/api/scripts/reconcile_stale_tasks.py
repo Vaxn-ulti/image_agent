@@ -18,6 +18,13 @@ def main(argv: list[str] | None = None) -> None:
         help="Run the Docker label check in dry-run mode and include running task ids in the JSON report.",
     )
     parser.add_argument(
+        "--task-id",
+        action="append",
+        type=int,
+        dest="task_ids",
+        help="Limit stale-task candidates or apply updates to the given task id. Repeat for multiple ids.",
+    )
+    parser.add_argument(
         "--reason",
         default="operator confirmed no matching running Image Agent container",
         help="Audit reason stored in task error_message when --apply is used.",
@@ -31,6 +38,7 @@ def main(argv: list[str] | None = None) -> None:
         apply=args.apply,
         running_container_task_ids=running_task_ids,
         container_check_status="passed" if should_check_containers else "not_requested",
+        task_ids=args.task_ids,
         reason=args.reason,
     )
     print(json.dumps(report, indent=2, sort_keys=True))

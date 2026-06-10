@@ -160,6 +160,35 @@ def test_reconcile_stale_active_tasks_marks_old_task_failed_with_audit(tmp_path,
     assert "stale task reconciliation" in log_path.read_text(encoding="utf-8")
 
 
+def test_reconcile_stale_active_tasks_can_scope_apply_to_task_ids(tmp_path, monkeypatch):
+    from app.workflows import stale_tasks
+
+    _prepare_db(tmp_path, monkeypatch)
+    now = datetime(2026, 6, 11, 0, 0, tzinfo=timezone.utc)
+    started = (now - timedelta(hours=72)).isoformat()
+    with database.connect() as conn:
+        for task_id in (83, 84):
+            conn.execute(
+                "INSERT INTO tasks(id, project_id, series_id, workflow_type, status, progress, log_path, created_at, started_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                (task_id, 1, 1, "dwi_qsirecon", "running", 20, str(tmp_path / f"task-{task_id}.log"), started, started),
+            )
+
+    report = stale_tasks.reconcile_stale_active_tasks(
+        max_age_hours=24,
+        apply=True,
+        now=now,
+        running_container_task_ids=set(),
+        task_ids={83},
+        reason="operator approved task 83 only",
+    )
+
+    assert report["updated_task_ids"] == [83]
+    assert report["out_of_scope_stale_task_ids"] == [84]
+    with database.connect() as conn:
+        rows = conn.execute("SELECT id, status FROM tasks ORDER BY id").fetchall()
+    assert [(row["id"], row["status"]) for row in rows] == [(83, "failed"), (84, "running")]
+
+
 def test_cli_check_containers_keeps_dry_run_read_only(tmp_path, monkeypatch, capsys):
     _prepare_db(tmp_path, monkeypatch)
     now = datetime.now(timezone.utc)
@@ -184,3 +213,26 @@ def test_cli_check_containers_keeps_dry_run_read_only(tmp_path, monkeypatch, cap
     with database.connect() as conn:
         row = conn.execute("SELECT status FROM tasks WHERE id=83").fetchone()
     assert row["status"] == "running"
+
+
+def test_cli_task_id_scopes_dry_run_candidates(tmp_path, monkeypatch, capsys):
+    _prepare_db(tmp_path, monkeypatch)
+    now = datetime.now(timezone.utc)
+    started = (now - timedelta(hours=72)).isoformat()
+    with database.connect() as conn:
+        for task_id in (83, 84):
+            conn.execute(
+                "INSERT INTO tasks(id, project_id, series_id, workflow_type, status, progress, log_path, created_at, started_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                (task_id, 1, 1, "dwi_qsirecon", "running", 20, str(tmp_path / f"task-{task_id}.log"), started, started),
+            )
+
+    cli = _load_reconcile_cli()
+    monkeypatch.setattr(cli, "running_container_task_ids_from_docker", lambda: set())
+
+    cli.main(["--max-age-hours", "24", "--check-containers", "--task-id", "83"])
+
+    report = json.loads(capsys.readouterr().out)
+    assert [task["id"] for task in report["stale_candidates"]] == [83]
+    assert report["out_of_scope_stale_task_ids"] == [84]
+    assert report["target_task_ids"] == [83]
+    assert report["updated_task_ids"] == []
