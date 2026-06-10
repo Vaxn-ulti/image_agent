@@ -86,6 +86,25 @@ Then restart the API with the service manager used on the host and run the smoke
 
 The wrapper uses `IMAGE_AGENT_STOP_TIMEOUT_SECONDS` while waiting for the old Image Agent uvicorn process to exit, and `IMAGE_AGENT_START_TIMEOUT_SECONDS` while waiting for the new API to become healthy. The post-restart `/health` must return `app=image_agent`; otherwise the restart fails and the operator should inspect `apps/api/api.out`.
 
+For accepted builds, prefer running the live API from a release overlay rather
+than the dirty remote main worktree. Set `IMAGE_AGENT_RELEASE_ROOT` to the
+accepted release directory, or set `IMAGE_AGENT_API_DIR` directly to that
+release's `apps/api` directory. By default, the restart wrapper still reads
+`IMAGE_AGENT_ENV_FILE` from the shared main repo `.env` and runs Python from
+`IMAGE_AGENT_SHARED_VENV_BIN`, which defaults to the shared main repo venv. This
+keeps the dirty remote main worktree out of the serving path while still reusing
+the operator-managed environment and dependencies.
+
+Example live release-overlay restart:
+
+```bash
+export IMAGE_AGENT_ROOT=/home/yyf/project/image_agent
+export IMAGE_AGENT_RELEASE_ROOT=/home/yyf/project/image_agent_releases/codex-7e7ff94-20260610
+export IMAGE_AGENT_ENV_FILE=/home/yyf/project/image_agent/.env
+export IMAGE_AGENT_SHARED_VENV_BIN=/home/yyf/project/image_agent/apps/api/.venv/bin
+bash tools/restart_remote_image_agent_api.sh
+```
+
 ## Smoke Checks
 
 From the remote backend directory:

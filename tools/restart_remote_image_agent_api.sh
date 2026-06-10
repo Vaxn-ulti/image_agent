@@ -2,13 +2,19 @@
 set -euo pipefail
 
 ROOT="${IMAGE_AGENT_ROOT:-/home/yyf/project/image_agent}"
-API_DIR="${IMAGE_AGENT_API_DIR:-$ROOT/apps/api}"
+RELEASE_ROOT="${IMAGE_AGENT_RELEASE_ROOT:-$ROOT}"
+API_DIR="${IMAGE_AGENT_API_DIR:-$RELEASE_ROOT/apps/api}"
+ENV_FILE="${IMAGE_AGENT_ENV_FILE:-$ROOT/.env}"
+SHARED_VENV_BIN="${IMAGE_AGENT_SHARED_VENV_BIN:-$ROOT/apps/api/.venv/bin}"
+VENV_BIN="${IMAGE_AGENT_VENV_BIN:-$SHARED_VENV_BIN}"
+PYTHON_BIN="${IMAGE_AGENT_PYTHON_BIN:-$VENV_BIN/python}"
+UVICORN_BIN="${IMAGE_AGENT_UVICORN_BIN:-$VENV_BIN/uvicorn}"
 HOST="${IMAGE_AGENT_API_HOST:-0.0.0.0}"
 PORT="${IMAGE_AGENT_API_PORT:-8000}"
 API_BASE="${IMAGE_AGENT_API_BASE:-http://127.0.0.1:$PORT}"
 STOP_TIMEOUT_SECONDS="${IMAGE_AGENT_STOP_TIMEOUT_SECONDS:-20}"
 START_TIMEOUT_SECONDS="${IMAGE_AGENT_START_TIMEOUT_SECONDS:-45}"
-UVICORN_PATTERN="$API_DIR/.venv/bin/.*uvicorn app.main:app.*--port $PORT"
+UVICORN_PATTERN="${IMAGE_AGENT_UVICORN_PATTERN:-uvicorn app.main:app.*--port $PORT}"
 
 fail() {
   printf 'error:%s\n' "$*" >&2
@@ -18,7 +24,10 @@ fail() {
 load_env() {
   cd "$API_DIR"
   set -a
-  if [[ -f ../../.env ]]; then
+  if [[ -f "$ENV_FILE" ]]; then
+    # shellcheck disable=SC1090
+    . "$ENV_FILE"
+  elif [[ -f ../../.env ]]; then
     # shellcheck disable=SC1091
     . ../../.env
   fi
@@ -32,7 +41,7 @@ check_no_active_tasks() {
   fi
   local active
   active="$(
-    .venv/bin/python - <<'PY'
+    "$PYTHON_BIN" - <<'PY'
 import json
 from app.db.database import connect
 
@@ -109,14 +118,18 @@ stop_api() {
 
 start_api() {
   cd "$API_DIR"
-  nohup .venv/bin/uvicorn app.main:app --host "$HOST" --port "$PORT" > api.out 2>&1 &
+  if [[ -x "$UVICORN_BIN" ]]; then
+    nohup "$UVICORN_BIN" app.main:app --host "$HOST" --port "$PORT" > api.out 2>&1 &
+  else
+    nohup "$PYTHON_BIN" -m uvicorn app.main:app --host "$HOST" --port "$PORT" > api.out 2>&1 &
+  fi
   echo "$!" > api.pid
   printf 'started:%s\n' "$(cat api.pid)"
 }
 
 health_is_image_agent() {
   local payload="$1"
-  HEALTH_JSON="$payload" .venv/bin/python - <<'PY'
+  HEALTH_JSON="$payload" "$PYTHON_BIN" - <<'PY'
 import json
 import os
 import sys

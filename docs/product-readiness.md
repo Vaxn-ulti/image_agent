@@ -54,4 +54,16 @@ Use the BMAD Method as process guidance, not as a local installation requirement
 
 ## Current Status
 
-As of 2026-06-09, this gate is not passed. Local docs and tests can continue to harden the product, but frontend page design remains blocked until strict remote acceptance evidence proves the deployed agent, RAG, workflow contracts, native QC artifacts, scientific reports, and run traceability all pass together on the remote server.
+As of 2026-06-11, the first formal live-port strict remote acceptance evidence
+has passed for committed release `7e7ff94` on the remote API surface at port
+`8000`. The saved evidence cited in `docs/work-log-2026-06-10.md` includes real
+project/upload/task ids, configured OpenAI-compatible Responses gateway smoke,
+RAG provenance and launchability citation, safe artifact manifest,
+container-native QC, derived scientific report provenance, route-served
+artifacts, and an offline verifier result of `status=passed`.
+
+The product is still in final operational hardening mode before frontend page
+design is released. The remaining readiness condition is to make the accepted
+release overlay the durable normal restart/service path, keep the dirty remote
+main worktree out of the serving path, and refresh or explicitly preserve the
+strict remote acceptance evidence after that operational path is used.
