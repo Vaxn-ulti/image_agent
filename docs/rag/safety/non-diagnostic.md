@@ -1,3 +1,11 @@
+---
+source_type: rag_safety
+policy: non_diagnostic
+status: current_policy
+priority: policy
+retrieved_date: 2026-06-10
+---
+
 # Non-Diagnostic Safety RAG
 
 ## Core Policy / 核心规则
@@ -35,4 +43,3 @@ The image_agent is not a clinician and must not diagnose from workflow outputs. 
 ## Escalation
 
 If the user asks for diagnosis, answer with a refusal to diagnose, then provide a safe explanation of available artifacts and suggest professional review.
-

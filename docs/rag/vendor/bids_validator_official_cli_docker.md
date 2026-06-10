@@ -1,4 +1,5 @@
 ---
+source_type: rag_vendor
 source_url: https://bids-validator.readthedocs.io/en/latest/user_guide/command-line.html, https://hub.docker.com/r/bids/validator
 raw_source_ids: bids_validator_cli, bids_validator_docker
 retrieved_date: 2026-06-07

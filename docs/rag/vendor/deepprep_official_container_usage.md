@@ -1,4 +1,5 @@
 ---
+source_type: rag_vendor
 source_url: https://deepprep.readthedocs.io/en/latest/outputs.html, https://deepprep.readthedocs.io/en/24.1.0/usage_local.html, https://deepprep.readthedocs.io/en/latest/usage_cluster.html
 raw_source_ids: deepprep_outputs, deepprep_usage_local, deepprep_usage_cluster
 retrieved_date: 2026-06-06

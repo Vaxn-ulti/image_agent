@@ -1,3 +1,11 @@
+---
+source_type: rag_safety
+policy: rag_priority
+status: current_policy
+priority: policy
+retrieved_date: 2026-06-10
+---
+
 # RAG Source Priority RAG
 
 ## Purpose / 目的
@@ -33,4 +41,3 @@ Good answer structure:
 2. "Registered/summary outputs..."
 3. "Relevant documentation context..."
 4. "Next safe action..."
-

@@ -1,4 +1,5 @@
 ---
+source_type: rag_vendor
 source_url: https://bids-specification.readthedocs.io/en/stable/modality-specific-files/magnetic-resonance-imaging-data.html, https://bids-specification.readthedocs.io/en/stable/derivatives/introduction.html
 raw_source_ids: bids_mri, bids_derivatives
 retrieved_date: 2026-06-06

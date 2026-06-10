@@ -1,4 +1,5 @@
 ---
+source_type: rag_vendor
 source_url: https://fsl.fmrib.ox.ac.uk/fsl/docs/diffusion/eddy/users_guide/index.html, https://fsl.fmrib.ox.ac.uk/fsl/docs/diffusion/dtifit.html, https://fsl.fmrib.ox.ac.uk/fsl/docs/registration/flirt/user_guide.html, https://fsl.fmrib.ox.ac.uk/fsl/docs/registration/fnirt/user_guide.html, https://fsl.fmrib.ox.ac.uk/fsl/docs/utilities/fslutils.html
 raw_source_ids: fsl_eddy_users_guide, fsl_dtifit, fsl_flirt_user_guide, fsl_fnirt_user_guide, fsl_utils
 retrieved_date: 2026-06-07

@@ -1,3 +1,10 @@
+---
+source_type: rag_contract
+contract: task_events
+status: current_contract
+retrieved_date: 2026-06-10
+---
+
 # Task Events Contract RAG
 
 ## Purpose / 目的

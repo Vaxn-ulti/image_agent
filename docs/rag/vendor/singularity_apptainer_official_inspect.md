@@ -1,4 +1,5 @@
 ---
+source_type: rag_vendor
 source_url: https://docs.sylabs.io/guides/latest/user-guide/cli/singularity_inspect.html, https://apptainer.org/docs/user/latest/cli/apptainer_inspect.html
 raw_source_ids: singularityce_inspect, apptainer_inspect
 retrieved_date: 2026-06-06

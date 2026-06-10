@@ -1,3 +1,10 @@
+---
+source_type: rag_contract
+contract: result_summary
+status: current_contract
+retrieved_date: 2026-06-10
+---
+
 # Result Summary Contract RAG
 
 ## Purpose / 目的

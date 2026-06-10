@@ -1,4 +1,5 @@
 ---
+source_type: rag_vendor
 source_url: https://qsiprep.readthedocs.io/en/stable/usage.html, https://qsiprep.readthedocs.io/en/stable/preprocessing.html
 raw_source_ids: qsiprep_usage, qsiprep_preprocessing_outputs
 retrieved_date: 2026-06-07

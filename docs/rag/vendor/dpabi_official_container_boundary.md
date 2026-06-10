@@ -1,4 +1,5 @@
 ---
+source_type: rag_vendor
 source_url: https://rfmri.org/DPABI, https://rfmri.org/content/dpabidpabisurfdparsf-stand-alone-version, https://rfmri.org/DPABISurfSlurm, https://github.com/Chaogan-Yan/DPABI, https://raw.githubusercontent.com/Chaogan-Yan/DPABI/master/Dockerfile, https://hub.docker.com/v2/repositories/cgyan/dpabi/
 raw_source_ids: dpabi_home, dpabi_standalone_docker, dpabisurfslurm_hpc_singularity, dpabi_github_repo, dpabi_dockerfile, dpabi_docker_hub
 retrieved_date: 2026-06-08

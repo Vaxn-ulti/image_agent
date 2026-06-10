@@ -1,4 +1,5 @@
 ---
+source_type: rag_vendor
 source_url: https://xcp-d.readthedocs.io/en/stable/usage.html, https://xcp-d.readthedocs.io/en/stable/installation.html
 raw_source_ids: xcp_d_usage, xcp_d_installation
 retrieved_date: 2026-06-06

@@ -1,4 +1,5 @@
 ---
+source_type: rag_vendor
 source_url: https://fmriprep.org/en/stable/outputs.html
 raw_source_ids: fmriprep_outputs
 retrieved_date: 2026-06-06

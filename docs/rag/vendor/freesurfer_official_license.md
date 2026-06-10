@@ -1,4 +1,5 @@
 ---
+source_type: rag_vendor
 source_url: https://surfer.nmr.mgh.harvard.edu/registration.html
 raw_source_ids: freesurfer_license_registration
 retrieved_date: 2026-06-07

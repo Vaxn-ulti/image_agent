@@ -1,4 +1,5 @@
 ---
+source_type: rag_vendor
 source_url: https://userdocs.mrtrix.org/en/latest/reference/commands/mrinfo.html, https://userdocs.mrtrix.org/en/latest/reference/commands/dwi2mask.html, https://userdocs.mrtrix.org/en/latest/reference/commands/mrconvert.html, https://userdocs.mrtrix.org/en/latest/reference/commands/dwi2tensor.html, https://userdocs.mrtrix.org/en/latest/reference/commands/tensor2metric.html, https://userdocs.mrtrix.org/en/latest/reference/commands/mrstats.html, https://userdocs.mrtrix.org/en/latest/reference/commands/mrcalc.html
 raw_source_ids: mrtrix3_mrinfo, mrtrix3_dwi2mask, mrtrix3_mrconvert, mrtrix3_dwi2tensor, mrtrix3_tensor2metric, mrtrix3_mrstats, mrtrix3_mrcalc
 retrieved_date: 2026-06-07

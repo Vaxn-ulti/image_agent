@@ -1,4 +1,5 @@
 ---
+source_type: rag_vendor
 source_url: https://www.templateflow.org/python-client/master/installation.html, https://github.com/templateflow/templateflow
 raw_source_ids: templateflow_installation, templateflow_archive
 retrieved_date: 2026-06-06

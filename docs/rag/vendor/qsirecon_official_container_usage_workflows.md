@@ -1,4 +1,5 @@
 ---
+source_type: rag_vendor
 source_url: https://qsirecon.readthedocs.io/en/stable/quickstart.html, https://qsirecon.readthedocs.io/en/stable/builtin_workflows.html, https://qsirecon.readthedocs.io/en/stable/building_workflows.html
 raw_source_ids: qsirecon_quickstart, qsirecon_builtin_workflows, qsirecon_custom_workflows
 retrieved_date: 2026-06-08

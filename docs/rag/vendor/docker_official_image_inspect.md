@@ -1,4 +1,5 @@
 ---
+source_type: rag_vendor
 source_url: https://docs.docker.com/reference/cli/docker/image/inspect/
 raw_source_ids: docker_image_inspect
 retrieved_date: 2026-06-06

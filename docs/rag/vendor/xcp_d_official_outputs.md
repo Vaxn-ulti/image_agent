@@ -1,4 +1,5 @@
 ---
+source_type: rag_vendor
 source_url: https://xcp-d.readthedocs.io/en/stable/outputs.html
 raw_source_ids: xcp_d_outputs
 retrieved_date: 2026-06-06

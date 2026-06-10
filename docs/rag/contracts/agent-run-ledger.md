@@ -1,3 +1,10 @@
+---
+source_type: rag_contract
+contract: agent_run_ledger
+status: current_contract
+retrieved_date: 2026-06-10
+---
+
 # Agent Run Ledger Contract RAG
 
 ## Purpose

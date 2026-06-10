@@ -1,4 +1,5 @@
 ---
+source_type: rag_vendor
 source_url: https://raw.githubusercontent.com/rordenlab/dcm2niix/master/README.md
 raw_source_ids: dcm2niix_readme
 retrieved_date: 2026-06-07

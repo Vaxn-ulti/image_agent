@@ -1,4 +1,5 @@
 ---
+source_type: rag_vendor
 source_url: https://mriqc.readthedocs.io/en/latest/usage.html, https://mriqc.readthedocs.io/en/latest/reports.html, https://mriqc.readthedocs.io/en/latest/install.html, https://www.nipreps.org/apps/docker/, https://www.nipreps.org/apps/singularity/
 raw_source_ids: mriqc_usage, mriqc_reports, mriqc_installation, nipreps_docker_guidelines, nipreps_singularity_guidelines
 retrieved_date: 2026-06-08

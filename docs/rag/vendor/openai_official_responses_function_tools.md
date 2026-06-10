@@ -1,4 +1,5 @@
 ---
+source_type: rag_vendor
 source_url: https://platform.openai.com/docs/guides/function-calling?api-mode=responses, https://platform.openai.com/docs/guides/tools?api-mode=responses, https://raw.githubusercontent.com/openai/openai-python/main/README.md, https://developers.openai.com/api/docs/api-reference/responses/create
 raw_source_ids: openai_function_calling_responses, openai_tools_responses, openai_python_sdk_readme, openai_responses_api_reference
 retrieved_date: 2026-06-07

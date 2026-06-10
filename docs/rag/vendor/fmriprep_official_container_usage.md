@@ -1,4 +1,5 @@
 ---
+source_type: rag_vendor
 source_url: https://fmriprep.org/en/stable/usage.html, https://fmriprep.org/en/stable/installation.html
 raw_source_ids: fmriprep_usage, fmriprep_installation
 retrieved_date: 2026-06-06

@@ -1,4 +1,5 @@
 ---
+source_type: rag_vendor
 source_url: https://surfer.nmr.mgh.harvard.edu/fswiki/recon-all, https://surfer.nmr.mgh.harvard.edu/fswiki/ReconAllOutputFiles
 raw_source_ids: freesurfer_recon_all, freesurfer_recon_all_outputs
 retrieved_date: 2026-06-07

@@ -1,4 +1,5 @@
 ---
+source_type: rag_vendor
 source_url: https://docs.podman.io/en/latest/markdown/podman-image-inspect.1.html
 raw_source_ids: podman_image_inspect
 retrieved_date: 2026-06-06
