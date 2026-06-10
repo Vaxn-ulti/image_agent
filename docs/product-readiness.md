@@ -74,5 +74,8 @@ tasks `83` and `84` remain in `running` state even though they appear stale.
 An auditable stale-task reconciliation tool now exists in
 `apps/api/scripts/reconcile_stale_tasks.py`, but production task rows should be
 changed only after an operator reviews the dry-run output and approves apply
-mode. Once those stale task records are resolved, normal restarts should no
-longer require overriding the active-task drain gate.
+mode. A remote dry-run from non-live release `118c407` reported tasks `83` and
+`84` as stale candidates older than 531 hours, and a shared-env Docker label
+check returned no running labelled Image Agent task ids. Once those stale task
+records are resolved, normal restarts should no longer require overriding the
+active-task drain gate.
