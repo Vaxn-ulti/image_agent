@@ -50,6 +50,7 @@ instead of legacy `/chat`.
 Agent run contract version: `agent_run.v1`.
 Lookup contract version: `agent_run_lookup.v1`.
 Project history contract version: `project_agent_run_history.v1`.
+Error contract version: `agent_api_error.v1`.
 
 Stable agent run states:
 
@@ -103,7 +104,10 @@ the stable enum are normalized to `failed` and recorded in
 
 `GET /agent/runs/{agent_run_id}`
 Response: same safe run fields as `agent_run_lookup.v1`, populated from the
-privacy-safe run ledger.
+privacy-safe run ledger. Lookup responses may include ledger-only audit fields
+such as `message_sha256`, `error_message`, `created_at`, `updated_at`, and
+`finished_at`; these fields are redacted and never contain the raw prompt,
+patient identifiers, host paths, API keys, or raw retrieved snippets.
 
 `POST /agent/runs/{thread_id}/resume`
 Request:
@@ -124,6 +128,24 @@ Response: `agent_run.v1`. Approved fixed-workflow confirmations may return
 `status=task_created` with a backend task object. Rejected or mismatched
 confirmations return stable blocked/cancelled states and never create production
 tasks.
+
+Agent run errors use the same envelope across this endpoint family:
+
+```json
+{
+  "detail": {
+    "contract_version": "agent_api_error.v1",
+    "code": "agent_model_call_failed",
+    "message": "Agent model call failed.",
+    "agent_run_id": "agent_run_..."
+  }
+}
+```
+
+Stable error codes include `message_required`, `agent_run_not_found`,
+`agent_model_call_failed`, and `agent_resume_failed`. Error details must not
+echo raw prompts, backend absolute paths, API keys, patient identifiers, raw
+model errors, or raw RAG snippets.
 
 `GET /projects/{project_id}/agent-runs`
 Response:

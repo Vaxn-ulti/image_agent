@@ -15,10 +15,12 @@ from pydantic import BaseModel
 from app.agent.graph import AgentRunner
 from app.agent.contracts import (
     AGENT_RUN_LOOKUP_CONTRACT_VERSION,
+    AgentApiErrorResponse,
     AgentRunLookupResponse,
     AgentRunResponse,
     ChatCompatibilityResponse,
     ProjectAgentRunHistoryResponse,
+    agent_api_error_detail,
     build_agent_run_response_payload,
     build_chat_compatibility_response,
     build_project_agent_run_history_response,
@@ -406,11 +408,21 @@ def agent_model_status():
     return model_provider_status()
 
 
-@app.post("/agent/runs", response_model=AgentRunResponse)
+AGENT_RUN_ERROR_RESPONSES = {
+    404: {"model": AgentApiErrorResponse},
+    422: {"model": AgentApiErrorResponse},
+    502: {"model": AgentApiErrorResponse},
+}
+
+
+@app.post("/agent/runs", response_model=AgentRunResponse, responses=AGENT_RUN_ERROR_RESPONSES)
 def agent_run(req: AgentRunRequest):
     message = req.message.strip()
     if not message:
-        raise HTTPException(422, "message is required")
+        raise HTTPException(
+            422,
+            agent_api_error_detail("message_required", "message is required"),
+        )
     agent_run_id = start_agent_run(request_type="run", project_id=req.project_id, message=message)
     project_context = read_project_context(req.project_id, rows_fn=rows, workflows=WORKFLOWS)
     try:
@@ -431,15 +443,22 @@ def agent_run(req: AgentRunRequest):
         finish_agent_run(agent_run_id, error=exc)
         raise HTTPException(
             502,
-            {"message": "Agent model call failed.", "agent_run_id": agent_run_id},
+            agent_api_error_detail(
+                "agent_model_call_failed",
+                "Agent model call failed.",
+                agent_run_id=agent_run_id,
+            ),
         ) from exc
 
 
-@app.get("/agent/runs/{agent_run_id}", response_model=AgentRunLookupResponse)
+@app.get("/agent/runs/{agent_run_id}", response_model=AgentRunLookupResponse, responses=AGENT_RUN_ERROR_RESPONSES)
 def agent_run_lookup(agent_run_id: str):
     run = load_agent_run(agent_run_id)
     if run is None:
-        raise HTTPException(404, "Agent run not found")
+        raise HTTPException(
+            404,
+            agent_api_error_detail("agent_run_not_found", "Agent run not found"),
+        )
     return build_agent_run_response_payload(
         run,
         ledger=run,
@@ -447,7 +466,7 @@ def agent_run_lookup(agent_run_id: str):
     )
 
 
-@app.post("/agent/runs/{thread_id}/resume", response_model=AgentRunResponse)
+@app.post("/agent/runs/{thread_id}/resume", response_model=AgentRunResponse, responses=AGENT_RUN_ERROR_RESPONSES)
 def agent_resume(thread_id: str, req: AgentResumeRequest):
     def _create_task(series_id: int, workflow_type: str, qsiprep_task_id: int | None = None) -> dict:
         return create_series_task(series_id, RunRequest(workflow_type=workflow_type, qsiprep_task_id=qsiprep_task_id))
@@ -481,7 +500,11 @@ def agent_resume(thread_id: str, req: AgentResumeRequest):
         finish_agent_run(agent_run_id, error=exc)
         raise HTTPException(
             502,
-            {"message": "Agent resume failed.", "agent_run_id": agent_run_id},
+            agent_api_error_detail(
+                "agent_resume_failed",
+                "Agent resume failed.",
+                agent_run_id=agent_run_id,
+            ),
         ) from exc
 
 

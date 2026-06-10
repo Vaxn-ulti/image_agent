@@ -10,6 +10,7 @@ AGENT_RUN_CONTRACT_VERSION = "agent_run.v1"
 AGENT_RUN_LOOKUP_CONTRACT_VERSION = "agent_run_lookup.v1"
 PROJECT_AGENT_RUN_HISTORY_CONTRACT_VERSION = "project_agent_run_history.v1"
 CHAT_COMPATIBILITY_CONTRACT_VERSION = "chat_compat.v1"
+AGENT_API_ERROR_CONTRACT_VERSION = "agent_api_error.v1"
 
 
 class AgentRunStatus(str, Enum):
@@ -72,6 +73,26 @@ class AgentRunResponse(BaseModel):
 
 class AgentRunLookupResponse(AgentRunResponse):
     contract_version: Literal["agent_run_lookup.v1"] = AGENT_RUN_LOOKUP_CONTRACT_VERSION
+    message_sha256: str | None = None
+    error_message: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+    finished_at: str | None = None
+
+
+class AgentApiErrorDetail(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    contract_version: Literal["agent_api_error.v1"] = AGENT_API_ERROR_CONTRACT_VERSION
+    code: str
+    message: str
+    agent_run_id: str | None = None
+
+
+class AgentApiErrorResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    detail: AgentApiErrorDetail
 
 
 class ProjectAgentRunHistoryItem(BaseModel):
@@ -206,7 +227,25 @@ def build_agent_run_response_payload(
         "tool_invocations": _list_value(ledger.get("tool_invocations")),
         "events": _list_value(result.get("events")) or _list_value(ledger.get("events")),
     }
+    if contract_version == AGENT_RUN_LOOKUP_CONTRACT_VERSION:
+        payload.update(
+            {
+                "message_sha256": ledger.get("message_sha256"),
+                "error_message": ledger.get("error_message"),
+                "created_at": ledger.get("created_at"),
+                "updated_at": ledger.get("updated_at"),
+                "finished_at": ledger.get("finished_at"),
+            }
+        )
     return {key: value for key, value in payload.items() if value is not None}
+
+
+def agent_api_error_detail(code: str, message: str, *, agent_run_id: str | None = None) -> dict[str, Any]:
+    return AgentApiErrorDetail(
+        code=code,
+        message=message,
+        agent_run_id=agent_run_id,
+    ).model_dump(exclude_none=True)
 
 
 def build_project_agent_run_history_response(project_id: int, agent_runs: list[dict[str, Any]]) -> dict[str, Any]:

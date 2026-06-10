@@ -101,6 +101,16 @@ def test_agent_api_openapi_declares_stable_response_contracts():
         schema["paths"]["/agent/runs/{thread_id}/resume"]["post"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
         == "#/components/schemas/AgentRunResponse"
     )
+    for method, path, status_code in (
+        ("post", "/agent/runs", "422"),
+        ("post", "/agent/runs", "502"),
+        ("get", "/agent/runs/{agent_run_id}", "404"),
+        ("post", "/agent/runs/{thread_id}/resume", "502"),
+    ):
+        assert (
+            schema["paths"][path][method]["responses"][status_code]["content"]["application/json"]["schema"]["$ref"]
+            == "#/components/schemas/AgentApiErrorResponse"
+        )
     assert (
         schema["paths"]["/projects/{project_id}/agent-runs"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
         == "#/components/schemas/ProjectAgentRunHistoryResponse"
@@ -313,6 +323,13 @@ def test_agent_run_requires_message():
     result = TestClient(app).post("/agent/runs", json={"project_id": None, "message": ""})
 
     assert result.status_code == 422
+    assert result.json() == {
+        "detail": {
+            "contract_version": "agent_api_error.v1",
+            "code": "message_required",
+            "message": "message is required",
+        }
+    }
 
 
 def test_agent_run_failure_ledger_redacts_sensitive_error_text(tmp_path, monkeypatch):
@@ -339,6 +356,9 @@ def test_agent_run_failure_ledger_redacts_sensitive_error_text(tmp_path, monkeyp
     result = TestClient(app).post("/agent/runs", json={"project_id": 7, "message": "patient John Doe"})
 
     assert result.status_code == 502
+    assert result.json()["detail"]["contract_version"] == "agent_api_error.v1"
+    assert result.json()["detail"]["code"] == "agent_model_call_failed"
+    assert result.json()["detail"]["message"] == "Agent model call failed."
     detail_json = json.dumps(result.json()["detail"], ensure_ascii=False)
     assert "agent_run_id" in result.json()["detail"]
     assert "sk-test-secret" not in detail_json
@@ -470,7 +490,13 @@ def test_agent_run_lookup_returns_404_for_unknown_run(tmp_path, monkeypatch):
     result = TestClient(app).get("/agent/runs/agent_run_missing")
 
     assert result.status_code == 404
-    assert result.json()["detail"] == "Agent run not found"
+    assert result.json() == {
+        "detail": {
+            "contract_version": "agent_api_error.v1",
+            "code": "agent_run_not_found",
+            "message": "Agent run not found",
+        }
+    }
 
 
 def test_agent_run_lookup_redacts_free_text_error_message(tmp_path, monkeypatch):
@@ -976,8 +1002,101 @@ def test_agent_resume_returns_ready_to_launch(tmp_path, monkeypatch):
     )
 
     assert result.status_code == 200
+    assert result.json()["contract_version"] == "agent_run.v1"
     assert result.json()["status"] == "ready_to_launch"
     assert result.json()["tool_input"]["workflow_type"] == "t1_deepprep"
+
+
+def test_agent_resume_contract_normalizes_unknown_runner_status(tmp_path, monkeypatch):
+    from app.core import config
+    from app.db import database
+    from app import main
+    from app.main import app
+
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
+    database.init_db()
+
+    class FakeRunner:
+        def resume(self, *, thread_id, approved, confirmation, create_task_fn=None):
+            return {
+                "status": "surprising_resume_status",
+                "thread_id": thread_id,
+                "message": "resume status drift",
+            }
+
+    monkeypatch.setattr(main, "AgentRunner", lambda: FakeRunner())
+
+    result = TestClient(app).post(
+        "/agent/runs/thread-unknown-status/resume",
+        json={
+            "approved": True,
+            "confirmation": {
+                "type": "workflow_execution",
+                "project_id": 1,
+                "series_id": 11,
+                "workflow_type": "t1_deepprep",
+            },
+        },
+    )
+
+    assert result.status_code == 200
+    body = result.json()
+    assert body["contract_version"] == "agent_run.v1"
+    assert body["status"] == "failed"
+    assert body["safe_metadata"]["contract_status_normalized_from"] == "surprising_resume_status"
+
+    with database.connect() as conn:
+        row = conn.execute("SELECT * FROM agent_runs WHERE agent_run_id=?", (body["agent_run_id"],)).fetchone()
+    assert row["request_type"] == "resume"
+    assert row["status"] == "failed"
+
+
+def test_agent_resume_failure_returns_stable_error_contract(tmp_path, monkeypatch):
+    from app.core import config
+    from app.db import database
+    from app import main
+    from app.main import app
+
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
+    database.init_db()
+
+    class FakeRunner:
+        def resume(self, *, thread_id, approved, confirmation, create_task_fn=None):
+            raise RuntimeError("OPENAI_API_KEY=sk-test-secret failed at C:/Users/A/private/patient-001")
+
+    monkeypatch.setattr(main, "AgentRunner", lambda: FakeRunner())
+
+    result = TestClient(app).post(
+        "/agent/runs/thread-failure/resume",
+        json={
+            "approved": True,
+            "confirmation": {
+                "type": "workflow_execution",
+                "project_id": 1,
+                "series_id": 11,
+                "workflow_type": "t1_deepprep",
+            },
+        },
+    )
+
+    assert result.status_code == 502
+    detail = result.json()["detail"]
+    assert detail["contract_version"] == "agent_api_error.v1"
+    assert detail["code"] == "agent_resume_failed"
+    assert detail["message"] == "Agent resume failed."
+    assert detail["agent_run_id"]
+    detail_json = json.dumps(detail, ensure_ascii=False)
+    assert "sk-test-secret" not in detail_json
+    assert "patient-001" not in detail_json
+    assert "C:/Users/A/private" not in detail_json
+
+    with database.connect() as conn:
+        row = conn.execute("SELECT * FROM agent_runs WHERE agent_run_id=?", (detail["agent_run_id"],)).fetchone()
+    assert row["request_type"] == "resume"
+    assert row["status"] == "failed"
+    assert row["error_message"] == "redacted_error_summary"
 
 
 def test_agent_resume_approved_confirmation_creates_real_task(tmp_path, monkeypatch):

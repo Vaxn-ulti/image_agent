@@ -20,7 +20,11 @@ Baseline endpoints:
 - `GET /agent/rag/status`
 - `POST /agent/rag/query`
 - `POST /agent/tools/verify-scientific-reports`
-- `POST /chat`
+- `POST /agent/runs`
+- `GET /agent/runs/{agent_run_id}`
+- `POST /agent/runs/{thread_id}/resume`
+- `GET /projects/{project_id}/agent-runs`
+- `POST /chat` compatibility only; new product surfaces should use the `/agent/runs` contract family.
 
 Phase 4 ingest endpoints include upload-session ingest and inventory status endpoints. Keep synchronous tiny-upload fast paths consistent with the persisted status endpoint output.
 
@@ -108,7 +112,7 @@ Workflow eligibility contract:
 
 ## Agent Orchestration Contract
 
-- `POST /agent/rag/query` and `POST /chat` should expose `intent`, `recommended_next_step`, `tool_chain_hint`, `tool_invocations`, and `rag_mode`.
+- `POST /agent/runs` is the primary product agent entrypoint. `POST /agent/rag/query` and compatibility `POST /chat` should expose `intent`, `recommended_next_step`, `tool_chain_hint`, `tool_invocations`, and `rag_mode` where applicable.
 - `tool_invocations` is a read-only trace of internal agent tools, such as `inspect_task_status`, `inspect_registered_outputs`, `inspect_scientific_reports`, and `recommend_next_action`.
 - The built-in agent may inspect state and suggest next actions from backend records, but it must not launch long-running workflows directly from chat.
 - `POST /agent/tools/verify-scientific-reports` is a read-only Agent tool endpoint for report-layer acceptance. It accepts `task_ids`, optional `projects_root`, optional explicit `output_dirs`, and `require_modalities`, then returns `ok`, `read_only`, resolution errors, missing modalities, and per-output checks.
