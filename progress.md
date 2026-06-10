@@ -94,3 +94,10 @@
   - Fixed `rag_orchestration.py` fallback frontmatter parsing so YAML-list metadata survives when `.rag_index` is absent or stale.
   - Added tests for fallback YAML-list preservation and required workflow frontmatter fields.
   - Verification: `python -m pytest apps/api/tests/test_agent_state_and_rag_index.py apps/api/tests/test_rag_query.py apps/api/tests/test_skill_and_rag_docs.py::test_workflow_rag_docs_have_machine_readable_frontmatter -q` returned `33 passed`.
+- Hardened artifact manifest display classification:
+  - Added manifest item fields `artifact_category`, `container_native_qc`, `derived_scientific_report`, and `frontend_preview_asset`.
+  - Added `counts_by_artifact_category` to the manifest envelope.
+  - Defaulted unlabeled `reports/*` assets to derived scientific report presentation metadata, including `source_stage=scientific_report`, `artifact_role=derived_presentation_asset`, `artifact_origin=generated_from_result_summary`, `native_artifact=false`, and `provenance.replaces_native_qc=false`.
+  - Preserved explicit container-native metadata when `native_artifact=true` and the item is not report-layer derived.
+  - Updated result-summary/container-QC RAG contracts and workflow/result-reviewer skill references so agents and frontend consumers distinguish native QC evidence from derived report assets.
+  - Verification: `python -m pytest apps/api/tests/test_artifact_manifest_contract.py apps/api/tests/test_result_contract.py apps/api/tests/test_skill_and_rag_docs.py::test_rag_corpus_contains_required_sections_and_vendor_metadata -q` returned `11 passed`; `python -m py_compile apps/api/app/workflows/artifact_manifest.py apps/api/tests/test_artifact_manifest_contract.py` passed.

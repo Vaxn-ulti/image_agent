@@ -80,6 +80,15 @@ Use `/tasks/{task_id}/artifact-manifest` as the stable preview/download list for
 
 The rule is: do not expose backend absolute paths through the manifest. It recomputes download URLs through `/tasks/{task_id}/artifacts/{relative_path}` and omits missing or unsafe paths. The result-summary remains authoritative for scientific/result interpretation; the manifest is only a display/download convenience.
 
+Manifest items also classify display provenance:
+
+- `artifact_category`: one of `container_native_qc`, `derived_scientific_report`, `frontend_preview_asset`, or `source_artifact`.
+- `container_native_qc`: true only for native workflow/container artifacts, not report-builder substitutes.
+- `derived_scientific_report`: true for report-layer assets generated from result-summary evidence, including unlabeled `reports/*` PNG/HTML assets.
+- `frontend_preview_asset`: true when `preview_kind` is embeddable or directly previewable (`image`, `html`, `table`, or `json`).
+
+Generated scientific report assets should carry `source_stage=scientific_report`, `artifact_role=derived_presentation_asset`, `artifact_origin=generated_from_result_summary`, `native_artifact=false`, and `provenance.replaces_native_qc=false`. These assets are useful for presentation, but they do not satisfy container-native QC evidence by themselves.
+
 ## Suggested Answer Shape
 
 Task `<id>` ran `<workflow_type>` for `<modality>`. Its summary reports spaces `<spaces>` and feature groups `<feature_groups>`. The most relevant artifacts are `<outputs>`. Provenance says `<provenance status>`, so these outputs are `<real|validation-only|placeholder>`.

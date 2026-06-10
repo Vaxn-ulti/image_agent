@@ -64,9 +64,12 @@ def build_artifact_manifest(
         )
 
     counts: dict[str, int] = {}
+    category_counts: dict[str, int] = {}
     for artifact in artifacts:
         section = artifact["section"]
         counts[section] = counts.get(section, 0) + 1
+        category = artifact["artifact_category"]
+        category_counts[category] = category_counts.get(category, 0) + 1
 
     summary_available = isinstance(result_summary, dict)
     return {
@@ -84,6 +87,7 @@ def build_artifact_manifest(
         },
         "artifact_endpoint": f"/tasks/{task['id']}/artifacts/{{relative_path}}",
         "counts_by_section": counts,
+        "counts_by_artifact_category": category_counts,
         "artifacts": artifacts,
         "omitted_artifacts": omitted,
     }
@@ -145,6 +149,7 @@ def _append_manifest_item(
     ):
         if key in item:
             manifest_item[key] = item[key]
+    manifest_item.update(_artifact_classification(normalized_relative_path, manifest_item))
     artifacts.append(manifest_item)
 
 
@@ -197,6 +202,52 @@ def _preview_kind(path: Path, content_type: str) -> str:
     if suffix == ".json" or content_type == "application/json":
         return "json"
     return "download"
+
+
+def _artifact_classification(relative_path: str, item: dict[str, Any]) -> dict[str, Any]:
+    preview_kind = str(item.get("preview_kind") or "download")
+    source_stage = str(item.get("source_stage") or "")
+    artifact_role = str(item.get("artifact_role") or "")
+    artifact_origin = str(item.get("artifact_origin") or "")
+    native_declared = item.get("native_artifact") is True
+    normalized = relative_path.replace("\\", "/").lower()
+    derived_report = (
+        source_stage == "scientific_report"
+        or artifact_role == "derived_presentation_asset"
+        or artifact_origin == "generated_from_result_summary"
+        or (not native_declared and normalized.startswith("reports/"))
+    )
+    container_native_qc = native_declared and not derived_report
+    frontend_preview_asset = preview_kind in {"image", "html", "table", "json"}
+
+    if container_native_qc:
+        category = "container_native_qc"
+    elif derived_report:
+        category = "derived_scientific_report"
+    elif frontend_preview_asset:
+        category = "frontend_preview_asset"
+    else:
+        category = "source_artifact"
+
+    updates: dict[str, Any] = {
+        "artifact_category": category,
+        "container_native_qc": container_native_qc,
+        "derived_scientific_report": derived_report,
+        "frontend_preview_asset": frontend_preview_asset,
+    }
+    if derived_report:
+        if not item.get("source_stage"):
+            updates["source_stage"] = "scientific_report"
+        if not item.get("artifact_role"):
+            updates["artifact_role"] = "derived_presentation_asset"
+        if not item.get("artifact_origin"):
+            updates["artifact_origin"] = "generated_from_result_summary"
+        updates["native_artifact"] = False
+        provenance = item.get("provenance") if isinstance(item.get("provenance"), dict) else {}
+        updates["provenance"] = {**provenance, "replaces_native_qc": False}
+    elif "native_artifact" not in item:
+        updates["native_artifact"] = False
+    return updates
 
 
 def _summary_relative_path(output_dir: Path, result_summary: dict[str, Any]) -> str | None:

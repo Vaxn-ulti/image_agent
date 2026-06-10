@@ -22,9 +22,10 @@ For each artifact family, check:
 - `download_url` resolves through the artifact endpoint;
 - `content_type` matches file type;
 - `size_bytes` is present and nonzero where expected;
-- the manifest envelope uses `contract_version=artifact_manifest_v1`; artifact items carry a valid `preview_kind`, safe `relative_path`, recomputed `download_url`, `content_type`, `size_bytes`, and no backend `path` leakage;
+- the manifest envelope uses `contract_version=artifact_manifest_v1`; artifact items carry a valid `preview_kind`, safe `relative_path`, recomputed `download_url`, `content_type`, `size_bytes`, `artifact_category`, `container_native_qc`, `derived_scientific_report`, `frontend_preview_asset`, and no backend `path` leakage;
 - feature group, modality, atlas, and space match the artifact content;
 - reports include `reports/index.html` and a manifest when the report layer is expected.
+- generated report PNG/HTML assets are classified as `derived_scientific_report`, not `container_native_qc`, unless explicit native metadata proves otherwise.
 
 ## Modality Reminders
 
@@ -39,3 +40,4 @@ For each artifact family, check:
 - Local absolute path exposed instead of artifact URL.
 - Result summary says one atlas while tables were generated with another.
 - Report HTML exists but is not registered under `outputs.reports`.
+- `reports/*.png` is counted as native QC just because it is previewable.

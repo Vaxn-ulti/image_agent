@@ -33,7 +33,7 @@ Continue developing Image Agent until the agent product is mature and stable eno
 | 2. Readiness Audit | in_progress | Subagent findings merged into findings.md; prioritized epics and first stories selected. |
 | 3. Agent API Contract Hardening | in_progress | `/agent/runs`, run lookup, resume, project history, and legacy `/chat` boundaries have stable contract versions, response models, status enums, and tests. |
 | 4. Official RAG Metadata Standardization | in_progress | Workflow docs expose machine-readable official grounding, expected artifacts, unsupported boundaries, source ids, and answer-boundary tests. |
-| 5. Workflow Artifact Contract Hardening | pending | `/artifact-manifest` is the frontend source of truth and separates container-native QC, derived scientific reports, and preview assets. |
+| 5. Workflow Artifact Contract Hardening | in_progress | `/artifact-manifest` is the frontend source of truth and separates container-native QC, derived scientific reports, and preview assets. |
 | 6. Skill Maintenance | pending | Image Agent skills follow skill-creator structure and have routing, audit, eval, and stale-name coverage. |
 | 7. Remote Verification Loop | pending | Remote server install/test/run evidence is logged; local-only execution is avoided. |
 | 8. Product Maturity Gate | pending | Stability/readiness checklist passes; only then notify user that frontend page design can begin. |
@@ -77,6 +77,13 @@ Continue developing Image Agent until the agent product is mature and stable eno
   - `docs/rag/workflows/workflow_launchability_matrix.md`
 - Required machine fields are now tested: `source_type`, `workflow_type`, `status`, `official_grounding`, `expected_artifacts`, and `unsupported_boundaries`.
 - `rag_orchestration.py` fallback retrieval now preserves YAML-list metadata when `.rag_index` is missing or stale.
+
+## Current Artifact Contract Progress
+
+- `/tasks/{task_id}/artifact-manifest` now classifies artifacts with `artifact_category`, `container_native_qc`, `derived_scientific_report`, and `frontend_preview_asset`.
+- Unlabeled `reports/*` preview assets default to derived scientific report metadata and cannot count as `container_native_qc`.
+- Manifest envelope includes `counts_by_artifact_category`.
+- RAG and skill references now state that derived scientific report assets are useful for presentation but do not replace native QC evidence.
 
 ## Remote Runtime Notes
 

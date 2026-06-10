@@ -19,6 +19,8 @@ The agent may create a lightweight index page or thumbnail gallery, but it must 
 
 Each native QC/report/figure/table/map/log artifact should carry `official_source_ids` in top-level artifact metadata and `provenance`. These ids point to curated RAG vendor documents that explain why the artifact is expected.
 
+`/tasks/{task_id}/artifact-manifest` is the frontend display/download source of truth. It must label each item with `artifact_category`, `container_native_qc`, `derived_scientific_report`, and `frontend_preview_asset` so UI and agents can distinguish native evidence from report-layer presentation assets.
+
 ## Expected Native Artifacts
 
 ### BOLD fMRIPrep
@@ -71,6 +73,8 @@ HTML reports belong in `outputs.reports`. PNG/SVG/JPEG/WebP assets belong in `ou
 Accepted `official_source_ids` include `docs/rag/vendor/fmriprep_official_outputs.md`, `docs/rag/vendor/xcp_d_official_outputs.md`, `docs/rag/vendor/deepprep_official_container_usage.md`, `docs/rag/vendor/freesurfer_official_container_reconall.md`, `docs/rag/vendor/qsiprep_official_container_usage_outputs.md`, `docs/rag/vendor/qsirecon_official_container_usage_workflows.md`, `docs/rag/vendor/fsl_official_fast_dti_tools.md`, and `docs/rag/vendor/mrtrix3_official_dti_toolbox.md`.
 
 `official_source_ids` are evidence pointers for RAG answers and frontend source display. They are not proof that a particular task succeeded or that an artifact was produced correctly; backend task status and result-summary remain authoritative.
+
+Generated report assets under `reports/*` are classified as `derived_scientific_report` unless explicit metadata proves a container-native source. They should default to `source_stage=scientific_report`, `artifact_role=derived_presentation_asset`, `artifact_origin=generated_from_result_summary`, `native_artifact=false`, and `provenance.replaces_native_qc=false`. They can be previewed, but they must not satisfy `container_native_qc=true`.
 
 ## Container Decomposition Requirements
 
@@ -147,3 +151,5 @@ The frontend should display:
 - Provenance: container image, command/script path, task id, workflow type, validation-only status, and `official_source_ids`.
 
 If a native artifact cannot be embedded safely, show a download/open link with content type and size.
+
+When a report-builder PNG or HTML asset exists without a matching container-native QC artifact, show it as a derived scientific report and flag the missing native QC evidence separately.
