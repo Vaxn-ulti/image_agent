@@ -1,5 +1,16 @@
 # Concrete Examples and Evals
 
+## Contents
+
+- Runner Example 1: Validate BOLD DeepPrep
+- Runner Example 2: Run QSI Full
+- Runner Example 2b: Run Production Fast GPU DTI
+- Runner Example 2c: Production Fast GPU DTI Missing JSON
+- Runner Example 3: QSIPrep Image Missing CUDA Eddy
+- Runner Example 4: QSIRecon Missing Recon Spec
+- Runner Example 5: Missing License
+- Eval Checklist
+
 ## Runner Example 1: Validate BOLD DeepPrep
 
 Inputs:

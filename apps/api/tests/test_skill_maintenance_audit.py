@@ -35,5 +35,8 @@ def test_skill_maintenance_audit_passes_current_repository():
     assert result["status"] == "passed"
     assert result["routing_matrix"]["covered_skill_count"] == 7
     assert result["skills"]["checked_skill_count"] == 7
+    assert result["references"]["checked_reference_count"] >= 25
+    assert result["references"]["long_reference_count"] >= 2
+    assert result["references"]["long_references_with_toc"] == result["references"]["long_reference_count"]
     assert result["evals"]["skills_with_required_categories"] == 7
     assert result["findings"] == []

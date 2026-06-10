@@ -1,5 +1,13 @@
 # DWI/QSI GPU Strategy
 
+## Contents
+
+- Production DWI Lightweight Toolbox Policy
+- Legacy QSIPrep/QSI Current State
+- QSIPrep Policy
+- QSIRecon Policy
+- Controller Finding and Runtime Lessons
+
 ## Production DWI Lightweight Toolbox Policy
 
 - `dwi_fast_gpu_dti` is the production DWI workflow.

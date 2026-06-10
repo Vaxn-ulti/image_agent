@@ -1,5 +1,17 @@
 # Contracts
 
+## Contents
+
+- API
+- Task States
+- Workflow Types
+- Shared Result Contract
+- Agent Orchestration Contract
+- BIDS-like Rules
+- Workflow Dependencies
+- Result Summary Semantics
+- BOLD Descriptive Review Boundary
+
 ## API
 
 Baseline endpoints:

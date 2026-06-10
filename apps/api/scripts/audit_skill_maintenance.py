@@ -26,6 +26,7 @@ REQUIRED_SECTIONS = {
 }
 
 REQUIRED_EVAL_CATEGORIES = {"normal_path", "missing_info", "risk_conflict"}
+LONG_REFERENCE_LINE_THRESHOLD = 100
 SECRET_PATTERNS = (
     re.compile(r"sk-[A-Za-z0-9]{20,}"),
     re.compile(r"(?:OPENAI|DEEPSEEK|RAWCHAT|API)_?KEY\s*=\s*['\"]?[^`'\"\s<]+", re.IGNORECASE),
@@ -39,12 +40,14 @@ def audit_skill_maintenance(root: str | Path = ".") -> dict[str, Any]:
 
     matrix = _audit_routing_matrix(skills_root, findings)
     skills = _audit_skills(skills_root, findings)
+    references = _audit_references(skills_root, findings)
     evals = _audit_evals(skills_root, findings)
 
     return {
         "status": "passed" if not findings else "failed",
         "routing_matrix": matrix,
         "skills": skills,
+        "references": references,
         "evals": evals,
         "findings": findings,
     }
@@ -145,6 +148,42 @@ def _audit_evals(skills_root: Path, findings: list[dict[str, str]]) -> dict[str,
     return {"skills_with_required_categories": passed}
 
 
+def _audit_references(skills_root: Path, findings: list[dict[str, str]]) -> dict[str, Any]:
+    checked = 0
+    long_count = 0
+    long_with_toc = 0
+    for skill_name in sorted(REQUIRED_SKILLS):
+        references_dir = skills_root / skill_name / "references"
+        for path in sorted(references_dir.glob("*.md")):
+            checked += 1
+            text = path.read_text(encoding="utf-8")
+            _audit_sensitive_text(path, text, findings)
+            line_count = len(text.splitlines())
+            if line_count < LONG_REFERENCE_LINE_THRESHOLD:
+                continue
+            long_count += 1
+            if _has_toc(text):
+                long_with_toc += 1
+            else:
+                findings.append(
+                    _finding(
+                        "long_reference_missing_toc",
+                        str(path),
+                        f"{line_count} lines; add a Contents/Table of Contents section.",
+                    )
+                )
+    return {
+        "checked_reference_count": checked,
+        "long_reference_count": long_count,
+        "long_references_with_toc": long_with_toc,
+        "long_reference_line_threshold": LONG_REFERENCE_LINE_THRESHOLD,
+    }
+
+
+def _has_toc(text: str) -> bool:
+    return bool(re.search(r"^## (?:Contents|Table of Contents|Quick Navigation)\s*$", text, flags=re.MULTILINE))
+
+
 def _frontmatter(text: str) -> dict[str, str]:
     if not text.startswith("---"):
         return {}
@@ -176,8 +215,11 @@ def _audit_reference_targets(skill_dir: Path, skill_path: Path, text: str, findi
 
 def _audit_sensitive_text(path: Path, text: str, findings: list[dict[str, str]]) -> None:
     for pattern in SECRET_PATTERNS:
-        if pattern.search(text):
+        for match in pattern.finditer(text):
+            if "..." in match.group(0):
+                continue
             findings.append(_finding("sensitive_token_pattern", str(path), pattern.pattern))
+            break
 
 
 def _finding(code: str, path: str, detail: str) -> dict[str, str]:

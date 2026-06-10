@@ -2,6 +2,18 @@
 
 Run the smallest matrix that covers the touched surface. Record command output in handoff notes.
 
+## Contents
+
+- Test Command
+- Baseline
+- BOLD Downstream Validation
+- T1 DeepPrep Result Validation
+- Production DWI Fast GPU DTI Validation
+- Legacy DWI/QSI GPU Validation
+- Real Acceptance
+- Contract Regression
+- Review/Test Acceptance
+
 ## Test Command
 
 Always use the venv pytest from the repo root:

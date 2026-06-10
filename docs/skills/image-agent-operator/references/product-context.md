@@ -1,5 +1,17 @@
 # Product Context
 
+## Contents
+
+- Scope
+- Data Path
+- Supported Ingest
+- Supported Workflows
+- DWI Runtime Position
+- Grounding Precedence
+- fMRI/BOLD Position
+- T1 Result Position
+- Unsupported Sequences
+
 ## Scope
 
 Image Agent is a remote-compute MVP with a React/Vite desktop UI and FastAPI backend. The backend owns storage, ingest, BIDS-like construction, workflow validation/execution, task status, logs, outputs, and OpenAI SDK chat gateway grounding.

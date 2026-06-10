@@ -1,5 +1,17 @@
 # Operational Recovery
 
+## Contents
+
+- API Port 8000 Conflict
+- Container Lifecycle vs API Lifecycle
+- Data Security
+- DWI Lock and Resource Policy
+- Docker Container Labels
+- Health and Admin Endpoints
+- Orphan Recovery Module
+- Mount Safety
+- Watcher /health Verification
+
 ## API Port 8000 Conflict
 
 Port 8000 is the image_agent API default. An unrelated uvicorn service can bind it first, causing the image_agent watcher to return HTTP 404 from `/tasks/{id}` for task ids that exist in the image_agent database. The 404 comes from the wrong application serving the request, not from missing data.
