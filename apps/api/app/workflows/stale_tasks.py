@@ -83,6 +83,7 @@ def reconcile_stale_active_tasks(
     apply: bool = False,
     now: datetime | None = None,
     running_container_task_ids: Iterable[int] | None = None,
+    container_check_status: str | None = None,
     reason: str = "operator confirmed no matching running Image Agent container",
 ) -> dict:
     """Report or fail stale active task rows.
@@ -95,6 +96,8 @@ def reconcile_stale_active_tasks(
     running_ids = None if running_container_task_ids is None else {int(task_id) for task_id in running_container_task_ids}
     if apply and running_ids is None:
         raise ValueError("running_container_task_ids is required when apply=True")
+    if container_check_status is None:
+        container_check_status = "not_requested" if running_ids is None else "passed"
 
     active = _active_tasks()
     summaries = [_candidate_summary(task, now=now, max_age_hours=max_age_hours) for task in active]
@@ -130,6 +133,8 @@ def reconcile_stale_active_tasks(
         "active_tasks": summaries,
         "stale_candidates": candidates,
         "blocked_task_ids": [int(task["id"]) for task in blocked],
+        "container_check_status": container_check_status,
+        "running_container_task_ids": None if running_ids is None else sorted(running_ids),
         "updated_task_ids": updated_task_ids,
     }
 

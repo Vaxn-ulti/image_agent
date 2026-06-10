@@ -1,6 +1,20 @@
 from datetime import datetime, timedelta, timezone
+import importlib.util
+import json
+from pathlib import Path
 
 from app.db import database
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _load_reconcile_cli():
+    module_path = REPO_ROOT / "apps" / "api" / "scripts" / "reconcile_stale_tasks.py"
+    spec = importlib.util.spec_from_file_location("reconcile_stale_tasks_cli", module_path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
 
 
 def _prepare_db(tmp_path, monkeypatch):
@@ -60,6 +74,33 @@ def test_find_stale_active_tasks_is_dry_run_only(tmp_path, monkeypatch):
     assert row["error_message"] is None
 
 
+def test_dry_run_can_report_running_container_blockers(tmp_path, monkeypatch):
+    from app.workflows import stale_tasks
+
+    _prepare_db(tmp_path, monkeypatch)
+    now = datetime(2026, 6, 11, 0, 0, tzinfo=timezone.utc)
+    started = (now - timedelta(hours=72)).isoformat()
+    with database.connect() as conn:
+        conn.execute(
+            "INSERT INTO tasks(id, project_id, series_id, workflow_type, status, progress, log_path, created_at, started_at) VALUES(?,?,?,?,?,?,?,?,?)",
+            (83, 1, 1, "dwi_qsirecon", "running", 20, str(tmp_path / "stale.log"), started, started),
+        )
+
+    report = stale_tasks.reconcile_stale_active_tasks(
+        max_age_hours=24,
+        apply=False,
+        now=now,
+        running_container_task_ids={83},
+        container_check_status="passed",
+    )
+
+    assert report["mode"] == "dry_run"
+    assert report["container_check_status"] == "passed"
+    assert report["running_container_task_ids"] == [83]
+    assert report["blocked_task_ids"] == [83]
+    assert report["stale_candidates"] == []
+
+
 def test_reconcile_stale_active_tasks_refuses_running_container(tmp_path, monkeypatch):
     from app.workflows import stale_tasks
 
@@ -117,3 +158,29 @@ def test_reconcile_stale_active_tasks_marks_old_task_failed_with_audit(tmp_path,
     assert "operator confirmed no matching container" in row["error_message"]
     assert row["finished_at"] == now.isoformat()
     assert "stale task reconciliation" in log_path.read_text(encoding="utf-8")
+
+
+def test_cli_check_containers_keeps_dry_run_read_only(tmp_path, monkeypatch, capsys):
+    _prepare_db(tmp_path, monkeypatch)
+    now = datetime.now(timezone.utc)
+    started = (now - timedelta(hours=72)).isoformat()
+    with database.connect() as conn:
+        conn.execute(
+            "INSERT INTO tasks(id, project_id, series_id, workflow_type, status, progress, log_path, created_at, started_at) VALUES(?,?,?,?,?,?,?,?,?)",
+            (83, 1, 1, "dwi_qsirecon", "running", 20, str(tmp_path / "stale.log"), started, started),
+        )
+
+    cli = _load_reconcile_cli()
+    monkeypatch.setattr(cli, "running_container_task_ids_from_docker", lambda: {83})
+
+    cli.main(["--max-age-hours", "24", "--check-containers"])
+
+    report = json.loads(capsys.readouterr().out)
+    assert report["mode"] == "dry_run"
+    assert report["container_check_status"] == "passed"
+    assert report["running_container_task_ids"] == [83]
+    assert report["blocked_task_ids"] == [83]
+    assert report["updated_task_ids"] == []
+    with database.connect() as conn:
+        row = conn.execute("SELECT status FROM tasks WHERE id=83").fetchone()
+    assert row["status"] == "running"

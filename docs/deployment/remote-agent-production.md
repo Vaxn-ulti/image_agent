@@ -117,6 +117,16 @@ cd /home/yyf/project/image_agent_releases/<accepted-release>/apps/api
 PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/reconcile_stale_tasks.py --max-age-hours 24
 ```
 
+For approval evidence, include the read-only container label check in the
+dry-run report:
+
+```bash
+set -a
+. /home/yyf/project/image_agent/.env
+set +a
+PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/reconcile_stale_tasks.py --max-age-hours 24 --check-containers
+```
+
 Only after operator review, run apply with Docker label checking enabled by
 default:
 
