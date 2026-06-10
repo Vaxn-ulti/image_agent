@@ -108,6 +108,26 @@ export IMAGE_AGENT_SHARED_VENV_BIN=/home/yyf/project/image_agent/apps/api/.venv/
 bash tools/restart_remote_image_agent_api.sh
 ```
 
+If the drain gate reports old `queued` or `running` tasks that are not backed by
+running Image Agent containers, audit them before using the override. The
+stale-task tool defaults to read-only dry-run:
+
+```bash
+cd /home/yyf/project/image_agent_releases/<accepted-release>/apps/api
+PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/reconcile_stale_tasks.py --max-age-hours 24
+```
+
+Only after operator review, run apply with Docker label checking enabled by
+default:
+
+```bash
+PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/reconcile_stale_tasks.py --apply --max-age-hours 24 --reason "operator confirmed no matching running Image Agent container"
+```
+
+The apply mode marks stale active task rows as `failed`, writes a concise audit
+line to the task log, and refuses to update rows that still have a running
+labelled Image Agent container.
+
 ## Smoke Checks
 
 From the remote backend directory:

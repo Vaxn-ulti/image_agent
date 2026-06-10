@@ -70,6 +70,9 @@ artifacts.
 
 Frontend design is still held until the final operational cleanup is resolved:
 the restart used `IMAGE_AGENT_ALLOW_RESTART_WITH_ACTIVE_TASKS=1` because legacy
-tasks `83` and `84` remain in `running` state even though they appear stale. The
-next maturity slice should add or run an auditable stale-task reconciliation path
-so normal restarts do not require overriding the active-task drain gate.
+tasks `83` and `84` remain in `running` state even though they appear stale.
+An auditable stale-task reconciliation tool now exists in
+`apps/api/scripts/reconcile_stale_tasks.py`, but production task rows should be
+changed only after an operator reviews the dry-run output and approves apply
+mode. Once those stale task records are resolved, normal restarts should no
+longer require overriding the active-task drain gate.
