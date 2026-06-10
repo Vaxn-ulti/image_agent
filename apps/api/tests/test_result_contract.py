@@ -209,6 +209,61 @@ def test_scientific_report_summary_backfills_main_result_summary(tmp_path):
     assert main_summary["provenance"]["scientific_report_summary_path"] == str(report_summary_path)
 
 
+def test_scientific_report_backfill_preserves_existing_native_reports(tmp_path):
+    summary = tmp_path / "summary" / "bold_result_summary.json"
+    native_report = tmp_path / "fmriprep" / "sub-01.html"
+    native_report.parent.mkdir(parents=True)
+    native_report.write_text("<html>native report</html>", encoding="utf-8")
+    summary.parent.mkdir(parents=True)
+    summary.write_text(
+        json.dumps(
+            {
+                "contract_version": "1.0",
+                "task_id": 118,
+                "workflow_type": "bold_fmriprep_xcpd_report",
+                "modality": "BOLD",
+                "spaces": ["MNI152"],
+                "feature_groups": ["preprocessing", "reports"],
+                "outputs": {
+                    "reports": [
+                        {
+                            "name": "sub-01.html",
+                            "path": str(native_report),
+                            "relative_path": "fmriprep/sub-01.html",
+                            "content_type": "text/html",
+                            "native_artifact": True,
+                            "source_stage": "fmriprep",
+                            "artifact_role": "container_native_html_report",
+                        }
+                    ]
+                },
+                "provenance": {},
+                "summary_path": str(summary),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    from app.workflows.scientific_reports import build_scientific_report_summary as build_report
+
+    for _ in range(2):
+        build_report(
+            out_dir=tmp_path,
+            task_id=118,
+            workflow_type="bold_fmriprep_xcpd_report",
+            summary=json.loads(summary.read_text(encoding="utf-8")),
+        )
+
+    main_summary = json.loads(summary.read_text(encoding="utf-8"))
+    reports = main_summary["outputs"]["reports"]
+    by_relative_path = {item["relative_path"]: item for item in reports}
+    assert by_relative_path["fmriprep/sub-01.html"]["native_artifact"] is True
+    assert by_relative_path["reports/index.html"]["artifact_role"] == "derived_presentation_asset"
+    assert by_relative_path["reports/report_manifest.json"]["artifact_origin"] == "generated_from_result_summary"
+    assert [item["relative_path"] for item in reports].count("reports/index.html") == 1
+    assert [item["relative_path"] for item in reports].count("fmriprep/sub-01.html") == 1
+
+
 def test_scientific_report_bundle_uses_png_figures_for_all_indicator_modalities(tmp_path):
     from app.workflows.scientific_reports import build_scientific_report_summary as build_report
 

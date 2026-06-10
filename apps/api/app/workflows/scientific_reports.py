@@ -1098,6 +1098,33 @@ def build_scientific_report_bundle(out_dir: Path, summary: dict[str, Any]) -> li
     return outputs
 
 
+def _summary_report_relative_path(item: dict[str, Any]) -> str:
+    return str(item.get("relative_path") or item.get("path") or "")
+
+
+def _is_generated_scientific_report_item(item: dict[str, Any]) -> bool:
+    relative_path = _summary_report_relative_path(item).replace("\\", "/")
+    return (
+        item.get("source_stage") == "scientific_report"
+        or item.get("artifact_role") == "derived_presentation_asset"
+        or item.get("artifact_origin") == "generated_from_result_summary"
+        or relative_path.startswith("reports/")
+    )
+
+
+def _merge_report_outputs(existing_reports: Any, report_outputs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    existing = existing_reports if isinstance(existing_reports, list) else []
+    generated_paths = {_summary_report_relative_path(item) for item in report_outputs if isinstance(item, dict)}
+    preserved = [
+        item
+        for item in existing
+        if isinstance(item, dict)
+        and _summary_report_relative_path(item) not in generated_paths
+        and not _is_generated_scientific_report_item(item)
+    ]
+    return [*preserved, *report_outputs]
+
+
 def build_scientific_report_summary(out_dir: Path, task_id: int, workflow_type: str, summary: dict[str, Any]) -> Path:
     modality = str(summary.get("modality") or "").upper() or "UNKNOWN"
     report_items = build_scientific_report_bundle(out_dir, summary)
@@ -1132,7 +1159,7 @@ def build_scientific_report_summary(out_dir: Path, task_id: int, workflow_type: 
                     report_payload = {}
                 report_outputs = (report_payload.get("outputs") or {}).get("reports") or []
                 outputs = source_payload.setdefault("outputs", {})
-                outputs["reports"] = report_outputs
+                outputs["reports"] = _merge_report_outputs(outputs.get("reports"), report_outputs)
                 provenance = source_payload.setdefault("provenance", {})
                 provenance["scientific_report_summary_path"] = str(report_summary_path)
                 provenance["scientific_report_report_count"] = len(report_outputs)
