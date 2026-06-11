@@ -169,6 +169,14 @@ def test_verify_stale_task_resolution_accepts_apply_and_clean_followup():
     [
         (lambda apply_payload, resolved_payload: apply_payload.update({"updated_task_ids": [83]}), "updated_task_ids must match expected task ids"),
         (
+            lambda apply_payload, resolved_payload: apply_payload["stale_candidates"][0].update({"log_path": "/home/yyf/project/image_agent/data/task-83.log"}),
+            "task evidence must not expose log_path",
+        ),
+        (
+            lambda apply_payload, resolved_payload: resolved_payload["active_tasks"].append({"id": 99, "log_path": "/home/yyf/project/image_agent/data/task-99.log"}),
+            "task evidence must not expose log_path",
+        ),
+        (
             lambda apply_payload, resolved_payload: resolved_payload.update(
                 {
                     "active_task_count": 1,

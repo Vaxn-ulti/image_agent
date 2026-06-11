@@ -172,8 +172,8 @@ PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/ver
 `verify_stale_task_resolution.py` must print `status=passed` before attempting
 a normal restart without `IMAGE_AGENT_ALLOW_RESTART_WITH_ACTIVE_TASKS=1`. If the
 follow-up dry-run reports target task ids as active, stale candidates, blockers,
-or labelled running containers, stop and review the production task/container
-state instead of overriding the drain gate.
+labelled running containers, or backend path fields such as `log_path`, stop and
+review the production task/container state instead of overriding the drain gate.
 
 ## Smoke Checks
 

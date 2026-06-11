@@ -51,6 +51,7 @@ def _expected_task_ids(expected_task_ids: Sequence[int]) -> list[int]:
 def _task_ids(tasks: list[dict]) -> list[int]:
     ids: list[int] = []
     for task in tasks:
+        _require("log_path" not in task, "task evidence must not expose log_path")
         task_id = task.get("id")
         _require(isinstance(task_id, int) and not isinstance(task_id, bool), "task id must be an integer")
         ids.append(task_id)
