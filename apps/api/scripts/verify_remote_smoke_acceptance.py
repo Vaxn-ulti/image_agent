@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from collections.abc import Sequence
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote
 
@@ -76,6 +77,34 @@ def _require_privacy_safe_symbol(payload: dict, key: str) -> None:
         and all(char.isalnum() or char in "_.-" for char in value),
         f"{key} must be privacy-safe",
     )
+
+
+def _parse_utc_timestamp(value: object, *, key: str) -> datetime:
+    _require(isinstance(value, str) and bool(value), f"{key} must be an ISO-8601 UTC timestamp")
+    normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise SystemExit(f"{key} must be an ISO-8601 UTC timestamp") from exc
+    _require(parsed.tzinfo is not None and parsed.utcoffset() is not None, f"{key} must be timezone-aware")
+    return parsed.astimezone(timezone.utc)
+
+
+def _verify_generated_at_utc(
+    payload: dict,
+    *,
+    max_age_hours: float | None = None,
+    now_utc: datetime | None = None,
+) -> datetime:
+    generated_at = _parse_utc_timestamp(payload.get("generated_at_utc"), key="generated_at_utc")
+    if max_age_hours is not None:
+        _require(max_age_hours >= 0, "max_age_hours must be non-negative")
+        now = now_utc or datetime.now(timezone.utc)
+        _require(now.tzinfo is not None and now.utcoffset() is not None, "now_utc must be timezone-aware")
+        age_hours = (now.astimezone(timezone.utc) - generated_at).total_seconds() / 3600
+        _require(age_hours >= 0, "generated_at_utc must not be in the future")
+        _require(age_hours <= max_age_hours, f"generated_at_utc is older than {max_age_hours:g} hours")
+    return generated_at
 
 
 def _require_positive_int(payload: dict, key: str) -> None:
@@ -517,8 +546,14 @@ def _verify_scientific_report_artifacts(payload: dict, gate: dict) -> None:
     )
 
 
-def verify_acceptance_payload(payload: dict) -> dict:
+def verify_acceptance_payload(
+    payload: dict,
+    *,
+    max_age_hours: float | None = None,
+    now_utc: datetime | None = None,
+) -> dict:
     _require(isinstance(payload, dict), "acceptance payload must be a JSON object")
+    _verify_generated_at_utc(payload, max_age_hours=max_age_hours, now_utc=now_utc)
     gate = _verify_gate_settings(payload)
     _require(isinstance(payload.get("health"), dict) and payload["health"].get("app") == "image_agent", "health.app must be image_agent")
     _require(isinstance(payload.get("model_status"), dict) and payload["model_status"].get("configured") is True, "model_status.configured must be true")
@@ -566,10 +601,22 @@ def verify_acceptance_payload(payload: dict) -> dict:
 def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Verify a saved strict remote smoke acceptance JSON artifact.")
     parser.add_argument("acceptance_json", help="Path to the JSON file written by smoke_remote_agent.py --output-json.")
+    parser.add_argument(
+        "--max-age-hours",
+        type=float,
+        default=None,
+        help="Fail if generated_at_utc is older than this many hours.",
+    )
+    parser.add_argument(
+        "--now-utc",
+        default=None,
+        help="Testing hook: ISO-8601 UTC timestamp used as the current time for --max-age-hours.",
+    )
     args = parser.parse_args(argv)
     source_path = Path(args.acceptance_json)
     payload = json.loads(source_path.read_text(encoding="utf-8"))
-    report = verify_acceptance_payload(payload)
+    now_utc = _parse_utc_timestamp(args.now_utc, key="now_utc") if args.now_utc else None
+    report = verify_acceptance_payload(payload, max_age_hours=args.max_age_hours, now_utc=now_utc)
     report["source_json"] = str(source_path)
     print(json.dumps(report, indent=2, ensure_ascii=False))
 

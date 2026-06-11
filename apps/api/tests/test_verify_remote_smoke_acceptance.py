@@ -1,5 +1,6 @@
 import importlib.util
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -263,9 +264,25 @@ def test_verify_remote_smoke_acceptance_accepts_strict_payload():
     assert report["checked"]["scientific_report_artifacts_status"] == "passed"
 
 
+def test_verify_remote_smoke_acceptance_rejects_stale_saved_evidence():
+    verifier = _load_verifier_module()
+    payload = _strict_smoke_payload()
+
+    with pytest.raises(SystemExit) as exc:
+        verifier.verify_acceptance_payload(
+            payload,
+            max_age_hours=24,
+            now_utc=datetime(2026, 6, 10, 13, 0, tzinfo=timezone.utc),
+        )
+
+    assert "generated_at_utc is older than 24 hours" in str(exc.value)
+
+
 @pytest.mark.parametrize(
     ("override", "expected_message"),
     [
+        ({"generated_at_utc": ""}, "generated_at_utc must be an ISO-8601 UTC timestamp"),
+        ({"generated_at_utc": "2026-06-08T12:00:00"}, "generated_at_utc must be timezone-aware"),
         ({"model_smoke_status": "skipped_missing_model_config"}, "model_smoke_status must be passed"),
         ({"agent_run_id": "agent_run_123 C:/Users/A/private"}, "agent_run_id must be privacy-safe"),
         ({"selected_skill": "image-agent-operator sk-test-secret"}, "selected_skill must be privacy-safe"),
@@ -596,3 +613,14 @@ def test_verify_remote_smoke_acceptance_cli_prints_passed_report(tmp_path, capsy
     assert report["status"] == "passed"
     assert report["summary"] == "status=passed"
     assert report["source_json"] == str(payload_path)
+
+
+def test_verify_remote_smoke_acceptance_cli_rejects_stale_report(tmp_path):
+    verifier = _load_verifier_module()
+    payload_path = tmp_path / "remote-smoke-acceptance.json"
+    payload_path.write_text(json.dumps(_strict_smoke_payload()), encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc:
+        verifier.main([str(payload_path), "--max-age-hours", "24", "--now-utc", "2026-06-10T13:00:00Z"])
+
+    assert "generated_at_utc is older than 24 hours" in str(exc.value)

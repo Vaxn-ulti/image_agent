@@ -19,7 +19,7 @@ Frontend page design may start only after all rows are marked with fresh evidenc
 | Workflow QC artifacts | Result images and reports rely on Docker/container-native QC artifacts such as fMRIPrep HTML, XCP-D HTML, DeepPrep QC, FreeSurfer snapshots, MRIQC outputs, QSIPrep/QSIRecon reports, or other container outputs. | Local code pretends to regenerate official QC, or derived scientific reports replace native QC evidence. |
 | Derived report artifacts | Scientific report HTML/PNG artifacts are allowed only as generated presentation assets from result summaries, with `native_artifact=false` and `provenance.replaces_native_qc=false`. | Report-layer figures are treated as container-native QC or accepted without separate native QC evidence. |
 | Skills | Image Agent skills remain skill-creator-style: clear trigger rules, operating rules, reference loading, output shape, eval hints, and routing between image-agent and neuroimaging workflow skills. | Skills have stale model/provider wording, missing references, unclear routing, or no eval/backlog coverage. |
-| Remote production proof | Strict remote acceptance runs on the remote server after deployment with real project/upload/task ids and configured model gateway. The saved JSON passes `apps/api/scripts/verify_remote_smoke_acceptance.py`. | Only local tests pass, remote model is unconfigured, real evidence ids are missing, or the offline verifier fails. |
+| Remote production proof | Strict remote acceptance runs on the remote server after deployment with real project/upload/task ids and configured model gateway. The saved JSON passes `apps/api/scripts/verify_remote_smoke_acceptance.py --max-age-hours 24`. | Only local tests pass, remote model is unconfigured, real evidence ids are missing, the JSON is stale, or the offline verifier fails. |
 
 ## Remote Acceptance Minimum
 
@@ -37,7 +37,7 @@ The strict remote acceptance package must include:
 - `project_contract_status=passed`, `upload_inventory_contract_status=passed`, and `task_artifact_manifest_status=passed`.
 - `container_native_qc_status=passed`, served container-native QC artifact URLs, accepted curated `official_source_ids`, and enough native QC images.
 - `scientific_report_artifacts_status=passed`, served report HTML/PNG URLs, and derived-presentation provenance that does not replace native QC.
-- Offline verifier output from `python scripts/verify_remote_smoke_acceptance.py <remote-smoke-acceptance.json>` with `status=passed`.
+- Offline verifier output from `python scripts/verify_remote_smoke_acceptance.py <remote-smoke-acceptance.json> --max-age-hours 24` with `status=passed`.
 
 `skipped_missing_model_config` is not production acceptance. Health, RAG, or local pytest success without a configured remote model gateway is not enough to release the frontend gate.
 
@@ -60,13 +60,15 @@ from release overlay
 The dirty remote main worktree is no longer the serving path for the accepted
 API process.
 
-Fresh strict remote acceptance passed after that release-overlay restart. The
+Strict remote acceptance passed after that release-overlay restart. The
 saved evidence is
 `/tmp/image_agent_task118_live8000_post_restart_f57a2ea_20260611.json`, and the
 offline verifier reported `status=passed` for model smoke, real evidence ids,
 RAG vendor pointer integrity, launchability query citation, project/upload
 contracts, artifact manifest, container-native QC, and derived scientific report
-artifacts.
+artifacts. That evidence predates the timestamp-freshness verifier option added
+later on 2026-06-11, so the frontend release gate still requires a new saved
+JSON that passes `--max-age-hours 24` after normal restart.
 
 Frontend design is still held until the final operational cleanup is resolved:
 the restart used `IMAGE_AGENT_ALLOW_RESTART_WITH_ACTIVE_TASKS=1` because legacy
