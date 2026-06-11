@@ -142,17 +142,13 @@ PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/rec
 ```
 
 Only after operator review, run apply with Docker label checking enabled by
-default and require the reviewed fingerprint. If the task state, scoped task
-ids, or labelled running-container evidence has changed, apply refuses to
-mutate rows and the operator must rerun dry-run review:
+default and require the reviewed JSON. The CLI reads the reviewed
+`approval_fingerprint` from that file. If the task state, scoped task ids, or
+labelled running-container evidence has changed, apply refuses to mutate rows
+and the operator must rerun dry-run review:
 
 ```bash
-APPROVAL_FINGERPRINT=$(python - <<'PY'
-import json
-print(json.load(open('/tmp/image_agent_stale_tasks_83_84_dry_run.json', encoding='utf-8'))['approval_fingerprint'])
-PY
-)
-PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/reconcile_stale_tasks.py --apply --max-age-hours 24 --task-id 83 --task-id 84 --require-approval-fingerprint "$APPROVAL_FINGERPRINT" --reason "operator confirmed no matching running Image Agent container"
+PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/reconcile_stale_tasks.py --apply --max-age-hours 24 --task-id 83 --task-id 84 --approval-json /tmp/image_agent_stale_tasks_83_84_dry_run.json --reason "operator confirmed no matching running Image Agent container"
 ```
 
 The apply mode marks stale active task rows as `failed`, writes a concise audit

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 
 from app.workflows import stale_tasks
 
@@ -33,7 +34,16 @@ def main(argv: list[str] | None = None) -> None:
         "--require-approval-fingerprint",
         help="Refuse --apply unless the current stale-task approval fingerprint matches this reviewed dry-run value.",
     )
+    parser.add_argument(
+        "--approval-json",
+        help="Read approval_fingerprint from a reviewed dry-run JSON report and require it before applying.",
+    )
     args = parser.parse_args(argv)
+
+    expected_fingerprint = args.require_approval_fingerprint
+    if args.approval_json:
+        approval_report = json.loads(Path(args.approval_json).read_text(encoding="utf-8"))
+        expected_fingerprint = approval_report["approval_fingerprint"]
 
     should_check_containers = args.apply or args.check_containers
     running_task_ids = running_container_task_ids_from_docker() if should_check_containers else None
@@ -43,7 +53,7 @@ def main(argv: list[str] | None = None) -> None:
         running_container_task_ids=running_task_ids,
         container_check_status="passed" if should_check_containers else "not_requested",
         task_ids=args.task_ids,
-        expected_approval_fingerprint=args.require_approval_fingerprint,
+        expected_approval_fingerprint=expected_fingerprint,
         reason=args.reason,
     )
     print(json.dumps(report, indent=2, sort_keys=True))

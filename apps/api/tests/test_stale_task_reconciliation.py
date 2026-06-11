@@ -301,3 +301,44 @@ def test_apply_refuses_mismatched_approval_fingerprint_before_updates(tmp_path, 
         row = conn.execute("SELECT status, error_message FROM tasks WHERE id=83").fetchone()
     assert row["status"] == "running"
     assert row["error_message"] is None
+
+
+def test_cli_apply_can_use_reviewed_approval_json(tmp_path, monkeypatch, capsys):
+    _prepare_db(tmp_path, monkeypatch)
+    now = datetime.now(timezone.utc)
+    started = (now - timedelta(hours=72)).isoformat()
+    with database.connect() as conn:
+        conn.execute(
+            "INSERT INTO tasks(id, project_id, series_id, workflow_type, status, progress, log_path, created_at, started_at) VALUES(?,?,?,?,?,?,?,?,?)",
+            (83, 1, 1, "dwi_qsirecon", "running", 20, str(tmp_path / "task-83.log"), started, started),
+        )
+
+    cli = _load_reconcile_cli()
+    monkeypatch.setattr(cli, "running_container_task_ids_from_docker", lambda: set())
+
+    cli.main(["--max-age-hours", "24", "--check-containers", "--task-id", "83"])
+    dry_run_report = json.loads(capsys.readouterr().out)
+    approval_path = tmp_path / "approval.json"
+    approval_path.write_text(json.dumps(dry_run_report), encoding="utf-8")
+
+    cli.main(
+        [
+            "--apply",
+            "--max-age-hours",
+            "24",
+            "--task-id",
+            "83",
+            "--approval-json",
+            str(approval_path),
+            "--reason",
+            "operator approved reviewed dry-run JSON",
+        ]
+    )
+
+    apply_report = json.loads(capsys.readouterr().out)
+    assert apply_report["updated_task_ids"] == [83]
+    assert apply_report["approval_fingerprint"] == dry_run_report["approval_fingerprint"]
+    with database.connect() as conn:
+        row = conn.execute("SELECT status, error_message FROM tasks WHERE id=83").fetchone()
+    assert row["status"] == "failed"
+    assert "operator approved reviewed dry-run JSON" in row["error_message"]
