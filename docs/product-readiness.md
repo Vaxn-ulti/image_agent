@@ -77,7 +77,9 @@ changed only after an operator reviews the dry-run output and approves apply
 mode. The tool now emits a dry-run `approval_fingerprint`; apply mode can read
 the reviewed report via `--approval-json` and require that fingerprint before
 mutating rows so scoped task ids and container-label evidence cannot drift
-silently between review and apply. A remote dry-run from non-live release
+silently between review and apply. The dry-run report can be checked with
+`apps/api/scripts/verify_stale_task_approval.py` before apply approval. A
+remote dry-run from non-live release
 `118c407` reported tasks `83` and `84` as stale candidates older than 531
 hours, and a shared-env Docker label check returned no running labelled Image
 Agent task ids. A fresh non-live release overlay dry-run on 2026-06-11 reported

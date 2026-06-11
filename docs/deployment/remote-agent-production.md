@@ -141,6 +141,12 @@ and running labelled task ids. Save the full dry-run JSON before applying:
 PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/reconcile_stale_tasks.py --max-age-hours 24 --check-containers --task-id 83 --task-id 84 > /tmp/image_agent_stale_tasks_83_84_dry_run.json
 ```
 
+Verify the saved approval evidence before requesting apply approval:
+
+```bash
+PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/verify_stale_task_approval.py /tmp/image_agent_stale_tasks_83_84_dry_run.json --task-id 83 --task-id 84
+```
+
 Only after operator review, run apply with Docker label checking enabled by
 default and require the reviewed JSON. The CLI reads the reviewed
 `approval_fingerprint` from that file. If the task state, scoped task ids, or
