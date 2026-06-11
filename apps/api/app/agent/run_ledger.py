@@ -412,6 +412,8 @@ def _safe_source_path(value: Any) -> str | None:
         return None
     if ".." in normalized.split("/"):
         return None
+    if not re.fullmatch(r"[A-Za-z0-9_./-]+", normalized):
+        return None
     if not any(normalized.startswith(prefix) for prefix in SAFE_RETRIEVED_SOURCE_PREFIXES):
         return None
     return normalized
