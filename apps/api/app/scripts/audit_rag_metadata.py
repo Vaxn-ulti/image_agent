@@ -103,6 +103,8 @@ def _validate_vendor(
 ) -> list[str]:
     issues: list[str] = []
     raw_source_ids = _as_list(metadata.get("raw_source_ids"))
+    metadata_source_urls = set(_as_list(metadata.get("source_url")))
+    manifest_source_urls: set[str] = set()
     vendor_doc = path.name
     for raw_source_id in raw_source_ids:
         source = raw_sources_by_id.get(raw_source_id)
@@ -113,6 +115,11 @@ def _validate_vendor(
             issues.append(
                 f"raw source {raw_source_id} points to {source.get('vendor_doc')}, expected {vendor_doc}"
             )
+        url = source.get("url")
+        if isinstance(url, str) and url.strip():
+            manifest_source_urls.add(url.strip())
+    if raw_source_ids and metadata_source_urls != manifest_source_urls:
+        issues.append("source_url must match manifest URLs for raw_source_ids")
     return issues
 
 
