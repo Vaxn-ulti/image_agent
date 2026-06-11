@@ -38,6 +38,26 @@ Required evidence:
 - Raw source policy reports no missing files, hash mismatches, or indexed raw sources.
 - Curated vendor provenance reports `curated_provenance_ok=true` and `curated_provenance_issues=[]`.
 
+## Stale Task Resolution Evidence
+
+Use this section only when a previous restart was blocked by stale
+`queued`/`running` task rows. Attach the reviewed dry-run JSON, apply JSON, and
+post-apply dry-run JSON:
+
+```bash
+cd /home/yyf/project/image_agent_releases/<accepted-release>/apps/api
+PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/verify_stale_task_approval.py /tmp/image_agent_stale_tasks_<ids>_dry_run.json --task-id <id> --task-id <id>
+PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/verify_stale_task_resolution.py --apply-json /tmp/image_agent_stale_tasks_<ids>_apply.json --resolution-json /tmp/image_agent_stale_tasks_<ids>_resolved_dry_run.json --task-id <id> --task-id <id> --require-empty-active
+```
+
+Required evidence before normal restart:
+
+- approval verifier prints `status=passed`;
+- resolution verifier prints `status=passed`;
+- apply JSON has `updated_task_ids` exactly matching the approved task ids;
+- post-apply dry-run has no target task ids in `active_tasks` or `stale_candidates`;
+- `running_container_task_ids=[]` and `blocked_task_ids=[]`.
+
 ## Restart Drain Evidence
 
 Run from the deployed remote repo:

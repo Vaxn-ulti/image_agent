@@ -1749,6 +1749,7 @@ def test_product_readiness_gate_blocks_frontend_until_agent_contracts_are_verifi
         "skill-creator-style",
         "strict remote acceptance",
         "verify_remote_smoke_acceptance.py",
+        "verify_stale_task_resolution.py",
         "model_smoke_status=passed",
         "container_native_qc_status=passed",
         "scientific_report_artifacts_status=passed",
