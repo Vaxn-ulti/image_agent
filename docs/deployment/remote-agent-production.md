@@ -133,17 +133,26 @@ PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/rec
 
 For scoped approval, repeat `--task-id` for the exact rows the operator intends
 to reconcile. The report keeps other stale rows in
-`out_of_scope_stale_task_ids`:
+`out_of_scope_stale_task_ids` and emits an `approval_fingerprint` calculated
+from the scoped stale candidates, target task ids, Docker label-check result,
+and running labelled task ids. Save the full dry-run JSON before applying:
 
 ```bash
-PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/reconcile_stale_tasks.py --max-age-hours 24 --check-containers --task-id 83 --task-id 84
+PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/reconcile_stale_tasks.py --max-age-hours 24 --check-containers --task-id 83 --task-id 84 > /tmp/image_agent_stale_tasks_83_84_dry_run.json
 ```
 
 Only after operator review, run apply with Docker label checking enabled by
-default:
+default and require the reviewed fingerprint. If the task state, scoped task
+ids, or labelled running-container evidence has changed, apply refuses to
+mutate rows and the operator must rerun dry-run review:
 
 ```bash
-PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/reconcile_stale_tasks.py --apply --max-age-hours 24 --task-id 83 --task-id 84 --reason "operator confirmed no matching running Image Agent container"
+APPROVAL_FINGERPRINT=$(python - <<'PY'
+import json
+print(json.load(open('/tmp/image_agent_stale_tasks_83_84_dry_run.json', encoding='utf-8'))['approval_fingerprint'])
+PY
+)
+PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/reconcile_stale_tasks.py --apply --max-age-hours 24 --task-id 83 --task-id 84 --require-approval-fingerprint "$APPROVAL_FINGERPRINT" --reason "operator confirmed no matching running Image Agent container"
 ```
 
 The apply mode marks stale active task rows as `failed`, writes a concise audit

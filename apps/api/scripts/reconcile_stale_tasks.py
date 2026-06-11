@@ -29,6 +29,10 @@ def main(argv: list[str] | None = None) -> None:
         default="operator confirmed no matching running Image Agent container",
         help="Audit reason stored in task error_message when --apply is used.",
     )
+    parser.add_argument(
+        "--require-approval-fingerprint",
+        help="Refuse --apply unless the current stale-task approval fingerprint matches this reviewed dry-run value.",
+    )
     args = parser.parse_args(argv)
 
     should_check_containers = args.apply or args.check_containers
@@ -39,6 +43,7 @@ def main(argv: list[str] | None = None) -> None:
         running_container_task_ids=running_task_ids,
         container_check_status="passed" if should_check_containers else "not_requested",
         task_ids=args.task_ids,
+        expected_approval_fingerprint=args.require_approval_fingerprint,
         reason=args.reason,
     )
     print(json.dumps(report, indent=2, sort_keys=True))

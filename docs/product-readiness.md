@@ -74,8 +74,16 @@ tasks `83` and `84` remain in `running` state even though they appear stale.
 An auditable stale-task reconciliation tool now exists in
 `apps/api/scripts/reconcile_stale_tasks.py`, but production task rows should be
 changed only after an operator reviews the dry-run output and approves apply
-mode. A remote dry-run from non-live release `118c407` reported tasks `83` and
-`84` as stale candidates older than 531 hours, and a shared-env Docker label
-check returned no running labelled Image Agent task ids. Once those stale task
-records are resolved, normal restarts should no longer require overriding the
-active-task drain gate.
+mode. The tool now emits a dry-run `approval_fingerprint`, and apply mode can
+require that reviewed fingerprint before mutating rows so scoped task ids and
+container-label evidence cannot drift silently between review and apply. A
+remote dry-run from non-live release `118c407` reported tasks `83` and `84` as
+stale candidates older than 531 hours, and a shared-env Docker label check
+returned no running labelled Image Agent task ids. A fresh non-live release
+overlay dry-run on 2026-06-11 reported `container_check_status=passed`,
+`running_container_task_ids=[]`, scoped `stale_candidates=[83,84]`, and
+`approval_fingerprint=139113571daf0137a3e34be526fd25ccaa8066aed725ab7c0b846cfc7eb3abd0`,
+saved on the remote host at
+`/tmp/image_agent_stale_tasks_83_84_fingerprint_dry_run_20260611T1215.json`.
+Once those stale task records are resolved through this approved flow, normal
+restarts should no longer require overriding the active-task drain gate.

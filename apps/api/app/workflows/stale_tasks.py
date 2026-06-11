@@ -8,6 +8,8 @@ Docker access failures.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
@@ -85,6 +87,7 @@ def reconcile_stale_active_tasks(
     running_container_task_ids: Iterable[int] | None = None,
     container_check_status: str | None = None,
     task_ids: Iterable[int] | None = None,
+    expected_approval_fingerprint: str | None = None,
     reason: str = "operator confirmed no matching running Image Agent container",
 ) -> dict:
     """Report or fail stale active task rows.
@@ -109,6 +112,19 @@ def reconcile_stale_active_tasks(
     out_of_scope_stale = [summary for summary in stale if target_ids is not None and summary["id"] not in target_ids]
     blocked = [summary for summary in scoped_stale if running_ids is not None and summary["id"] in running_ids]
     candidates = [summary for summary in scoped_stale if running_ids is None or summary["id"] not in running_ids]
+
+    approval_payload = _approval_payload(
+        max_age_hours=max_age_hours,
+        target_ids=target_ids,
+        container_check_status=container_check_status,
+        running_ids=running_ids,
+        candidates=candidates,
+        blocked=blocked,
+        out_of_scope_stale=out_of_scope_stale,
+    )
+    approval_fingerprint = _approval_fingerprint(approval_payload)
+    if expected_approval_fingerprint is not None and approval_fingerprint != expected_approval_fingerprint:
+        raise ValueError("approval fingerprint mismatch; rerun dry-run review before applying stale task reconciliation")
 
     updated_task_ids: list[int] = []
     if apply:
@@ -141,8 +157,49 @@ def reconcile_stale_active_tasks(
         "blocked_task_ids": [int(task["id"]) for task in blocked],
         "container_check_status": container_check_status,
         "running_container_task_ids": None if running_ids is None else sorted(running_ids),
+        "approval_payload": approval_payload,
+        "approval_fingerprint": approval_fingerprint,
         "updated_task_ids": updated_task_ids,
     }
+
+
+def _approval_payload(
+    *,
+    max_age_hours: float,
+    target_ids: set[int] | None,
+    container_check_status: str,
+    running_ids: set[int] | None,
+    candidates: list[dict],
+    blocked: list[dict],
+    out_of_scope_stale: list[dict],
+) -> dict:
+    def task_snapshot(task: dict) -> dict:
+        return {
+            "id": int(task["id"]),
+            "project_id": task["project_id"],
+            "series_id": task["series_id"],
+            "workflow_type": task["workflow_type"],
+            "status": task["status"],
+            "progress": task["progress"],
+            "started_at": task.get("started_at"),
+            "created_at": task.get("created_at"),
+        }
+
+    return {
+        "max_age_hours": max_age_hours,
+        "target_task_ids": None if target_ids is None else sorted(target_ids),
+        "container_check_status": container_check_status,
+        "running_container_task_ids": None if running_ids is None else sorted(running_ids),
+        "stale_candidate_ids": [int(task["id"]) for task in candidates],
+        "blocked_task_ids": [int(task["id"]) for task in blocked],
+        "out_of_scope_stale_task_ids": [int(task["id"]) for task in out_of_scope_stale],
+        "stale_candidates": [task_snapshot(task) for task in candidates],
+    }
+
+
+def _approval_fingerprint(payload: dict) -> str:
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def summary_age(task: dict, now: datetime) -> float:

@@ -236,3 +236,68 @@ def test_cli_task_id_scopes_dry_run_candidates(tmp_path, monkeypatch, capsys):
     assert report["out_of_scope_stale_task_ids"] == [84]
     assert report["target_task_ids"] == [83]
     assert report["updated_task_ids"] == []
+
+
+def test_dry_run_report_includes_stable_approval_fingerprint(tmp_path, monkeypatch):
+    from app.workflows import stale_tasks
+
+    _prepare_db(tmp_path, monkeypatch)
+    now = datetime(2026, 6, 11, 0, 0, tzinfo=timezone.utc)
+    started = (now - timedelta(hours=72)).isoformat()
+    with database.connect() as conn:
+        conn.execute(
+            "INSERT INTO tasks(id, project_id, series_id, workflow_type, status, progress, log_path, created_at, started_at) VALUES(?,?,?,?,?,?,?,?,?)",
+            (83, 1, 1, "dwi_qsirecon", "running", 20, str(tmp_path / "task-83.log"), started, started),
+        )
+
+    first = stale_tasks.reconcile_stale_active_tasks(
+        max_age_hours=24,
+        apply=False,
+        now=now,
+        running_container_task_ids=set(),
+        task_ids={83},
+    )
+    later = stale_tasks.reconcile_stale_active_tasks(
+        max_age_hours=24,
+        apply=False,
+        now=now + timedelta(minutes=5),
+        running_container_task_ids=set(),
+        task_ids={83},
+    )
+
+    assert len(first["approval_fingerprint"]) == 64
+    assert first["approval_fingerprint"] == later["approval_fingerprint"]
+    assert first["approval_payload"]["stale_candidate_ids"] == [83]
+    assert first["approval_payload"]["running_container_task_ids"] == []
+
+
+def test_apply_refuses_mismatched_approval_fingerprint_before_updates(tmp_path, monkeypatch):
+    from app.workflows import stale_tasks
+
+    _prepare_db(tmp_path, monkeypatch)
+    now = datetime(2026, 6, 11, 0, 0, tzinfo=timezone.utc)
+    started = (now - timedelta(hours=72)).isoformat()
+    with database.connect() as conn:
+        conn.execute(
+            "INSERT INTO tasks(id, project_id, series_id, workflow_type, status, progress, log_path, created_at, started_at) VALUES(?,?,?,?,?,?,?,?,?)",
+            (83, 1, 1, "dwi_qsirecon", "running", 20, str(tmp_path / "task-83.log"), started, started),
+        )
+
+    try:
+        stale_tasks.reconcile_stale_active_tasks(
+            max_age_hours=24,
+            apply=True,
+            now=now,
+            running_container_task_ids=set(),
+            task_ids={83},
+            expected_approval_fingerprint="not-the-reviewed-fingerprint",
+        )
+    except ValueError as exc:
+        assert "approval fingerprint mismatch" in str(exc)
+    else:
+        raise AssertionError("expected mismatched approval fingerprint to fail")
+
+    with database.connect() as conn:
+        row = conn.execute("SELECT status, error_message FROM tasks WHERE id=83").fetchone()
+    assert row["status"] == "running"
+    assert row["error_message"] is None
