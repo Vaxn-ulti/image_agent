@@ -67,8 +67,15 @@ def _require_status(payload: dict, key: str, expected: str = "passed") -> None:
     _require(payload.get(key) == expected, f"{key} must be {expected}")
 
 
-def _require_non_empty_string(payload: dict, key: str) -> None:
-    _require(isinstance(payload.get(key), str) and bool(payload[key]), f"{key} must be present")
+def _require_privacy_safe_symbol(payload: dict, key: str) -> None:
+    value = payload.get(key)
+    _require(
+        isinstance(value, str)
+        and bool(value)
+        and len(value) <= 140
+        and all(char.isalnum() or char in "_.-" for char in value),
+        f"{key} must be privacy-safe",
+    )
 
 
 def _require_positive_int(payload: dict, key: str) -> None:
@@ -518,7 +525,7 @@ def verify_acceptance_payload(payload: dict) -> dict:
     _require_status(payload, "model_smoke_status")
     _require(payload.get("agent_run_status") == "answered", "agent_run_status must be answered")
     for key in ("agent_run_id", "intent", "selected_skill"):
-        _require_non_empty_string(payload, key)
+        _require_privacy_safe_symbol(payload, key)
     _require_int_metric(payload, "rag_document_count")
     _require_int_metric(payload, "rag_chunk_count")
     _require(payload["rag_document_count"] >= gate["min_documents"], "rag_document_count below smoke gate minimum")

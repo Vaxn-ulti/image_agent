@@ -267,6 +267,8 @@ def test_verify_remote_smoke_acceptance_accepts_strict_payload():
     ("override", "expected_message"),
     [
         ({"model_smoke_status": "skipped_missing_model_config"}, "model_smoke_status must be passed"),
+        ({"agent_run_id": "agent_run_123 C:/Users/A/private"}, "agent_run_id must be privacy-safe"),
+        ({"selected_skill": "image-agent-operator sk-test-secret"}, "selected_skill must be privacy-safe"),
         ({"remote_evidence_ids_status": "skipped"}, "remote_evidence_ids_status must be passed"),
         ({"rag_launchability_query_source": "Answer mentions docs/rag/workflows/workflow_launchability_matrix.md"}, "launchability query source must cite workflow matrix"),
         ({"container_native_qc_served_urls": []}, "container_native_qc_served_urls must be non-empty"),
