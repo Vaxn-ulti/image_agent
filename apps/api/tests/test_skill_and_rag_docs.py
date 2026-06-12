@@ -632,6 +632,7 @@ def test_openai_responses_tool_contract_is_documented_for_agent_use():
         "`strict=true`",
         "`additionalProperties=false`",
         "dispatcher rejects unknown tool arguments",
+        "dispatcher rejects missing required tool arguments",
         "OpenAI SDK",
         "official OpenAI Python SDK",
         "OpenAI client",

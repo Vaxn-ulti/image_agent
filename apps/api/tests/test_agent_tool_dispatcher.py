@@ -166,6 +166,19 @@ def test_dispatcher_rejects_unknown_tool_arguments_before_execution():
     assert "adhoc_frontend_field" in result["message"]
 
 
+def test_dispatcher_rejects_missing_required_tool_arguments_before_execution():
+    result = dispatch_tool_call(
+        "preflight_workflow",
+        {"series_id": 11},
+        project_context={"series": [], "workflows": []},
+    )
+
+    assert result["status"] == "blocked"
+    assert result["production_task_created"] is False
+    assert "Missing required tool argument" in result["message"]
+    assert "workflow_type" in result["message"]
+
+
 def test_tool_trace_response_items_use_responses_function_call_output():
     trace = [{"status": "ok", "tool": "list_workflows", "call_id": "call_1", "result": [{"type": "fixed"}]}]
 

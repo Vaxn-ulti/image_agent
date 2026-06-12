@@ -47,6 +47,14 @@ def _unknown_argument_names(tool_name: str, args: dict[str, Any]) -> list[str]:
     return sorted(key for key in args if key not in allowed)
 
 
+def _missing_required_argument_names(tool_name: str, args: dict[str, Any]) -> list[str]:
+    schema = _tool_schema(tool_name) or {}
+    required = schema.get("required")
+    if not isinstance(required, list):
+        return []
+    return sorted(str(key) for key in required if str(key) not in args or args.get(str(key)) is None)
+
+
 def _blocked_result(tool_name: str, message: str, *, call_id: str | None = None) -> dict[str, Any]:
     return {
         "status": "blocked",
@@ -93,6 +101,13 @@ def dispatch_tool_call(
         return _blocked_result(
             tool_name,
             "Unknown tool argument(s): " + ", ".join(unknown_arguments),
+            call_id=call_id,
+        )
+    missing_arguments = _missing_required_argument_names(tool_name, args)
+    if missing_arguments:
+        return _blocked_result(
+            tool_name,
+            "Missing required tool argument(s): " + ", ".join(missing_arguments),
             call_id=call_id,
         )
 
