@@ -87,8 +87,10 @@ approved apply, the apply JSON and a second scoped dry-run must be checked with
 in the saved stale-task evidence. The stale-task approval/apply/resolution
 artifacts must include timezone-aware `generated_at` timestamps, and the
 resolution `generated_at` must be after or equal to apply `generated_at` before
-a normal restart without the active-task override is accepted. A remote dry-run
-from non-live release
+a normal restart without the active-task override is accepted. In short,
+stale-task evidence must pass a `max_age_hours` freshness limit through the
+approval and resolution verifier scripts before it can unblock normal restart
+or frontend release evidence. A remote dry-run from non-live release
 `118c407` reported tasks `83` and `84` as stale candidates older than 531
 hours, and a shared-env Docker label check returned no running labelled Image
 Agent task ids. A fresh non-live release overlay dry-run on 2026-06-11 reported
