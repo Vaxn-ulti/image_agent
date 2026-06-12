@@ -121,6 +121,40 @@ def test_responses_payload_prefers_json_schema_when_structured_schema_is_availab
     assert payload["text"]["format"] == {"type": "json_schema", **schema}
 
 
+@pytest.mark.parametrize(
+    ("schema", "message"),
+    [
+        ({"strict": True, "schema": {"type": "object", "additionalProperties": False}}, "structured_schema must include name"),
+        ({"name": "agent_decision", "schema": {"type": "object", "additionalProperties": False}}, "structured_schema strict must be true"),
+        (
+            {"name": "agent_decision", "strict": False, "schema": {"type": "object", "additionalProperties": False}},
+            "structured_schema strict must be true",
+        ),
+        ({"name": "agent_decision", "strict": True}, "structured_schema schema must be an object"),
+        ({"name": "agent_decision", "strict": True, "schema": []}, "structured_schema schema must be an object"),
+        (
+            {"name": "agent_decision", "strict": True, "schema": {"type": "array", "additionalProperties": False}},
+            "structured_schema schema.type must be object",
+        ),
+        (
+            {"name": "agent_decision", "strict": True, "schema": {"type": "object"}},
+            "structured_schema schema.additionalProperties must be false",
+        ),
+    ],
+)
+def test_responses_payload_rejects_non_strict_structured_schema(monkeypatch, schema, message):
+    monkeypatch.setenv("OPENAI_API_KEY", "secret-value")
+    config = model_gateway.ModelConfig.from_env()
+
+    with pytest.raises(model_gateway.ModelGatewayError, match=message):
+        model_gateway._responses_payload(
+            [{"role": "user", "content": "hi"}],
+            config,
+            structured=True,
+            structured_schema=schema,
+        )
+
+
 def test_responses_payload_preserves_function_call_output_items(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "secret-value")
     config = model_gateway.ModelConfig.from_env()

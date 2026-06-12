@@ -79,6 +79,13 @@ Continue developing Image Agent until the agent product is mature and stable eno
 - `rag_orchestration.py` fallback retrieval now preserves YAML-list metadata when `.rag_index` is missing or stale.
 - `audit_rag_metadata.py` now validates raw official-source manifest entries directly: required fields, HTTPS URL, official source type, downloaded status, safe raw-snapshot file path, existing bytes, file-size match, and SHA-256 match.
 
+## Current Agent Gateway Progress
+
+- Model gateway remains OpenAI SDK-style: construct the official `OpenAI` client and call `client.responses.create(...)` with Responses-native payloads.
+- Responses function tools remain top-level `{"type":"function","name":...,"parameters":...}` specs, with tool results returned as typed `function_call_output` items.
+- Structured planner schemas now fail before the remote model call when malformed: `structured_schema` must include a non-empty `name`, `strict=True`, an object `schema`, `schema.type=object`, and `schema.additionalProperties=False`.
+- `json_object` remains only a compatibility fallback when no schema is available.
+
 ## Current Artifact Contract Progress
 
 - `/tasks/{task_id}/artifact-manifest` now classifies artifacts with `artifact_category`, `container_native_qc`, `derived_scientific_report`, and `frontend_preview_asset`.

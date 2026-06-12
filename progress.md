@@ -136,3 +136,8 @@
   - Added `apps/api/tests/test_rag_metadata_audit.py::test_rag_metadata_audit_reports_invalid_raw_source_manifest_entries`.
   - Updated `apps/api/app/scripts/audit_rag_metadata.py` to validate manifest entry fields, HTTPS URLs, safe raw snapshot paths, existing files, positive byte counts, file-size matches, and SHA-256 matches.
   - Verification: RED for the new audit test first, then `PYTHONPATH=apps/api python -m pytest apps/api/tests/test_rag_metadata_audit.py -q` returned `4 passed`; live repository audit returned `ok=true`, `vendor_provenance_issues=[]`, and `raw_sources_indexed=false`.
+- Hardened the OpenAI Responses structured output boundary:
+  - Added `apps/api/tests/test_model_gateway.py::test_responses_payload_rejects_non_strict_structured_schema`.
+  - Updated `apps/api/app/agent/model_gateway.py` so malformed `structured_schema` values are rejected before `responses.create`.
+  - Required non-empty schema `name`, `strict=True`, object `schema`, `schema.type=object`, and `schema.additionalProperties=False` before sending `json_schema` format payloads.
+  - Updated the OpenAI Responses RAG summary and Image Agent developer contract to document the pre-call guard.

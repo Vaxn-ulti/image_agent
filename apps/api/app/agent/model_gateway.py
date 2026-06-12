@@ -97,6 +97,22 @@ def provider_status(config: ModelConfig | None = None) -> dict[str, Any]:
     }
 
 
+def _strict_json_schema_format(structured_schema: dict[str, Any]) -> dict[str, Any]:
+    name = structured_schema.get("name")
+    if not isinstance(name, str) or not name.strip():
+        raise ModelGatewayError("structured_schema must include name")
+    if structured_schema.get("strict") is not True:
+        raise ModelGatewayError("structured_schema strict must be true")
+    schema = structured_schema.get("schema")
+    if not isinstance(schema, dict):
+        raise ModelGatewayError("structured_schema schema must be an object")
+    if schema.get("type") != "object":
+        raise ModelGatewayError("structured_schema schema.type must be object")
+    if schema.get("additionalProperties") is not False:
+        raise ModelGatewayError("structured_schema schema.additionalProperties must be false")
+    return {"type": "json_schema", **structured_schema}
+
+
 def _responses_payload(
     messages: list[dict[str, Any]],
     config: ModelConfig,
@@ -135,11 +151,7 @@ def _responses_payload(
         "reasoning": {"effort": config.reasoning_effort},
     }
     if structured:
-        format_payload = (
-            {"type": "json_schema", **structured_schema}
-            if structured_schema
-            else {"type": "json_object"}
-        )
+        format_payload = _strict_json_schema_format(structured_schema) if structured_schema else {"type": "json_object"}
         payload["text"] = {"format": format_payload}
     tools = openai_tool_specs()
     if tools:

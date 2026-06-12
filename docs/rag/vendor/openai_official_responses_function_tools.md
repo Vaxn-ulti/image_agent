@@ -56,6 +56,8 @@ For model decisions that must be JSON, use Responses `text.format` with `{"type"
 
 Image Agent should prefer `json_schema` whenever a schema is available. `json_object` is only a compatibility fallback for older JSON mode or paths without schema support.
 
+Image Agent gateway code should reject malformed `structured_schema` values before calling `responses.create`: `name` must be non-empty, `strict` must be `true`, and `schema` must be an object schema with `type=object` and `additionalProperties=false`.
+
 Use `text.format`, not Chat-Completions-style `response_format`, for Responses structured outputs. strict structured outputs must still be backend-validated before the decision is trusted.
 
 Do not represent structured JSON decisions as fake function calls. Function tools are only for backend tool requests, and structured decisions remain model text constrained by the Responses text format contract.

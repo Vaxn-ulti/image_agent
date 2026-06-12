@@ -640,6 +640,9 @@ def test_openai_responses_structured_output_contract_is_documented_for_agent_use
         "compatibility fallback",
         "schema is available",
         "strict structured outputs",
+        "reject malformed `structured_schema`",
+        "before calling `responses.create`",
+        "`additionalProperties=false`",
     ):
         assert phrase in combined
 
