@@ -136,6 +136,28 @@ def openai_tool_specs() -> list[dict[str, Any]]:
     specs = []
     for tool in list_function_tools():
         spec = {"type": "function", **tool}
-        spec.setdefault("strict", False)
+        parameters = _strict_object_schema(spec.get("parameters") or {})
+        spec["parameters"] = parameters
+        spec["strict"] = True
         specs.append(spec)
     return specs
+
+
+def _strict_object_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    strict_schema = deepcopy(schema)
+    _mark_object_schemas_strict(strict_schema)
+    return strict_schema
+
+
+def _mark_object_schemas_strict(schema: Any) -> None:
+    if not isinstance(schema, dict):
+        return
+    schema_type = schema.get("type")
+    if schema_type == "object" or (isinstance(schema_type, list) and "object" in schema_type):
+        schema["additionalProperties"] = False
+    for value in (schema.get("properties") or {}).values():
+        _mark_object_schemas_strict(value)
+    _mark_object_schemas_strict(schema.get("items"))
+    for key in ("oneOf", "anyOf", "allOf"):
+        for value in schema.get(key) or []:
+            _mark_object_schemas_strict(value)

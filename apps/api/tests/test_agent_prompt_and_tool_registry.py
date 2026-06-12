@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from app.agent.tool_registry import list_function_tools
+from app.agent.tool_registry import list_function_tools, openai_tool_specs
 
 
 PROMPT_ROOT = Path(__file__).resolve().parents[1] / "app" / "agent" / "prompts"
@@ -46,3 +46,31 @@ def test_function_tool_registry_exposes_required_tools_without_shell_access():
     assert "shell" not in names
     assert "docker_run" not in names
     assert all("parameters" in tool for tool in tools)
+
+
+def test_openai_function_tool_specs_are_strict_responses_schemas():
+    specs = openai_tool_specs()
+
+    assert specs
+    for spec in specs:
+        assert spec["type"] == "function", spec["name"]
+        assert spec["strict"] is True, spec["name"]
+        parameters = spec["parameters"]
+        assert parameters["type"] == "object", spec["name"]
+        assert parameters["additionalProperties"] is False, spec["name"]
+        for path, schema in _object_schemas(parameters):
+            assert schema["additionalProperties"] is False, f"{spec['name']}:{path}"
+
+
+def _object_schemas(schema, path="$"):
+    if not isinstance(schema, dict):
+        return
+    if schema.get("type") == "object":
+        yield path, schema
+    for key, value in schema.get("properties", {}).items():
+        yield from _object_schemas(value, f"{path}.properties.{key}")
+    items = schema.get("items")
+    if isinstance(items, dict):
+        yield from _object_schemas(items, f"{path}.items")
+    for index, value in enumerate(schema.get("oneOf", []) or []):
+        yield from _object_schemas(value, f"{path}.oneOf[{index}]")

@@ -27,16 +27,23 @@ Image Agent uses the official OpenAI Python SDK at the model boundary. The gatew
   "description": "Read task events/log tail for progress and failures.",
   "parameters": {
     "type": "object",
+    "additionalProperties": false,
     "required": ["task_id"],
     "properties": {
       "task_id": {"type": "integer"}
     }
   },
-  "strict": false
+  "strict": true
 }
 ```
 
 The gateway should use `tool_choice: "auto"` when exposing the allowlisted backend tools.
+Image Agent function tool specs are strict at the OpenAI boundary: every
+Responses function tool has `strict=true`, and every object schema in
+`parameters` has `additionalProperties=false` before `responses.create` is
+called. The backend dispatcher still enforces allowlisted tool names,
+arguments, project scope, production gating, and redaction after the model asks
+for a tool.
 
 The official OpenAI Python SDK source is the contract for the client shape: instantiate an `OpenAI client`, configure credentials/base URL through the backend configuration layer, and use the typed SDK resource (`client.responses.create(...)`) rather than direct `urllib` calls to `/responses`. The Responses API reference is the contract for the request/response resource boundary.
 
@@ -84,6 +91,7 @@ Outputs:
 ## Image Agent Notes
 
 - Use the OpenAI SDK `responses.create` path with the Responses API shape. Do not reintroduce hand-rolled `/responses` HTTP transport or Chat-Completions-style nested tool specs such as `{"type":"function","function":{...}}`.
+- Keep function tool specs strict: set `strict=true` and `additionalProperties=false` on every object schema exposed to the model.
 - Keep the SDK boundary explicit in reviews: the implementation should import the official OpenAI Python SDK, construct an `OpenAI client`, and call `client.responses.create(...)`.
 - Default to sending Responses `metadata` for first-party compatible behavior; disable it explicitly with `OPENAI_DISABLE_METADATA=true` when an OpenAI-compatible gateway rejects or masks that parameter. `/agent/model/status` may expose the resulting `metadata_enabled` boolean but must never expose secrets.
 - Keep tool execution backend-first. The model requests a registered function; backend code enforces arguments, project scope, production gating, and redaction.
