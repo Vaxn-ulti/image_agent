@@ -1,5 +1,6 @@
 import importlib.util
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -76,7 +77,7 @@ def _approval_payload():
         },
         "blocked_task_ids": [],
         "container_check_status": "passed",
-        "generated_at": "2026-06-11T04:14:24.156875+00:00",
+        "generated_at": "2026-06-12T04:14:24.156875+00:00",
         "max_age_hours": 24.0,
         "mode": "dry_run",
         "out_of_scope_stale_task_ids": [],
@@ -123,6 +124,19 @@ def test_verify_stale_task_approval_accepts_reviewed_dry_run():
     assert report["status"] == "passed"
     assert report["checked"]["target_task_ids"] == [83, 84]
     assert report["checked"]["stale_candidate_ids"] == [83, 84]
+
+
+def test_verify_stale_task_approval_rejects_stale_evidence_by_max_age():
+    verifier = _load_verifier_module()
+
+    with pytest.raises(SystemExit) as exc:
+        verifier.verify_approval_payload(
+            _approval_payload(),
+            expected_task_ids=[83, 84],
+            now=datetime(2026, 6, 13, 5, 0, tzinfo=timezone.utc),
+        )
+
+    assert "generated_at is older than max_age_hours" in str(exc.value)
 
 
 @pytest.mark.parametrize(

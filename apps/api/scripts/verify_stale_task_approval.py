@@ -4,7 +4,7 @@ import argparse
 import hashlib
 import json
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -55,7 +55,25 @@ def _parse_timestamp(value: object, *, key: str) -> datetime:
     except ValueError as exc:
         raise SystemExit(f"{key} must be an ISO-8601 timestamp") from exc
     _require(parsed.tzinfo is not None and parsed.utcoffset() is not None, f"{key} must be timezone-aware")
-    return parsed
+    return parsed.astimezone(timezone.utc)
+
+
+def _max_age_hours(payload: dict, *, key: str) -> float:
+    value = payload.get("max_age_hours")
+    _require(isinstance(value, (int, float)) and not isinstance(value, bool), f"{key}.max_age_hours must be a number")
+    max_age_hours = float(value)
+    _require(max_age_hours >= 0, f"{key}.max_age_hours must be non-negative")
+    return max_age_hours
+
+
+def _verify_freshness(payload: dict, *, key: str, now: datetime | None) -> datetime:
+    generated_at = _parse_timestamp(payload.get("generated_at"), key=f"{key}.generated_at" if key else "generated_at")
+    current = now or datetime.now(timezone.utc)
+    _require(current.tzinfo is not None and current.utcoffset() is not None, "now must be timezone-aware")
+    age_hours = (current.astimezone(timezone.utc) - generated_at).total_seconds() / 3600
+    _require(age_hours >= 0, f"{key + '.' if key else ''}generated_at must not be in the future")
+    _require(age_hours <= _max_age_hours(payload, key=key or "evidence"), f"{key + '.' if key else ''}generated_at is older than max_age_hours")
+    return generated_at
 
 
 def approval_fingerprint(payload: dict) -> str:
@@ -63,10 +81,15 @@ def approval_fingerprint(payload: dict) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def verify_approval_payload(payload: dict, *, expected_task_ids: Sequence[int] | None = None) -> dict:
+def verify_approval_payload(
+    payload: dict,
+    *,
+    expected_task_ids: Sequence[int] | None = None,
+    now: datetime | None = None,
+) -> dict:
     _require(isinstance(payload, dict), "approval payload must be a JSON object")
     _assert_no_backend_paths(payload)
-    _parse_timestamp(payload.get("generated_at"), key="generated_at")
+    _verify_freshness(payload, key="", now=now)
     _require(payload.get("mode") == "dry_run", "mode must be dry_run")
     _require(payload.get("container_check_status") == "passed", "container_check_status must be passed")
     _require(_as_int_list(payload.get("running_container_task_ids"), key="running_container_task_ids") == [], "running_container_task_ids must be empty")

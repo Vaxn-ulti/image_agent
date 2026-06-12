@@ -1,6 +1,7 @@
 import hashlib
 import importlib.util
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -84,7 +85,7 @@ def _apply_payload():
         "approval_fingerprint": _fingerprint(approval_payload),
         "blocked_task_ids": [],
         "container_check_status": "passed",
-        "generated_at": "2026-06-11T04:20:24.156875+00:00",
+        "generated_at": "2026-06-12T04:20:24.156875+00:00",
         "max_age_hours": 24.0,
         "mode": "apply",
         "out_of_scope_stale_task_ids": [],
@@ -138,7 +139,7 @@ def _resolved_payload():
         "approval_fingerprint": _fingerprint(approval_payload),
         "blocked_task_ids": [],
         "container_check_status": "passed",
-        "generated_at": "2026-06-11T04:25:24.156875+00:00",
+        "generated_at": "2026-06-12T04:25:24.156875+00:00",
         "max_age_hours": 24.0,
         "mode": "dry_run",
         "out_of_scope_stale_task_ids": [],
@@ -162,6 +163,39 @@ def test_verify_stale_task_resolution_accepts_apply_and_clean_followup():
     assert report["status"] == "passed"
     assert report["checked"]["updated_task_ids"] == [83, 84]
     assert report["checked"]["resolved_task_ids"] == [83, 84]
+
+
+def test_verify_stale_task_resolution_rejects_stale_apply_evidence_by_max_age():
+    verifier = _load_verifier_module()
+
+    with pytest.raises(SystemExit) as exc:
+        verifier.verify_resolution_evidence(
+            _apply_payload(),
+            _resolved_payload(),
+            expected_task_ids=[83, 84],
+            require_empty_active=True,
+            now=datetime(2026, 6, 13, 5, 0, tzinfo=timezone.utc),
+        )
+
+    assert "apply.generated_at is older than max_age_hours" in str(exc.value)
+
+
+def test_verify_stale_task_resolution_rejects_stale_resolution_evidence_by_max_age():
+    verifier = _load_verifier_module()
+    apply_payload = _apply_payload()
+    apply_payload["generated_at"] = "2026-06-13T04:20:24.156875+00:00"
+    resolved_payload = _resolved_payload()
+
+    with pytest.raises(SystemExit) as exc:
+        verifier.verify_resolution_evidence(
+            apply_payload,
+            resolved_payload,
+            expected_task_ids=[83, 84],
+            require_empty_active=True,
+            now=datetime(2026, 6, 13, 5, 0, tzinfo=timezone.utc),
+        )
+
+    assert "resolution.generated_at is older than max_age_hours" in str(exc.value)
 
 
 @pytest.mark.parametrize(
@@ -193,7 +227,7 @@ def test_verify_stale_task_resolution_accepts_apply_and_clean_followup():
             "resolution.generated_at must be an ISO-8601 timestamp",
         ),
         (
-            lambda apply_payload, resolved_payload: resolved_payload.update({"generated_at": "2026-06-11T04:19:24.156875+00:00"}),
+            lambda apply_payload, resolved_payload: resolved_payload.update({"generated_at": "2026-06-12T04:19:24.156875+00:00"}),
             "resolution generated_at must be after or equal to apply generated_at",
         ),
         (
