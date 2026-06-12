@@ -177,6 +177,14 @@ def test_verify_stale_task_resolution_accepts_apply_and_clean_followup():
             "task evidence must not expose log_path",
         ),
         (
+            lambda apply_payload, resolved_payload: apply_payload["approval_payload"].update({"debug_output_dir": "/home/yyf/project/image_agent/data/projects/15"}),
+            "stale-task evidence must not expose backend paths",
+        ),
+        (
+            lambda apply_payload, resolved_payload: resolved_payload["active_tasks"].append({"id": 99, "debug_log": "C:\\Users\\A\\Documents\\task.log"}),
+            "stale-task evidence must not expose backend paths",
+        ),
+        (
             lambda apply_payload, resolved_payload: resolved_payload.update(
                 {
                     "active_task_count": 1,

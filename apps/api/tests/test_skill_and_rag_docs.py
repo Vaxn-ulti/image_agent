@@ -1238,6 +1238,8 @@ def test_developer_testing_matrix_requires_stale_task_gate_before_strict_accepta
         "`out_of_scope_stale_task_ids=[]`",
         "`running_container_task_ids=[]`",
         "`blocked_task_ids=[]`",
+        "reject `log_path`",
+        "reject backend absolute paths",
         "normal restart without `IMAGE_AGENT_ALLOW_RESTART_WITH_ACTIVE_TASKS=1`",
     ):
         assert phrase in matrix

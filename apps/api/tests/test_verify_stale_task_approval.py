@@ -133,6 +133,14 @@ def test_verify_stale_task_approval_accepts_reviewed_dry_run():
         (lambda payload: payload.update({"updated_task_ids": [83]}), "updated_task_ids must be empty"),
         (lambda payload: payload.update({"mode": "apply"}), "mode must be dry_run"),
         (lambda payload: payload.update({"target_task_ids": [83]}), "target_task_ids must match expected task ids"),
+        (
+            lambda payload: payload["approval_payload"].update({"debug_output_dir": "/home/yyf/project/image_agent/data/projects/15"}),
+            "stale-task evidence must not expose backend paths",
+        ),
+        (
+            lambda payload: payload["active_tasks"][0].update({"debug_log": "C:\\Users\\A\\Documents\\task.log"}),
+            "stale-task evidence must not expose backend paths",
+        ),
     ],
 )
 def test_verify_stale_task_approval_rejects_weak_evidence(mutate, expected_message):

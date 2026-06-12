@@ -30,6 +30,31 @@ def _as_task_list(value: object, *, key: str) -> list[dict]:
     return result
 
 
+def _looks_like_backend_path(value: str) -> bool:
+    normalized = value.replace("\\", "/")
+    return (
+        normalized.startswith("/")
+        or (len(normalized) >= 3 and normalized[1] == ":" and normalized[0].isalpha() and normalized[2] == "/")
+        or "/home/yyf/" in normalized
+        or "/project/image_agent/" in normalized
+        or "/data/projects/" in normalized
+    )
+
+
+def _assert_no_backend_paths(value: object) -> None:
+    if isinstance(value, dict):
+        for key, item in value.items():
+            _require(key != "log_path", "task evidence must not expose log_path")
+            _assert_no_backend_paths(item)
+        return
+    if isinstance(value, list):
+        for item in value:
+            _assert_no_backend_paths(item)
+        return
+    if isinstance(value, str):
+        _require(not _looks_like_backend_path(value), "stale-task evidence must not expose backend paths")
+
+
 def _approval_fingerprint(payload: dict) -> str:
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -71,6 +96,8 @@ def verify_resolution_evidence(
     _require(expected, "expected task ids are required")
     _require(isinstance(apply_payload, dict), "apply payload must be a JSON object")
     _require(isinstance(resolution_payload, dict), "resolution payload must be a JSON object")
+    _assert_no_backend_paths(apply_payload)
+    _assert_no_backend_paths(resolution_payload)
 
     apply_fingerprint = _verify_fingerprint(apply_payload)
     _require(apply_payload.get("mode") == "apply", "apply mode must be apply")

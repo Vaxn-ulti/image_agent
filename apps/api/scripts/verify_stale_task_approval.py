@@ -21,6 +21,31 @@ def _as_int_list(value: object, *, key: str) -> list[int]:
     return result
 
 
+def _looks_like_backend_path(value: str) -> bool:
+    normalized = value.replace("\\", "/")
+    return (
+        normalized.startswith("/")
+        or (len(normalized) >= 3 and normalized[1] == ":" and normalized[0].isalpha() and normalized[2] == "/")
+        or "/home/yyf/" in normalized
+        or "/project/image_agent/" in normalized
+        or "/data/projects/" in normalized
+    )
+
+
+def _assert_no_backend_paths(value: object) -> None:
+    if isinstance(value, dict):
+        for key, item in value.items():
+            _require(key != "log_path", "task evidence must not expose log_path")
+            _assert_no_backend_paths(item)
+        return
+    if isinstance(value, list):
+        for item in value:
+            _assert_no_backend_paths(item)
+        return
+    if isinstance(value, str):
+        _require(not _looks_like_backend_path(value), "stale-task evidence must not expose backend paths")
+
+
 def approval_fingerprint(payload: dict) -> str:
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -28,6 +53,7 @@ def approval_fingerprint(payload: dict) -> str:
 
 def verify_approval_payload(payload: dict, *, expected_task_ids: Sequence[int] | None = None) -> dict:
     _require(isinstance(payload, dict), "approval payload must be a JSON object")
+    _assert_no_backend_paths(payload)
     _require(payload.get("mode") == "dry_run", "mode must be dry_run")
     _require(payload.get("container_check_status") == "passed", "container_check_status must be passed")
     _require(_as_int_list(payload.get("running_container_task_ids"), key="running_container_task_ids") == [], "running_container_task_ids must be empty")

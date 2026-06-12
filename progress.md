@@ -141,3 +141,7 @@
   - Updated `apps/api/app/agent/model_gateway.py` so malformed `structured_schema` values are rejected before `responses.create`.
   - Required non-empty schema `name`, `strict=True`, object `schema`, `schema.type=object`, and `schema.additionalProperties=False` before sending `json_schema` format payloads.
   - Updated the OpenAI Responses RAG summary and Image Agent developer contract to document the pre-call guard.
+- Hardened stale-task release evidence verifiers:
+  - Added negative tests for backend absolute-path leakage in stale-task approval and resolution JSON.
+  - Updated `verify_stale_task_approval.py` and `verify_stale_task_resolution.py` to recursively reject `log_path` and backend absolute path strings before accepting saved evidence.
+  - Updated the developer testing matrix and product readiness gate so the remote stale-task cleanup path requires path-safe approval/apply/resolution evidence before normal restart and strict smoke.
