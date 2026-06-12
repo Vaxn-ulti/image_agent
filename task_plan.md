@@ -115,6 +115,7 @@ Continue developing Image Agent until the agent product is mature and stable eno
 - The strict acceptance command should include `--require-deployment-identity --deployment-id <accepted-release-or-commit>`.
 - The freshness gate still requires `verify_remote_smoke_acceptance.py <remote-smoke-acceptance.json> --max-age-hours 24`.
 - `docs/skills/image-agent-developer/references/testing-matrix.md` now mirrors these strict smoke identity and freshness requirements, guarded by `test_developer_testing_matrix_requires_deployment_identity_for_strict_smoke`.
+- The same developer testing matrix now requires approved stale-task reconciliation before strict smoke when active tasks block restart: `verify_stale_task_approval.py`, apply with `--approval-json`, `verify_stale_task_resolution.py --require-empty-active`, and then normal restart without `IMAGE_AGENT_ALLOW_RESTART_WITH_ACTIVE_TASKS=1`.
 
 ## Prior BMAD-Style Explorer Findings
 

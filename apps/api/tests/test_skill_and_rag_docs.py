@@ -1220,6 +1220,26 @@ def test_developer_testing_matrix_requires_deployment_identity_for_strict_smoke(
         assert phrase in matrix
 
 
+def test_developer_testing_matrix_requires_stale_task_gate_before_strict_acceptance():
+    matrix = (
+        REPO_ROOT / "docs" / "skills" / "image-agent-developer" / "references" / "testing-matrix.md"
+    ).read_text(encoding="utf-8")
+
+    for phrase in (
+        "approved stale-task reconciliation",
+        "`verify_stale_task_approval.py`",
+        "`verify_stale_task_resolution.py`",
+        "`--approval-json`",
+        "`--require-empty-active`",
+        "`approval_fingerprint`",
+        "`out_of_scope_stale_task_ids=[]`",
+        "`running_container_task_ids=[]`",
+        "`blocked_task_ids=[]`",
+        "normal restart without `IMAGE_AGENT_ALLOW_RESTART_WITH_ACTIVE_TASKS=1`",
+    ):
+        assert phrase in matrix
+
+
 def test_remote_script_timeout_and_log_safety_are_documented_for_agent_use():
     paths = [
         REPO_ROOT / "docs" / "deployment" / "remote-agent-production.md",

@@ -128,3 +128,7 @@
   - Added `apps/api/tests/test_skill_and_rag_docs.py::test_developer_testing_matrix_requires_deployment_identity_for_strict_smoke`.
   - Updated `docs/skills/image-agent-developer/references/testing-matrix.md` to require `--require-deployment-identity`, `--deployment-id`, matching `deployment_identity.deployment_id` and `smoke_gate.deployment_id`, privacy-safe `deployment_identity.health_version`, and `verify_remote_smoke_acceptance.py --max-age-hours 24`.
   - Verification: RED for the new doc contract first, then `169 passed` across the related skill docs, smoke script, and verifier tests; `python apps/api/scripts/audit_skill_maintenance.py --json` returned `status=passed`.
+- Synchronized the Image Agent developer testing matrix with the stale-task release gate:
+  - Added `apps/api/tests/test_skill_and_rag_docs.py::test_developer_testing_matrix_requires_stale_task_gate_before_strict_acceptance`.
+  - Updated `docs/skills/image-agent-developer/references/testing-matrix.md` to require approved stale-task reconciliation before strict smoke when active tasks block restart, including `verify_stale_task_approval.py`, `--approval-json`, `approval_fingerprint`, `verify_stale_task_resolution.py --require-empty-active`, empty blocker/out-of-scope/running-container lists, and a normal restart without `IMAGE_AGENT_ALLOW_RESTART_WITH_ACTIVE_TASKS=1`.
+  - Verification: RED for the new doc contract first, then the focused test passed locally.
