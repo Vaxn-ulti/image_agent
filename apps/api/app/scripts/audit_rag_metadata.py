@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -50,23 +51,87 @@ def _as_list(value: Any) -> list[str]:
 
 def _load_vendor_manifest(root: Path) -> tuple[dict[str, dict[str, Any]], list[str]]:
     manifest_path = root / "docs" / "rag" / "vendor" / "raw-sources" / "manifest.json"
+    raw_root = manifest_path.parent
+    manifest_rel = manifest_path.relative_to(root).as_posix()
     if not manifest_path.exists():
-        return {}, [f"{manifest_path.relative_to(root).as_posix()} is missing"]
+        return {}, [f"{manifest_rel} is missing"]
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except Exception as exc:
-        return {}, [f"{manifest_path.relative_to(root).as_posix()} could not be parsed: {exc}"]
+        return {}, [f"{manifest_rel} could not be parsed: {exc}"]
     sources = manifest.get("sources")
     if not isinstance(sources, list):
-        return {}, [f"{manifest_path.relative_to(root).as_posix()} does not contain a sources list"]
+        return {}, [f"{manifest_rel} does not contain a sources list"]
     by_id: dict[str, dict[str, Any]] = {}
     issues: list[str] = []
     for source in sources:
         if not isinstance(source, dict) or not source.get("id"):
             issues.append("vendor raw-source manifest contains an entry without id")
             continue
-        by_id[str(source["id"])] = source
+        source_id = str(source["id"])
+        by_id[source_id] = source
+        issues.extend(_validate_manifest_source(root=root, raw_root=raw_root, manifest_rel=manifest_rel, source=source, source_id=source_id))
     return by_id, issues
+
+
+def _validate_manifest_source(
+    *,
+    root: Path,
+    raw_root: Path,
+    manifest_rel: str,
+    source: dict[str, Any],
+    source_id: str,
+) -> list[str]:
+    issues: list[str] = []
+    required_fields = ("vendor_doc", "url", "file", "source_type", "retrieved_at", "sha256", "bytes", "status")
+    for field in required_fields:
+        if source.get(field) in (None, "", []):
+            issues.append(f"{manifest_rel}: source {source_id} missing {field}")
+
+    url = source.get("url")
+    if not isinstance(url, str) or not url.startswith("https://"):
+        issues.append(f"{manifest_rel}: source {source_id} url must start with https://")
+
+    source_type = source.get("source_type")
+    if not isinstance(source_type, str) or not source_type.startswith("official_"):
+        issues.append(f"{manifest_rel}: source {source_id} source_type must start with official_")
+
+    if source.get("status") != "downloaded":
+        issues.append(f"{manifest_rel}: source {source_id} status must be downloaded")
+
+    file_value = source.get("file")
+    raw_file: Path | None = None
+    if not isinstance(file_value, str) or not file_value:
+        issues.append(f"{manifest_rel}: source {source_id} file must be a relative path")
+    elif "\\" in file_value or file_value.startswith("/") or ".." in Path(file_value).parts:
+        issues.append(f"{manifest_rel}: source {source_id} file must stay inside raw-sources")
+    else:
+        raw_file = raw_root / file_value
+        try:
+            raw_file.relative_to(root)
+        except ValueError:
+            issues.append(f"{manifest_rel}: source {source_id} file must stay inside repository")
+
+    raw_bytes: bytes | None = None
+    if raw_file is not None:
+        if not raw_file.exists() or not raw_file.is_file():
+            issues.append(f"{manifest_rel}: source {source_id} file is missing")
+        else:
+            raw_bytes = raw_file.read_bytes()
+
+    expected_bytes = source.get("bytes")
+    if not isinstance(expected_bytes, int) or isinstance(expected_bytes, bool) or expected_bytes <= 0:
+        issues.append(f"{manifest_rel}: source {source_id} bytes must be positive")
+    elif raw_bytes is None or expected_bytes != len(raw_bytes):
+        issues.append(f"{manifest_rel}: source {source_id} bytes must match file size")
+
+    expected_sha = source.get("sha256")
+    if not isinstance(expected_sha, str) or len(expected_sha) != 64:
+        issues.append(f"{manifest_rel}: source {source_id} sha256 must be a SHA-256 hex string")
+    elif raw_bytes is None or expected_sha != hashlib.sha256(raw_bytes).hexdigest():
+        issues.append(f"{manifest_rel}: source {source_id} sha256 must match file bytes")
+
+    return issues
 
 
 def _missing_fields(metadata: dict[str, Any], fields: list[str]) -> list[str]:

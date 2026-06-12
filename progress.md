@@ -132,3 +132,7 @@
   - Added `apps/api/tests/test_skill_and_rag_docs.py::test_developer_testing_matrix_requires_stale_task_gate_before_strict_acceptance`.
   - Updated `docs/skills/image-agent-developer/references/testing-matrix.md` to require approved stale-task reconciliation before strict smoke when active tasks block restart, including `verify_stale_task_approval.py`, `--approval-json`, `approval_fingerprint`, `verify_stale_task_resolution.py --require-empty-active`, empty blocker/out-of-scope/running-container lists, and a normal restart without `IMAGE_AGENT_ALLOW_RESTART_WITH_ACTIVE_TASKS=1`.
   - Verification: RED for the new doc contract first, then the focused test passed locally.
+- Hardened reusable RAG metadata audit for raw official-source manifest integrity:
+  - Added `apps/api/tests/test_rag_metadata_audit.py::test_rag_metadata_audit_reports_invalid_raw_source_manifest_entries`.
+  - Updated `apps/api/app/scripts/audit_rag_metadata.py` to validate manifest entry fields, HTTPS URLs, safe raw snapshot paths, existing files, positive byte counts, file-size matches, and SHA-256 matches.
+  - Verification: RED for the new audit test first, then `PYTHONPATH=apps/api python -m pytest apps/api/tests/test_rag_metadata_audit.py -q` returned `4 passed`; live repository audit returned `ok=true`, `vendor_provenance_issues=[]`, and `raw_sources_indexed=false`.

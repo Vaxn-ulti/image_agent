@@ -77,6 +77,7 @@ Continue developing Image Agent until the agent product is mature and stable eno
   - `docs/rag/workflows/workflow_launchability_matrix.md`
 - Required machine fields are now tested: `source_type`, `workflow_type`, `status`, `official_grounding`, `expected_artifacts`, and `unsupported_boundaries`.
 - `rag_orchestration.py` fallback retrieval now preserves YAML-list metadata when `.rag_index` is missing or stale.
+- `audit_rag_metadata.py` now validates raw official-source manifest entries directly: required fields, HTTPS URL, official source type, downloaded status, safe raw-snapshot file path, existing bytes, file-size match, and SHA-256 match.
 
 ## Current Artifact Contract Progress
 

@@ -1,3 +1,5 @@
+import hashlib
+import json
 from pathlib import Path
 
 
@@ -60,8 +62,26 @@ def test_rag_metadata_audit_reports_vendor_source_url_drift(tmp_path):
     )
     raw_root = vendor / "raw-sources"
     raw_root.mkdir()
+    raw_bytes = b"official docs"
+    (raw_root / "snapshot.html").write_bytes(raw_bytes)
     (raw_root / "manifest.json").write_text(
-        '{"sources":[{"id":"official_example","vendor_doc":"example.md","url":"https://example.org/docs"}]}',
+        json.dumps(
+            {
+                "sources": [
+                    {
+                        "id": "official_example",
+                        "vendor_doc": "example.md",
+                        "url": "https://example.org/docs",
+                        "file": "snapshot.html",
+                        "source_type": "official_docs",
+                        "retrieved_at": "2026-06-08T00:00:00Z",
+                        "sha256": hashlib.sha256(raw_bytes).hexdigest(),
+                        "bytes": len(raw_bytes),
+                        "status": "downloaded",
+                    }
+                ]
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -70,4 +90,56 @@ def test_rag_metadata_audit_reports_vendor_source_url_drift(tmp_path):
     assert result["ok"] is False
     assert result["vendor_provenance_issues"] == [
         "docs/rag/vendor/example.md: source_url must match manifest URLs for raw_source_ids"
+    ]
+
+
+def test_rag_metadata_audit_reports_invalid_raw_source_manifest_entries(tmp_path):
+    from app.scripts.audit_rag_metadata import audit_rag_metadata
+
+    vendor = tmp_path / "docs" / "rag" / "vendor"
+    vendor.mkdir(parents=True)
+    (vendor / "example.md").write_text(
+        "---\n"
+        "source_type: rag_vendor\n"
+        "source_url: https://example.org/docs\n"
+        "raw_source_ids: official_example\n"
+        "status: curated_summary\n"
+        "---\n"
+        "# Example\n",
+        encoding="utf-8",
+    )
+    raw_root = vendor / "raw-sources"
+    raw_root.mkdir()
+    (raw_root / "snapshot.html").write_text("official docs", encoding="utf-8")
+    (raw_root / "manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "sources": [
+                    {
+                        "id": "official_example",
+                        "vendor_doc": "example.md",
+                        "url": "http://example.org/docs",
+                        "file": "missing.html",
+                        "source_type": "official_docs",
+                        "retrieved_at": "2026-06-08T00:00:00Z",
+                        "sha256": "0" * 64,
+                        "bytes": 999,
+                        "status": "downloaded",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = audit_rag_metadata(root=tmp_path, strict=True)
+
+    assert result["ok"] is False
+    assert result["vendor_provenance_issues"] == [
+        "docs/rag/vendor/raw-sources/manifest.json: source official_example url must start with https://",
+        "docs/rag/vendor/raw-sources/manifest.json: source official_example file is missing",
+        "docs/rag/vendor/raw-sources/manifest.json: source official_example bytes must match file size",
+        "docs/rag/vendor/raw-sources/manifest.json: source official_example sha256 must match file bytes",
+        "docs/rag/vendor/example.md: source_url must match manifest URLs for raw_source_ids",
     ]
