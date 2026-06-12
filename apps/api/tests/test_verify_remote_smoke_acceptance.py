@@ -449,6 +449,7 @@ def test_verify_remote_smoke_acceptance_rejects_incomplete_curated_sources():
         ({"deployment_id": "/home/yyf/project/image_agent"}, "deployment_id must be privacy-safe"),
         ({"health_app": "wrong_app"}, "deployment_identity.health_app must be image_agent"),
         ({"health_version": ""}, "deployment_identity.health_version must be present"),
+        ({"health_version": "/home/yyf/project/image_agent/apps/api"}, "deployment_identity.health_version must be privacy-safe"),
     ],
 )
 def test_verify_remote_smoke_acceptance_rejects_bad_deployment_identity(

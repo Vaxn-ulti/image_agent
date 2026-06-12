@@ -71,11 +71,17 @@ def _require_status(payload: dict, key: str, expected: str = "passed") -> None:
 def _require_privacy_safe_symbol(payload: dict, key: str) -> None:
     value = payload.get(key)
     _require(
+        _is_privacy_safe_symbol(value),
+        f"{key} must be privacy-safe",
+    )
+
+
+def _is_privacy_safe_symbol(value: object) -> bool:
+    return (
         isinstance(value, str)
         and bool(value)
         and len(value) <= 140
-        and all(char.isalnum() or char in "_.-" for char in value),
-        f"{key} must be privacy-safe",
+        and all(char.isalnum() or char in "_.-" for char in value)
     )
 
 
@@ -397,6 +403,10 @@ def _verify_deployment_identity(payload: dict, gate: dict) -> None:
     _require(
         isinstance(health_version, str) and bool(health_version) and len(health_version) <= 80,
         "deployment_identity.health_version must be present",
+    )
+    _require(
+        _is_privacy_safe_symbol(health_version),
+        "deployment_identity.health_version must be privacy-safe",
     )
 
 

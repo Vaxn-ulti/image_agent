@@ -120,3 +120,7 @@
   - `PYTHONPATH=apps/api python -m pytest apps/api/tests/test_verify_remote_smoke_acceptance.py apps/api/tests/test_smoke_remote_agent.py -q` returned `163 passed`.
   - `python -m py_compile apps/api/scripts/verify_remote_smoke_acceptance.py apps/api/scripts/smoke_remote_agent.py` passed.
 - Frontend design remains blocked. This slice strengthens saved-evidence identity, but the product gate still requires operator-reviewed stale-task resolution, normal remote restart, and fresh strict remote acceptance within 24 hours.
+- Continued the same 2026-06-12 strict acceptance hardening by requiring `deployment_identity.health_version` to be present and privacy-safe in both live smoke output and offline verifier input.
+- Verification for the health-version hardening:
+  - RED: `PYTHONPATH=apps/api python -m pytest apps/api/tests/test_smoke_remote_agent.py::test_smoke_remote_agent_rejects_bad_health_version_for_deployment_identity -q` failed before implementation because the smoke script continued after a bad health version.
+  - GREEN: `PYTHONPATH=apps/api python -m pytest apps/api/tests/test_verify_remote_smoke_acceptance.py apps/api/tests/test_smoke_remote_agent.py -q` returned `166 passed`; `python -m py_compile apps/api/scripts/smoke_remote_agent.py apps/api/scripts/verify_remote_smoke_acceptance.py` passed.

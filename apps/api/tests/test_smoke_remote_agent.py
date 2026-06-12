@@ -281,6 +281,41 @@ def test_smoke_remote_agent_rejects_path_like_deployment_id():
     assert "--deployment-id must be a privacy-safe release id or commit" in str(exc.value)
 
 
+@pytest.mark.parametrize(
+    ("health_version", "expected_message"),
+    [
+        ("", "deployment identity health version is missing"),
+        ("/home/yyf/project/image_agent_releases/codex-f57a2ea/apps/api", "deployment identity health version must be privacy-safe"),
+    ],
+)
+def test_smoke_remote_agent_rejects_bad_health_version_for_deployment_identity(
+    monkeypatch,
+    health_version,
+    expected_message,
+):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        if url.endswith("/health"):
+            return {"status": "ok", "app": "image_agent", "version": health_version}
+        raise AssertionError(f"unexpected request after bad deployment identity: {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(
+            [
+                "--api-base",
+                "http://api.local",
+                "--require-deployment-identity",
+                "--deployment-id",
+                "codex-f57a2ea-20260611T023456",
+            ]
+        )
+
+    assert expected_message in str(exc.value)
+
+
 def test_smoke_remote_agent_enforces_rag_thresholds_and_raw_source_policy(monkeypatch):
     smoke = _load_smoke_module()
 

@@ -749,10 +749,19 @@ def main(argv: Sequence[str] | None = None) -> None:
     _validate_health(health)
     deployment_identity = None
     if args.deployment_id:
+        health_version = health.get("version")
+        _require(
+            isinstance(health_version, str) and bool(health_version),
+            "deployment identity health version is missing",
+        )
+        _require(
+            _is_privacy_safe_symbol(health_version),
+            "deployment identity health version must be privacy-safe",
+        )
         deployment_identity = {
             "deployment_id": args.deployment_id,
             "health_app": health.get("app"),
-            "health_version": health.get("version"),
+            "health_version": health_version,
         }
     status = _request("GET", f"{base}/agent/model/status")
     rag_before = _request("GET", f"{base}/agent/rag/status")
