@@ -154,6 +154,18 @@ def test_dispatcher_handles_responses_tool_call_arguments_json():
     assert all(item["lane"] == "fixed_workflow" for item in trace[0]["result"])
 
 
+def test_dispatcher_rejects_unknown_tool_arguments_before_execution():
+    result = dispatch_tool_call(
+        "list_workflows",
+        {"lane": "fixed_workflow", "adhoc_frontend_field": "drift"},
+    )
+
+    assert result["status"] == "blocked"
+    assert result["production_task_created"] is False
+    assert "Unknown tool argument" in result["message"]
+    assert "adhoc_frontend_field" in result["message"]
+
+
 def test_tool_trace_response_items_use_responses_function_call_output():
     trace = [{"status": "ok", "tool": "list_workflows", "call_id": "call_1", "result": [{"type": "fixed"}]}]
 

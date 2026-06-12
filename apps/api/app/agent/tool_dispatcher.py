@@ -16,6 +16,13 @@ def _allowed_tool_names() -> set[str]:
     return {tool["name"] for tool in list_function_tools()}
 
 
+def _tool_schema(tool_name: str) -> dict[str, Any] | None:
+    for tool in list_function_tools():
+        if tool["name"] == tool_name:
+            return tool.get("parameters") if isinstance(tool.get("parameters"), dict) else None
+    return None
+
+
 def _parse_arguments(arguments: Any) -> dict[str, Any]:
     if arguments is None:
         return {}
@@ -29,6 +36,15 @@ def _parse_arguments(arguments: Any) -> dict[str, Any]:
             raise ValueError("Tool call arguments must decode to a JSON object")
         return parsed
     raise ValueError("Tool call arguments must be a JSON object or JSON string")
+
+
+def _unknown_argument_names(tool_name: str, args: dict[str, Any]) -> list[str]:
+    schema = _tool_schema(tool_name) or {}
+    properties = schema.get("properties")
+    if not isinstance(properties, dict):
+        return []
+    allowed = set(properties)
+    return sorted(key for key in args if key not in allowed)
 
 
 def _blocked_result(tool_name: str, message: str, *, call_id: str | None = None) -> dict[str, Any]:
@@ -72,6 +88,13 @@ def dispatch_tool_call(
         args = _parse_arguments(arguments)
     except (json.JSONDecodeError, ValueError) as exc:
         return _blocked_result(tool_name, f"Invalid tool arguments: {exc}", call_id=call_id)
+    unknown_arguments = _unknown_argument_names(tool_name, args)
+    if unknown_arguments:
+        return _blocked_result(
+            tool_name,
+            "Unknown tool argument(s): " + ", ".join(unknown_arguments),
+            call_id=call_id,
+        )
 
     try:
         if tool_name == "list_workflows":
