@@ -163,6 +163,39 @@ def test_agent_resume_rejects_unknown_request_fields_with_stable_error():
     }
 
 
+def test_agent_resume_rejects_unknown_confirmation_fields_with_stable_error(tmp_path, monkeypatch):
+    from app.core import config
+    from app.db import database
+    from app.main import app
+
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
+    database.init_db()
+
+    result = TestClient(app).post(
+        "/agent/runs/thread-1/resume",
+        json={
+            "approved": True,
+            "confirmation": {
+                "type": "workflow_execution",
+                "project_id": 1,
+                "series_id": 11,
+                "workflow_type": "t1_deepprep_anat_report",
+                "absolute_path_hint": "C:/Users/A/private/patient-001",
+            },
+        },
+    )
+
+    assert result.status_code == 422
+    assert result.json() == {
+        "detail": {
+            "contract_version": "agent_api_error.v1",
+            "code": "request_contract_violation",
+            "message": "Request does not match the Agent API contract.",
+        }
+    }
+
+
 def test_agent_request_validation_handler_preserves_default_errors_for_other_routes():
     from app.main import app
 

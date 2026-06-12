@@ -6,6 +6,7 @@ import re
 import zipfile
 from pathlib import Path
 from threading import Thread
+from typing import Any
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
@@ -118,7 +119,23 @@ class AgentResumeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     approved: bool
-    confirmation: dict
+    confirmation: "AgentResumeConfirmation"
+
+
+class AgentResumeConfirmation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: str
+    action_lane: str | None = None
+    title: str | None = None
+    project_id: int | None = None
+    series_id: int | None = None
+    workflow_type: str | None = None
+    qsiprep_task_id: int | None = None
+    summary: str | None = None
+    risks: list[str] | None = None
+    preflight: dict[str, Any] | None = None
+    data_candidate_selection: dict[str, Any] | None = None
 
 
 class RagQueryRequest(BaseModel):
@@ -492,18 +509,19 @@ def agent_resume(thread_id: str, req: AgentResumeRequest):
     def _create_task(series_id: int, workflow_type: str, qsiprep_task_id: int | None = None) -> dict:
         return create_series_task(series_id, RunRequest(workflow_type=workflow_type, qsiprep_task_id=qsiprep_task_id))
 
+    confirmation = req.confirmation.model_dump(exclude_none=True)
     agent_run_id = start_agent_run(
         request_type="resume",
-        project_id=req.confirmation.get("project_id"),
+        project_id=confirmation.get("project_id"),
         thread_id=thread_id,
         approved=req.approved,
-        confirmation=req.confirmation,
+        confirmation=confirmation,
     )
     try:
         result = normalize_agent_run_result(dict(AgentRunner().resume(
             thread_id=thread_id,
             approved=req.approved,
-            confirmation=req.confirmation,
+            confirmation=confirmation,
             create_task_fn=_create_task,
         )))
         result["agent_run_id"] = agent_run_id

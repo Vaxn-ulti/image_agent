@@ -1005,6 +1005,7 @@ def test_agent_run_ledger_contract_is_documented_for_agent_use():
         "server-side resume confirmation path",
         "GET /agent/runs/{agent_run_id}",
         "unknown request fields return `request_contract_violation`",
+        "nested confirmation fields are also strict",
         "ledger-only envelope",
         "safe_metadata",
         "retrieved_sources",

@@ -16,7 +16,9 @@ The ledger is not the source of truth for workflow outputs. Backend task rows re
 `/agent/runs` and `/agent/runs/{thread_id}/resume` request bodies are strict
 contracts: unknown request fields return `request_contract_violation` through
 the `agent_api_error.v1` envelope instead of being ignored or stored in the
-ledger.
+ledger. For resume calls, nested confirmation fields are also strict: only the
+stable workflow-confirmation fields are accepted before ledger or runner state
+is touched.
 
 Pending server-side confirmations use the SQLite `agent_confirmations` table as
 their durable source of truth when the database has been initialized. The legacy

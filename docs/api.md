@@ -55,6 +55,8 @@ Error contract version: `agent_api_error.v1`.
 The Agent API request bodies are strict. Unknown request fields are rejected
 instead of ignored, and unknown request fields return `request_contract_violation`
 using the `agent_api_error.v1` envelope.
+For `/agent/runs/{thread_id}/resume`, nested confirmation fields are also strict:
+only the stable workflow-confirmation fields are accepted.
 
 Stable agent run states:
 
