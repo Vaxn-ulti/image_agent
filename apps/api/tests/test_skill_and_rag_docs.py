@@ -1202,6 +1202,24 @@ def test_remote_smoke_acceptance_json_verifier_is_documented():
         assert phrase in combined
 
 
+def test_developer_testing_matrix_requires_deployment_identity_for_strict_smoke():
+    matrix = (
+        REPO_ROOT / "docs" / "skills" / "image-agent-developer" / "references" / "testing-matrix.md"
+    ).read_text(encoding="utf-8")
+
+    for phrase in (
+        "`--require-deployment-identity`",
+        "`--deployment-id`",
+        "`deployment_identity_status=passed`",
+        "`deployment_identity.deployment_id`",
+        "`deployment_identity.health_version`",
+        "`smoke_gate.deployment_id`",
+        "privacy-safe",
+        "`python scripts/verify_remote_smoke_acceptance.py --max-age-hours 24 <remote-smoke-acceptance.json>`",
+    ):
+        assert phrase in matrix
+
+
 def test_remote_script_timeout_and_log_safety_are_documented_for_agent_use():
     paths = [
         REPO_ROOT / "docs" / "deployment" / "remote-agent-production.md",

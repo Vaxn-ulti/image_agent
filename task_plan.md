@@ -114,6 +114,7 @@ Continue developing Image Agent until the agent product is mature and stable eno
 - `deployment_identity.health_version` must also be present and privacy-safe, so `/health.version` cannot smuggle a release path into saved evidence.
 - The strict acceptance command should include `--require-deployment-identity --deployment-id <accepted-release-or-commit>`.
 - The freshness gate still requires `verify_remote_smoke_acceptance.py <remote-smoke-acceptance.json> --max-age-hours 24`.
+- `docs/skills/image-agent-developer/references/testing-matrix.md` now mirrors these strict smoke identity and freshness requirements, guarded by `test_developer_testing_matrix_requires_deployment_identity_for_strict_smoke`.
 
 ## Prior BMAD-Style Explorer Findings
 

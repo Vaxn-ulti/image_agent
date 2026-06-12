@@ -124,3 +124,7 @@
 - Verification for the health-version hardening:
   - RED: `PYTHONPATH=apps/api python -m pytest apps/api/tests/test_smoke_remote_agent.py::test_smoke_remote_agent_rejects_bad_health_version_for_deployment_identity -q` failed before implementation because the smoke script continued after a bad health version.
   - GREEN: `PYTHONPATH=apps/api python -m pytest apps/api/tests/test_verify_remote_smoke_acceptance.py apps/api/tests/test_smoke_remote_agent.py -q` returned `166 passed`; `python -m py_compile apps/api/scripts/smoke_remote_agent.py apps/api/scripts/verify_remote_smoke_acceptance.py` passed.
+- Synchronized the Image Agent developer testing matrix with the strict smoke deployment identity gate:
+  - Added `apps/api/tests/test_skill_and_rag_docs.py::test_developer_testing_matrix_requires_deployment_identity_for_strict_smoke`.
+  - Updated `docs/skills/image-agent-developer/references/testing-matrix.md` to require `--require-deployment-identity`, `--deployment-id`, matching `deployment_identity.deployment_id` and `smoke_gate.deployment_id`, privacy-safe `deployment_identity.health_version`, and `verify_remote_smoke_acceptance.py --max-age-hours 24`.
+  - Verification: RED for the new doc contract first, then `169 passed` across the related skill docs, smoke script, and verifier tests; `python apps/api/scripts/audit_skill_maintenance.py --json` returned `status=passed`.
