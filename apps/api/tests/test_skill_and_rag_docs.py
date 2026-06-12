@@ -1240,6 +1240,8 @@ def test_developer_testing_matrix_requires_stale_task_gate_before_strict_accepta
         "`blocked_task_ids=[]`",
         "reject `log_path`",
         "reject backend absolute paths",
+        "timezone-aware `generated_at`",
+        "resolution `generated_at` must be after or equal to apply `generated_at`",
         "normal restart without `IMAGE_AGENT_ALLOW_RESTART_WITH_ACTIVE_TASKS=1`",
     ):
         assert phrase in matrix

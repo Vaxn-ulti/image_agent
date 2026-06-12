@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 from collections.abc import Sequence
+from datetime import datetime
 from pathlib import Path
 
 
@@ -55,6 +56,17 @@ def _assert_no_backend_paths(value: object) -> None:
         _require(not _looks_like_backend_path(value), "stale-task evidence must not expose backend paths")
 
 
+def _parse_timestamp(value: object, *, key: str) -> datetime:
+    _require(isinstance(value, str) and bool(value), f"{key} must be an ISO-8601 timestamp")
+    normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise SystemExit(f"{key} must be an ISO-8601 timestamp") from exc
+    _require(parsed.tzinfo is not None and parsed.utcoffset() is not None, f"{key} must be timezone-aware")
+    return parsed
+
+
 def _approval_fingerprint(payload: dict) -> str:
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -98,6 +110,12 @@ def verify_resolution_evidence(
     _require(isinstance(resolution_payload, dict), "resolution payload must be a JSON object")
     _assert_no_backend_paths(apply_payload)
     _assert_no_backend_paths(resolution_payload)
+    apply_generated_at = _parse_timestamp(apply_payload.get("generated_at"), key="apply.generated_at")
+    resolution_generated_at = _parse_timestamp(resolution_payload.get("generated_at"), key="resolution.generated_at")
+    _require(
+        resolution_generated_at >= apply_generated_at,
+        "resolution generated_at must be after or equal to apply generated_at",
+    )
 
     apply_fingerprint = _verify_fingerprint(apply_payload)
     _require(apply_payload.get("mode") == "apply", "apply mode must be apply")

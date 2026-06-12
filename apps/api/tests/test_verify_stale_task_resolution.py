@@ -185,6 +185,18 @@ def test_verify_stale_task_resolution_accepts_apply_and_clean_followup():
             "stale-task evidence must not expose backend paths",
         ),
         (
+            lambda apply_payload, resolved_payload: apply_payload.update({"generated_at": ""}),
+            "apply.generated_at must be an ISO-8601 timestamp",
+        ),
+        (
+            lambda apply_payload, resolved_payload: resolved_payload.update({"generated_at": ""}),
+            "resolution.generated_at must be an ISO-8601 timestamp",
+        ),
+        (
+            lambda apply_payload, resolved_payload: resolved_payload.update({"generated_at": "2026-06-11T04:19:24.156875+00:00"}),
+            "resolution generated_at must be after or equal to apply generated_at",
+        ),
+        (
             lambda apply_payload, resolved_payload: resolved_payload.update(
                 {
                     "active_task_count": 1,

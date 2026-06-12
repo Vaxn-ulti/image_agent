@@ -145,3 +145,6 @@
   - Added negative tests for backend absolute-path leakage in stale-task approval and resolution JSON.
   - Updated `verify_stale_task_approval.py` and `verify_stale_task_resolution.py` to recursively reject `log_path` and backend absolute path strings before accepting saved evidence.
   - Updated the developer testing matrix and product readiness gate so the remote stale-task cleanup path requires path-safe approval/apply/resolution evidence before normal restart and strict smoke.
+- Hardened stale-task evidence timestamp ordering:
+  - Added negative tests for missing, naive, and out-of-order `generated_at` values.
+  - Stale-task approval evidence now requires timezone-aware `generated_at`; resolution evidence now requires timezone-aware apply/resolution timestamps and rejects resolution timestamps earlier than apply.

@@ -84,8 +84,11 @@ silently between review and apply. The dry-run report can be checked with
 approved apply, the apply JSON and a second scoped dry-run must be checked with
 `apps/api/scripts/verify_stale_task_resolution.py`; that verifier must print
 `status=passed`, reject `log_path`, and reject backend absolute paths anywhere
-in the saved stale-task evidence before a normal restart without the active-task
-override is accepted. A remote dry-run from non-live release
+in the saved stale-task evidence. The stale-task approval/apply/resolution
+artifacts must include timezone-aware `generated_at` timestamps, and the
+resolution `generated_at` must be after or equal to apply `generated_at` before
+a normal restart without the active-task override is accepted. A remote dry-run
+from non-live release
 `118c407` reported tasks `83` and `84` as stale candidates older than 531
 hours, and a shared-env Docker label check returned no running labelled Image
 Agent task ids. A fresh non-live release overlay dry-run on 2026-06-11 reported

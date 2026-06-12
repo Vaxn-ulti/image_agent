@@ -133,6 +133,8 @@ def test_verify_stale_task_approval_accepts_reviewed_dry_run():
         (lambda payload: payload.update({"updated_task_ids": [83]}), "updated_task_ids must be empty"),
         (lambda payload: payload.update({"mode": "apply"}), "mode must be dry_run"),
         (lambda payload: payload.update({"target_task_ids": [83]}), "target_task_ids must match expected task ids"),
+        (lambda payload: payload.update({"generated_at": ""}), "generated_at must be an ISO-8601 timestamp"),
+        (lambda payload: payload.update({"generated_at": "2026-06-11T04:14:24"}), "generated_at must be timezone-aware"),
         (
             lambda payload: payload["approval_payload"].update({"debug_output_dir": "/home/yyf/project/image_agent/data/projects/15"}),
             "stale-task evidence must not expose backend paths",
