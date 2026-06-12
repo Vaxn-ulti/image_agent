@@ -52,6 +52,10 @@ Lookup contract version: `agent_run_lookup.v1`.
 Project history contract version: `project_agent_run_history.v1`.
 Error contract version: `agent_api_error.v1`.
 
+The Agent API request bodies are strict. Unknown request fields are rejected
+instead of ignored, and unknown request fields return `request_contract_violation`
+using the `agent_api_error.v1` envelope.
+
 Stable agent run states:
 
 - `running`

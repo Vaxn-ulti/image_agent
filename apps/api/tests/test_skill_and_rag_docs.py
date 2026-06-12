@@ -980,6 +980,7 @@ def test_agent_run_ledger_contract_is_documented_for_agent_use():
         "production task creation remains gated outside the planner loop",
         "server-side resume confirmation path",
         "GET /agent/runs/{agent_run_id}",
+        "unknown request fields return `request_contract_violation`",
         "ledger-only envelope",
         "safe_metadata",
         "retrieved_sources",

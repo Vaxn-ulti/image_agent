@@ -125,6 +125,7 @@ Workflow eligibility contract:
 ## Agent Orchestration Contract
 
 - `POST /agent/runs` is the primary product agent entrypoint. `POST /agent/rag/query` and compatibility `POST /chat` should expose `intent`, `recommended_next_step`, `tool_chain_hint`, `tool_invocations`, and `rag_mode` where applicable.
+- `/agent/runs` and `/agent/runs/{thread_id}/resume` request bodies are strict API contracts: unknown request fields return `request_contract_violation` in the `agent_api_error.v1` envelope rather than being ignored.
 - `tool_invocations` is a read-only trace of internal agent tools, such as `inspect_task_status`, `inspect_registered_outputs`, `inspect_scientific_reports`, and `recommend_next_action`.
 - The built-in agent may inspect state and suggest next actions from backend records, but it must not launch long-running workflows directly from chat.
 - `POST /agent/tools/verify-scientific-reports` is a read-only Agent tool endpoint for report-layer acceptance. It accepts `task_ids`, optional `projects_root`, optional explicit `output_dirs`, and `require_modalities`, then returns `ok`, `read_only`, resolution errors, missing modalities, and per-output checks.

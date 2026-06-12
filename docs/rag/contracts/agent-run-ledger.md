@@ -13,6 +13,11 @@ The agent-run ledger is the durable agent-run trace for Image Agent orchestratio
 
 The ledger is not the source of truth for workflow outputs. Backend task rows remain the task-state source of truth; backend task rows remain authoritative. The result-summary JSON remains the output source of truth; result-summary JSON remains authoritative for completed workflow outputs.
 
+`/agent/runs` and `/agent/runs/{thread_id}/resume` request bodies are strict
+contracts: unknown request fields return `request_contract_violation` through
+the `agent_api_error.v1` envelope instead of being ignored or stored in the
+ledger.
+
 Pending server-side confirmations use the SQLite `agent_confirmations` table as
 their durable source of truth when the database has been initialized. The legacy
 JSON thread file is only a compatibility mirror/fallback for lightweight tests

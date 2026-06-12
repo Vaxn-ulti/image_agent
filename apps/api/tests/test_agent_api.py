@@ -119,6 +119,58 @@ def test_agent_api_openapi_declares_stable_response_contracts():
         schema["paths"]["/chat"]["post"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
         == "#/components/schemas/ChatCompatibilityResponse"
     )
+    for name in ("AgentRunRequest", "AgentResumeRequest"):
+        assert schema["components"]["schemas"][name]["additionalProperties"] is False
+
+
+def test_agent_run_rejects_unknown_request_fields_with_stable_error():
+    from app.main import app
+
+    result = TestClient(app).post(
+        "/agent/runs",
+        json={"project_id": None, "message": "hi", "adhoc_frontend_field": "drift"},
+    )
+
+    assert result.status_code == 422
+    assert result.json() == {
+        "detail": {
+            "contract_version": "agent_api_error.v1",
+            "code": "request_contract_violation",
+            "message": "Request does not match the Agent API contract.",
+        }
+    }
+
+
+def test_agent_resume_rejects_unknown_request_fields_with_stable_error():
+    from app.main import app
+
+    result = TestClient(app).post(
+        "/agent/runs/thread-1/resume",
+        json={
+            "approved": True,
+            "confirmation": {"type": "workflow_execution"},
+            "adhoc_frontend_field": "drift",
+        },
+    )
+
+    assert result.status_code == 422
+    assert result.json() == {
+        "detail": {
+            "contract_version": "agent_api_error.v1",
+            "code": "request_contract_violation",
+            "message": "Request does not match the Agent API contract.",
+        }
+    }
+
+
+def test_agent_request_validation_handler_preserves_default_errors_for_other_routes():
+    from app.main import app
+
+    result = TestClient(app).post("/chat", json={"project_id": 1})
+
+    assert result.status_code == 422
+    assert isinstance(result.json()["detail"], list)
+    assert result.json()["detail"][0]["loc"][-1] == "message"
 
 
 def test_agent_run_contract_normalizes_unknown_runner_status(tmp_path, monkeypatch):

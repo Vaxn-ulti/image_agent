@@ -7,10 +7,12 @@ import zipfile
 from pathlib import Path
 from threading import Thread
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import request_validation_exception_handler as fastapi_request_validation_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel, ConfigDict
 
 from app.agent.graph import AgentRunner
 from app.agent.contracts import (
@@ -106,11 +108,15 @@ class ChatRequest(BaseModel):
 
 
 class AgentRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     project_id: int | None = None
     message: str
 
 
 class AgentResumeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     approved: bool
     confirmation: dict
 
@@ -406,6 +412,21 @@ def agent_rag_rebuild():
 @app.get("/agent/model/status")
 def agent_model_status():
     return model_provider_status()
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_exception_handler(request: Request, exc: RequestValidationError):
+    if request.url.path.startswith("/agent/runs"):
+        return JSONResponse(
+            status_code=422,
+            content={
+                "detail": agent_api_error_detail(
+                    "request_contract_violation",
+                    "Request does not match the Agent API contract.",
+                )
+            },
+        )
+    return await fastapi_request_validation_exception_handler(request, exc)
 
 
 AGENT_RUN_ERROR_RESPONSES = {
