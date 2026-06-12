@@ -1,3 +1,9 @@
+---
+source_type: rag_interpretation
+status: current_guidance
+retrieved_date: 2026-06-13
+---
+
 # T1 Feature Interpretation RAG
 
 ## Scope / 范围
@@ -41,4 +47,3 @@ Mention these when present:
 ## Good Short Answer
 
 "The T1 summary contains FreeSurfer-derived structural features such as cortical thickness, surface area, and segmentation volumes. These are useful for research-style morphometry and QC review, but they are not diagnostic by themselves."
-

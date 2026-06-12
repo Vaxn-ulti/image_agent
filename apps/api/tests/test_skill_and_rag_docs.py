@@ -219,6 +219,30 @@ def test_workflow_rag_docs_have_machine_readable_frontmatter():
             assert (REPO_ROOT / grounded_source).exists(), f"{relative} missing {grounded_source}"
 
 
+def test_all_indexed_rag_docs_have_basic_machine_readable_frontmatter():
+    rag_root = REPO_ROOT / "docs" / "rag"
+    allowed_source_types = {
+        "rag_contract",
+        "rag_data_requirement",
+        "rag_interpretation",
+        "rag_safety",
+        "rag_troubleshooting",
+        "rag_vendor",
+        "rag_workflow",
+    }
+
+    for path in rag_root.rglob("*.md"):
+        relative = path.relative_to(rag_root).as_posix()
+        if relative.startswith("vendor/raw-sources/"):
+            continue
+
+        metadata, _body = _parse_frontmatter(path.read_text(encoding="utf-8"))
+
+        assert metadata.get("source_type") in allowed_source_types, relative
+        assert metadata.get("status"), relative
+        assert str(metadata.get("retrieved_date", "")).startswith("2026-06-"), relative
+
+
 def test_vendor_raw_sources_manifest_covers_curated_summaries():
     raw_root = REPO_ROOT / "docs" / "rag" / "vendor" / "raw-sources"
     manifest_path = raw_root / "manifest.json"

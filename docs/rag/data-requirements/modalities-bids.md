@@ -1,3 +1,9 @@
+---
+source_type: rag_data_requirement
+status: current_contract
+retrieved_date: 2026-06-13
+---
+
 # Modalities and BIDS Requirements RAG
 
 ## Purpose / 目的

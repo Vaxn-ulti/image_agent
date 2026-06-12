@@ -1,3 +1,9 @@
+---
+source_type: rag_interpretation
+status: current_guidance
+retrieved_date: 2026-06-13
+---
+
 # BOLD Feature Interpretation RAG
 
 ## Scope / 范围
@@ -42,4 +48,3 @@ Avoid:
 2. Name the available BOLD feature groups.
 3. Explain the main metrics in plain language.
 4. Add QC and non-diagnostic caveats.
-

@@ -1,3 +1,9 @@
+---
+source_type: rag_troubleshooting
+status: current_guidance
+retrieved_date: 2026-06-13
+---
+
 # Common Workflow Errors RAG
 
 ## Purpose / 目的
