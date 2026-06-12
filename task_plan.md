@@ -107,6 +107,13 @@ Continue developing Image Agent until the agent product is mature and stable eno
   - `OPENAI_API_KEY` must be configured outside the repo and never written to source, docs, logs, RAG, or workflow child environments.
 - Local workspace remains code/docs only. Real installation, model smoke, workflow execution, and strict acceptance must run on the remote server.
 
+## Current Strict Acceptance Evidence Hardening
+
+- Saved strict remote smoke evidence must now include `deployment_identity_status=passed`.
+- `smoke_gate.deployment_id` and `deployment_identity.deployment_id` must match and must be a privacy-safe short release id or commit, not a full backend path.
+- The strict acceptance command should include `--require-deployment-identity --deployment-id <accepted-release-or-commit>`.
+- The freshness gate still requires `verify_remote_smoke_acceptance.py <remote-smoke-acceptance.json> --max-age-hours 24`.
+
 ## Prior BMAD-Style Explorer Findings
 
 | Role | Agent | Scope |

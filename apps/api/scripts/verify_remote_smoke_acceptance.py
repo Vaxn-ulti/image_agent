@@ -115,6 +115,7 @@ def _verify_gate_settings(payload: dict) -> dict:
     gate = payload.get("smoke_gate") if isinstance(payload.get("smoke_gate"), dict) else {}
     for key in (
         "require_model",
+        "require_deployment_identity",
         "require_raw_source_policy",
         "require_vendor_pointer_integrity",
         "require_real_evidence_ids",
@@ -129,6 +130,7 @@ def _verify_gate_settings(payload: dict) -> dict:
     _require_positive_int_metric(gate, "min_chunks")
     _require_positive_int_metric(gate, "min_native_qc_images")
     _require_positive_int_metric(gate, "min_scientific_report_images")
+    _require_privacy_safe_symbol(gate, "deployment_id")
     return gate
 
 
@@ -379,6 +381,25 @@ def _verify_real_ids(payload: dict, gate: dict) -> None:
         _require(evidence_ids.get(key) == gate.get(key), f"remote_evidence_ids.{key} must match smoke_gate.{key}")
 
 
+def _verify_deployment_identity(payload: dict, gate: dict) -> None:
+    _require_status(payload, "deployment_identity_status")
+    identity = payload.get("deployment_identity") if isinstance(payload.get("deployment_identity"), dict) else {}
+    _require_privacy_safe_symbol(identity, "deployment_id")
+    _require(
+        identity.get("deployment_id") == gate.get("deployment_id"),
+        "deployment_identity.deployment_id must match smoke_gate.deployment_id",
+    )
+    _require(
+        identity.get("health_app") == "image_agent",
+        "deployment_identity.health_app must be image_agent",
+    )
+    health_version = identity.get("health_version")
+    _require(
+        isinstance(health_version, str) and bool(health_version) and len(health_version) <= 80,
+        "deployment_identity.health_version must be present",
+    )
+
+
 def _verify_official_source_ids(source_ids: object) -> set[str]:
     _require(isinstance(source_ids, list) and source_ids, "container_native_qc_official_source_ids must be non-empty")
     verified_ids = set()
@@ -556,6 +577,7 @@ def verify_acceptance_payload(
     _verify_generated_at_utc(payload, max_age_hours=max_age_hours, now_utc=now_utc)
     gate = _verify_gate_settings(payload)
     _require(isinstance(payload.get("health"), dict) and payload["health"].get("app") == "image_agent", "health.app must be image_agent")
+    _verify_deployment_identity(payload, gate)
     _require(isinstance(payload.get("model_status"), dict) and payload["model_status"].get("configured") is True, "model_status.configured must be true")
     _require_status(payload, "model_smoke_status")
     _require(payload.get("agent_run_status") == "answered", "agent_run_status must be answered")
@@ -585,6 +607,7 @@ def verify_acceptance_payload(
         "summary": "status=passed",
         "checked": {
             "model_smoke_status": payload["model_smoke_status"],
+            "deployment_identity_status": payload["deployment_identity_status"],
             "remote_evidence_ids_status": payload["remote_evidence_ids_status"],
             "rag_vendor_pointer_integrity_status": payload["rag_vendor_pointer_integrity_status"],
             "rag_vendor_coverage_catalog_status": payload["rag_vendor_coverage_catalog_status"],

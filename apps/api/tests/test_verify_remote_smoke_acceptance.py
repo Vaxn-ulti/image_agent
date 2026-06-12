@@ -21,6 +21,8 @@ def _strict_smoke_payload():
         "smoke_gate": {
             "api_base": "http://127.0.0.1:8000",
             "require_model": True,
+            "require_deployment_identity": True,
+            "deployment_id": "codex-f57a2ea-20260611T023456",
             "min_documents": 60,
             "min_chunks": 200,
             "require_raw_source_policy": True,
@@ -36,6 +38,12 @@ def _strict_smoke_payload():
             "task_id": 114,
         },
         "health": {"status": "ok", "app": "image_agent"},
+        "deployment_identity_status": "passed",
+        "deployment_identity": {
+            "deployment_id": "codex-f57a2ea-20260611T023456",
+            "health_app": "image_agent",
+            "health_version": "0.2.0",
+        },
         "model_status": {"configured": True, "provider": "OpenAI"},
         "model_smoke_status": "passed",
         "agent_run_status": "answered",
@@ -284,6 +292,7 @@ def test_verify_remote_smoke_acceptance_rejects_stale_saved_evidence():
         ({"generated_at_utc": ""}, "generated_at_utc must be an ISO-8601 UTC timestamp"),
         ({"generated_at_utc": "2026-06-08T12:00:00"}, "generated_at_utc must be timezone-aware"),
         ({"model_smoke_status": "skipped_missing_model_config"}, "model_smoke_status must be passed"),
+        ({"deployment_identity_status": "skipped"}, "deployment_identity_status must be passed"),
         ({"agent_run_id": "agent_run_123 C:/Users/A/private"}, "agent_run_id must be privacy-safe"),
         ({"selected_skill": "image-agent-operator sk-test-secret"}, "selected_skill must be privacy-safe"),
         ({"remote_evidence_ids_status": "skipped"}, "remote_evidence_ids_status must be passed"),
@@ -291,6 +300,8 @@ def test_verify_remote_smoke_acceptance_rejects_stale_saved_evidence():
         ({"container_native_qc_served_urls": []}, "container_native_qc_served_urls must be non-empty"),
         ({"container_native_qc_official_source_ids": ["docs/rag/vendor/fake.md"]}, "container_native_qc_official_source_ids contains unsupported source"),
         ({"smoke_gate": {"require_real_evidence_ids": False}}, "smoke_gate.require_real_evidence_ids must be true"),
+        ({"smoke_gate": {"require_deployment_identity": False}}, "smoke_gate.require_deployment_identity must be true"),
+        ({"smoke_gate": {"deployment_id": "C:/srv/image_agent"}}, "deployment_id must be privacy-safe"),
         ({"smoke_gate": {"require_vendor_pointer_integrity": False}}, "smoke_gate.require_vendor_pointer_integrity must be true"),
         ({"smoke_gate": {"require_scientific_report_artifacts": False}}, "smoke_gate.require_scientific_report_artifacts must be true"),
         ({"rag_document_count": True}, "rag_document_count must be an integer"),
@@ -429,6 +440,29 @@ def test_verify_remote_smoke_acceptance_rejects_incomplete_curated_sources():
         verifier.verify_acceptance_payload(payload)
 
     assert "curated_sources entries must be complete with raw_source_ids, source_urls, and raw_files" in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    ("identity_override", "expected_message"),
+    [
+        ({"deployment_id": "other-release"}, "deployment_identity.deployment_id must match smoke_gate.deployment_id"),
+        ({"deployment_id": "/home/yyf/project/image_agent"}, "deployment_id must be privacy-safe"),
+        ({"health_app": "wrong_app"}, "deployment_identity.health_app must be image_agent"),
+        ({"health_version": ""}, "deployment_identity.health_version must be present"),
+    ],
+)
+def test_verify_remote_smoke_acceptance_rejects_bad_deployment_identity(
+    identity_override,
+    expected_message,
+):
+    verifier = _load_verifier_module()
+    payload = _strict_smoke_payload()
+    payload["deployment_identity"].update(identity_override)
+
+    with pytest.raises(SystemExit) as exc:
+        verifier.verify_acceptance_payload(payload)
+
+    assert expected_message in str(exc.value)
 
 
 def test_verify_remote_smoke_acceptance_rejects_weak_curated_source_pointer_metadata():

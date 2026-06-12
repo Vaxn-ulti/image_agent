@@ -107,3 +107,16 @@
   - Added `apps/api/tests/test_skill_maintenance_audit.py`.
   - Updated `docs/skills/image-agent-developer/references/skill-maintenance.md` with the audit command.
   - Verification: `python -m pytest apps/api/tests/test_skill_maintenance_audit.py -q` returned `2 passed`; `python apps/api/scripts/audit_skill_maintenance.py --json` returned `status=passed` with no findings.
+
+## 2026-06-12
+
+- Continued product-maturity hardening without subagents and without local/remote runtime installation.
+- Added a strict remote acceptance deployment identity gate:
+  - `apps/api/scripts/smoke_remote_agent.py` now supports `--require-deployment-identity` plus a privacy-safe `--deployment-id`.
+  - Saved strict smoke JSON now records `deployment_identity_status` and `deployment_identity` when the gate is required.
+  - `apps/api/scripts/verify_remote_smoke_acceptance.py` now requires `deployment_identity_status=passed`, a privacy-safe `deployment_identity.deployment_id`, and a match to `smoke_gate.deployment_id`.
+- Updated `docs/deployment/remote-agent-production.md`, `docs/deployment/remote-agent-acceptance-template.md`, and `docs/product-readiness.md` so the release gate requires a short accepted release id or commit, not a full remote release path.
+- Verification:
+  - `PYTHONPATH=apps/api python -m pytest apps/api/tests/test_verify_remote_smoke_acceptance.py apps/api/tests/test_smoke_remote_agent.py -q` returned `163 passed`.
+  - `python -m py_compile apps/api/scripts/verify_remote_smoke_acceptance.py apps/api/scripts/smoke_remote_agent.py` passed.
+- Frontend design remains blocked. This slice strengthens saved-evidence identity, but the product gate still requires operator-reviewed stale-task resolution, normal remote restart, and fresh strict remote acceptance within 24 hours.

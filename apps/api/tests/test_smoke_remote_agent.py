@@ -255,6 +255,32 @@ def test_smoke_remote_agent_require_model_fails_when_gateway_unconfigured(monkey
     assert "model gateway is not configured" in str(exc.value)
 
 
+def test_smoke_remote_agent_requires_deployment_id_for_identity_gate():
+    smoke = _load_smoke_module()
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(["--api-base", "http://api.local", "--require-deployment-identity"])
+
+    assert "--require-deployment-identity requires --deployment-id" in str(exc.value)
+
+
+def test_smoke_remote_agent_rejects_path_like_deployment_id():
+    smoke = _load_smoke_module()
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(
+            [
+                "--api-base",
+                "http://api.local",
+                "--require-deployment-identity",
+                "--deployment-id",
+                "/home/yyf/project/image_agent_releases/codex-f57a2ea",
+            ]
+        )
+
+    assert "--deployment-id must be a privacy-safe release id or commit" in str(exc.value)
+
+
 def test_smoke_remote_agent_enforces_rag_thresholds_and_raw_source_policy(monkeypatch):
     smoke = _load_smoke_module()
 
@@ -558,6 +584,9 @@ def test_smoke_remote_agent_strict_gate_reports_successful_run(capsys, monkeypat
             "--api-base",
             "http://api.local",
             "--require-model",
+            "--require-deployment-identity",
+            "--deployment-id",
+            "codex-f57a2ea-20260611T023456",
             "--min-documents",
             "60",
             "--min-chunks",
@@ -1563,6 +1592,9 @@ def test_smoke_remote_agent_writes_acceptance_json_artifact(capsys, monkeypatch,
             "--api-base",
             "http://api.local",
             "--require-model",
+            "--require-deployment-identity",
+            "--deployment-id",
+            "codex-f57a2ea-20260611T023456",
             "--min-documents",
             "60",
             "--min-chunks",
@@ -1580,6 +1612,8 @@ def test_smoke_remote_agent_writes_acceptance_json_artifact(capsys, monkeypatch,
     assert artifact_payload["smoke_gate"] == {
         "api_base": "http://api.local",
         "require_model": True,
+        "require_deployment_identity": True,
+        "deployment_id": "codex-f57a2ea-20260611T023456",
         "min_documents": 60,
         "min_chunks": 200,
         "require_raw_source_policy": True,
@@ -1593,6 +1627,12 @@ def test_smoke_remote_agent_writes_acceptance_json_artifact(capsys, monkeypatch,
         "project_id": None,
         "task_id": None,
         "upload_session_id": None,
+    }
+    assert artifact_payload["deployment_identity_status"] == "passed"
+    assert artifact_payload["deployment_identity"] == {
+        "deployment_id": "codex-f57a2ea-20260611T023456",
+        "health_app": "image_agent",
+        "health_version": "0.2.0",
     }
     assert artifact_payload["rag_vendor_pointer_integrity_status"] == "passed"
     assert artifact_payload["rag_vendor_pointer_integrity_referenced_vendor_docs"] == [

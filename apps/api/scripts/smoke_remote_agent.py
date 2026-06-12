@@ -74,6 +74,15 @@ def _require(condition: bool, message: str) -> None:
         raise SystemExit(message)
 
 
+def _is_privacy_safe_symbol(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and bool(value)
+        and len(value) <= 140
+        and all(char.isalnum() or char in "_.-" for char in value)
+    )
+
+
 def _int_metric(*values: object) -> int:
     for value in values:
         try:
@@ -641,6 +650,15 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--api-base", default="http://127.0.0.1:8000")
     parser.add_argument("--message", default="Summarize the current Image Agent runtime status.")
     parser.add_argument("--require-model", action="store_true", help="Fail if the OpenAI model gateway is not configured.")
+    parser.add_argument(
+        "--require-deployment-identity",
+        action="store_true",
+        help="Fail unless --deployment-id names the accepted remote release or commit.",
+    )
+    parser.add_argument(
+        "--deployment-id",
+        help="Privacy-safe accepted release id or commit hash, e.g. codex-f57a2ea-20260611T023456.",
+    )
     parser.add_argument("--min-documents", type=int, default=0, help="Minimum RAG document count after rebuild.")
     parser.add_argument("--min-chunks", type=int, default=0, help="Minimum RAG chunk count after rebuild.")
     parser.add_argument(
@@ -713,6 +731,10 @@ def main(argv: Sequence[str] | None = None) -> None:
         args.project_id is None or args.upload_session_id is None or args.task_id is None
     ):
         raise SystemExit("--require-real-evidence-ids requires --project-id, --upload-session-id, and --task-id")
+    if args.require_deployment_identity and not args.deployment_id:
+        raise SystemExit("--require-deployment-identity requires --deployment-id")
+    if args.deployment_id is not None and not _is_privacy_safe_symbol(args.deployment_id):
+        raise SystemExit("--deployment-id must be a privacy-safe release id or commit")
     if args.require_container_native_qc and args.task_id is None:
         raise SystemExit("--require-container-native-qc requires --task-id")
     if args.min_native_qc_images > 0 and args.task_id is None:
@@ -725,6 +747,13 @@ def main(argv: Sequence[str] | None = None) -> None:
     base = args.api_base.rstrip("/")
     health = _request("GET", f"{base}/health")
     _validate_health(health)
+    deployment_identity = None
+    if args.deployment_id:
+        deployment_identity = {
+            "deployment_id": args.deployment_id,
+            "health_app": health.get("app"),
+            "health_version": health.get("version"),
+        }
     status = _request("GET", f"{base}/agent/model/status")
     rag_before = _request("GET", f"{base}/agent/rag/status")
     rag = _request("POST", f"{base}/agent/rag/rebuild")
@@ -792,6 +821,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         "smoke_gate": {
             "api_base": base,
             "require_model": bool(args.require_model),
+            "require_deployment_identity": bool(args.require_deployment_identity),
+            "deployment_id": args.deployment_id,
             "min_documents": max(args.min_documents, 0),
             "min_chunks": max(args.min_chunks, 0),
             "require_raw_source_policy": bool(args.require_raw_source_policy),
@@ -807,6 +838,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             "upload_session_id": args.upload_session_id,
         },
         "health": health,
+        "deployment_identity_status": "passed" if args.require_deployment_identity else "skipped",
+        "deployment_identity": deployment_identity,
         "model_status": status,
         "model_smoke_status": model_smoke_status,
         "rag_before": rag_before.get("index"),

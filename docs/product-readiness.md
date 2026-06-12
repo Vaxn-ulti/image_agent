@@ -27,7 +27,7 @@ The remote server is the authority for install, testing, running, and production
 
 The strict remote acceptance package must include:
 
-- Deployed package identity or commit.
+- Deployed package identity or commit, recorded as a privacy-safe `deployment_id`.
 - `/health` returning `app=image_agent`.
 - `/agent/model/status` with the OpenAI SDK gateway configured.
 - `model_smoke_status=passed` from a live `/agent/runs` smoke.
@@ -37,7 +37,7 @@ The strict remote acceptance package must include:
 - `project_contract_status=passed`, `upload_inventory_contract_status=passed`, and `task_artifact_manifest_status=passed`.
 - `container_native_qc_status=passed`, served container-native QC artifact URLs, accepted curated `official_source_ids`, and enough native QC images.
 - `scientific_report_artifacts_status=passed`, served report HTML/PNG URLs, and derived-presentation provenance that does not replace native QC.
-- Offline verifier output from `python scripts/verify_remote_smoke_acceptance.py <remote-smoke-acceptance.json> --max-age-hours 24` with `status=passed`.
+- Offline verifier output from `python scripts/verify_remote_smoke_acceptance.py <remote-smoke-acceptance.json> --max-age-hours 24` with `status=passed`, including `deployment_identity_status=passed` and a `deployment_identity.deployment_id` matching `smoke_gate.deployment_id`.
 
 `skipped_missing_model_config` is not production acceptance. Health, RAG, or local pytest success without a configured remote model gateway is not enough to release the frontend gate.
 

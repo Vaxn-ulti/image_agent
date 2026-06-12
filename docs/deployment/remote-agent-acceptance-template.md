@@ -86,6 +86,8 @@ source .venv/bin/activate
 python scripts/smoke_remote_agent.py \
   --api-base http://127.0.0.1:8000 \
   --require-model \
+  --require-deployment-identity \
+  --deployment-id <accepted-release-or-commit> \
   --min-documents 60 \
   --min-chunks 200 \
   --require-raw-source-policy \
@@ -105,6 +107,8 @@ python scripts/smoke_remote_agent.py \
 Attach the strict smoke acceptance JSON and verify it contains:
 
 - `model_smoke_status=passed`
+- `deployment_identity_status=passed`
+- `deployment_identity.deployment_id` matches `smoke_gate.deployment_id` and is a short release id or commit, not a full remote path
 - `agent_run_id`
 - `intent`
 - `selected_skill`
@@ -172,7 +176,7 @@ Run the offline strict smoke acceptance JSON verifier `apps/api/scripts/verify_r
 python scripts/verify_remote_smoke_acceptance.py "../../docs/deployment/remote-smoke-acceptance-<timestamp>.json"
 ```
 
-Attach the verifier report only when it prints `status=passed`. This offline strict smoke acceptance JSON verifier does not replace running `smoke_remote_agent.py` on the remote server; it re-checks the saved evidence for the same strict fields, including `model_smoke_status=passed`, `remote_evidence_ids_status=passed`, `rag_raw_sources.manifest_schema_version`, `rag_raw_sources.source_count`, `rag_raw_sources.vendor_doc_count`, `rag_vendor_pointer_integrity_status=passed`, `require_vendor_pointer_integrity`, `rag_vendor_pointer_integrity_referenced_vendor_docs`, `rag_vendor_coverage_catalog_status=complete`, `vendor_coverage_catalog`, `vendor_coverage_catalog.vendors`, `rag_raw_sources.curated_sources`, `rag_launchability_query_status=passed`, `container_native_qc_status=passed`, `container_native_qc_served_urls`, `container_native_qc_artifacts`, `container_native_qc_official_source_ids`, each container-native QC artifact `relative_path` is slash-relative and safe, each container-native QC artifact `download_url` is recomputed from `task_id` and `relative_path`, each container-native QC artifact `content_type` matches `preview_kind`, `scientific_report_artifacts_status=passed`, `scientific_report_served_urls`, and `scientific_report_artifacts`; `vendor_coverage_catalog.vendors` and `rag_raw_sources.curated_sources` must exactly match with no missing or extra vendor docs, each scientific report artifact `download_url` is served with non-empty bytes, and each scientific report artifact `content_type` matches `preview_kind`. The verifier also checks that `vendor_coverage_catalog` must not expose `manifest_path`, `persist_dir`, `raw_snapshots`, `raw_files`, or `sha256`.
+Attach the verifier report only when it prints `status=passed`. This offline strict smoke acceptance JSON verifier does not replace running `smoke_remote_agent.py` on the remote server; it re-checks the saved evidence for the same strict fields, including `deployment_identity_status=passed`, a privacy-safe `deployment_identity.deployment_id` matching `smoke_gate.deployment_id`, `model_smoke_status=passed`, `remote_evidence_ids_status=passed`, `rag_raw_sources.manifest_schema_version`, `rag_raw_sources.source_count`, `rag_raw_sources.vendor_doc_count`, `rag_vendor_pointer_integrity_status=passed`, `require_vendor_pointer_integrity`, `rag_vendor_pointer_integrity_referenced_vendor_docs`, `rag_vendor_coverage_catalog_status=complete`, `vendor_coverage_catalog`, `vendor_coverage_catalog.vendors`, `rag_raw_sources.curated_sources`, `rag_launchability_query_status=passed`, `container_native_qc_status=passed`, `container_native_qc_served_urls`, `container_native_qc_artifacts`, `container_native_qc_official_source_ids`, each container-native QC artifact `relative_path` is slash-relative and safe, each container-native QC artifact `download_url` is recomputed from `task_id` and `relative_path`, each container-native QC artifact `content_type` matches `preview_kind`, `scientific_report_artifacts_status=passed`, `scientific_report_served_urls`, and `scientific_report_artifacts`; `vendor_coverage_catalog.vendors` and `rag_raw_sources.curated_sources` must exactly match with no missing or extra vendor docs, each scientific report artifact `download_url` is served with non-empty bytes, and each scientific report artifact `content_type` matches `preview_kind`. The verifier also checks that `vendor_coverage_catalog` must not expose `manifest_path`, `persist_dir`, `raw_snapshots`, `raw_files`, or `sha256`.
 
 ## Production Acceptance Decision
 
@@ -181,6 +185,7 @@ Accepted only if all of the following are true:
 - current package is deployed remotely;
 - `/agent/model/status` reports `configured=true`;
 - restart drain evidence includes `active_task_drain:ok`, `port_owner:image_agent`, and `health:ok app=image_agent`;
+- strict smoke acceptance JSON reports `deployment_identity_status=passed` for the accepted release id or commit;
 - strict smoke acceptance JSON reports `model_smoke_status=passed`;
 - strict smoke acceptance JSON includes `agent_run_id`, `intent`, and `selected_skill`;
 - strict smoke acceptance JSON reports `remote_evidence_ids_status=passed` with real `project_id`, `upload_session_id`, and `task_id`;
