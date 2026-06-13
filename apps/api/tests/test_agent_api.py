@@ -814,7 +814,7 @@ def test_project_agent_runs_list_resanitizes_persisted_json_fields(tmp_path, mon
                 "run",
                 "thread-list",
                 7,
-                "failed",
+                "surprising_history_status",
                 "hash",
                 "openai_sdk_gateway",
                 "[]",
@@ -842,7 +842,9 @@ def test_project_agent_runs_list_resanitizes_persisted_json_fields(tmp_path, mon
     assert "patient Jane Doe" not in body_json
     assert "sk-test-secret" not in body_json
     assert "error_message" not in body_json
+    assert body["agent_runs"][0]["status"] == "failed"
     assert body["agent_runs"][0]["safe_metadata"] == {
+        "contract_status_normalized_from": "surprising_history_status",
         "rag_mode": "local_persistent_index",
         "schema_version": 1,
         "trace_kind": "privacy-safe lifecycle traceability",

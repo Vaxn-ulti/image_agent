@@ -179,7 +179,11 @@ Response:
 ```
 
 Project history is ledger-derived and safe for UI timelines. It does not expose
-raw messages, raw answers, raw snippets, or backend absolute paths.
+raw messages, raw answers, raw snippets, or backend absolute paths. If a
+persisted run status falls outside the stable state enum, project history
+normalizes it to `failed` and records the original privacy-safe symbol in
+`safe_metadata.contract_status_normalized_from`, matching the single-run lookup
+audit behavior.
 
 ## Chat Compatibility
 

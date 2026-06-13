@@ -283,17 +283,21 @@ def agent_api_error_detail(code: str, message: str, *, agent_run_id: str | None 
 
 
 def build_project_agent_run_history_response(project_id: int, agent_runs: list[dict[str, Any]]) -> dict[str, Any]:
+    def history_item(item: dict[str, Any]) -> dict[str, Any]:
+        status, original = normalize_agent_run_status(item.get("status"))
+        safe_metadata = _dict_value(item.get("safe_metadata"))
+        if original:
+            safe_metadata = {**safe_metadata, "contract_status_normalized_from": original}
+        return {
+            **item,
+            "status": status,
+            "safe_metadata": safe_metadata,
+        }
+
     return {
         "contract_version": PROJECT_AGENT_RUN_HISTORY_CONTRACT_VERSION,
         "project_id": project_id,
-        "agent_runs": [
-            {
-                **item,
-                "status": normalize_agent_run_status(item.get("status"))[0],
-                "safe_metadata": _dict_value(item.get("safe_metadata")),
-            }
-            for item in agent_runs
-        ],
+        "agent_runs": [history_item(item) for item in agent_runs],
     }
 
 
