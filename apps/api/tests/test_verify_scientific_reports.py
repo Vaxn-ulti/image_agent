@@ -192,6 +192,26 @@ def test_check_output_rejects_derived_only_reports_when_native_qc_required(tmp_p
     assert any("container-native QC evidence missing" in error for error in result.errors)
 
 
+def test_check_output_rejects_reports_path_native_qc_impersonation(tmp_path):
+    _write_report_output(tmp_path, "DWI")
+    fake_native = tmp_path / "reports" / "fake_native.png"
+    fake_native.write_bytes(b"\x89PNG\r\n\x1a\n" + (b"fake-native" * 80))
+    summary_path = tmp_path / "summary" / "dwi_result_summary.json"
+    payload = json.loads(summary_path.read_text(encoding="utf-8"))
+    payload["outputs"]["figures"] = [
+        {
+            "relative_path": "reports/fake_native.png",
+            **_native_qc_metadata("docs/rag/vendor/fmriprep_official_outputs.md", preview_kind="image"),
+        }
+    ]
+    summary_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = check_output(tmp_path, require_container_native_qc=True, min_native_qc_images=1)
+
+    assert not result.ok
+    assert any("container-native QC evidence missing" in error for error in result.errors)
+
+
 def test_check_output_accepts_separate_native_qc_when_required(tmp_path):
     _write_report_output(tmp_path, "DWI")
     _add_native_qc_outputs(tmp_path)

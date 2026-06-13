@@ -184,6 +184,9 @@ def _is_positive_int(value: object) -> bool:
 
 
 def _is_native_qc_item(item: dict[str, Any]) -> bool:
+    relative_path = _relative_path(item).replace("\\", "/").lower()
+    if relative_path.startswith("reports/"):
+        return False
     provenance = item.get("provenance") if isinstance(item.get("provenance"), dict) else {}
     return (
         item.get("native_artifact") is True
