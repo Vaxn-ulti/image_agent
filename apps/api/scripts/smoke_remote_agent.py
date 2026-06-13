@@ -416,6 +416,7 @@ def _validate_task_artifact_manifest(
         if _is_native_qc_artifact(artifact):
             _validate_native_qc_provenance(artifact)
             source_ids = _native_qc_official_source_ids(artifact)
+            provenance = artifact.get("provenance") if isinstance(artifact.get("provenance"), dict) else {}
             _require(source_ids, "native container QC artifact official_source_ids missing")
             native_qc_artifacts.append(
                 {
@@ -423,7 +424,14 @@ def _validate_task_artifact_manifest(
                     "download_url": download_url,
                     "content_type": content_type,
                     "preview_kind": preview_kind,
+                    "artifact_origin": artifact.get("artifact_origin"),
+                    "native_artifact": artifact.get("native_artifact"),
                     "official_source_ids": source_ids,
+                    "provenance": {
+                        "generated_from": provenance.get("generated_from"),
+                        "replaces_native_qc": provenance.get("replaces_native_qc"),
+                        "official_source_ids": source_ids,
+                    },
                 }
             )
         if _is_scientific_report_candidate(artifact):

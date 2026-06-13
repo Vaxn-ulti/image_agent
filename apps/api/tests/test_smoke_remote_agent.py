@@ -1131,14 +1131,28 @@ def test_smoke_remote_agent_require_container_native_qc_reports_served_evidence(
             "download_url": "/tasks/114/artifacts/fmriprep/sub-01.html",
             "content_type": "text/html",
             "preview_kind": "html",
+            "artifact_origin": "container_output",
+            "native_artifact": True,
             "official_source_ids": ["docs/rag/vendor/fmriprep_official_outputs.md"],
+            "provenance": {
+                "generated_from": "container_native_qc",
+                "replaces_native_qc": False,
+                "official_source_ids": ["docs/rag/vendor/fmriprep_official_outputs.md"],
+            },
         },
         {
             "relative_path": "xcpd/sub-01/figures/carpetplot.png",
             "download_url": "/tasks/114/artifacts/xcpd/sub-01/figures/carpetplot.png",
             "content_type": "image/png",
             "preview_kind": "image",
+            "artifact_origin": "container_output",
+            "native_artifact": True,
             "official_source_ids": ["docs/rag/vendor/xcp_d_official_outputs.md"],
+            "provenance": {
+                "generated_from": "container_native_qc",
+                "replaces_native_qc": False,
+                "official_source_ids": ["docs/rag/vendor/xcp_d_official_outputs.md"],
+            },
         },
     ]
     assert payload["container_native_qc_official_source_ids"] == [
