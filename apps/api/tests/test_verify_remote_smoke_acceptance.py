@@ -300,6 +300,20 @@ def test_verify_remote_smoke_acceptance_rejects_stale_saved_evidence():
             {"model_status": {"api_key": "sk-test-secret"}},
             "model_status must not expose api_key",
         ),
+        (
+            {
+                "model_status": {
+                    "deployment": {
+                        "reverse_tunnel_command": "ssh -N -R 18080:127.0.0.1:8080 user@remote"
+                    }
+                }
+            },
+            "model_status.deployment must not expose reverse_tunnel_command",
+        ),
+        (
+            {"model_status": {"deployment": {"access_token": "sk-test-secret"}}},
+            "model_status.deployment must not expose access_token",
+        ),
         ({"deployment_identity_status": "skipped"}, "deployment_identity_status must be passed"),
         ({"agent_run_id": "agent_run_123 C:/Users/A/private"}, "agent_run_id must be privacy-safe"),
         ({"selected_skill": "image-agent-operator sk-test-secret"}, "selected_skill must be privacy-safe"),

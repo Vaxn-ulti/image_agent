@@ -569,6 +569,11 @@ def test_smoke_remote_agent_configured_run_must_succeed(monkeypatch):
                 "provider": "OpenAI",
                 "base_url": "https://sk-test-secret@example.invalid/v1",
                 "api_key": "sk-test-secret",
+                "deployment": {
+                    "backend_runtime_mode": "remote",
+                    "model_gateway_access": "ssh_reverse_tunnel",
+                    "reverse_tunnel_command": "ssh -N -R 18080:127.0.0.1:8080 user@remote",
+                },
             }
         if url.endswith("/agent/rag/status"):
             return {
@@ -604,6 +609,11 @@ def test_smoke_remote_agent_strict_gate_reports_successful_run(capsys, monkeypat
                 "provider": "OpenAI",
                 "base_url": "https://sk-test-secret@example.invalid/v1",
                 "api_key": "sk-test-secret",
+                "deployment": {
+                    "backend_runtime_mode": "remote",
+                    "model_gateway_access": "ssh_reverse_tunnel",
+                    "reverse_tunnel_command": "ssh -N -R 18080:127.0.0.1:8080 user@remote",
+                },
             }
         if url.endswith("/agent/rag/status"):
             return {
@@ -649,6 +659,11 @@ def test_smoke_remote_agent_strict_gate_reports_successful_run(capsys, monkeypat
     assert "api_key" not in payload["model_status"]
     assert "sk-test-secret" not in json.dumps(payload["model_status"])
     assert payload["model_status"]["base_url"] == "https://example.invalid/v1"
+    assert payload["model_status"]["deployment"] == {
+        "backend_runtime_mode": "remote",
+        "model_gateway_access": "ssh_reverse_tunnel",
+    }
+    assert "reverse_tunnel_command" not in json.dumps(payload["model_status"])
     assert payload["agent_run_id"] == "agent_run_123"
     assert payload["agent_run_status"] == "answered"
     assert payload["intent"] == "answer_question"

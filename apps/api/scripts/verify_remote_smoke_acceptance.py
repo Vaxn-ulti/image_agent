@@ -104,6 +104,14 @@ def _verify_model_status(payload: dict) -> None:
         value = status.get(key)
         if value is not None:
             _require(_is_privacy_safe_symbol(value), f"model_status.{key} must be privacy-safe")
+    deployment = status.get("deployment")
+    if deployment is not None:
+        _require(isinstance(deployment, dict), "model_status.deployment must be an object")
+        allowed_deployment_keys = {"backend_runtime_mode", "model_gateway_access"}
+        for key, value in deployment.items():
+            key_text = str(key)
+            _require(key_text in allowed_deployment_keys, f"model_status.deployment must not expose {key_text}")
+            _require(_is_privacy_safe_symbol(value), f"model_status.deployment.{key_text} must be privacy-safe")
 
 
 def _parse_utc_timestamp(value: object, *, key: str) -> datetime:
