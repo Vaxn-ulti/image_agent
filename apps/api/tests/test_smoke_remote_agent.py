@@ -15,6 +15,15 @@ def _load_smoke_module():
     return module
 
 
+def _load_verifier_module():
+    script = Path(__file__).resolve().parents[1] / "scripts" / "verify_remote_smoke_acceptance.py"
+    spec = importlib.util.spec_from_file_location("verify_remote_smoke_acceptance", script)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
 def _good_remote_smoke_response(url: str):
     if url.endswith("/health"):
         return {"status": "ok", "app": "image_agent", "version": "0.2.0"}
@@ -1830,6 +1839,162 @@ def test_smoke_remote_agent_rejects_vendor_coverage_catalog_curated_source_drift
         )
 
     assert "RAG vendor coverage catalog failed: vendors must match curated_sources" in str(exc.value)
+
+
+def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(capsys, monkeypatch):
+    smoke = _load_smoke_module()
+    verifier = _load_verifier_module()
+
+    native_artifacts = [
+        {
+            "relative_path": "fmriprep/sub-01.html",
+            "download_url": "/tasks/114/artifacts/fmriprep/sub-01.html",
+            "preview_kind": "html",
+            "content_type": "text/html",
+            "size_bytes": 48,
+            "exists": True,
+            "source_stage": "fmriprep",
+            "artifact_role": "container_native_html_report",
+            "artifact_origin": "container_output",
+            "native_artifact": True,
+            "official_source_ids": ["docs/rag/vendor/fmriprep_official_outputs.md"],
+            "provenance": {
+                "generated_from": "container_native_qc",
+                "replaces_native_qc": False,
+                "official_source_ids": ["docs/rag/vendor/fmriprep_official_outputs.md"],
+            },
+        },
+        {
+            "relative_path": "xcpd/sub-01/figures/carpetplot.png",
+            "download_url": "/tasks/114/artifacts/xcpd/sub-01/figures/carpetplot.png",
+            "preview_kind": "image",
+            "content_type": "image/png",
+            "size_bytes": 68,
+            "exists": True,
+            "source_stage": "xcpd",
+            "artifact_role": "container_native_qc_figure",
+            "artifact_origin": "container_output",
+            "native_artifact": True,
+            "official_source_ids": ["docs/rag/vendor/xcp_d_official_outputs.md"],
+            "provenance": {
+                "generated_from": "container_native_qc",
+                "replaces_native_qc": False,
+                "official_source_ids": ["docs/rag/vendor/xcp_d_official_outputs.md"],
+            },
+        },
+    ]
+    report_manifest = _scientific_report_manifest()
+
+    def fake_request(method, url, payload=None):
+        if url.endswith("/health"):
+            return {"status": "ok", "app": "image_agent", "version": "0.2.0"}
+        if url.endswith("/agent/model/status"):
+            return {
+                "configured": True,
+                "provider": "OpenAI",
+                "deployment": {
+                    "backend_runtime_mode": "remote",
+                    "model_gateway_access": "ssh_reverse_tunnel",
+                    "reverse_tunnel_command": "ssh -N -R 18080:127.0.0.1:8080 user@remote",
+                },
+            }
+        if url.endswith("/agent/rag/status"):
+            return {
+                "index": {
+                    "document_count": 72,
+                    "chunk_count": 260,
+                    "engine": "llama_index",
+                    "indexed_sources": ["docs/rag/workflows/workflow_launchability_matrix.md"],
+                },
+                "vendor_raw_sources": _complete_vendor_raw_sources(),
+                "vendor_pointer_integrity": _complete_vendor_pointer_integrity(),
+                "vendor_coverage_catalog": _complete_vendor_coverage_catalog(),
+            }
+        if url.endswith("/agent/rag/rebuild"):
+            return {"document_count": 72, "chunk_count": 260, "semantic_index": True}
+        if url.endswith("/agent/rag/query"):
+            return {
+                "intent": "launchability",
+                "answer": "workflow_eligibility remains authoritative for launchability.",
+                "citations": [{"path": "docs/rag/workflows/workflow_launchability_matrix.md"}],
+            }
+        if url.endswith("/agent/runs"):
+            return {
+                "agent_run_id": "agent_run_456",
+                "status": "answered",
+                "intent": "answer_question",
+                "selected_skill": "image-agent-operator",
+            }
+        if url.endswith("/projects/7/series"):
+            return [{"id": 1, "modality": "T1", "workflow_eligibility": _good_workflow_eligibility()}]
+        if url.endswith("/projects/7/datasets/22/inventory"):
+            return {
+                "upload_session_id": 22,
+                "status": "completed",
+                "inventory": {
+                    "inventory_status": "completed",
+                    "series": [{"series_id": 1, "modality": "T1", "workflow_eligibility": _good_workflow_eligibility()}],
+                },
+            }
+        if url.endswith("/tasks/114/artifact-manifest"):
+            return {
+                "contract_version": "artifact_manifest_v1",
+                "task_id": 114,
+                "result_summary": {"available": True},
+                "artifacts": [*native_artifacts, *report_manifest["artifacts"]],
+                "omitted_artifacts": [],
+            }
+        raise AssertionError(f"unexpected request: {url}")
+
+    def fake_request_bytes(url):
+        if url.endswith("/fmriprep/sub-01.html") or url.endswith("/reports/index.html"):
+            return b"<html>report</html>", "text/html"
+        if url.endswith("/xcpd/sub-01/figures/carpetplot.png") or url.endswith("/reports/t1_qc.png"):
+            return b"\x89PNG\r\n\x1a\n", "image/png"
+        if url.endswith("/reports/report_manifest.json"):
+            return b'{"figures":[]}', "application/json"
+        raise AssertionError(f"unexpected artifact byte request: {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+    monkeypatch.setattr(smoke, "_request_bytes", fake_request_bytes)
+
+    smoke.main(
+        [
+            "--api-base",
+            "http://api.local",
+            "--require-model",
+            "--require-deployment-identity",
+            "--deployment-id",
+            "codex-f57a2ea-20260611T023456",
+            "--min-documents",
+            "60",
+            "--min-chunks",
+            "200",
+            "--require-raw-source-policy",
+            "--require-vendor-pointer-integrity",
+            "--require-real-evidence-ids",
+            "--require-launchability-matrix",
+            "--require-container-native-qc",
+            "--min-native-qc-images",
+            "1",
+            "--require-scientific-report-artifacts",
+            "--min-scientific-report-images",
+            "1",
+            "--project-id",
+            "7",
+            "--upload-session-id",
+            "22",
+            "--task-id",
+            "114",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    report = verifier.verify_acceptance_payload(payload)
+
+    assert report["status"] == "passed"
+    assert report["checked"]["container_native_qc_status"] == "passed"
+    assert report["checked"]["scientific_report_artifacts_status"] == "passed"
 
 
 def test_smoke_remote_agent_validates_project_series_and_task_artifact_contracts(capsys, monkeypatch):
