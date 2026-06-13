@@ -40,8 +40,8 @@ def _complete_vendor_raw_sources(**overrides):
     payload = {
         "manifest_exists": True,
         "manifest_schema_version": 1,
-        "source_count": 21,
-        "vendor_doc_count": 21,
+        "source_count": 2,
+        "vendor_doc_count": 2,
         "missing_files": [],
         "hash_mismatches": [],
         "raw_sources_indexed": False,
@@ -50,15 +50,25 @@ def _complete_vendor_raw_sources(**overrides):
         "curated_provenance_issues": [],
         "curated_sources": [
             {
-                "vendor_doc": "fmriprep_official_container_usage.md",
-                "raw_source_ids": ["fmriprep_usage"],
-                "source_urls": ["https://fmriprep.org/en/stable/usage.html"],
-                "raw_files": ["docs/rag/vendor/raw-sources/fmriprep_usage.html"],
+                "vendor_doc": "fmriprep_official_outputs.md",
+                "raw_source_ids": ["fmriprep_outputs"],
+                "source_urls": ["https://fmriprep.org/en/stable/outputs.html"],
+                "raw_files": ["docs/rag/vendor/raw-sources/fmriprep_outputs.html"],
                 "source_types": ["official_docs"],
                 "manifest_backed": True,
                 "source_url_backed": True,
                 "complete": True,
-            }
+            },
+            {
+                "vendor_doc": "xcp_d_official_outputs.md",
+                "raw_source_ids": ["xcp_d_outputs"],
+                "source_urls": ["https://xcp-d.readthedocs.io/en/latest/outputs.html"],
+                "raw_files": ["docs/rag/vendor/raw-sources/xcp_d_outputs.html"],
+                "source_types": ["official_docs"],
+                "manifest_backed": True,
+                "source_url_backed": True,
+                "complete": True,
+            },
         ],
     }
     payload.update(overrides)
@@ -1763,6 +1773,63 @@ def test_smoke_remote_agent_writes_acceptance_json_artifact(capsys, monkeypatch,
     assert "manifest_path" not in json.dumps(artifact_payload["rag_vendor_coverage_catalog"])
     assert "raw_snapshots" not in json.dumps(artifact_payload["rag_vendor_coverage_catalog"])
     assert artifact_payload["generated_at_utc"].endswith("Z")
+
+
+def test_smoke_remote_agent_rejects_vendor_coverage_catalog_curated_source_drift(monkeypatch):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        if url.endswith("/health"):
+            return {"status": "ok", "app": "image_agent", "version": "0.2.0"}
+        if url.endswith("/agent/model/status"):
+            return {"configured": True, "provider": "OpenAI"}
+        if url.endswith("/agent/rag/status"):
+            return {
+                "index": {"document_count": 72, "chunk_count": 260, "engine": "llama_index"},
+                "vendor_raw_sources": _complete_vendor_raw_sources(
+                    curated_sources=[
+                        {
+                            "vendor_doc": "fmriprep_official_outputs.md",
+                            "complete": True,
+                            "raw_source_ids": ["fmriprep_outputs"],
+                            "source_urls": ["https://fmriprep.org/en/stable/outputs.html"],
+                            "raw_files": ["docs/rag/vendor/raw-sources/fmriprep_outputs.html"],
+                            "source_types": ["official_docs"],
+                            "manifest_backed": True,
+                            "source_url_backed": True,
+                        }
+                    ],
+                    vendor_doc_count=1,
+                    source_count=1,
+                ),
+                "vendor_pointer_integrity": _complete_vendor_pointer_integrity(),
+                "vendor_coverage_catalog": _complete_vendor_coverage_catalog(),
+            }
+        if url.endswith("/agent/rag/rebuild"):
+            return {"document_count": 72, "chunk_count": 260, "semantic_index": True}
+        if url.endswith("/agent/runs"):
+            return {
+                "agent_run_id": "agent_run_456",
+                "status": "answered",
+                "intent": "answer_question",
+                "selected_skill": "image-agent-operator",
+            }
+        raise AssertionError(f"unexpected request: {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(
+            [
+                "--api-base",
+                "http://api.local",
+                "--require-model",
+                "--require-raw-source-policy",
+                "--require-vendor-pointer-integrity",
+            ]
+        )
+
+    assert "RAG vendor coverage catalog failed: vendors must match curated_sources" in str(exc.value)
 
 
 def test_smoke_remote_agent_validates_project_series_and_task_artifact_contracts(capsys, monkeypatch):

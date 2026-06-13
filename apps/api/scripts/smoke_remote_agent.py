@@ -236,11 +236,14 @@ def _validate_vendor_pointer_integrity(rag_after: dict) -> dict:
 
 
 def _summarize_vendor_coverage_catalog(rag_after: dict) -> dict:
+    raw = rag_after.get("vendor_raw_sources") if isinstance(rag_after.get("vendor_raw_sources"), dict) else {}
     catalog = (
         rag_after.get("vendor_coverage_catalog")
         if isinstance(rag_after.get("vendor_coverage_catalog"), dict)
         else {}
     )
+    if catalog.get("status") == "complete":
+        _validate_vendor_coverage_catalog(catalog, raw)
     return {
         "catalog": catalog,
         "status": str(catalog.get("status") or "missing"),
@@ -249,6 +252,41 @@ def _summarize_vendor_coverage_catalog(rag_after: dict) -> dict:
         "incomplete_vendor_doc_count": _int_metric(catalog.get("incomplete_vendor_doc_count")),
         "raw_source_count": _int_metric(catalog.get("raw_source_count")),
     }
+
+
+def _vendor_docs_from_curated_sources(raw: dict) -> set[str]:
+    curated_sources = raw.get("curated_sources")
+    if not isinstance(curated_sources, list):
+        return set()
+    return {
+        item.get("vendor_doc")
+        for item in curated_sources
+        if isinstance(item, dict) and isinstance(item.get("vendor_doc"), str)
+    }
+
+
+def _validate_vendor_coverage_catalog(catalog: dict, raw: dict) -> None:
+    vendors = catalog.get("vendors")
+    _require(isinstance(vendors, list) and vendors, "RAG vendor coverage catalog failed: vendors missing")
+    vendor_docs = {
+        vendor.get("vendor_doc")
+        for vendor in vendors
+        if isinstance(vendor, dict) and isinstance(vendor.get("vendor_doc"), str)
+    }
+    curated_docs = _vendor_docs_from_curated_sources(raw)
+    _require(curated_docs, "RAG vendor coverage catalog failed: curated_sources missing")
+    _require(
+        vendor_docs == curated_docs,
+        "RAG vendor coverage catalog failed: vendors must match curated_sources",
+    )
+    _require(
+        _int_metric(catalog.get("vendor_doc_count")) == len(vendor_docs) == _int_metric(raw.get("vendor_doc_count")),
+        "RAG vendor coverage catalog failed: vendor_doc_count mismatch",
+    )
+    _require(
+        _int_metric(catalog.get("raw_source_count")) == _int_metric(raw.get("source_count")),
+        "RAG vendor coverage catalog failed: raw_source_count mismatch",
+    )
 
 
 def _collect_source_markers(value: object, *, in_source_field: bool = False) -> list[str]:
