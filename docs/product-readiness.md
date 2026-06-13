@@ -99,5 +99,17 @@ Agent task ids. A fresh non-live release overlay dry-run on 2026-06-11 reported
 `approval_fingerprint=139113571daf0137a3e34be526fd25ccaa8066aed725ab7c0b846cfc7eb3abd0`,
 saved on the remote host at
 `/tmp/image_agent_stale_tasks_83_84_fingerprint_dry_run_20260611T1215.json`.
+As of the 2026-06-13 remote read-only dry-run, fresh approval evidence now exists
+against the same scoped task ids. The dry-run JSON is saved on the remote host at
+`/tmp/image_agent_stale_tasks_83_84_dry_run_20260613T1640Z.json`; the current
+local verifier checked that file with `--max-age-hours 24` and reported
+`status=passed`, `checked.generated_at_utc=2026-06-13T16:40:24.758668+00:00`,
+`checked.container_check_status=passed`,
+`checked.running_container_task_ids=[]`, and the same approval fingerprint
+`139113571daf0137a3e34be526fd25ccaa8066aed725ab7c0b846cfc7eb3abd0`. This is
+operator-review evidence only: approved apply has not been run, the post-apply
+`verify_stale_task_resolution.py --require-empty-active --max-age-hours 24`
+gate has not passed, and a normal restart plus fresh strict smoke evidence are
+still required.
 Once those stale task records are resolved through this approved flow, normal
 restarts should no longer require overriding the active-task drain gate.
