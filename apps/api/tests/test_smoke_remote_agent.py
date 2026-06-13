@@ -1167,6 +1167,45 @@ def test_smoke_remote_agent_require_container_native_qc_rejects_derived_only_man
     assert "task artifact manifest native container QC evidence missing" in str(exc.value)
 
 
+def test_smoke_remote_agent_require_container_native_qc_rejects_reports_path_native_impersonation():
+    smoke = _load_smoke_module()
+
+    with pytest.raises(SystemExit) as exc:
+        smoke._validate_task_artifact_manifest(
+            {
+                "contract_version": "artifact_manifest_v1",
+                "task_id": 114,
+                "result_summary": {"available": True},
+                "artifacts": [
+                    {
+                        "relative_path": "reports/fake_native.png",
+                        "download_url": "/tasks/114/artifacts/reports/fake_native.png",
+                        "preview_kind": "image",
+                        "content_type": "image/png",
+                        "size_bytes": 68,
+                        "exists": True,
+                        "source_stage": "fmriprep",
+                        "artifact_role": "container_native_qc_figure",
+                        "artifact_origin": "container_output",
+                        "native_artifact": True,
+                        "official_source_ids": ["docs/rag/vendor/fmriprep_official_outputs.md"],
+                        "provenance": {
+                            "generated_from": "container_native_qc",
+                            "replaces_native_qc": False,
+                            "official_source_ids": ["docs/rag/vendor/fmriprep_official_outputs.md"],
+                        },
+                    }
+                ],
+                "omitted_artifacts": [],
+            },
+            114,
+            require_native_qc_artifact=True,
+            min_native_qc_images=1,
+        )
+
+    assert "task artifact manifest native container QC evidence missing" in str(exc.value)
+
+
 def test_smoke_remote_agent_require_container_native_qc_rejects_missing_official_source_ids():
     smoke = _load_smoke_module()
 

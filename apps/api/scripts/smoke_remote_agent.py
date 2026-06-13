@@ -573,6 +573,9 @@ def _curated_vendor_doc_path(source_id: str) -> Path:
 
 
 def _is_native_qc_artifact(artifact: dict) -> bool:
+    relative_path = str(artifact.get("relative_path") or "").replace("\\", "/").lower()
+    if relative_path.startswith("reports/"):
+        return False
     provenance = artifact.get("provenance") if isinstance(artifact.get("provenance"), dict) else {}
     return (
         artifact.get("native_artifact") is True
