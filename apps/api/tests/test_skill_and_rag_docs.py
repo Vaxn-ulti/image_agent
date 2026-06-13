@@ -1241,6 +1241,16 @@ def test_remote_smoke_acceptance_json_verifier_is_documented():
         assert phrase in combined
 
 
+def test_remote_acceptance_template_verifier_command_requires_freshness_gate():
+    template = (REPO_ROOT / "docs" / "deployment" / "remote-agent-acceptance-template.md").read_text(encoding="utf-8")
+
+    assert (
+        'python scripts/verify_remote_smoke_acceptance.py "../../docs/deployment/'
+        'remote-smoke-acceptance-<timestamp>.json" --max-age-hours 24'
+    ) in template
+    assert "`--max-age-hours 24`" in template
+
+
 def test_developer_testing_matrix_requires_deployment_identity_for_strict_smoke():
     matrix = (
         REPO_ROOT / "docs" / "skills" / "image-agent-developer" / "references" / "testing-matrix.md"
