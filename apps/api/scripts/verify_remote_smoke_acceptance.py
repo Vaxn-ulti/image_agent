@@ -474,13 +474,36 @@ def _verify_container_native_qc(payload: dict, gate: dict) -> None:
     derived_image_count = 0
     for artifact in artifacts:
         _require(isinstance(artifact, dict), "container_native_qc_artifacts entries must be objects")
-        for key in ("relative_path", "download_url", "content_type", "preview_kind", "official_source_ids"):
+        for key in (
+            "relative_path",
+            "download_url",
+            "content_type",
+            "preview_kind",
+            "artifact_origin",
+            "native_artifact",
+            "official_source_ids",
+            "provenance",
+        ):
             _require(key in artifact, f"container_native_qc_artifacts entries must include {key}")
         preview_kind = artifact["preview_kind"]
         _require(preview_kind in {"html", "image"}, "container_native_qc_artifacts preview_kind must be html or image")
         relative_path = artifact["relative_path"]
         download_url = artifact["download_url"]
         content_type = artifact["content_type"]
+        provenance = artifact.get("provenance") if isinstance(artifact.get("provenance"), dict) else {}
+        _require(
+            artifact.get("artifact_origin") == "container_output",
+            "container_native_qc_artifacts artifact_origin must be container_output",
+        )
+        _require(artifact.get("native_artifact") is True, "container_native_qc_artifacts native_artifact must be true")
+        _require(
+            provenance.get("generated_from") == "container_native_qc",
+            "container_native_qc_artifacts provenance.generated_from must be container_native_qc",
+        )
+        _require(
+            provenance.get("replaces_native_qc") is False,
+            "container_native_qc_artifacts provenance.replaces_native_qc must be false",
+        )
         _require(isinstance(relative_path, str) and relative_path, "container_native_qc_artifacts relative_path must be non-empty")
         _require(not _is_unsafe_relative_path(relative_path), "container_native_qc_artifacts relative_path is unsafe")
         _require(
@@ -506,7 +529,13 @@ def _verify_container_native_qc(payload: dict, gate: dict) -> None:
         _require(download_url in payload["container_native_qc_served_urls"], "container_native_qc_artifacts download_url must be served")
         flattened_relative_paths.append(relative_path)
         flattened_served_urls.append(download_url)
-        flattened_source_ids.update(_verify_official_source_ids(artifact["official_source_ids"]))
+        artifact_source_ids = _verify_official_source_ids(artifact["official_source_ids"])
+        provenance_source_ids = _verify_official_source_ids(provenance.get("official_source_ids"))
+        _require(
+            artifact_source_ids == provenance_source_ids,
+            "container_native_qc_artifacts provenance.official_source_ids must match official_source_ids",
+        )
+        flattened_source_ids.update(artifact_source_ids)
     _require(image_count == derived_image_count, "container_native_qc_image_count must match container_native_qc_artifacts")
     _require(payload["container_native_qc_relative_paths"] == flattened_relative_paths, "container_native_qc_relative_paths must match container_native_qc_artifacts")
     _require(payload["container_native_qc_served_urls"] == flattened_served_urls, "container_native_qc_served_urls must match container_native_qc_artifacts")

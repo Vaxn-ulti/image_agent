@@ -190,14 +190,28 @@ def _strict_smoke_payload():
                 "download_url": "/tasks/114/artifacts/fmriprep/sub-01.html",
                 "content_type": "text/html",
                 "preview_kind": "html",
+                "artifact_origin": "container_output",
+                "native_artifact": True,
                 "official_source_ids": ["docs/rag/vendor/fmriprep_official_outputs.md"],
+                "provenance": {
+                    "generated_from": "container_native_qc",
+                    "replaces_native_qc": False,
+                    "official_source_ids": ["docs/rag/vendor/fmriprep_official_outputs.md"],
+                },
             },
             {
                 "relative_path": "xcpd/sub-01/figures/carpetplot.png",
                 "download_url": "/tasks/114/artifacts/xcpd/sub-01/figures/carpetplot.png",
                 "content_type": "image/png",
                 "preview_kind": "image",
+                "artifact_origin": "container_output",
+                "native_artifact": True,
                 "official_source_ids": ["docs/rag/vendor/xcp_d_official_outputs.md"],
+                "provenance": {
+                    "generated_from": "container_native_qc",
+                    "replaces_native_qc": False,
+                    "official_source_ids": ["docs/rag/vendor/xcp_d_official_outputs.md"],
+                },
             },
         ],
         "container_native_qc_official_source_ids": [
@@ -435,7 +449,27 @@ def test_verify_remote_smoke_acceptance_rejects_bad_scientific_report_artifact(
         ),
         (
             {"official_source_ids": ["docs/rag/vendor/fmriprep_official_outputs.md"]},
-            "container_native_qc_official_source_ids must match container_native_qc_artifacts",
+            "container_native_qc_artifacts provenance.official_source_ids must match official_source_ids",
+        ),
+        ({"artifact_origin": "generated_from_result_summary"}, "container_native_qc_artifacts artifact_origin must be container_output"),
+        ({"native_artifact": False}, "container_native_qc_artifacts native_artifact must be true"),
+        (
+            {"provenance": {"generated_from": "result_summary", "replaces_native_qc": False}},
+            "container_native_qc_artifacts provenance.generated_from must be container_native_qc",
+        ),
+        (
+            {"provenance": {"generated_from": "container_native_qc", "replaces_native_qc": True}},
+            "container_native_qc_artifacts provenance.replaces_native_qc must be false",
+        ),
+        (
+            {
+                "provenance": {
+                    "generated_from": "container_native_qc",
+                    "replaces_native_qc": False,
+                    "official_source_ids": ["docs/rag/vendor/fmriprep_official_outputs.md"],
+                }
+            },
+            "container_native_qc_artifacts provenance.official_source_ids must match official_source_ids",
         ),
     ],
 )
