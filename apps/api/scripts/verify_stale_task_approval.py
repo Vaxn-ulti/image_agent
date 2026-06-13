@@ -100,7 +100,7 @@ def verify_approval_payload(
 ) -> dict:
     _require(isinstance(payload, dict), "approval payload must be a JSON object")
     _assert_no_backend_paths(payload)
-    _, effective_max_age_hours = _verify_freshness(payload, key="", now=now, max_age_hours=max_age_hours)
+    generated_at_utc, effective_max_age_hours = _verify_freshness(payload, key="", now=now, max_age_hours=max_age_hours)
     _require(payload.get("mode") == "dry_run", "mode must be dry_run")
     _require(payload.get("container_check_status") == "passed", "container_check_status must be passed")
     _require(_as_int_list(payload.get("running_container_task_ids"), key="running_container_task_ids") == [], "running_container_task_ids must be empty")
@@ -160,6 +160,7 @@ def verify_approval_payload(
             "approval_fingerprint": actual_fingerprint,
             "container_check_status": payload["container_check_status"],
             "max_age_hours": effective_max_age_hours,
+            "generated_at_utc": generated_at_utc.isoformat(),
         },
     }
 

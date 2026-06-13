@@ -246,7 +246,9 @@ def verify_resolution_evidence(
             "resolution_approval_fingerprint": resolution_fingerprint,
             "require_empty_active": require_empty_active,
             "max_age_hours": apply_max_age_hours,
+            "apply_generated_at_utc": apply_generated_at.isoformat(),
             "resolution_max_age_hours": resolution_max_age_hours,
+            "resolution_generated_at_utc": resolution_generated_at.isoformat(),
         },
     }
 

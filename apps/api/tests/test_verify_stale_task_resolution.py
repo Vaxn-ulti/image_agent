@@ -333,6 +333,8 @@ def test_verify_stale_task_resolution_cli_prints_passed_report(tmp_path, capsys)
     assert report["source_json"]["apply"] == str(apply_path)
     assert report["source_json"]["resolution"] == str(resolved_path)
     assert report["checked"]["max_age_hours"] == 24.0
+    assert report["checked"]["apply_generated_at_utc"] == now
+    assert report["checked"]["resolution_generated_at_utc"] == now
 
 
 def test_verify_stale_task_resolution_cli_max_age_hours_overrides_loose_payload(tmp_path):
