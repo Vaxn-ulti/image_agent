@@ -68,6 +68,19 @@ def _invalid_argument_type_messages(tool_name: str, args: dict[str, Any]) -> lis
     return sorted(messages)
 
 
+def _invalid_argument_value_messages(tool_name: str, args: dict[str, Any]) -> list[str]:
+    schema = _tool_schema(tool_name) or {}
+    properties = schema.get("properties")
+    if not isinstance(properties, dict):
+        return []
+    messages = []
+    for key, value in args.items():
+        property_schema = properties.get(key)
+        if isinstance(property_schema, dict) and not _value_matches_enum(value, property_schema):
+            messages.append(f"{key} expected one of {_schema_enum_label(property_schema)}")
+    return sorted(messages)
+
+
 def _value_matches_schema(value: Any, schema: dict[str, Any]) -> bool:
     if "oneOf" in schema:
         return any(
@@ -103,6 +116,18 @@ def _value_matches_type(value: Any, schema_type: Any, schema: dict[str, Any]) ->
     return True
 
 
+def _value_matches_enum(value: Any, schema: dict[str, Any]) -> bool:
+    if "oneOf" in schema:
+        return any(
+            isinstance(option, dict) and _value_matches_enum(value, option)
+            for option in schema.get("oneOf") or []
+        )
+    allowed_values = schema.get("enum")
+    if isinstance(allowed_values, list):
+        return value in allowed_values
+    return True
+
+
 def _schema_type_label(schema: dict[str, Any]) -> str:
     if "oneOf" in schema:
         labels = [
@@ -115,6 +140,20 @@ def _schema_type_label(schema: dict[str, Any]) -> str:
     if isinstance(schema_type, list):
         return " or ".join(str(item) for item in schema_type)
     return str(schema_type or "valid schema value")
+
+
+def _schema_enum_label(schema: dict[str, Any]) -> str:
+    if "oneOf" in schema:
+        labels = [
+            _schema_enum_label(option)
+            for option in schema.get("oneOf") or []
+            if isinstance(option, dict)
+        ]
+        return " or ".join(label for label in labels if label) or "allowed values"
+    allowed_values = schema.get("enum")
+    if isinstance(allowed_values, list):
+        return ", ".join(repr(value) for value in allowed_values)
+    return "allowed values"
 
 
 def _blocked_result(tool_name: str, message: str, *, call_id: str | None = None) -> dict[str, Any]:
@@ -177,6 +216,13 @@ def dispatch_tool_call(
         return _blocked_result(
             tool_name,
             "Invalid tool argument type(s): " + "; ".join(invalid_type_messages),
+            call_id=call_id,
+        )
+    invalid_value_messages = _invalid_argument_value_messages(tool_name, args)
+    if invalid_value_messages:
+        return _blocked_result(
+            tool_name,
+            "Invalid tool argument value(s): " + "; ".join(invalid_value_messages),
             call_id=call_id,
         )
 

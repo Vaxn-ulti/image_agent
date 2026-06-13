@@ -191,6 +191,26 @@ def test_dispatcher_rejects_invalid_tool_argument_types_before_execution():
     assert "task_id" in result["message"]
 
 
+def test_dispatcher_rejects_invalid_tool_argument_enum_before_execution():
+    result = dispatch_tool_call(
+        "preflight_workflow",
+        {"series_id": 1, "workflow_type": "made_up_workflow"},
+    )
+
+    assert result["status"] == "blocked"
+    assert result["production_task_created"] is False
+    assert "Invalid tool argument value" in result["message"]
+    assert "workflow_type" in result["message"]
+
+
+def test_dispatcher_allows_nullable_enum_arguments():
+    result = dispatch_tool_call("list_workflows", {"lane": None})
+
+    assert result["status"] == "ok"
+    assert result["production_task_created"] is False
+    assert result["result"]
+
+
 def test_tool_trace_response_items_use_responses_function_call_output():
     trace = [{"status": "ok", "tool": "list_workflows", "call_id": "call_1", "result": [{"type": "fixed"}]}]
 

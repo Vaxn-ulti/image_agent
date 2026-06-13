@@ -62,6 +62,17 @@ def test_openai_function_tool_specs_are_strict_responses_schemas():
             assert schema["additionalProperties"] is False, f"{spec['name']}:{path}"
 
 
+def test_preflight_workflow_tool_schema_exposes_registered_workflow_enum():
+    tools = {tool["name"]: tool for tool in list_function_tools()}
+    workflow_schema = tools["preflight_workflow"]["parameters"]["properties"]["workflow_type"]
+
+    assert workflow_schema["type"] == "string"
+    assert "t1_deepprep_anat_report" in workflow_schema["enum"]
+    assert "bold_fmriprep_xcpd_report" in workflow_schema["enum"]
+    assert "dwi_fast_gpu_dti" in workflow_schema["enum"]
+    assert "made_up_workflow" not in workflow_schema["enum"]
+
+
 def _object_schemas(schema, path="$"):
     if not isinstance(schema, dict):
         return

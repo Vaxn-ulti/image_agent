@@ -49,7 +49,9 @@ enforcement. The dispatcher rejects missing required tool arguments before
 execution as a stable blocked tool result instead of allowing handler-level
 exceptions to shape the tool trace. The dispatcher rejects invalid tool
 argument types before execution so bad values such as string task ids do not
-fall through to handler casts or database-backed reads.
+fall through to handler casts or database-backed reads. The preflight
+workflow_type enum is derived from the workflow registry so model-facing tool
+schemas and backend validation share the same launchability boundary.
 
 The official OpenAI Python SDK source is the contract for the client shape: instantiate an `OpenAI client`, configure credentials/base URL through the backend configuration layer, and use the typed SDK resource (`client.responses.create(...)`) rather than direct `urllib` calls to `/responses`. The Responses API reference is the contract for the request/response resource boundary.
 
@@ -101,6 +103,7 @@ Outputs:
 - The dispatcher rejects unknown tool arguments before execution; do not silently ignore ad hoc model, frontend, or compatibility-layer parameters.
 - The dispatcher rejects missing required tool arguments before execution; missing required inputs should produce a stable blocked tool result, not a handler exception.
 - The dispatcher rejects invalid tool argument types before execution; malformed values should be stable blocked tool results, not handler casts or database reads.
+- The preflight workflow_type enum is derived from the workflow registry; do not maintain a separate hand-written model-facing workflow list.
 - Keep the SDK boundary explicit in reviews: the implementation should import the official OpenAI Python SDK, construct an `OpenAI client`, and call `client.responses.create(...)`.
 - Default to sending Responses `metadata` for first-party compatible behavior; disable it explicitly with `OPENAI_DISABLE_METADATA=true` when an OpenAI-compatible gateway rejects or masks that parameter. `/agent/model/status` may expose the resulting `metadata_enabled` boolean but must never expose secrets.
 - Keep tool execution backend-first. The model requests a registered function; backend code enforces arguments, project scope, production gating, and redaction.

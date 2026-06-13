@@ -634,6 +634,7 @@ def test_openai_responses_tool_contract_is_documented_for_agent_use():
         "dispatcher rejects unknown tool arguments",
         "dispatcher rejects missing required tool arguments",
         "dispatcher rejects invalid tool argument types",
+        "preflight workflow_type enum is derived from the workflow registry",
         "OpenAI SDK",
         "official OpenAI Python SDK",
         "OpenAI client",

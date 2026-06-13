@@ -3,6 +3,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+from app.workflows.registry import allowed_runtime_workflows
+
 
 FUNCTION_TOOLS: list[dict[str, Any]] = [
     {
@@ -16,7 +18,7 @@ FUNCTION_TOOLS: list[dict[str, Any]] = [
         "parameters": {
             "type": "object",
             "properties": {
-                "lane": {"type": ["string", "null"], "enum": ["fixed_workflow", "toolchain_incubation"]},
+                "lane": {"type": ["string", "null"], "enum": ["fixed_workflow", "toolchain_incubation", None]},
                 "agent_selectable": {"type": ["boolean", "null"]},
             },
         },
@@ -129,7 +131,25 @@ FUNCTION_TOOLS: list[dict[str, Any]] = [
 
 
 def list_function_tools() -> list[dict[str, Any]]:
-    return deepcopy(FUNCTION_TOOLS)
+    tools = deepcopy(FUNCTION_TOOLS)
+    _inject_registered_workflow_enums(tools)
+    return tools
+
+
+def _inject_registered_workflow_enums(tools: list[dict[str, Any]]) -> None:
+    workflow_types = sorted(allowed_runtime_workflows())
+    for tool in tools:
+        if tool.get("name") != "preflight_workflow":
+            continue
+        parameters = tool.get("parameters")
+        if not isinstance(parameters, dict):
+            continue
+        properties = parameters.get("properties")
+        if not isinstance(properties, dict):
+            continue
+        workflow_type = properties.get("workflow_type")
+        if isinstance(workflow_type, dict):
+            workflow_type["enum"] = workflow_types
 
 
 def openai_tool_specs() -> list[dict[str, Any]]:
