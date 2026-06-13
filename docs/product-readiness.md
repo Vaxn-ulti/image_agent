@@ -120,5 +120,13 @@ both stale-task verifier CLIs. On the remote server, the overlay verified the
 fresh dry-run JSON above with `status=passed`, and its stale-task test slice
 reported `40 passed`. This overlay is a prepared verifier/apply tooling base,
 not production acceptance and not a service restart.
+The same remote gate verifier overlay has also been refreshed with current
+strict smoke gate scripts from local commit `7b12e615`. Its
+`verify_remote_smoke_acceptance.py -h` output exposes `--max-age-hours` and
+`--now-utc`, and the remote strict-smoke test slice
+`tests/test_verify_remote_smoke_acceptance.py tests/test_smoke_remote_agent.py`
+reported `179 passed`. This prepares the post-restart strict smoke acceptance
+tooling but does not replace running a fresh strict remote acceptance smoke
+after normal restart.
 Once those stale task records are resolved through this approved flow, normal
 restarts should no longer require overriding the active-task drain gate.
