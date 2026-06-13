@@ -128,5 +128,10 @@ strict smoke gate scripts from local commit `7b12e615`. Its
 reported `179 passed`. This prepares the post-restart strict smoke acceptance
 tooling but does not replace running a fresh strict remote acceptance smoke
 after normal restart.
+The restart wrapper now also has a non-destructive preflight mode:
+`IMAGE_AGENT_RESTART_PREFLIGHT_ONLY=1`. It runs the active-task drain and
+port-owner checks without stopping or starting the API; a clean preflight prints
+`restart_preflight:ok`. Use it after stale-task resolution and before the normal
+restart, so restart blockers are caught before any service mutation.
 Once those stale task records are resolved through this approved flow, normal
 restarts should no longer require overriding the active-task drain gate.

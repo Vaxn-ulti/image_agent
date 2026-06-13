@@ -1870,6 +1870,8 @@ def test_product_readiness_gate_blocks_frontend_until_agent_contracts_are_verifi
         "strict smoke gate scripts",
         "179 passed",
         "verify_remote_smoke_acceptance.py -h",
+        "IMAGE_AGENT_RESTART_PREFLIGHT_ONLY=1",
+        "restart_preflight:ok",
         "verify_stale_task_resolution.py",
         "model_smoke_status=passed",
         "container_native_qc_status=passed",

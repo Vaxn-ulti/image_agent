@@ -89,6 +89,11 @@ Then restart the API with the service manager used on the host and run the smoke
 
 The wrapper uses `IMAGE_AGENT_STOP_TIMEOUT_SECONDS` while waiting for the old Image Agent uvicorn process to exit, and `IMAGE_AGENT_START_TIMEOUT_SECONDS` while waiting for the new API to become healthy. The post-restart `/health` must return `app=image_agent`; otherwise the restart fails and the operator should inspect `apps/api/api.out`.
 
+Set `IMAGE_AGENT_RESTART_PREFLIGHT_ONLY=1` to run the drain and port-owner
+checks without stopping or starting the API. In other words, it runs the drain and port-owner checks without stopping or starting the API. A clean preflight
+prints `restart_preflight:ok`; use it after stale-task resolution and before normal restart to confirm the restart wrapper will not be blocked by active
+tasks or a foreign port owner.
+
 For accepted builds, prefer running the live API from a release overlay rather
 than the dirty remote main worktree. Set `IMAGE_AGENT_RELEASE_ROOT` to the
 accepted release directory, or set `IMAGE_AGENT_API_DIR` directly to that

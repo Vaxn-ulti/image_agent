@@ -164,6 +164,10 @@ wait_for_health() {
 load_env
 check_no_active_tasks
 check_port_owner
+if [[ "${IMAGE_AGENT_RESTART_PREFLIGHT_ONLY:-0}" == "1" ]]; then
+  printf 'restart_preflight:ok\n'
+  exit 0
+fi
 stop_api
 start_api
 wait_for_health
