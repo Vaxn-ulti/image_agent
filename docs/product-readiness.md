@@ -133,5 +133,10 @@ The restart wrapper now also has a non-destructive preflight mode:
 port-owner checks without stopping or starting the API; a clean preflight prints
 `restart_preflight:ok`. Use it after stale-task resolution and before the normal
 restart, so restart blockers are caught before any service mutation.
+The non-live remote gate verifier overlay has been updated with this restart
+preflight mode and its remote restart-script test slice reported `6 passed`.
+Before stale-task apply, the preflight-only command still fails at the drain gate
+with active tasks `83` and `84`, which confirms the current blocker without
+stopping or starting the API.
 Once those stale task records are resolved through this approved flow, normal
 restarts should no longer require overriding the active-task drain gate.
