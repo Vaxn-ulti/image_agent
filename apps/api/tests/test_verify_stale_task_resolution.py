@@ -158,6 +158,7 @@ def test_verify_stale_task_resolution_accepts_apply_and_clean_followup():
         _resolved_payload(),
         expected_task_ids=[83, 84],
         require_empty_active=True,
+        now=datetime(2026, 6, 12, 5, 0, tzinfo=timezone.utc),
     )
 
     assert report["status"] == "passed"
@@ -202,6 +203,20 @@ def test_verify_stale_task_resolution_rejects_stale_resolution_evidence_by_max_a
     ("mutate", "expected_message"),
     [
         (lambda apply_payload, resolved_payload: apply_payload.update({"updated_task_ids": [83]}), "updated_task_ids must match expected task ids"),
+        (
+            lambda apply_payload, resolved_payload: (
+                apply_payload["approval_payload"].update({"stale_candidate_ids": [83]}),
+                apply_payload.update({"approval_fingerprint": _fingerprint(apply_payload["approval_payload"])}),
+            ),
+            "apply approval_payload stale_candidate_ids must match expected task ids",
+        ),
+        (
+            lambda apply_payload, resolved_payload: (
+                resolved_payload["approval_payload"].update({"stale_candidate_ids": [83]}),
+                resolved_payload.update({"approval_fingerprint": _fingerprint(resolved_payload["approval_payload"])}),
+            ),
+            "resolution approval_payload stale_candidate_ids must be empty",
+        ),
         (
             lambda apply_payload, resolved_payload: apply_payload["stale_candidates"][0].update({"log_path": "/home/yyf/project/image_agent/data/task-83.log"}),
             "task evidence must not expose log_path",
@@ -281,6 +296,7 @@ def test_verify_stale_task_resolution_rejects_weak_evidence(mutate, expected_mes
             resolved_payload,
             expected_task_ids=[83, 84],
             require_empty_active=True,
+            now=datetime(2026, 6, 12, 5, 0, tzinfo=timezone.utc),
         )
 
     assert expected_message in str(exc.value)
@@ -290,8 +306,13 @@ def test_verify_stale_task_resolution_cli_prints_passed_report(tmp_path, capsys)
     verifier = _load_verifier_module()
     apply_path = tmp_path / "stale-apply.json"
     resolved_path = tmp_path / "stale-resolved.json"
-    apply_path.write_text(json.dumps(_apply_payload()), encoding="utf-8")
-    resolved_path.write_text(json.dumps(_resolved_payload()), encoding="utf-8")
+    apply_payload = _apply_payload()
+    resolved_payload = _resolved_payload()
+    now = datetime.now(timezone.utc).isoformat()
+    apply_payload["generated_at"] = now
+    resolved_payload["generated_at"] = now
+    apply_path.write_text(json.dumps(apply_payload), encoding="utf-8")
+    resolved_path.write_text(json.dumps(resolved_payload), encoding="utf-8")
 
     verifier.main(
         [

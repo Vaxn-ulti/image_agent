@@ -113,6 +113,37 @@ def _task_ids(tasks: list[dict]) -> list[int]:
     return ids
 
 
+def _verify_approval_payload_summary(
+    payload: dict,
+    *,
+    key: str,
+    expected_target_ids: list[int],
+    expected_stale_candidate_ids: list[int],
+) -> None:
+    approval_payload = payload.get("approval_payload")
+    _require(isinstance(approval_payload, dict), f"{key} approval_payload must be present")
+    target_ids = sorted(_as_int_list(approval_payload.get("target_task_ids"), key=f"{key}.approval_payload.target_task_ids"))
+    _require(target_ids == expected_target_ids, f"{key} approval_payload target_task_ids must match expected task ids")
+    candidate_ids = sorted(_as_int_list(approval_payload.get("stale_candidate_ids"), key=f"{key}.approval_payload.stale_candidate_ids"))
+    if expected_stale_candidate_ids:
+        _require(candidate_ids == expected_stale_candidate_ids, f"{key} approval_payload stale_candidate_ids must match expected task ids")
+    else:
+        _require(candidate_ids == [], f"{key} approval_payload stale_candidate_ids must be empty")
+    _require(
+        _as_int_list(approval_payload.get("running_container_task_ids"), key=f"{key}.approval_payload.running_container_task_ids") == [],
+        f"{key} approval_payload running_container_task_ids must be empty",
+    )
+    _require(
+        _as_int_list(approval_payload.get("blocked_task_ids"), key=f"{key}.approval_payload.blocked_task_ids") == [],
+        f"{key} approval_payload blocked_task_ids must be empty",
+    )
+    _require(
+        _as_int_list(approval_payload.get("out_of_scope_stale_task_ids"), key=f"{key}.approval_payload.out_of_scope_stale_task_ids") == [],
+        f"{key} approval_payload out_of_scope_stale_task_ids must be empty",
+    )
+    _require(approval_payload.get("container_check_status") == "passed", f"{key} approval_payload container_check_status must be passed")
+
+
 def verify_resolution_evidence(
     apply_payload: dict,
     resolution_payload: dict,
@@ -151,6 +182,12 @@ def verify_resolution_evidence(
     for candidate in apply_candidates:
         _require(candidate.get("is_stale") is True, "apply stale_candidates entries must be stale")
         _require(candidate.get("status") in {"queued", "running"}, "apply stale_candidates entries must be active tasks")
+    _verify_approval_payload_summary(
+        apply_payload,
+        key="apply",
+        expected_target_ids=expected,
+        expected_stale_candidate_ids=expected,
+    )
 
     resolution_fingerprint = _verify_fingerprint(resolution_payload)
     _require(resolution_payload.get("mode") == "dry_run", "resolution mode must be dry_run")
@@ -167,6 +204,12 @@ def verify_resolution_evidence(
     active_tasks = _as_task_list(resolution_payload.get("active_tasks"), key="resolution.active_tasks")
     active_target_ids = sorted(task_id for task_id in _task_ids(active_tasks) if task_id in expected)
     _require(active_target_ids == [], "resolved dry-run must not include target task ids as active")
+    _verify_approval_payload_summary(
+        resolution_payload,
+        key="resolution",
+        expected_target_ids=expected,
+        expected_stale_candidate_ids=[],
+    )
     if require_empty_active:
         _require(resolution_payload.get("active_task_count") == 0, "resolved dry-run active_task_count must be 0")
         _require(active_tasks == [], "resolved dry-run active_tasks must be empty")

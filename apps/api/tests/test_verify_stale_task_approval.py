@@ -119,7 +119,11 @@ def _approval_payload():
 def test_verify_stale_task_approval_accepts_reviewed_dry_run():
     verifier = _load_verifier_module()
 
-    report = verifier.verify_approval_payload(_approval_payload(), expected_task_ids=[83, 84])
+    report = verifier.verify_approval_payload(
+        _approval_payload(),
+        expected_task_ids=[83, 84],
+        now=datetime(2026, 6, 12, 5, 0, tzinfo=timezone.utc),
+    )
 
     assert report["status"] == "passed"
     assert report["checked"]["target_task_ids"] == [83, 84]
@@ -165,7 +169,11 @@ def test_verify_stale_task_approval_rejects_weak_evidence(mutate, expected_messa
     mutate(payload)
 
     with pytest.raises(SystemExit) as exc:
-        verifier.verify_approval_payload(payload, expected_task_ids=[83, 84])
+        verifier.verify_approval_payload(
+            payload,
+            expected_task_ids=[83, 84],
+            now=datetime(2026, 6, 12, 5, 0, tzinfo=timezone.utc),
+        )
 
     assert expected_message in str(exc.value)
 
@@ -173,7 +181,9 @@ def test_verify_stale_task_approval_rejects_weak_evidence(mutate, expected_messa
 def test_verify_stale_task_approval_cli_prints_passed_report(tmp_path, capsys):
     verifier = _load_verifier_module()
     payload_path = tmp_path / "stale-approval.json"
-    payload_path.write_text(json.dumps(_approval_payload()), encoding="utf-8")
+    payload = _approval_payload()
+    payload["generated_at"] = datetime.now(timezone.utc).isoformat()
+    payload_path.write_text(json.dumps(payload), encoding="utf-8")
 
     verifier.main([str(payload_path), "--task-id", "83", "--task-id", "84"])
 
