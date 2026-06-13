@@ -5,6 +5,7 @@ import json
 from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlsplit
 from urllib.parse import quote
 
 
@@ -83,6 +84,26 @@ def _is_privacy_safe_symbol(value: object) -> bool:
         and len(value) <= 140
         and all(char.isalnum() or char in "_.-" for char in value)
     )
+
+
+def _verify_model_status(payload: dict) -> None:
+    status = payload.get("model_status")
+    _require(isinstance(status, dict), "model_status must be present")
+    _require(status.get("configured") is True, "model_status.configured must be true")
+    blocked_keys = {"api_key", "token", "secret", "password", "authorization"}
+    for key in status:
+        key_text = str(key).lower()
+        _require(not any(blocked in key_text for blocked in blocked_keys), f"model_status must not expose {key}")
+    base_url = status.get("base_url")
+    if base_url is not None:
+        _require(isinstance(base_url, str) and bool(base_url), "model_status.base_url must be a string")
+        parsed = urlsplit(base_url)
+        _require(not parsed.username and not parsed.password, "model_status.base_url must not contain credentials")
+        _require(parsed.scheme in {"http", "https"}, "model_status.base_url must be http or https")
+    for key in ("provider", "model", "review_model", "wire_api", "reasoning_effort"):
+        value = status.get(key)
+        if value is not None:
+            _require(_is_privacy_safe_symbol(value), f"model_status.{key} must be privacy-safe")
 
 
 def _parse_utc_timestamp(value: object, *, key: str) -> datetime:
@@ -592,7 +613,7 @@ def verify_acceptance_payload(
     gate = _verify_gate_settings(payload)
     _require(isinstance(payload.get("health"), dict) and payload["health"].get("app") == "image_agent", "health.app must be image_agent")
     _verify_deployment_identity(payload, gate)
-    _require(isinstance(payload.get("model_status"), dict) and payload["model_status"].get("configured") is True, "model_status.configured must be true")
+    _verify_model_status(payload)
     _require_status(payload, "model_smoke_status")
     _require(payload.get("agent_run_status") == "answered", "agent_run_status must be answered")
     for key in ("agent_run_id", "intent", "selected_skill"):

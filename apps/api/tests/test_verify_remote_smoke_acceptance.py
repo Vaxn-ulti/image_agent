@@ -292,6 +292,14 @@ def test_verify_remote_smoke_acceptance_rejects_stale_saved_evidence():
         ({"generated_at_utc": ""}, "generated_at_utc must be an ISO-8601 UTC timestamp"),
         ({"generated_at_utc": "2026-06-08T12:00:00"}, "generated_at_utc must be timezone-aware"),
         ({"model_smoke_status": "skipped_missing_model_config"}, "model_smoke_status must be passed"),
+        (
+            {"model_status": {"base_url": "https://sk-test-secret@example.invalid/v1"}},
+            "model_status.base_url must not contain credentials",
+        ),
+        (
+            {"model_status": {"api_key": "sk-test-secret"}},
+            "model_status must not expose api_key",
+        ),
         ({"deployment_identity_status": "skipped"}, "deployment_identity_status must be passed"),
         ({"agent_run_id": "agent_run_123 C:/Users/A/private"}, "agent_run_id must be privacy-safe"),
         ({"selected_skill": "image-agent-operator sk-test-secret"}, "selected_skill must be privacy-safe"),

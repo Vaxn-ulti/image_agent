@@ -564,7 +564,12 @@ def test_smoke_remote_agent_configured_run_must_succeed(monkeypatch):
         if url.endswith("/health"):
             return {"status": "ok", "app": "image_agent", "version": "0.2.0"}
         if url.endswith("/agent/model/status"):
-            return {"configured": True, "provider": "OpenAI"}
+            return {
+                "configured": True,
+                "provider": "OpenAI",
+                "base_url": "https://sk-test-secret@example.invalid/v1",
+                "api_key": "sk-test-secret",
+            }
         if url.endswith("/agent/rag/status"):
             return {
                 "index": {"document_count": 70, "chunk_count": 250, "engine": "llama_index"},
@@ -594,7 +599,12 @@ def test_smoke_remote_agent_strict_gate_reports_successful_run(capsys, monkeypat
         if url.endswith("/health"):
             return {"status": "ok", "app": "image_agent", "version": "0.2.0"}
         if url.endswith("/agent/model/status"):
-            return {"configured": True, "provider": "OpenAI"}
+            return {
+                "configured": True,
+                "provider": "OpenAI",
+                "base_url": "https://sk-test-secret@example.invalid/v1",
+                "api_key": "sk-test-secret",
+            }
         if url.endswith("/agent/rag/status"):
             return {
                 "index": {"document_count": 70, "chunk_count": 250, "engine": "llama_index"},
@@ -634,6 +644,11 @@ def test_smoke_remote_agent_strict_gate_reports_successful_run(capsys, monkeypat
     payload = json.loads(capsys.readouterr().out)
     assert payload["health"]["app"] == "image_agent"
     assert payload["model_smoke_status"] == "passed"
+    assert payload["model_status"]["configured"] is True
+    assert payload["model_status"]["provider"] == "OpenAI"
+    assert "api_key" not in payload["model_status"]
+    assert "sk-test-secret" not in json.dumps(payload["model_status"])
+    assert payload["model_status"]["base_url"] == "https://example.invalid/v1"
     assert payload["agent_run_id"] == "agent_run_123"
     assert payload["agent_run_status"] == "answered"
     assert payload["intent"] == "answer_question"

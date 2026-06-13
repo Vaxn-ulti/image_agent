@@ -107,6 +107,7 @@ python scripts/smoke_remote_agent.py \
 Attach the strict smoke acceptance JSON and verify it contains:
 
 - `model_smoke_status=passed`
+- `model_status.configured=true`, with only safe model gateway summary fields. It must not contain API keys, tokens, secrets, passwords, authorization headers, or a `base_url` with embedded credentials.
 - `deployment_identity_status=passed`
 - `deployment_identity.deployment_id` matches `smoke_gate.deployment_id` and is a short release id or commit, not a full remote path
 - `deployment_identity.health_version` is present and is a short privacy-safe version string, not a full remote path
@@ -190,6 +191,7 @@ Accepted only if all of the following are true:
 - strict smoke acceptance JSON reports `deployment_identity_status=passed` for the accepted release id or commit;
 - strict smoke acceptance JSON reports a privacy-safe `deployment_identity.health_version`;
 - strict smoke acceptance JSON reports `model_smoke_status=passed`;
+- strict smoke acceptance JSON reports `model_status.configured=true` without secret-bearing keys or credentialed URLs;
 - strict smoke acceptance JSON includes `agent_run_id`, `intent`, and `selected_skill`;
 - strict smoke acceptance JSON reports `remote_evidence_ids_status=passed` with real `project_id`, `upload_session_id`, and `task_id`;
 - strict smoke acceptance JSON reports `rag_vendor_pointer_integrity_status=passed`, `rag_vendor_pointer_integrity_pointer_count` greater than zero, `rag_vendor_pointer_integrity_issue_count=0`, and non-empty `rag_vendor_pointer_integrity_referenced_vendor_docs`;

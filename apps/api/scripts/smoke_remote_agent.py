@@ -7,7 +7,7 @@ import urllib.request
 from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit, urlunsplit
 
 
 LAUNCHABILITY_MATRIX_SOURCE = "docs/rag/workflows/workflow_launchability_matrix.md"
@@ -81,6 +81,38 @@ def _is_privacy_safe_symbol(value: object) -> bool:
         and len(value) <= 140
         and all(char.isalnum() or char in "_.-" for char in value)
     )
+
+
+def _safe_model_status(status: dict) -> dict:
+    safe: dict = {"configured": bool(status.get("configured"))}
+    for key in ("provider", "model", "review_model", "wire_api", "reasoning_effort"):
+        value = status.get(key)
+        if isinstance(value, str) and _is_privacy_safe_symbol(value):
+            safe[key] = value
+    base_url = status.get("base_url")
+    if isinstance(base_url, str) and base_url:
+        parsed = urlsplit(base_url)
+        if parsed.scheme in {"http", "https"} and parsed.hostname:
+            host = parsed.hostname
+            if parsed.port is not None:
+                host = f"{host}:{parsed.port}"
+            safe["base_url"] = urlunsplit((parsed.scheme, host, parsed.path, parsed.query, parsed.fragment))
+    for key in ("store", "metadata_enabled"):
+        if isinstance(status.get(key), bool):
+            safe[key] = status[key]
+    for key in ("context_window", "auto_compact_token_limit"):
+        if isinstance(status.get(key), int) and not isinstance(status.get(key), bool):
+            safe[key] = status[key]
+    deployment = status.get("deployment")
+    if isinstance(deployment, dict):
+        safe_deployment = {}
+        for key in ("backend_runtime_mode", "model_gateway_access"):
+            value = deployment.get(key)
+            if isinstance(value, str) and _is_privacy_safe_symbol(value):
+                safe_deployment[key] = value
+        if safe_deployment:
+            safe["deployment"] = safe_deployment
+    return safe
 
 
 def _int_metric(*values: object) -> int:
@@ -767,6 +799,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             "health_version": health_version,
         }
     status = _request("GET", f"{base}/agent/model/status")
+    safe_model_status = _safe_model_status(status)
     rag_before = _request("GET", f"{base}/agent/rag/status")
     rag = _request("POST", f"{base}/agent/rag/rebuild")
     rag_after = _request("GET", f"{base}/agent/rag/status")
@@ -852,7 +885,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         "health": health,
         "deployment_identity_status": "passed" if args.require_deployment_identity else "skipped",
         "deployment_identity": deployment_identity,
-        "model_status": status,
+        "model_status": safe_model_status,
         "model_smoke_status": model_smoke_status,
         "rag_before": rag_before.get("index"),
         "rag_raw_sources": rag_after.get("vendor_raw_sources"),
