@@ -190,6 +190,7 @@ def test_verify_stale_task_approval_cli_prints_passed_report(tmp_path, capsys):
     report = json.loads(capsys.readouterr().out)
     assert report["status"] == "passed"
     assert report["source_json"] == str(payload_path)
+    assert report["checked"]["max_age_hours"] == 24.0
 
 
 def test_verify_stale_task_approval_cli_max_age_hours_overrides_loose_payload(tmp_path):

@@ -66,17 +66,24 @@ def _max_age_hours(payload: dict, *, key: str, override: float | None = None) ->
     return max_age_hours
 
 
-def _verify_freshness(payload: dict, *, key: str, now: datetime | None, max_age_hours: float | None = None) -> datetime:
+def _verify_freshness(
+    payload: dict,
+    *,
+    key: str,
+    now: datetime | None,
+    max_age_hours: float | None = None,
+) -> tuple[datetime, float]:
     generated_at = _parse_timestamp(payload.get("generated_at"), key=f"{key}.generated_at" if key else "generated_at")
     current = now or datetime.now(timezone.utc)
     _require(current.tzinfo is not None and current.utcoffset() is not None, "now must be timezone-aware")
     age_hours = (current.astimezone(timezone.utc) - generated_at).total_seconds() / 3600
     _require(age_hours >= 0, f"{key + '.' if key else ''}generated_at must not be in the future")
+    effective_max_age_hours = _max_age_hours(payload, key=key or "evidence", override=max_age_hours)
     _require(
-        age_hours <= _max_age_hours(payload, key=key or "evidence", override=max_age_hours),
+        age_hours <= effective_max_age_hours,
         f"{key + '.' if key else ''}generated_at is older than max_age_hours",
     )
-    return generated_at
+    return generated_at, effective_max_age_hours
 
 
 def approval_fingerprint(payload: dict) -> str:
@@ -93,7 +100,7 @@ def verify_approval_payload(
 ) -> dict:
     _require(isinstance(payload, dict), "approval payload must be a JSON object")
     _assert_no_backend_paths(payload)
-    _verify_freshness(payload, key="", now=now, max_age_hours=max_age_hours)
+    _, effective_max_age_hours = _verify_freshness(payload, key="", now=now, max_age_hours=max_age_hours)
     _require(payload.get("mode") == "dry_run", "mode must be dry_run")
     _require(payload.get("container_check_status") == "passed", "container_check_status must be passed")
     _require(_as_int_list(payload.get("running_container_task_ids"), key="running_container_task_ids") == [], "running_container_task_ids must be empty")
@@ -152,6 +159,7 @@ def verify_approval_payload(
             "stale_candidate_ids": stale_candidate_ids,
             "approval_fingerprint": actual_fingerprint,
             "container_check_status": payload["container_check_status"],
+            "max_age_hours": effective_max_age_hours,
         },
     }
 

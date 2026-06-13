@@ -75,17 +75,24 @@ def _max_age_hours(payload: dict, *, key: str, override: float | None = None) ->
     return max_age_hours
 
 
-def _verify_freshness(payload: dict, *, key: str, now: datetime | None, max_age_hours: float | None = None) -> datetime:
+def _verify_freshness(
+    payload: dict,
+    *,
+    key: str,
+    now: datetime | None,
+    max_age_hours: float | None = None,
+) -> tuple[datetime, float]:
     generated_at = _parse_timestamp(payload.get("generated_at"), key=f"{key}.generated_at")
     current = now or datetime.now(timezone.utc)
     _require(current.tzinfo is not None and current.utcoffset() is not None, "now must be timezone-aware")
     age_hours = (current.astimezone(timezone.utc) - generated_at).total_seconds() / 3600
     _require(age_hours >= 0, f"{key}.generated_at must not be in the future")
+    effective_max_age_hours = _max_age_hours(payload, key=key, override=max_age_hours)
     _require(
-        age_hours <= _max_age_hours(payload, key=key, override=max_age_hours),
+        age_hours <= effective_max_age_hours,
         f"{key}.generated_at is older than max_age_hours",
     )
-    return generated_at
+    return generated_at, effective_max_age_hours
 
 
 def _approval_fingerprint(payload: dict) -> str:
@@ -164,8 +171,13 @@ def verify_resolution_evidence(
     _require(isinstance(resolution_payload, dict), "resolution payload must be a JSON object")
     _assert_no_backend_paths(apply_payload)
     _assert_no_backend_paths(resolution_payload)
-    apply_generated_at = _verify_freshness(apply_payload, key="apply", now=now, max_age_hours=max_age_hours)
-    resolution_generated_at = _verify_freshness(
+    apply_generated_at, apply_max_age_hours = _verify_freshness(
+        apply_payload,
+        key="apply",
+        now=now,
+        max_age_hours=max_age_hours,
+    )
+    resolution_generated_at, resolution_max_age_hours = _verify_freshness(
         resolution_payload,
         key="resolution",
         now=now,
@@ -233,6 +245,8 @@ def verify_resolution_evidence(
             "apply_approval_fingerprint": apply_fingerprint,
             "resolution_approval_fingerprint": resolution_fingerprint,
             "require_empty_active": require_empty_active,
+            "max_age_hours": apply_max_age_hours,
+            "resolution_max_age_hours": resolution_max_age_hours,
         },
     }
 
