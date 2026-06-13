@@ -130,7 +130,7 @@ def _verify_generated_at_utc(
     *,
     max_age_hours: float | None = None,
     now_utc: datetime | None = None,
-) -> datetime:
+) -> tuple[datetime, float | None]:
     generated_at = _parse_utc_timestamp(payload.get("generated_at_utc"), key="generated_at_utc")
     if max_age_hours is not None:
         _require(max_age_hours >= 0, "max_age_hours must be non-negative")
@@ -139,7 +139,7 @@ def _verify_generated_at_utc(
         age_hours = (now.astimezone(timezone.utc) - generated_at).total_seconds() / 3600
         _require(age_hours >= 0, "generated_at_utc must not be in the future")
         _require(age_hours <= max_age_hours, f"generated_at_utc is older than {max_age_hours:g} hours")
-    return generated_at
+    return generated_at, max_age_hours
 
 
 def _require_positive_int(payload: dict, key: str) -> None:
@@ -646,7 +646,11 @@ def verify_acceptance_payload(
     now_utc: datetime | None = None,
 ) -> dict:
     _require(isinstance(payload, dict), "acceptance payload must be a JSON object")
-    _verify_generated_at_utc(payload, max_age_hours=max_age_hours, now_utc=now_utc)
+    _, effective_max_age_hours = _verify_generated_at_utc(
+        payload,
+        max_age_hours=max_age_hours,
+        now_utc=now_utc,
+    )
     gate = _verify_gate_settings(payload)
     _require(isinstance(payload.get("health"), dict) and payload["health"].get("app") == "image_agent", "health.app must be image_agent")
     _verify_deployment_identity(payload, gate)
@@ -689,6 +693,7 @@ def verify_acceptance_payload(
             "task_artifact_manifest_status": payload["task_artifact_manifest_status"],
             "container_native_qc_status": payload["container_native_qc_status"],
             "scientific_report_artifacts_status": payload["scientific_report_artifacts_status"],
+            "max_age_hours": effective_max_age_hours,
         },
     }
 

@@ -713,12 +713,13 @@ def test_verify_remote_smoke_acceptance_cli_prints_passed_report(tmp_path, capsy
     payload_path = tmp_path / "remote-smoke-acceptance.json"
     payload_path.write_text(json.dumps(_strict_smoke_payload()), encoding="utf-8")
 
-    verifier.main([str(payload_path)])
+    verifier.main([str(payload_path), "--max-age-hours", "24", "--now-utc", "2026-06-08T13:00:00Z"])
 
     report = json.loads(capsys.readouterr().out)
     assert report["status"] == "passed"
     assert report["summary"] == "status=passed"
     assert report["source_json"] == str(payload_path)
+    assert report["checked"]["max_age_hours"] == 24.0
 
 
 def test_verify_remote_smoke_acceptance_cli_rejects_stale_report(tmp_path):
