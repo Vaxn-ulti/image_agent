@@ -179,6 +179,18 @@ def test_dispatcher_rejects_missing_required_tool_arguments_before_execution():
     assert "workflow_type" in result["message"]
 
 
+def test_dispatcher_rejects_invalid_tool_argument_types_before_execution():
+    def fake_rows(sql, params=()):
+        raise AssertionError("rows_fn must not run for invalid tool arguments")
+
+    result = dispatch_tool_call("read_task", {"task_id": "not-an-int"}, rows_fn=fake_rows)
+
+    assert result["status"] == "blocked"
+    assert result["production_task_created"] is False
+    assert "Invalid tool argument type" in result["message"]
+    assert "task_id" in result["message"]
+
+
 def test_tool_trace_response_items_use_responses_function_call_output():
     trace = [{"status": "ok", "tool": "list_workflows", "call_id": "call_1", "result": [{"type": "fixed"}]}]
 

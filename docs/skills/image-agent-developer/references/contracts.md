@@ -136,6 +136,7 @@ Workflow eligibility contract:
 - OpenAI function tool specs are strict at the model boundary: set `strict=true`, ensure every object schema in `parameters` has `additionalProperties=false`, and still validate/dispatch only allowlisted tools on the backend.
 - The backend dispatcher rejects unknown tool arguments before execution; do not silently ignore ad hoc model, frontend, or compatibility-layer parameters.
 - The backend dispatcher rejects missing required tool arguments before execution; missing required inputs should produce a stable blocked tool result rather than a handler-level exception.
+- The backend dispatcher rejects invalid tool argument types before execution; malformed values should produce stable blocked tool results rather than handler casts or database-backed reads.
 - Model-requested function calls must be answered with typed `function_call_output` input items keyed by the original `call_id`. Plain text `Tool results JSON` messages are only a compatibility fallback when a malformed tool call has no call id.
 - Structured planner decisions should use Responses `text.format` with `json_schema` and `strict: true` when the backend has a schema; prefer `json_schema` whenever a schema is available. `json_object` is only a compatibility fallback.
 - The gateway must reject malformed `structured_schema` before calling `responses.create`: require a non-empty `name`, `strict=true`, and an object `schema` with `type=object` plus `additionalProperties=false`.

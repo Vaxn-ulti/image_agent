@@ -55,6 +55,68 @@ def _missing_required_argument_names(tool_name: str, args: dict[str, Any]) -> li
     return sorted(str(key) for key in required if str(key) not in args or args.get(str(key)) is None)
 
 
+def _invalid_argument_type_messages(tool_name: str, args: dict[str, Any]) -> list[str]:
+    schema = _tool_schema(tool_name) or {}
+    properties = schema.get("properties")
+    if not isinstance(properties, dict):
+        return []
+    messages = []
+    for key, value in args.items():
+        property_schema = properties.get(key)
+        if isinstance(property_schema, dict) and not _value_matches_schema(value, property_schema):
+            messages.append(f"{key} expected {_schema_type_label(property_schema)}")
+    return sorted(messages)
+
+
+def _value_matches_schema(value: Any, schema: dict[str, Any]) -> bool:
+    if "oneOf" in schema:
+        return any(
+            isinstance(option, dict) and _value_matches_schema(value, option)
+            for option in schema.get("oneOf") or []
+        )
+    schema_type = schema.get("type")
+    if isinstance(schema_type, list):
+        return any(_value_matches_type(value, item, schema) for item in schema_type)
+    return _value_matches_type(value, schema_type, schema)
+
+
+def _value_matches_type(value: Any, schema_type: Any, schema: dict[str, Any]) -> bool:
+    if schema_type == "null":
+        return value is None
+    if schema_type == "integer":
+        return type(value) is int
+    if schema_type == "number":
+        return (type(value) is int or type(value) is float) and not isinstance(value, bool)
+    if schema_type == "string":
+        return isinstance(value, str)
+    if schema_type == "boolean":
+        return type(value) is bool
+    if schema_type == "object":
+        return isinstance(value, dict)
+    if schema_type == "array":
+        if not isinstance(value, list):
+            return False
+        item_schema = schema.get("items")
+        if not isinstance(item_schema, dict):
+            return True
+        return all(_value_matches_schema(item, item_schema) for item in value)
+    return True
+
+
+def _schema_type_label(schema: dict[str, Any]) -> str:
+    if "oneOf" in schema:
+        labels = [
+            _schema_type_label(option)
+            for option in schema.get("oneOf") or []
+            if isinstance(option, dict)
+        ]
+        return " or ".join(labels) or "valid schema value"
+    schema_type = schema.get("type")
+    if isinstance(schema_type, list):
+        return " or ".join(str(item) for item in schema_type)
+    return str(schema_type or "valid schema value")
+
+
 def _blocked_result(tool_name: str, message: str, *, call_id: str | None = None) -> dict[str, Any]:
     return {
         "status": "blocked",
@@ -108,6 +170,13 @@ def dispatch_tool_call(
         return _blocked_result(
             tool_name,
             "Missing required tool argument(s): " + ", ".join(missing_arguments),
+            call_id=call_id,
+        )
+    invalid_type_messages = _invalid_argument_type_messages(tool_name, args)
+    if invalid_type_messages:
+        return _blocked_result(
+            tool_name,
+            "Invalid tool argument type(s): " + "; ".join(invalid_type_messages),
             call_id=call_id,
         )
 
