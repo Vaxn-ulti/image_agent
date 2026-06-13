@@ -106,7 +106,11 @@ Response:
 The response intentionally excludes raw prompts, raw RAG snippets, absolute
 host paths, API keys, and free-text patient identifiers. Runner statuses outside
 the stable enum are normalized to `failed` and recorded in
-`safe_metadata.contract_status_normalized_from` for audit.
+`safe_metadata.contract_status_normalized_from` for audit. Nested `task`,
+`tool_input`, and `confirmation` payloads use allowlisted frontend-safe scalar
+fields only; runner fields such as `log_path`, `output_dir`, backend absolute
+paths, free-text nested `error_message`, raw nested provenance, and arbitrary
+dictionaries are not part of the Agent API response contract.
 
 `GET /agent/runs/{agent_run_id}`
 Response: same safe run fields as `agent_run_lookup.v1`, populated from the

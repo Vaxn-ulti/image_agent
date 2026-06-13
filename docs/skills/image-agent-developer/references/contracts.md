@@ -157,6 +157,7 @@ Agent-run ledger:
 - `GET /agent/runs/{agent_run_id}` should return a ledger-only envelope with `safe_metadata`, `retrieved_sources`, `tool_invocations`, lifecycle `events`, and safe ids. It is not the original agent result; do not expose raw answer text, raw prompts, raw RAG snippets, full confirmation payloads, or host paths.
 - `GET /projects/{project_id}/agent-runs` should return project-scoped agent-run history as a safe project run summary list, sorted newest first, with `event_count` instead of full event payloads.
 - safe_metadata excludes free-form model text; do not expose model-generated `recommended_next_step`, `tool_chain_hint`, or similar text through the ledger envelope. Absolute host paths are not valid retrieved_sources. Exposed failure summaries should use `redacted_error_summary`.
+- Immediate `/agent/runs` and resume responses must also ensure task, tool_input, and confirmation use allowlisted frontend-safe scalar fields only; do not expose `log_path`, `output_dir`, free-text nested `error_message`, backend absolute paths, raw nested provenance, or arbitrary runner dictionaries.
 - Pending confirmation records should include `expires_at`; pending confirmations are single-use. A successful approved resume must consume the pending thread, and expired confirmations return blocked with `production_task_created=false`.
 - Lookup/list responses re-sanitize stored JSON before returning it. safe_metadata uses an allowlist, retrieved_sources expose source ids only, and titles and snippets are not ledger fields.
 

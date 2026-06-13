@@ -11,6 +11,40 @@ AGENT_RUN_LOOKUP_CONTRACT_VERSION = "agent_run_lookup.v1"
 PROJECT_AGENT_RUN_HISTORY_CONTRACT_VERSION = "project_agent_run_history.v1"
 CHAT_COMPATIBILITY_CONTRACT_VERSION = "chat_compat.v1"
 AGENT_API_ERROR_CONTRACT_VERSION = "agent_api_error.v1"
+SAFE_NESTED_AGENT_FIELDS = {
+    "confirmation": {
+        "type",
+        "action_lane",
+        "title",
+        "project_id",
+        "series_id",
+        "workflow_type",
+        "qsiprep_task_id",
+        "summary",
+        "risks",
+    },
+    "task": {
+        "id",
+        "task_id",
+        "project_id",
+        "series_id",
+        "workflow_type",
+        "status",
+        "progress",
+        "created_at",
+        "started_at",
+        "finished_at",
+    },
+    "tool_input": {
+        "project_id",
+        "series_id",
+        "task_id",
+        "workflow_type",
+        "qsiprep_task_id",
+        "approved",
+        "action_lane",
+    },
+}
 
 
 class AgentRunStatus(str, Enum):
@@ -216,10 +250,10 @@ def build_agent_run_response_payload(
         "selected_skill": result.get("selected_skill") or ledger.get("selected_skill"),
         "answer": result.get("answer"),
         "message": result.get("message"),
-        "confirmation": _optional_dict(result.get("confirmation")),
-        "task": _optional_dict(result.get("task")),
+        "confirmation": _optional_safe_nested_dict("confirmation", result.get("confirmation")),
+        "task": _optional_safe_nested_dict("task", result.get("task")),
         "backend_tool": result.get("backend_tool"),
-        "tool_input": _optional_dict(result.get("tool_input")),
+        "tool_input": _optional_safe_nested_dict("tool_input", result.get("tool_input")),
         "production_task_created": result.get("production_task_created") if isinstance(result.get("production_task_created"), bool) else safe_metadata.get("production_task_created"),
         "model_gateway_access": ledger.get("model_gateway_access"),
         "safe_metadata": safe_metadata,
@@ -278,6 +312,39 @@ def _dict_value(value: Any) -> dict[str, Any]:
 
 def _optional_dict(value: Any) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
+
+
+def _optional_safe_nested_dict(kind: str, value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    allowed = SAFE_NESTED_AGENT_FIELDS.get(kind, set())
+    safe = {
+        key: nested_value
+        for key, nested_value in value.items()
+        if key in allowed and _is_safe_nested_scalar(nested_value)
+    }
+    return safe or None
+
+
+def _is_safe_nested_scalar(value: Any) -> bool:
+    if value is None or isinstance(value, (bool, int, float)):
+        return True
+    if isinstance(value, str):
+        return _is_safe_nested_string(value)
+    if isinstance(value, list):
+        return all(_is_safe_nested_string(item) for item in value)
+    return False
+
+
+def _is_safe_nested_string(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    normalized = value.replace("\\", "/")
+    if normalized.startswith("/") or ".." in normalized.split("/"):
+        return False
+    if len(normalized) >= 3 and normalized[1:3] == ":/":
+        return False
+    return True
 
 
 def _list_value(value: Any) -> list[Any]:

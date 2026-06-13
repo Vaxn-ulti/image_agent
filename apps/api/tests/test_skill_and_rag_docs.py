@@ -1024,6 +1024,7 @@ def test_agent_run_ledger_contract_is_documented_for_agent_use():
         "event_count",
         "safe project run summary",
         "safe_metadata excludes free-form model text",
+        "task, tool_input, and confirmation use allowlisted frontend-safe scalar fields",
         "absolute host paths are not valid retrieved_sources",
         "redacted_error_summary",
         "expires_at",

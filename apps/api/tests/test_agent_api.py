@@ -84,6 +84,61 @@ def test_agent_run_returns_answer_and_persists_privacy_safe_ledger(tmp_path, mon
     assert event_types == ["agent_run_created", "agent_run_started", "agent_run_completed"]
 
 
+def test_agent_run_response_redacts_nested_backend_paths(tmp_path, monkeypatch):
+    from app.core import config
+    from app.db import database
+    from app import main
+    from app.main import app
+
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
+    database.init_db()
+
+    class FakeRunner:
+        def run(self, *, message, project_context):
+            return {
+                "status": "task_created",
+                "task": {
+                    "id": 118,
+                    "project_id": 7,
+                    "series_id": 11,
+                    "workflow_type": "bold_fmriprep_xcpd_report",
+                    "status": "queued",
+                    "error_message": "patient Jane Doe at C:/Users/A/private",
+                    "log_path": "C:/Users/A/private/task.log",
+                },
+                "tool_input": {
+                    "series_id": 11,
+                    "workflow_type": "bold_fmriprep_xcpd_report",
+                    "output_dir": "D:/project/private-output",
+                },
+            }
+
+    monkeypatch.setattr(main, "AgentRunner", lambda: FakeRunner())
+    monkeypatch.setattr(
+        main,
+        "read_project_context",
+        lambda project_id, *, rows_fn, workflows: {"project_id": project_id, "workflows": workflows},
+    )
+
+    result = TestClient(app).post("/agent/runs", json={"project_id": 7, "message": "run BOLD"})
+
+    assert result.status_code == 200
+    body = result.json()
+    body_json = json.dumps(body, ensure_ascii=False)
+    assert body["status"] == "task_created"
+    assert body["task"]["id"] == 118
+    assert body["tool_input"] == {
+        "series_id": 11,
+        "workflow_type": "bold_fmriprep_xcpd_report",
+    }
+    assert "log_path" not in body["task"]
+    assert "error_message" not in body["task"]
+    assert "C:/Users/A/private" not in body_json
+    assert "D:/project/private-output" not in body_json
+    assert "patient Jane Doe" not in body_json
+
+
 def test_agent_api_openapi_declares_stable_response_contracts():
     from app.main import app
 

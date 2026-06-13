@@ -111,6 +111,7 @@ Each list item may include `agent_run_id`, `request_type`, `status`, safe ids, `
 Additional safety rules:
 
 - safe_metadata excludes free-form model text. Do not store `recommended_next_step`, `tool_chain_hint`, or similar model text in exposed ledger metadata.
+- Immediate `/agent/runs` and resume responses must also ensure task, tool_input, and confirmation use allowlisted frontend-safe scalar fields only. Do not return `log_path`, `output_dir`, free-text nested `error_message`, backend absolute paths, raw nested provenance, or arbitrary runner dictionaries through these fields.
 - absolute host paths are not valid retrieved_sources. Keep only repository-relative/document-relative source ids.
 - `error_message` should use the fixed value `redacted_error_summary` for exposed ledger failures; the detailed exception belongs in server logs, not the API ledger envelope.
 - lookup/list responses re-sanitize stored JSON before returning it. safe_metadata uses an allowlist, retrieved_sources expose source ids only, and titles and snippets are not ledger fields.
