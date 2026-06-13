@@ -1099,6 +1099,7 @@ def test_remote_smoke_acceptance_gate_is_documented_for_agent_use():
         "scientific report artifact `content_type` matches `preview_kind`",
         "`reports/index.html`",
         "`reports/report_manifest.json`",
+        "`reports/*` artifacts must not be auto-promoted to container-native QC",
         "`source_stage=scientific_report`",
         "`artifact_role=derived_presentation_asset`",
         "`artifact_origin=generated_from_result_summary`",
@@ -1529,6 +1530,7 @@ def test_scientific_report_verifier_requires_native_qc_gate_in_docs():
         "derived presentation",
         "container-native QC",
         "does not replace native QC",
+        "`reports/*` artifacts must not be auto-promoted to container-native QC",
     ):
         assert phrase in combined
 

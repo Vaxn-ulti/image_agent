@@ -160,7 +160,7 @@ def _append_manifest_item(
     ):
         if key in item:
             manifest_item[key] = item[key]
-    manifest_item.update(_legacy_native_qc_provenance_updates(manifest_item))
+    manifest_item.update(_legacy_native_qc_provenance_updates(normalized_relative_path, manifest_item))
     manifest_item.update(_artifact_classification(normalized_relative_path, manifest_item))
     artifacts.append(manifest_item)
 
@@ -249,11 +249,12 @@ def _artifact_classification(relative_path: str, item: dict[str, Any]) -> dict[s
         "frontend_preview_asset": frontend_preview_asset,
     }
     if derived_report:
-        if not item.get("source_stage"):
+        force_report_layer = normalized.startswith("reports/")
+        if force_report_layer or not item.get("source_stage"):
             updates["source_stage"] = "scientific_report"
-        if not item.get("artifact_role"):
+        if force_report_layer or not item.get("artifact_role"):
             updates["artifact_role"] = "derived_presentation_asset"
-        if not item.get("artifact_origin"):
+        if force_report_layer or not item.get("artifact_origin"):
             updates["artifact_origin"] = "generated_from_result_summary"
         updates["native_artifact"] = False
         updates["provenance"] = {**provenance, "replaces_native_qc": False}
@@ -264,7 +265,9 @@ def _artifact_classification(relative_path: str, item: dict[str, Any]) -> dict[s
     return updates
 
 
-def _legacy_native_qc_provenance_updates(item: dict[str, Any]) -> dict[str, Any]:
+def _legacy_native_qc_provenance_updates(relative_path: str, item: dict[str, Any]) -> dict[str, Any]:
+    if relative_path.replace("\\", "/").lower().startswith("reports/"):
+        return {}
     source_stage = str(item.get("source_stage") or "")
     artifact_role = str(item.get("artifact_role") or "")
     artifact_origin = str(item.get("artifact_origin") or "")

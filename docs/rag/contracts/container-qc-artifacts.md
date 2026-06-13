@@ -74,7 +74,7 @@ Accepted `official_source_ids` include `docs/rag/vendor/fmriprep_official_output
 
 `official_source_ids` are evidence pointers for RAG answers and frontend source display. They are not proof that a particular task succeeded or that an artifact was produced correctly; backend task status and result-summary remain authoritative.
 
-Generated report assets under `reports/*` are classified as `derived_scientific_report` unless explicit metadata proves a container-native source. They should default to `source_stage=scientific_report`, `artifact_role=derived_presentation_asset`, `artifact_origin=generated_from_result_summary`, `native_artifact=false`, and `provenance.replaces_native_qc=false`. They can be previewed, but they must not satisfy `container_native_qc=true`.
+Generated report assets under `reports/*` are classified as `derived_scientific_report` unless explicit metadata proves a container-native source. `reports/*` artifacts must not be auto-promoted to container-native QC from legacy `source_stage` or `artifact_role` values that only look like fMRIPrep, XCP-D, DeepPrep, FreeSurfer, QSIPrep, QSIRecon, FSL, or MRtrix native QC. They should default to `source_stage=scientific_report`, `artifact_role=derived_presentation_asset`, `artifact_origin=generated_from_result_summary`, `native_artifact=false`, and `provenance.replaces_native_qc=false`. They can be previewed, but they must not satisfy `container_native_qc=true`.
 
 ## Container Decomposition Requirements
 

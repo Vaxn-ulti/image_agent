@@ -182,3 +182,45 @@ def test_artifact_manifest_enriches_legacy_native_qc_stage_and_role(tmp_path):
     assert artifact["provenance"]["generated_from"] == "container_native_qc"
     assert artifact["provenance"]["replaces_native_qc"] is False
     assert artifact["provenance"]["official_source_ids"] == artifact["official_source_ids"]
+
+
+def test_artifact_manifest_does_not_promote_reports_assets_to_legacy_native_qc(tmp_path):
+    output_dir = tmp_path / "output"
+    report_asset = output_dir / "reports" / "fmriprep-panel.png"
+    report_asset.parent.mkdir(parents=True)
+    report_asset.write_bytes(b"\x89PNG\r\n\x1a\nreport")
+
+    result_summary = {
+        "contract_version": "1.0",
+        "modality": "BOLD",
+        "outputs": {
+            "figures": [
+                {
+                    "name": "fmriprep-panel.png",
+                    "path": str(report_asset),
+                    "relative_path": "reports/fmriprep-panel.png",
+                    "content_type": "image/png",
+                    "source_stage": "fmriprep",
+                    "artifact_role": "container_native_qc_figure",
+                },
+            ],
+        },
+    }
+
+    manifest = build_artifact_manifest(
+        {"id": 10, "project_id": 1, "workflow_type": "bold_fmriprep_xcpd_report", "status": "completed"},
+        output_dir,
+        result_summary,
+        registered_outputs=[],
+    )
+
+    artifact = manifest["artifacts"][0]
+    assert artifact["relative_path"] == "reports/fmriprep-panel.png"
+    assert artifact["artifact_category"] == "derived_scientific_report"
+    assert artifact["container_native_qc"] is False
+    assert artifact["derived_scientific_report"] is True
+    assert artifact["source_stage"] == "scientific_report"
+    assert artifact["artifact_role"] == "derived_presentation_asset"
+    assert artifact["artifact_origin"] == "generated_from_result_summary"
+    assert artifact["native_artifact"] is False
+    assert artifact["provenance"]["replaces_native_qc"] is False

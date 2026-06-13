@@ -92,6 +92,7 @@ Scientific report display layer:
 - The report layer is presentation over the result-summary source of truth; do not replace raw tables/maps or invent measurements only for a chart.
 - The frontend should surface reports as a readable `Scientific report` panel and keep machine outputs in the generic artifact table. Image report artifacts (`image/*`, `.svg`, `.png`, `.jpg`, `.jpeg`, `.webp`) should render as embedded figure previews; `reports/index.html` should remain the full report entry point.
 - Generated scientific report assets must be labeled with `source_stage: scientific_report`, `artifact_role: derived_presentation_asset`, `artifact_origin: generated_from_result_summary`, `native_artifact: false`, and `provenance.replaces_native_qc: false` so agents and UI can distinguish them from container-native QC artifacts.
+- `reports/*` artifacts must not be auto-promoted to container-native QC from legacy native-looking `source_stage` or `artifact_role` metadata. Treat report-layer paths as derived presentation unless strict non-report container output provenance proves otherwise.
 
 Every result-summary output item should include:
 
