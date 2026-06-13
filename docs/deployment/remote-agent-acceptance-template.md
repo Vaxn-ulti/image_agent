@@ -156,6 +156,7 @@ Attach the strict smoke acceptance JSON and verify it contains:
 - `container_native_qc_served_urls` lists the manifest `download_url` routes that returned non-empty bytes
 - `container_native_qc_artifacts` lists each served native QC artifact with `relative_path`, `download_url`, `content_type`, `preview_kind`, and accepted `official_source_ids`
 - each container-native QC artifact `relative_path` is slash-relative and safe
+- each container-native QC artifact `relative_path` must not start with `reports/`; `reports/*` artifacts must remain `scientific_report_artifacts`
 - each container-native QC artifact `download_url` is recomputed from `task_id` and `relative_path`
 - each container-native QC artifact `content_type` matches `preview_kind`
 - `container_native_qc_official_source_ids` cites accepted container-QC curated vendor docs rather than raw sources or arbitrary `docs/rag/vendor/*.md` strings

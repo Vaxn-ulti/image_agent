@@ -1089,6 +1089,7 @@ def test_remote_smoke_acceptance_gate_is_documented_for_agent_use():
         "`container_native_qc_artifacts`",
         "`container_native_qc_official_source_ids`",
         "container-native QC artifact `relative_path` is slash-relative and safe",
+        "each container-native QC artifact `relative_path` must not start with `reports/`",
         "container-native QC artifact `download_url` is recomputed from `task_id` and `relative_path`",
         "container-native QC artifact `content_type` matches `preview_kind`",
         "`scientific_report_artifacts_status=passed`",

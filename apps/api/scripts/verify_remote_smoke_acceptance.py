@@ -454,6 +454,10 @@ def _verify_container_native_qc(payload: dict, gate: dict) -> None:
         content_type = artifact["content_type"]
         _require(isinstance(relative_path, str) and relative_path, "container_native_qc_artifacts relative_path must be non-empty")
         _require(not _is_unsafe_relative_path(relative_path), "container_native_qc_artifacts relative_path is unsafe")
+        _require(
+            not relative_path.replace("\\", "/").lower().startswith("reports/"),
+            "container_native_qc_artifacts reports paths must be scientific report artifacts",
+        )
         _require(isinstance(download_url, str) and download_url, "container_native_qc_artifacts download_url must be non-empty")
         expected_download_url = f"/tasks/{gate['task_id']}/artifacts/{quote(relative_path)}"
         _require(download_url == expected_download_url, "container_native_qc_artifacts download_url mismatch")

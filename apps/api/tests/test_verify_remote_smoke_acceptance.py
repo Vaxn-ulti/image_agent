@@ -431,6 +431,21 @@ def test_verify_remote_smoke_acceptance_rejects_bad_container_native_qc_artifact
     assert expected_message in str(exc.value)
 
 
+def test_verify_remote_smoke_acceptance_rejects_reports_path_container_native_qc_artifact():
+    verifier = _load_verifier_module()
+    payload = _strict_smoke_payload()
+    artifact = payload["container_native_qc_artifacts"][1]
+    artifact["relative_path"] = "reports/fake_native.png"
+    artifact["download_url"] = "/tasks/114/artifacts/reports/fake_native.png"
+    payload["container_native_qc_relative_paths"][1] = "reports/fake_native.png"
+    payload["container_native_qc_served_urls"][1] = "/tasks/114/artifacts/reports/fake_native.png"
+
+    with pytest.raises(SystemExit) as exc:
+        verifier.verify_acceptance_payload(payload)
+
+    assert "container_native_qc_artifacts reports paths must be scientific report artifacts" in str(exc.value)
+
+
 def test_verify_remote_smoke_acceptance_rejects_incomplete_curated_sources():
     verifier = _load_verifier_module()
     payload = _strict_smoke_payload()
