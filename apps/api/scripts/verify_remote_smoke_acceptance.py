@@ -646,7 +646,7 @@ def verify_acceptance_payload(
     now_utc: datetime | None = None,
 ) -> dict:
     _require(isinstance(payload, dict), "acceptance payload must be a JSON object")
-    _, effective_max_age_hours = _verify_generated_at_utc(
+    generated_at_utc, effective_max_age_hours = _verify_generated_at_utc(
         payload,
         max_age_hours=max_age_hours,
         now_utc=now_utc,
@@ -694,6 +694,7 @@ def verify_acceptance_payload(
             "container_native_qc_status": payload["container_native_qc_status"],
             "scientific_report_artifacts_status": payload["scientific_report_artifacts_status"],
             "max_age_hours": effective_max_age_hours,
+            "generated_at_utc": generated_at_utc.isoformat(),
         },
     }
 

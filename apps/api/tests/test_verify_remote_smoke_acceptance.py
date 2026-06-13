@@ -720,6 +720,7 @@ def test_verify_remote_smoke_acceptance_cli_prints_passed_report(tmp_path, capsy
     assert report["summary"] == "status=passed"
     assert report["source_json"] == str(payload_path)
     assert report["checked"]["max_age_hours"] == 24.0
+    assert report["checked"]["generated_at_utc"] == "2026-06-08T12:00:00+00:00"
 
 
 def test_verify_remote_smoke_acceptance_cli_rejects_stale_report(tmp_path):
