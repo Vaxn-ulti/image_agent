@@ -1294,6 +1294,22 @@ def test_developer_testing_matrix_requires_stale_task_gate_before_strict_accepta
         assert phrase in matrix
 
 
+def test_remote_stale_task_verifier_commands_require_freshness_override():
+    paths = [
+        REPO_ROOT / "docs" / "deployment" / "remote-agent-production.md",
+        REPO_ROOT / "docs" / "deployment" / "remote-agent-acceptance-template.md",
+    ]
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in paths)
+
+    for phrase in (
+        "scripts/verify_stale_task_approval.py /tmp/image_agent_stale_tasks_83_84_dry_run.json --task-id 83 --task-id 84 --max-age-hours 24",
+        "scripts/verify_stale_task_resolution.py --apply-json /tmp/image_agent_stale_tasks_83_84_apply.json --resolution-json /tmp/image_agent_stale_tasks_83_84_resolved_dry_run.json --task-id 83 --task-id 84 --require-empty-active --max-age-hours 24",
+        "scripts/verify_stale_task_approval.py /tmp/image_agent_stale_tasks_<ids>_dry_run.json --task-id <id> --task-id <id> --max-age-hours 24",
+        "scripts/verify_stale_task_resolution.py --apply-json /tmp/image_agent_stale_tasks_<ids>_apply.json --resolution-json /tmp/image_agent_stale_tasks_<ids>_resolved_dry_run.json --task-id <id> --task-id <id> --require-empty-active --max-age-hours 24",
+    ):
+        assert phrase in combined
+
+
 def test_remote_script_timeout_and_log_safety_are_documented_for_agent_use():
     paths = [
         REPO_ROOT / "docs" / "deployment" / "remote-agent-production.md",

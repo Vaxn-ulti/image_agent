@@ -67,21 +67,24 @@ def _parse_timestamp(value: object, *, key: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
-def _max_age_hours(payload: dict, *, key: str) -> float:
-    value = payload.get("max_age_hours")
+def _max_age_hours(payload: dict, *, key: str, override: float | None = None) -> float:
+    value = override if override is not None else payload.get("max_age_hours")
     _require(isinstance(value, (int, float)) and not isinstance(value, bool), f"{key}.max_age_hours must be a number")
     max_age_hours = float(value)
     _require(max_age_hours >= 0, f"{key}.max_age_hours must be non-negative")
     return max_age_hours
 
 
-def _verify_freshness(payload: dict, *, key: str, now: datetime | None) -> datetime:
+def _verify_freshness(payload: dict, *, key: str, now: datetime | None, max_age_hours: float | None = None) -> datetime:
     generated_at = _parse_timestamp(payload.get("generated_at"), key=f"{key}.generated_at")
     current = now or datetime.now(timezone.utc)
     _require(current.tzinfo is not None and current.utcoffset() is not None, "now must be timezone-aware")
     age_hours = (current.astimezone(timezone.utc) - generated_at).total_seconds() / 3600
     _require(age_hours >= 0, f"{key}.generated_at must not be in the future")
-    _require(age_hours <= _max_age_hours(payload, key=key), f"{key}.generated_at is older than max_age_hours")
+    _require(
+        age_hours <= _max_age_hours(payload, key=key, override=max_age_hours),
+        f"{key}.generated_at is older than max_age_hours",
+    )
     return generated_at
 
 
@@ -151,6 +154,7 @@ def verify_resolution_evidence(
     expected_task_ids: Sequence[int],
     require_empty_active: bool = False,
     now: datetime | None = None,
+    max_age_hours: float | None = None,
 ) -> dict:
     """Verify stale-task apply evidence plus a follow-up clean dry-run report."""
 
@@ -160,8 +164,13 @@ def verify_resolution_evidence(
     _require(isinstance(resolution_payload, dict), "resolution payload must be a JSON object")
     _assert_no_backend_paths(apply_payload)
     _assert_no_backend_paths(resolution_payload)
-    apply_generated_at = _verify_freshness(apply_payload, key="apply", now=now)
-    resolution_generated_at = _verify_freshness(resolution_payload, key="resolution", now=now)
+    apply_generated_at = _verify_freshness(apply_payload, key="apply", now=now, max_age_hours=max_age_hours)
+    resolution_generated_at = _verify_freshness(
+        resolution_payload,
+        key="resolution",
+        now=now,
+        max_age_hours=max_age_hours,
+    )
     _require(
         resolution_generated_at >= apply_generated_at,
         "resolution generated_at must be after or equal to apply generated_at",
@@ -234,17 +243,31 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--resolution-json", required=True, help="Path to follow-up dry-run JSON written after the apply.")
     parser.add_argument("--task-id", action="append", type=int, dest="task_ids", required=True, help="Expected reconciled task id. Repeat for multiple ids.")
     parser.add_argument("--require-empty-active", action="store_true", help="Require the follow-up dry-run to report no active tasks at all.")
+    parser.add_argument(
+        "--max-age-hours",
+        type=float,
+        default=None,
+        help="Override payload max_age_hours freshness limits for apply and resolution evidence.",
+    )
+    parser.add_argument(
+        "--now-utc",
+        default=None,
+        help="Testing hook: ISO-8601 UTC timestamp used as current time for --max-age-hours.",
+    )
     args = parser.parse_args(argv)
 
     apply_path = Path(args.apply_json)
     resolution_path = Path(args.resolution_json)
     apply_payload = json.loads(apply_path.read_text(encoding="utf-8"))
     resolution_payload = json.loads(resolution_path.read_text(encoding="utf-8"))
+    now = _parse_timestamp(args.now_utc, key="now_utc") if args.now_utc else None
     report = verify_resolution_evidence(
         apply_payload,
         resolution_payload,
         expected_task_ids=args.task_ids,
         require_empty_active=args.require_empty_active,
+        now=now,
+        max_age_hours=args.max_age_hours,
     )
     report["source_json"] = {
         "apply": str(apply_path),

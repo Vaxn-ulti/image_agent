@@ -144,7 +144,7 @@ PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/rec
 Verify the saved approval evidence before requesting apply approval:
 
 ```bash
-PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/verify_stale_task_approval.py /tmp/image_agent_stale_tasks_83_84_dry_run.json --task-id 83 --task-id 84
+PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/verify_stale_task_approval.py /tmp/image_agent_stale_tasks_83_84_dry_run.json --task-id 83 --task-id 84 --max-age-hours 24
 ```
 
 Only after operator review, run apply with Docker label checking enabled by
@@ -166,10 +166,12 @@ dry-run should show that the reconciled task ids are no longer active or stale:
 
 ```bash
 PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/reconcile_stale_tasks.py --max-age-hours 24 --check-containers --task-id 83 --task-id 84 > /tmp/image_agent_stale_tasks_83_84_resolved_dry_run.json
-PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/verify_stale_task_resolution.py --apply-json /tmp/image_agent_stale_tasks_83_84_apply.json --resolution-json /tmp/image_agent_stale_tasks_83_84_resolved_dry_run.json --task-id 83 --task-id 84 --require-empty-active
+PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/verify_stale_task_resolution.py --apply-json /tmp/image_agent_stale_tasks_83_84_apply.json --resolution-json /tmp/image_agent_stale_tasks_83_84_resolved_dry_run.json --task-id 83 --task-id 84 --require-empty-active --max-age-hours 24
 ```
 
-`verify_stale_task_resolution.py` must print `status=passed` before attempting
+`verify_stale_task_approval.py --max-age-hours 24` and
+`verify_stale_task_resolution.py --max-age-hours 24` must print
+`status=passed` before attempting
 a normal restart without `IMAGE_AGENT_ALLOW_RESTART_WITH_ACTIVE_TASKS=1`. If the
 follow-up dry-run reports target task ids as active, stale candidates, blockers,
 labelled running containers, or backend path fields such as `log_path`, stop and

@@ -190,3 +190,29 @@ def test_verify_stale_task_approval_cli_prints_passed_report(tmp_path, capsys):
     report = json.loads(capsys.readouterr().out)
     assert report["status"] == "passed"
     assert report["source_json"] == str(payload_path)
+
+
+def test_verify_stale_task_approval_cli_max_age_hours_overrides_loose_payload(tmp_path):
+    verifier = _load_verifier_module()
+    payload_path = tmp_path / "stale-approval.json"
+    payload = _approval_payload()
+    payload["generated_at"] = "2026-06-12T04:14:24.156875+00:00"
+    payload["max_age_hours"] = 999.0
+    payload_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc:
+        verifier.main(
+            [
+                str(payload_path),
+                "--task-id",
+                "83",
+                "--task-id",
+                "84",
+                "--max-age-hours",
+                "24",
+                "--now-utc",
+                "2026-06-13T05:00:00Z",
+            ]
+        )
+
+    assert "generated_at is older than max_age_hours" in str(exc.value)

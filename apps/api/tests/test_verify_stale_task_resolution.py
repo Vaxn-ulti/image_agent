@@ -332,3 +332,36 @@ def test_verify_stale_task_resolution_cli_prints_passed_report(tmp_path, capsys)
     assert report["status"] == "passed"
     assert report["source_json"]["apply"] == str(apply_path)
     assert report["source_json"]["resolution"] == str(resolved_path)
+
+
+def test_verify_stale_task_resolution_cli_max_age_hours_overrides_loose_payload(tmp_path):
+    verifier = _load_verifier_module()
+    apply_path = tmp_path / "stale-apply.json"
+    resolved_path = tmp_path / "stale-resolved.json"
+    apply_payload = _apply_payload()
+    resolved_payload = _resolved_payload()
+    apply_payload["max_age_hours"] = 999.0
+    resolved_payload["max_age_hours"] = 999.0
+    apply_path.write_text(json.dumps(apply_payload), encoding="utf-8")
+    resolved_path.write_text(json.dumps(resolved_payload), encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc:
+        verifier.main(
+            [
+                "--apply-json",
+                str(apply_path),
+                "--resolution-json",
+                str(resolved_path),
+                "--task-id",
+                "83",
+                "--task-id",
+                "84",
+                "--require-empty-active",
+                "--max-age-hours",
+                "24",
+                "--now-utc",
+                "2026-06-13T05:00:00Z",
+            ]
+        )
+
+    assert "apply.generated_at is older than max_age_hours" in str(exc.value)

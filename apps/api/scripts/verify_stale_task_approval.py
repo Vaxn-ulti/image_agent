@@ -58,21 +58,24 @@ def _parse_timestamp(value: object, *, key: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
-def _max_age_hours(payload: dict, *, key: str) -> float:
-    value = payload.get("max_age_hours")
+def _max_age_hours(payload: dict, *, key: str, override: float | None = None) -> float:
+    value = override if override is not None else payload.get("max_age_hours")
     _require(isinstance(value, (int, float)) and not isinstance(value, bool), f"{key}.max_age_hours must be a number")
     max_age_hours = float(value)
     _require(max_age_hours >= 0, f"{key}.max_age_hours must be non-negative")
     return max_age_hours
 
 
-def _verify_freshness(payload: dict, *, key: str, now: datetime | None) -> datetime:
+def _verify_freshness(payload: dict, *, key: str, now: datetime | None, max_age_hours: float | None = None) -> datetime:
     generated_at = _parse_timestamp(payload.get("generated_at"), key=f"{key}.generated_at" if key else "generated_at")
     current = now or datetime.now(timezone.utc)
     _require(current.tzinfo is not None and current.utcoffset() is not None, "now must be timezone-aware")
     age_hours = (current.astimezone(timezone.utc) - generated_at).total_seconds() / 3600
     _require(age_hours >= 0, f"{key + '.' if key else ''}generated_at must not be in the future")
-    _require(age_hours <= _max_age_hours(payload, key=key or "evidence"), f"{key + '.' if key else ''}generated_at is older than max_age_hours")
+    _require(
+        age_hours <= _max_age_hours(payload, key=key or "evidence", override=max_age_hours),
+        f"{key + '.' if key else ''}generated_at is older than max_age_hours",
+    )
     return generated_at
 
 
@@ -86,10 +89,11 @@ def verify_approval_payload(
     *,
     expected_task_ids: Sequence[int] | None = None,
     now: datetime | None = None,
+    max_age_hours: float | None = None,
 ) -> dict:
     _require(isinstance(payload, dict), "approval payload must be a JSON object")
     _assert_no_backend_paths(payload)
-    _verify_freshness(payload, key="", now=now)
+    _verify_freshness(payload, key="", now=now, max_age_hours=max_age_hours)
     _require(payload.get("mode") == "dry_run", "mode must be dry_run")
     _require(payload.get("container_check_status") == "passed", "container_check_status must be passed")
     _require(_as_int_list(payload.get("running_container_task_ids"), key="running_container_task_ids") == [], "running_container_task_ids must be empty")
@@ -156,10 +160,27 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Verify a reviewed stale-task dry-run approval JSON artifact.")
     parser.add_argument("approval_json", help="Path to JSON written by reconcile_stale_tasks.py dry-run.")
     parser.add_argument("--task-id", action="append", type=int, dest="task_ids", help="Expected target task id. Repeat for multiple ids.")
+    parser.add_argument(
+        "--max-age-hours",
+        type=float,
+        default=None,
+        help="Override the payload max_age_hours freshness limit for approval evidence.",
+    )
+    parser.add_argument(
+        "--now-utc",
+        default=None,
+        help="Testing hook: ISO-8601 UTC timestamp used as current time for --max-age-hours.",
+    )
     args = parser.parse_args(argv)
     source_path = Path(args.approval_json)
     payload = json.loads(source_path.read_text(encoding="utf-8"))
-    report = verify_approval_payload(payload, expected_task_ids=args.task_ids)
+    now = _parse_timestamp(args.now_utc, key="now_utc") if args.now_utc else None
+    report = verify_approval_payload(
+        payload,
+        expected_task_ids=args.task_ids,
+        now=now,
+        max_age_hours=args.max_age_hours,
+    )
     report["source_json"] = str(source_path)
     print(json.dumps(report, indent=2, sort_keys=True))
 

@@ -46,14 +46,14 @@ post-apply dry-run JSON:
 
 ```bash
 cd /home/yyf/project/image_agent_releases/<accepted-release>/apps/api
-PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/verify_stale_task_approval.py /tmp/image_agent_stale_tasks_<ids>_dry_run.json --task-id <id> --task-id <id>
-PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/verify_stale_task_resolution.py --apply-json /tmp/image_agent_stale_tasks_<ids>_apply.json --resolution-json /tmp/image_agent_stale_tasks_<ids>_resolved_dry_run.json --task-id <id> --task-id <id> --require-empty-active
+PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/verify_stale_task_approval.py /tmp/image_agent_stale_tasks_<ids>_dry_run.json --task-id <id> --task-id <id> --max-age-hours 24
+PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/verify_stale_task_resolution.py --apply-json /tmp/image_agent_stale_tasks_<ids>_apply.json --resolution-json /tmp/image_agent_stale_tasks_<ids>_resolved_dry_run.json --task-id <id> --task-id <id> --require-empty-active --max-age-hours 24
 ```
 
 Required evidence before normal restart:
 
-- approval verifier prints `status=passed`;
-- resolution verifier prints `status=passed`;
+- approval verifier prints `status=passed` with `--max-age-hours 24`;
+- resolution verifier prints `status=passed` with `--max-age-hours 24`;
 - apply JSON has `updated_task_ids` exactly matching the approved task ids;
 - post-apply dry-run has no target task ids in `active_tasks` or `stale_candidates`;
 - `running_container_task_ids=[]` and `blocked_task_ids=[]`.
