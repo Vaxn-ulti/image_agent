@@ -390,13 +390,45 @@ def list_workflows():
 def get_result_contract():
     return result_contract_spec()
 
+
+def _public_model_status() -> dict[str, Any]:
+    status = model_provider_status()
+    safe: dict[str, Any] = {
+        key: value
+        for key, value in status.items()
+        if key
+        in {
+            "provider",
+            "configured",
+            "base_url",
+            "model",
+            "review_model",
+            "wire_api",
+            "reasoning_effort",
+            "store",
+            "metadata_enabled",
+            "context_window",
+            "auto_compact_token_limit",
+        }
+    }
+    deployment = status.get("deployment") if isinstance(status.get("deployment"), dict) else {}
+    safe_deployment = {
+        key: deployment[key]
+        for key in ("backend_runtime_mode", "model_gateway_access")
+        if key in deployment
+    }
+    if safe_deployment:
+        safe["deployment"] = safe_deployment
+    return safe
+
+
 @app.get("/deployment")
 def deployment():
     mode = os.environ.get("BACKEND_RUNTIME_MODE", "remote")
     return {
         "backend_runtime_mode": mode,
         "api_base_hint": os.environ.get("IMAGE_AGENT_PUBLIC_BASE_URL", ""),
-        "agent": model_provider_status(),
+        "agent": _public_model_status(),
         "legacy_chat_provider": legacy_chat_provider_status(),
     }
 
@@ -428,7 +460,7 @@ def agent_rag_rebuild():
 
 @app.get("/agent/model/status")
 def agent_model_status():
-    return model_provider_status()
+    return _public_model_status()
 
 
 @app.exception_handler(RequestValidationError)

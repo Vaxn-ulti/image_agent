@@ -5,7 +5,9 @@ import json
 
 def test_agent_model_status_uses_model_gateway(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "secret-value")
-    monkeypatch.setenv("OPENAI_BASE_URL", "http://127.0.0.1:8080")
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://127.0.0.1:18080")
+    monkeypatch.setenv("BACKEND_RUNTIME_MODE", "remote")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_TUNNEL_PORT", "18080")
     from app.main import app
 
     result = TestClient(app).get("/agent/model/status")
@@ -14,7 +16,35 @@ def test_agent_model_status_uses_model_gateway(monkeypatch):
     body = result.json()
     assert body["provider"] == "OpenAI"
     assert body["configured"] is True
+    assert body["deployment"] == {
+        "backend_runtime_mode": "remote",
+        "model_gateway_access": "ssh_reverse_tunnel",
+    }
     assert "api_key" not in body
+    assert "reverse_tunnel_command" not in json.dumps(body)
+    assert "ssh -N -R" not in json.dumps(body)
+    assert "secret-value" not in json.dumps(body)
+
+
+def test_deployment_status_uses_safe_agent_model_summary(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "secret-value")
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://127.0.0.1:18080")
+    monkeypatch.setenv("BACKEND_RUNTIME_MODE", "remote")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_TUNNEL_PORT", "18080")
+    from app.main import app
+
+    result = TestClient(app).get("/deployment")
+
+    assert result.status_code == 200
+    body = result.json()
+    body_json = json.dumps(body)
+    assert body["agent"]["deployment"] == {
+        "backend_runtime_mode": "remote",
+        "model_gateway_access": "ssh_reverse_tunnel",
+    }
+    assert "reverse_tunnel_command" not in body_json
+    assert "ssh -N -R" not in body_json
+    assert "secret-value" not in body_json
 
 
 def test_agent_run_returns_answer_and_persists_privacy_safe_ledger(tmp_path, monkeypatch):

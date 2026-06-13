@@ -28,7 +28,7 @@ export OPENAI_API_KEY=<provided-by-operator>
 
 `OPENAI_DISABLE_METADATA=true` is required for OpenAI-compatible gateways that reject the Responses `metadata` field but wrap the upstream validation error as a generic 502. Leave it unset for gateways that accept Responses metadata.
 
-`/agent/model/status` reports whether the key is configured, whether request metadata is enabled, and how the remote backend reaches the gateway. It never returns the API key.
+`/agent/model/status` reports whether the key is configured, whether request metadata is enabled, and a safe gateway-access summary. It never returns the API key or reverse-tunnel command text.
 
 ## BOLD fMRIPrep + XCP-D Remote Scripts
 
