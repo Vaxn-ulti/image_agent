@@ -111,5 +111,14 @@ operator-review evidence only: approved apply has not been run, the post-apply
 `verify_stale_task_resolution.py --require-empty-active --max-age-hours 24`
 gate has not passed, and a normal restart plus fresh strict smoke evidence are
 still required.
+To avoid using stale verifier scripts during that operator-approved path, a
+remote gate verifier overlay now exists at
+`/home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132`.
+This non-live overlay was copied from the prior stale-task tooling overlay and
+then updated from local commit `efca895b`; it now exposes `--max-age-hours` on
+both stale-task verifier CLIs. On the remote server, the overlay verified the
+fresh dry-run JSON above with `status=passed`, and its stale-task test slice
+reported `40 passed`. This overlay is a prepared verifier/apply tooling base,
+not production acceptance and not a service restart.
 Once those stale task records are resolved through this approved flow, normal
 restarts should no longer require overriding the active-task drain gate.
