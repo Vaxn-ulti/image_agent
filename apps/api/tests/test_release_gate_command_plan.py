@@ -32,6 +32,13 @@ def test_remote_release_gate_command_plan_is_machine_checkable():
         "apply_approved_stale_task_resolution",
         "restart_api_normally",
     ]
+    assert plan["approval_request_requirements"] == {
+        "must_include_fields": [
+            "approval_fingerprint",
+            "approval_expires_at_utc",
+        ],
+        "approval_expires_at_utc_source": "verified_approval.checked.generated_at_utc + freshness_hours",
+    }
 
 
 def test_remote_release_gate_command_plan_orders_safe_remote_acceptance_steps():
@@ -52,6 +59,7 @@ def test_remote_release_gate_command_plan_orders_safe_remote_acceptance_steps():
     commands = "\n".join(step["command"] for step in plan["steps"])
     assert f"--approval-json {CURRENT_APPROVAL_JSON}" in commands
     assert "approval_fingerprint" in json.dumps(plan, sort_keys=True)
+    assert "approval_expires_at_utc" in json.dumps(plan, sort_keys=True)
     assert "--check-containers --task-id 83 --task-id 84" in commands
     assert "--require-empty-active --max-age-hours 24" in commands
     assert "IMAGE_AGENT_RESTART_PREFLIGHT_ONLY=1" in commands

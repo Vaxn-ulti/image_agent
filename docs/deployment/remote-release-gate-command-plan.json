@@ -11,6 +11,13 @@
     84
   ],
   "freshness_hours": 24,
+  "approval_request_requirements": {
+    "must_include_fields": [
+      "approval_fingerprint",
+      "approval_expires_at_utc"
+    ],
+    "approval_expires_at_utc_source": "verified_approval.checked.generated_at_utc + freshness_hours"
+  },
   "frontend_gate": {
     "status_until_all_steps_pass": "blocked",
     "required_final_evidence": "fresh_strict_remote_smoke_acceptance_verified_within_24h"

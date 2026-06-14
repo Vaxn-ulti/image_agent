@@ -141,6 +141,17 @@ def verify_plan(plan: dict) -> dict:
     _require(plan.get("target_task_ids") == [83, 84], "target_task_ids must be [83, 84]")
     _require(plan.get("freshness_hours") == 24, "freshness_hours must be 24")
     _require(
+        plan.get("approval_request_requirements")
+        == {
+            "must_include_fields": [
+                "approval_fingerprint",
+                "approval_expires_at_utc",
+            ],
+            "approval_expires_at_utc_source": "verified_approval.checked.generated_at_utc + freshness_hours",
+        },
+        "approval_request_requirements mismatch",
+    )
+    _require(
         plan.get("privacy_and_safety_invariants") == REQUIRED_PRIVACY_AND_SAFETY_INVARIANTS,
         "privacy_and_safety_invariants mismatch",
     )
@@ -257,6 +268,7 @@ def verify_plan(plan: dict) -> dict:
 
     serialized = json.dumps(plan, sort_keys=True)
     _require("approval_fingerprint" in serialized, "plan must preserve approval_fingerprint evidence requirement")
+    _require("approval_expires_at_utc" in serialized, "plan must preserve approval_expires_at_utc evidence requirement")
     _require("restart_preflight:ok" in serialized, "plan must require restart_preflight:ok")
     _require("skipped_missing_model_config" in serialized, "plan must reject skipped_missing_model_config")
 
