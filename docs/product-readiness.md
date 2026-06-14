@@ -160,5 +160,9 @@ reported `status=passed`, and the focused remote test slice
 reported `4 passed`. This proves the operator command plan is present and
 machine-checkable on the remote verifier overlay, but it still does not mutate
 tasks, restart the service, or run strict smoke acceptance.
+The same overlay was then refreshed with local commit `cd9f4a3a`, including
+the stale-task approval refresh path; the remote command-plan verifier reported
+`checked.approval_refresh_required_when=approval_json_missing_or_older_than_24h`
+with `status=passed`, and the focused remote test slice reported `5 passed`.
 Once those stale task records are resolved through this approved flow, normal
 restarts should no longer require overriding the active-task drain gate.
