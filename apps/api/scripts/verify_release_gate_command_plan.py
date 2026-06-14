@@ -280,6 +280,7 @@ def verify_plan(plan: dict) -> dict:
             "step_count": len(verified_steps),
             "target_task_ids": plan["target_task_ids"],
             "freshness_hours": plan["freshness_hours"],
+            "approval_request_required_fields": plan["approval_request_requirements"]["must_include_fields"],
             "operator_authorization_required_steps": operator_steps,
             "mutating_steps": mutating_steps,
             "frontend_gate_status": plan["frontend_gate"]["status_until_all_steps_pass"],

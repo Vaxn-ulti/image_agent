@@ -32,6 +32,10 @@ def test_remote_release_gate_command_plan_is_machine_checkable():
         "apply_approved_stale_task_resolution",
         "restart_api_normally",
     ]
+    assert report["checked"]["approval_request_required_fields"] == [
+        "approval_fingerprint",
+        "approval_expires_at_utc",
+    ]
     assert plan["approval_request_requirements"] == {
         "must_include_fields": [
             "approval_fingerprint",
