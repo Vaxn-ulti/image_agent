@@ -1,0 +1,132 @@
+{
+  "plan_id": "remote_release_gate_after_stale_task_approval_v1",
+  "schema_version": 1,
+  "status": "operator_authorization_required",
+  "remote_host": "yyf@10.2.32.14",
+  "remote_project_root": "/home/yyf/project/image_agent",
+  "release_overlay": "/home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132",
+  "approval_json": "/tmp/image_agent_stale_tasks_83_84_dry_run_20260613T1640Z.json",
+  "target_task_ids": [
+    83,
+    84
+  ],
+  "freshness_hours": 24,
+  "frontend_gate": {
+    "status_until_all_steps_pass": "blocked",
+    "required_final_evidence": "fresh_strict_remote_smoke_acceptance_verified_within_24h"
+  },
+  "privacy_and_safety_invariants": [
+    "do_not_store_or_print_api_keys_or_secrets",
+    "do_not_store_raw_patient_data",
+    "do_not_store_backend_absolute_paths_in_acceptance_json",
+    "do_not_use_IMAGE_AGENT_ALLOW_RESTART_WITH_ACTIVE_TASKS",
+    "do_not_count_skipped_missing_model_config_as_passed"
+  ],
+  "steps": [
+    {
+      "id": "verify_fresh_stale_task_approval",
+      "purpose": "Verify the reviewed dry-run JSON for tasks 83 and 84 is fresh and still carries the reviewed approval_fingerprint before any mutation.",
+      "command": "cd /home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132/apps/api && PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/verify_stale_task_approval.py /tmp/image_agent_stale_tasks_83_84_dry_run_20260613T1640Z.json --task-id 83 --task-id 84 --max-age-hours 24",
+      "requires_operator_authorization": false,
+      "mutates_remote_state": false,
+      "expected_success": [
+        "status=passed",
+        "checked.generated_at_utc is within 24 hours",
+        "checked.approval_fingerprint matches the reviewed dry-run payload"
+      ]
+    },
+    {
+      "id": "apply_approved_stale_task_resolution",
+      "purpose": "After explicit operator authorization, mark only stale active task rows 83 and 84 as failed using the reviewed approval JSON.",
+      "command": "cd /home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132/apps/api && PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/reconcile_stale_tasks.py --apply --max-age-hours 24 --task-id 83 --task-id 84 --approval-json /tmp/image_agent_stale_tasks_83_84_dry_run_20260613T1640Z.json --reason \"operator confirmed no matching running Image Agent container\" > /tmp/image_agent_stale_tasks_83_84_apply_<timestamp>.json",
+      "requires_operator_authorization": true,
+      "mutates_remote_state": true,
+      "expected_success": [
+        "mode=apply",
+        "updated_task_ids contains exactly 83 and 84",
+        "approval_fingerprint matches /tmp/image_agent_stale_tasks_83_84_dry_run_20260613T1640Z.json",
+        "running_container_task_ids is empty"
+      ]
+    },
+    {
+      "id": "collect_post_apply_clean_dry_run",
+      "purpose": "Collect a second scoped read-only dry-run after apply to prove the targeted active tasks are no longer blocking restart.",
+      "command": "cd /home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132/apps/api && PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/reconcile_stale_tasks.py --max-age-hours 24 --check-containers --task-id 83 --task-id 84 > /tmp/image_agent_stale_tasks_83_84_resolved_dry_run_<timestamp>.json",
+      "requires_operator_authorization": false,
+      "mutates_remote_state": false,
+      "expected_success": [
+        "mode=dry_run",
+        "container_check_status=passed",
+        "running_container_task_ids is empty",
+        "blocked_task_ids is empty",
+        "stale_candidates is empty for target_task_ids"
+      ]
+    },
+    {
+      "id": "verify_post_apply_clean_resolution",
+      "purpose": "Verify the apply JSON and post-apply dry-run JSON together, requiring no active target tasks and fresh evidence.",
+      "command": "cd /home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132/apps/api && PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/verify_stale_task_resolution.py --apply-json /tmp/image_agent_stale_tasks_83_84_apply_<timestamp>.json --resolution-json /tmp/image_agent_stale_tasks_83_84_resolved_dry_run_<timestamp>.json --task-id 83 --task-id 84 --require-empty-active --max-age-hours 24",
+      "requires_operator_authorization": false,
+      "mutates_remote_state": false,
+      "expected_success": [
+        "status=passed",
+        "checked.apply_generated_at_utc is within 24 hours",
+        "checked.resolution_generated_at_utc is within 24 hours",
+        "require_empty_active is satisfied"
+      ]
+    },
+    {
+      "id": "restart_api_preflight_only",
+      "purpose": "Run the restart wrapper through drain and port-owner checks without stopping or starting the API.",
+      "command": "cd /home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132 && IMAGE_AGENT_ROOT=/home/yyf/project/image_agent IMAGE_AGENT_RELEASE_ROOT=/home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132 IMAGE_AGENT_ENV_FILE=/home/yyf/project/image_agent/.env IMAGE_AGENT_SHARED_VENV_BIN=/home/yyf/project/image_agent/apps/api/.venv/bin IMAGE_AGENT_RESTART_PREFLIGHT_ONLY=1 bash tools/restart_remote_image_agent_api.sh",
+      "requires_operator_authorization": false,
+      "mutates_remote_state": false,
+      "expected_success": [
+        "restart_preflight:ok",
+        "no stop_api invocation",
+        "no start_api invocation"
+      ]
+    },
+    {
+      "id": "restart_api_normally",
+      "purpose": "Restart the API from the accepted release overlay after the clean preflight has passed, without active-task override.",
+      "command": "cd /home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132 && IMAGE_AGENT_ROOT=/home/yyf/project/image_agent IMAGE_AGENT_RELEASE_ROOT=/home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132 IMAGE_AGENT_ENV_FILE=/home/yyf/project/image_agent/.env IMAGE_AGENT_SHARED_VENV_BIN=/home/yyf/project/image_agent/apps/api/.venv/bin bash tools/restart_remote_image_agent_api.sh",
+      "requires_operator_authorization": false,
+      "mutates_remote_state": true,
+      "expected_success": [
+        "health check reports app=image_agent",
+        "port owner is the expected Image Agent uvicorn process",
+        "no IMAGE_AGENT_ALLOW_RESTART_WITH_ACTIVE_TASKS override was used"
+      ]
+    },
+    {
+      "id": "run_strict_remote_smoke_acceptance",
+      "purpose": "Run strict remote acceptance with model, real evidence ids, launchability, native QC, and scientific report artifact gates.",
+      "command": "cd /home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132/apps/api && /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/smoke_remote_agent.py --api-base http://127.0.0.1:8000 --require-model --require-deployment-identity --deployment-id <accepted_release_or_commit> --min-documents 60 --min-chunks 200 --require-raw-source-policy --require-vendor-pointer-integrity --require-real-evidence-ids --require-launchability-matrix --require-container-native-qc --min-native-qc-images 1 --require-scientific-report-artifacts --min-scientific-report-images 1 --project-id <project_id> --upload-session-id <upload_session_id> --task-id <completed_task_id> --output-json /tmp/image_agent_remote_smoke_acceptance_<timestamp>.json",
+      "requires_operator_authorization": false,
+      "mutates_remote_state": false,
+      "expected_success": [
+        "model_smoke_status=passed",
+        "deployment_identity_status=passed",
+        "remote_evidence_ids_status=passed",
+        "container_native_qc_status=passed",
+        "scientific_report_artifacts_status=passed",
+        "skipped_missing_model_config is not accepted"
+      ]
+    },
+    {
+      "id": "verify_strict_remote_smoke_acceptance_json",
+      "purpose": "Run the offline verifier against the saved strict smoke JSON so stale or weak evidence cannot open the frontend gate.",
+      "command": "cd /home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132/apps/api && /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/verify_remote_smoke_acceptance.py /tmp/image_agent_remote_smoke_acceptance_<timestamp>.json --max-age-hours 24",
+      "requires_operator_authorization": false,
+      "mutates_remote_state": false,
+      "expected_success": [
+        "status=passed",
+        "checked.generated_at_utc is within 24 hours",
+        "checked.model_smoke_status=passed",
+        "checked.container_native_qc_status=passed",
+        "checked.scientific_report_artifacts_status=passed"
+      ]
+    }
+  ]
+}

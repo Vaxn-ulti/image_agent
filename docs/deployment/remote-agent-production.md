@@ -121,6 +121,22 @@ If the drain gate reports old `queued` or `running` tasks that are not backed by
 running Image Agent containers, audit them before using the override. The
 stale-task tool defaults to read-only dry-run:
 
+For the current tasks `83` and `84` cleanup path, prefer the machine-checkable
+command sequence in `docs/deployment/remote-release-gate-command-plan.json`.
+Before using the plan, verify it locally or on the release overlay with:
+
+```bash
+python apps/api/scripts/verify_release_gate_command_plan.py docs/deployment/remote-release-gate-command-plan.json
+```
+
+That verifier checks the required step order, `approval_fingerprint` guard,
+`--max-age-hours 24`, post-apply `--require-empty-active`, preflight-only
+`restart_preflight:ok`, normal restart without
+`IMAGE_AGENT_ALLOW_RESTART_WITH_ACTIVE_TASKS=1`, strict smoke flags, and the
+final offline `verify_remote_smoke_acceptance.py --max-age-hours 24` check. It
+does not run ssh, apply stale tasks, restart the service, or run smoke by
+itself.
+
 ```bash
 cd /home/yyf/project/image_agent_releases/<accepted-release>/apps/api
 PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/reconcile_stale_tasks.py --max-age-hours 24

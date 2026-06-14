@@ -1874,6 +1874,8 @@ def test_product_readiness_gate_blocks_frontend_until_agent_contracts_are_verifi
         "restart_preflight:ok",
         "remote restart-script test slice reported `6 passed`",
         "preflight-only command still fails at the drain gate",
+        "remote-release-gate-command-plan.json",
+        "verify_release_gate_command_plan.py",
         "verify_stale_task_resolution.py",
         "model_smoke_status=passed",
         "container_native_qc_status=passed",

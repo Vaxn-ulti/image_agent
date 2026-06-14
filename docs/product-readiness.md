@@ -138,5 +138,15 @@ preflight mode and its remote restart-script test slice reported `6 passed`.
 Before stale-task apply, the preflight-only command still fails at the drain gate
 with active tasks `83` and `84`, which confirms the current blocker without
 stopping or starting the API.
+The full post-authorization command sequence is now captured in
+`docs/deployment/remote-release-gate-command-plan.json` and checked by
+`apps/api/scripts/verify_release_gate_command_plan.py`. That machine-checkable
+plan fixes the required order: fresh stale-task approval verification,
+operator-approved apply, post-apply clean dry-run, resolution verification,
+`IMAGE_AGENT_RESTART_PREFLIGHT_ONLY=1` reaching `restart_preflight:ok`, normal
+restart without `IMAGE_AGENT_ALLOW_RESTART_WITH_ACTIVE_TASKS=1`, strict remote
+smoke, and offline strict smoke JSON verification with `--max-age-hours 24`.
+It is an execution plan and guardrail, not evidence that apply, restart, or
+strict smoke acceptance has already happened.
 Once those stale task records are resolved through this approved flow, normal
 restarts should no longer require overriding the active-task drain gate.
