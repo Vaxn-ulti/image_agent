@@ -39,6 +39,7 @@ def test_build_stale_task_apply_request_requires_operator_authorization(tmp_path
     assert request["approval_json"] == str(approval_json)
     assert request["target_task_ids"] == [83, 84]
     assert request["approval_fingerprint"] == payload["approval_fingerprint"]
+    assert request["approval_expires_at_utc"] == "2026-06-13T04:14:24.156875+00:00"
     assert request["verified_approval"]["status"] == "passed"
     assert request["verified_approval"]["checked"]["generated_at_utc"] == payload["generated_at"]
     assert request["must_not_run_until"] == "operator explicitly approves stale-task apply"
@@ -113,3 +114,4 @@ def test_build_stale_task_apply_request_cli_writes_json(tmp_path, capsys):
     assert stdout_report == saved_report
     assert saved_report["status"] == "operator_authorization_required"
     assert saved_report["output_json"] == str(output_json)
+    assert saved_report["approval_expires_at_utc"] == "2026-06-13T04:14:24.156875+00:00"

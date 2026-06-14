@@ -106,6 +106,11 @@ def verify_apply_request(
         max_age_hours=max_age_hours,
         now_utc=now,
     )
+    expires_at_utc = generated_at_utc + timedelta(hours=max_age_hours)
+    _require(
+        request.get("approval_expires_at_utc") == expires_at_utc.isoformat(),
+        "approval_expires_at_utc mismatch",
+    )
 
     apply_step = request.get("apply_step")
     _require(isinstance(apply_step, dict), "apply_step must be present")
@@ -160,7 +165,7 @@ def verify_apply_request(
             "approval_fingerprint": approval_fingerprint,
             "verified_approval_generated_at_utc": generated_at_utc.isoformat(),
             "max_age_hours": float(max_age_hours),
-            "expires_at_utc": (generated_at_utc + timedelta(hours=max_age_hours)).isoformat(),
+            "expires_at_utc": expires_at_utc.isoformat(),
             "followup_step_ids": step_ids,
         },
     }

@@ -105,6 +105,10 @@ def test_verify_stale_task_apply_request_rejects_after_freshness_boundary(tmp_pa
             lambda request: request["required_followup_steps"].pop(3),
             "required follow-up step ids mismatch",
         ),
+        (
+            lambda request: request.update({"approval_expires_at_utc": "2026-06-13T04:14:25+00:00"}),
+            "approval_expires_at_utc mismatch",
+        ),
     ],
 )
 def test_verify_stale_task_apply_request_rejects_unsafe_request(tmp_path, mutate, message):

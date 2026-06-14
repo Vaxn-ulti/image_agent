@@ -4,7 +4,7 @@ import argparse
 import importlib.util
 import json
 from collections.abc import Sequence
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -69,6 +69,10 @@ def build_apply_request(
     )
     task_ids = verified["checked"]["target_task_ids"]
     task_flags = _task_flags(task_ids)
+    approval_generated_at = _parse_utc_timestamp(verified["checked"]["generated_at_utc"])
+    if approval_generated_at is None:
+        raise SystemExit("verified approval generated_at_utc is required")
+    approval_expires_at = approval_generated_at + timedelta(hours=max_age_hours)
     stamp = _timestamp_for_paths(output_timestamp)
     apply_json = f"/tmp/image_agent_stale_tasks_83_84_apply_{stamp}.json"
     resolution_json = f"/tmp/image_agent_stale_tasks_83_84_resolved_dry_run_{stamp}.json"
@@ -137,6 +141,7 @@ def build_apply_request(
         "must_not_run_until": "operator explicitly approves stale-task apply",
         "approval_json": approval_json_text,
         "approval_fingerprint": verified["checked"]["approval_fingerprint"],
+        "approval_expires_at_utc": approval_expires_at.isoformat(),
         "target_task_ids": task_ids,
         "verified_approval": verified,
         "apply_step": {
