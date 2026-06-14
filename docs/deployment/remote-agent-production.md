@@ -136,6 +136,11 @@ That verifier checks the required step order, `approval_fingerprint` guard,
 final offline `verify_remote_smoke_acceptance.py --max-age-hours 24` check. It
 does not run ssh, apply stale tasks, restart the service, or run smoke by
 itself.
+If the recorded approval JSON is missing or older than 24 hours, use the
+plan's `stale_task_approval_refresh` command to generate a fresh read-only
+`reconcile_stale_tasks.py --check-containers --task-id 83 --task-id 84` report,
+then have the operator review the new `approval_fingerprint` before apply. The
+refresh command must not include `--apply`.
 
 ```bash
 cd /home/yyf/project/image_agent_releases/<accepted-release>/apps/api

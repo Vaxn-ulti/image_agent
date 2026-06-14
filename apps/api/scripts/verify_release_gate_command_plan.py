@@ -72,6 +72,55 @@ def _verify_step_shape(step: object, *, expected_id: str, index: int) -> dict:
     return step
 
 
+def _verify_approval_refresh(plan: dict) -> dict:
+    refresh = plan.get("stale_task_approval_refresh")
+    _require(isinstance(refresh, dict), "stale_task_approval_refresh must be present")
+    _require(
+        refresh.get("required_when") == "approval_json_missing_or_older_than_24h",
+        "stale_task_approval_refresh.required_when mismatch",
+    )
+    _require(
+        refresh.get("must_be_operator_reviewed_before_apply") is True,
+        "stale_task_approval_refresh must require operator review before apply",
+    )
+    _require(
+        refresh.get("mutates_remote_state") is False,
+        "stale_task_approval_refresh must be read-only",
+    )
+    _require(
+        refresh.get("output_json_pattern") == "/tmp/image_agent_stale_tasks_83_84_dry_run_<timestamp>.json",
+        "stale_task_approval_refresh.output_json_pattern mismatch",
+    )
+    command = refresh.get("command")
+    _require(isinstance(command, str) and command.strip(), "stale_task_approval_refresh.command must be non-empty")
+    _require("\n" not in command, "stale_task_approval_refresh.command must be single-line")
+    _require("--apply" not in command, "stale_task_approval_refresh.command must not apply")
+    _require(
+        "IMAGE_AGENT_ALLOW_RESTART_WITH_ACTIVE_TASKS=1" not in command,
+        "stale_task_approval_refresh.command must not use active-task restart override",
+    )
+    _require(
+        API_KEY_SHAPED_RE.search(command) is None and "OPENAI_API_KEY" not in command,
+        "stale_task_approval_refresh.command must not expose secrets",
+    )
+    for required in (
+        "reconcile_stale_tasks.py --max-age-hours 24 --check-containers",
+        "--task-id 83 --task-id 84",
+        "> /tmp/image_agent_stale_tasks_83_84_dry_run_<timestamp>.json",
+    ):
+        _require(required in command, f"stale_task_approval_refresh.command must include {required}")
+    _require(
+        refresh.get("next_steps_after_refresh")
+        == [
+            "operator reviews refreshed dry-run JSON and approval_fingerprint",
+            "set approval_json to the refreshed dry-run JSON path",
+            "rerun verify_fresh_stale_task_approval before apply",
+        ],
+        "stale_task_approval_refresh.next_steps_after_refresh mismatch",
+    )
+    return refresh
+
+
 def verify_plan(plan: dict) -> dict:
     _require(plan.get("plan_id") == PLAN_ID, f"plan_id must be {PLAN_ID}")
     _require(plan.get("schema_version") == 1, "schema_version must be 1")
@@ -100,6 +149,7 @@ def verify_plan(plan: dict) -> dict:
         },
         "frontend_gate mismatch",
     )
+    refresh = _verify_approval_refresh(plan)
 
     steps = plan.get("steps")
     _require(isinstance(steps, list), "steps must be a list")
@@ -208,6 +258,7 @@ def verify_plan(plan: dict) -> dict:
             "operator_authorization_required_steps": operator_steps,
             "mutating_steps": mutating_steps,
             "frontend_gate_status": plan["frontend_gate"]["status_until_all_steps_pass"],
+            "approval_refresh_required_when": refresh["required_when"],
         },
     }
 

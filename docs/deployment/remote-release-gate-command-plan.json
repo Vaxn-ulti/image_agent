@@ -22,6 +22,18 @@
     "do_not_use_IMAGE_AGENT_ALLOW_RESTART_WITH_ACTIVE_TASKS",
     "do_not_count_skipped_missing_model_config_as_passed"
   ],
+  "stale_task_approval_refresh": {
+    "required_when": "approval_json_missing_or_older_than_24h",
+    "command": "cd /home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132/apps/api && PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/reconcile_stale_tasks.py --max-age-hours 24 --check-containers --task-id 83 --task-id 84 > /tmp/image_agent_stale_tasks_83_84_dry_run_<timestamp>.json",
+    "output_json_pattern": "/tmp/image_agent_stale_tasks_83_84_dry_run_<timestamp>.json",
+    "must_be_operator_reviewed_before_apply": true,
+    "mutates_remote_state": false,
+    "next_steps_after_refresh": [
+      "operator reviews refreshed dry-run JSON and approval_fingerprint",
+      "set approval_json to the refreshed dry-run JSON path",
+      "rerun verify_fresh_stale_task_approval before apply"
+    ]
+  },
   "steps": [
     {
       "id": "verify_fresh_stale_task_approval",

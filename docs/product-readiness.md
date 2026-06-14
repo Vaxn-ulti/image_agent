@@ -148,6 +148,10 @@ restart without `IMAGE_AGENT_ALLOW_RESTART_WITH_ACTIVE_TASKS=1`, strict remote
 smoke, and offline strict smoke JSON verification with `--max-age-hours 24`.
 It is an execution plan and guardrail, not evidence that apply, restart, or
 strict smoke acceptance has already happened.
+The plan also includes `stale_task_approval_refresh` for
+`approval_json_missing_or_older_than_24h`; that command creates a fresh
+read-only `--check-containers --task-id 83 --task-id 84` dry-run and must be
+operator-reviewed before it replaces the approval JSON used by apply.
 The non-live remote gate verifier overlay has also been refreshed with this
 command plan slice from local commit `dc1bdaf9`; on the remote server,
 `verify_release_gate_command_plan.py docs/deployment/remote-release-gate-command-plan.json`

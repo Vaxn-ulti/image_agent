@@ -80,3 +80,24 @@ def test_remote_release_gate_command_plan_declares_frontend_blocking_invariants(
         "do_not_use_IMAGE_AGENT_ALLOW_RESTART_WITH_ACTIVE_TASKS",
         "do_not_count_skipped_missing_model_config_as_passed",
     ]
+
+
+def test_remote_release_gate_command_plan_includes_approval_refresh_path():
+    plan = json.loads(PLAN_PATH.read_text(encoding="utf-8"))
+    refresh = plan["stale_task_approval_refresh"]
+
+    assert refresh["required_when"] == "approval_json_missing_or_older_than_24h"
+    assert refresh["must_be_operator_reviewed_before_apply"] is True
+    assert refresh["mutates_remote_state"] is False
+    assert refresh["output_json_pattern"] == "/tmp/image_agent_stale_tasks_83_84_dry_run_<timestamp>.json"
+
+    command = refresh["command"]
+    assert "reconcile_stale_tasks.py --max-age-hours 24 --check-containers" in command
+    assert "--task-id 83 --task-id 84" in command
+    assert "--apply" not in command
+    assert "IMAGE_AGENT_ALLOW_RESTART_WITH_ACTIVE_TASKS=1" not in command
+    assert refresh["next_steps_after_refresh"] == [
+        "operator reviews refreshed dry-run JSON and approval_fingerprint",
+        "set approval_json to the refreshed dry-run JSON path",
+        "rerun verify_fresh_stale_task_approval before apply",
+    ]
