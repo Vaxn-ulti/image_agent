@@ -106,6 +106,26 @@ def build_apply_request(
         "IMAGE_AGENT_RESTART_PREFLIGHT_ONLY=1 "
         "bash tools/restart_remote_image_agent_api.sh"
     )
+    restart_normal = (
+        f"cd {REMOTE_OVERLAY_ROOT} && "
+        "IMAGE_AGENT_ROOT=/home/yyf/project/image_agent "
+        f"IMAGE_AGENT_RELEASE_ROOT={REMOTE_OVERLAY_ROOT} "
+        "IMAGE_AGENT_ENV_FILE=/home/yyf/project/image_agent/.env "
+        "IMAGE_AGENT_SHARED_VENV_BIN=/home/yyf/project/image_agent/apps/api/.venv/bin "
+        "bash tools/restart_remote_image_agent_api.sh"
+    )
+    strict_smoke = _api_command(
+        (
+            "scripts/smoke_remote_agent.py --api-base http://127.0.0.1:8000 "
+            "--require-model --require-deployment-identity --deployment-id <accepted_release_or_commit> "
+            "--min-documents 60 --min-chunks 200 --require-raw-source-policy "
+            "--require-vendor-pointer-integrity --require-real-evidence-ids "
+            "--require-launchability-matrix --require-container-native-qc --min-native-qc-images 1 "
+            "--require-scientific-report-artifacts --min-scientific-report-images 1 "
+            "--project-id <project_id> --upload-session-id <upload_session_id> "
+            f"--task-id <completed_task_id> --output-json {strict_smoke_json}"
+        )
+    )
     strict_smoke_verify = _api_command(
         f"scripts/verify_remote_smoke_acceptance.py {strict_smoke_json} --max-age-hours {max_age_hours:g}"
     )
@@ -144,6 +164,18 @@ def build_apply_request(
                 "mutates_remote_state": False,
                 "command": restart_preflight,
                 "expected_success": "restart_preflight:ok",
+            },
+            {
+                "id": "restart_api_normally",
+                "mutates_remote_state": True,
+                "command": restart_normal,
+                "expected_success": "health.app=image_agent",
+            },
+            {
+                "id": "run_strict_remote_smoke_acceptance",
+                "mutates_remote_state": False,
+                "command": strict_smoke,
+                "expected_output_json": strict_smoke_json,
             },
             {
                 "id": "verify_strict_remote_smoke_acceptance_json_after_normal_restart",

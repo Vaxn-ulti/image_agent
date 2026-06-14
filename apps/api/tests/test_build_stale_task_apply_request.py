@@ -72,6 +72,13 @@ def test_build_stale_task_apply_request_includes_post_apply_gates(tmp_path):
     assert "verify_stale_task_resolution.py" in commands
     assert "--require-empty-active --max-age-hours 24" in commands
     assert "IMAGE_AGENT_RESTART_PREFLIGHT_ONLY=1" in commands
+    assert "restart_api_normally" in json.dumps(request)
+    assert "bash tools/restart_remote_image_agent_api.sh" in commands
+    assert "smoke_remote_agent.py" in commands
+    assert "--require-model" in commands
+    assert "--require-real-evidence-ids" in commands
+    assert "--require-container-native-qc" in commands
+    assert "--require-scientific-report-artifacts" in commands
     assert "restart_preflight:ok" in json.dumps(request)
     assert "verify_remote_smoke_acceptance.py" in commands
     assert "--max-age-hours 24" in commands

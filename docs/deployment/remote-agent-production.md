@@ -154,8 +154,10 @@ PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/bui
 
 The resulting `stale_task_apply_approval` JSON includes the reviewed
 `approval_fingerprint`, the exact env-loading apply command, and the required
-post-apply verification gates. It still requires explicit operator approval
-before anyone runs the apply command.
+post-apply verification gates, including clean resolution verification,
+preflight-only restart, normal restart, strict remote smoke, and offline strict
+smoke JSON verification. It still requires explicit operator approval before
+anyone runs the apply command.
 
 ```bash
 cd /home/yyf/project/image_agent_releases/<accepted-release>/apps/api
