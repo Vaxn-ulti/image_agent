@@ -182,6 +182,11 @@ Before approval, check that request with
 `apps/api/scripts/verify_stale_task_apply_request.py`; the verifier must report
 `status=passed` and only statically validates the request JSON without running
 the embedded apply, restart, or smoke commands.
+The non-live remote overlay verified
+`/tmp/image_agent_stale_tasks_83_84_apply_request_20260614T080202Z.json` with
+`verify_stale_task_apply_request.py`; it reported `status=passed`,
+`checked.authorization_required=true`, and
+`checked.verified_approval_generated_at_utc=2026-06-14T08:02:02.843606+00:00`.
 The non-live remote gate verifier overlay has also been refreshed with this
 command plan slice from local commit `dc1bdaf9`; on the remote server,
 `verify_release_gate_command_plan.py docs/deployment/remote-release-gate-command-plan.json`
