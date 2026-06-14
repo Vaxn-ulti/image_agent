@@ -162,6 +162,10 @@ approval verifier reported `status=passed`,
 `checked.container_check_status=passed`,
 `checked.running_container_task_ids=[]`, and the same approval fingerprint
 `139113571daf0137a3e34be526fd25ccaa8066aed725ab7c0b846cfc7eb3abd0`.
+The non-live remote gate verifier overlay was refreshed with local commit
+`dc5e9471`; its command-plan verifier reported `status=passed` against the new
+approval JSON path, and the focused remote readiness test slice reported
+`6 passed`.
 The non-live remote gate verifier overlay has also been refreshed with this
 command plan slice from local commit `dc1bdaf9`; on the remote server,
 `verify_release_gate_command_plan.py docs/deployment/remote-release-gate-command-plan.json`
