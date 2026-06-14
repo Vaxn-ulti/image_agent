@@ -6,6 +6,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PLAN_PATH = REPO_ROOT / "docs" / "deployment" / "remote-release-gate-command-plan.json"
 SCRIPT_PATH = REPO_ROOT / "apps" / "api" / "scripts" / "verify_release_gate_command_plan.py"
+CURRENT_APPROVAL_JSON = "/tmp/image_agent_stale_tasks_83_84_dry_run_20260614T080202Z.json"
 
 
 def load_verifier():
@@ -49,7 +50,7 @@ def test_remote_release_gate_command_plan_orders_safe_remote_acceptance_steps():
     ]
 
     commands = "\n".join(step["command"] for step in plan["steps"])
-    assert "--approval-json /tmp/image_agent_stale_tasks_83_84_dry_run_20260613T1640Z.json" in commands
+    assert f"--approval-json {CURRENT_APPROVAL_JSON}" in commands
     assert "approval_fingerprint" in json.dumps(plan, sort_keys=True)
     assert "--check-containers --task-id 83 --task-id 84" in commands
     assert "--require-empty-active --max-age-hours 24" in commands
@@ -101,3 +102,18 @@ def test_remote_release_gate_command_plan_includes_approval_refresh_path():
         "set approval_json to the refreshed dry-run JSON path",
         "rerun verify_fresh_stale_task_approval before apply",
     ]
+
+
+def test_remote_release_gate_reconcile_commands_load_remote_env_for_docker_checks():
+    plan = json.loads(PLAN_PATH.read_text(encoding="utf-8"))
+    env_prefix = "set -a; . /home/yyf/project/image_agent/.env; set +a;"
+
+    refresh_command = plan["stale_task_approval_refresh"]["command"]
+    assert env_prefix in refresh_command
+
+    commands_by_step = {step["id"]: step["command"] for step in plan["steps"]}
+    for step_id in (
+        "apply_approved_stale_task_resolution",
+        "collect_post_apply_clean_dry_run",
+    ):
+        assert env_prefix in commands_by_step[step_id]

@@ -9,6 +9,8 @@ from pathlib import Path
 
 PLAN_ID = "remote_release_gate_after_stale_task_approval_v1"
 API_KEY_SHAPED_RE = re.compile(r"sk-[A-Za-z0-9_-]{10,}")
+REMOTE_ENV_LOAD_SNIPPET = "set -a; . /home/yyf/project/image_agent/.env; set +a;"
+CURRENT_APPROVAL_JSON = "/tmp/image_agent_stale_tasks_83_84_dry_run_20260614T080202Z.json"
 
 EXPECTED_STEP_IDS = [
     "verify_fresh_stale_task_approval",
@@ -104,6 +106,7 @@ def _verify_approval_refresh(plan: dict) -> dict:
         "stale_task_approval_refresh.command must not expose secrets",
     )
     for required in (
+        REMOTE_ENV_LOAD_SNIPPET,
         "reconcile_stale_tasks.py --max-age-hours 24 --check-containers",
         "--task-id 83 --task-id 84",
         "> /tmp/image_agent_stale_tasks_83_84_dry_run_<timestamp>.json",
@@ -132,7 +135,7 @@ def verify_plan(plan: dict) -> dict:
         "release_overlay must point at the prepared remote verifier overlay",
     )
     _require(
-        plan.get("approval_json") == "/tmp/image_agent_stale_tasks_83_84_dry_run_20260613T1640Z.json",
+        plan.get("approval_json") == CURRENT_APPROVAL_JSON,
         "approval_json must point at the reviewed fresh dry-run evidence",
     )
     _require(plan.get("target_task_ids") == [83, 84], "target_task_ids must be [83, 84]")
@@ -162,17 +165,27 @@ def verify_plan(plan: dict) -> dict:
 
     _require_command_contains(
         commands_by_step["verify_fresh_stale_task_approval"],
-        "verify_stale_task_approval.py /tmp/image_agent_stale_tasks_83_84_dry_run_20260613T1640Z.json --task-id 83 --task-id 84 --max-age-hours 24",
+        f"verify_stale_task_approval.py {CURRENT_APPROVAL_JSON} --task-id 83 --task-id 84 --max-age-hours 24",
         step_id="verify_fresh_stale_task_approval",
     )
     _require_command_contains(
         commands_by_step["apply_approved_stale_task_resolution"],
-        "reconcile_stale_tasks.py --apply --max-age-hours 24 --task-id 83 --task-id 84 --approval-json /tmp/image_agent_stale_tasks_83_84_dry_run_20260613T1640Z.json",
+        f"reconcile_stale_tasks.py --apply --max-age-hours 24 --task-id 83 --task-id 84 --approval-json {CURRENT_APPROVAL_JSON}",
+        step_id="apply_approved_stale_task_resolution",
+    )
+    _require_command_contains(
+        commands_by_step["apply_approved_stale_task_resolution"],
+        REMOTE_ENV_LOAD_SNIPPET,
         step_id="apply_approved_stale_task_resolution",
     )
     _require_command_contains(
         commands_by_step["collect_post_apply_clean_dry_run"],
         "reconcile_stale_tasks.py --max-age-hours 24 --check-containers --task-id 83 --task-id 84",
+        step_id="collect_post_apply_clean_dry_run",
+    )
+    _require_command_contains(
+        commands_by_step["collect_post_apply_clean_dry_run"],
+        REMOTE_ENV_LOAD_SNIPPET,
         step_id="collect_post_apply_clean_dry_run",
     )
     _require_command_contains(

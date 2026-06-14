@@ -140,7 +140,10 @@ If the recorded approval JSON is missing or older than 24 hours, use the
 plan's `stale_task_approval_refresh` command to generate a fresh read-only
 `reconcile_stale_tasks.py --check-containers --task-id 83 --task-id 84` report,
 then have the operator review the new `approval_fingerprint` before apply. The
-refresh command must not include `--apply`.
+refresh command must not include `--apply`. The refresh, apply, and post-apply
+dry-run commands must load the remote `.env` first with
+`set -a; . /home/yyf/project/image_agent/.env; set +a`, because Docker label
+checks require `IMAGE_AGENT_SUDO_PASSWORD`.
 
 ```bash
 cd /home/yyf/project/image_agent_releases/<accepted-release>/apps/api

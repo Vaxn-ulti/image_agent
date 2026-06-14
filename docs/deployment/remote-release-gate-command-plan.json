@@ -5,7 +5,7 @@
   "remote_host": "yyf@10.2.32.14",
   "remote_project_root": "/home/yyf/project/image_agent",
   "release_overlay": "/home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132",
-  "approval_json": "/tmp/image_agent_stale_tasks_83_84_dry_run_20260613T1640Z.json",
+  "approval_json": "/tmp/image_agent_stale_tasks_83_84_dry_run_20260614T080202Z.json",
   "target_task_ids": [
     83,
     84
@@ -24,7 +24,7 @@
   ],
   "stale_task_approval_refresh": {
     "required_when": "approval_json_missing_or_older_than_24h",
-    "command": "cd /home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132/apps/api && PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/reconcile_stale_tasks.py --max-age-hours 24 --check-containers --task-id 83 --task-id 84 > /tmp/image_agent_stale_tasks_83_84_dry_run_<timestamp>.json",
+    "command": "cd /home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132/apps/api && set -a; . /home/yyf/project/image_agent/.env; set +a; PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/reconcile_stale_tasks.py --max-age-hours 24 --check-containers --task-id 83 --task-id 84 > /tmp/image_agent_stale_tasks_83_84_dry_run_<timestamp>.json",
     "output_json_pattern": "/tmp/image_agent_stale_tasks_83_84_dry_run_<timestamp>.json",
     "must_be_operator_reviewed_before_apply": true,
     "mutates_remote_state": false,
@@ -38,7 +38,7 @@
     {
       "id": "verify_fresh_stale_task_approval",
       "purpose": "Verify the reviewed dry-run JSON for tasks 83 and 84 is fresh and still carries the reviewed approval_fingerprint before any mutation.",
-      "command": "cd /home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132/apps/api && PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/verify_stale_task_approval.py /tmp/image_agent_stale_tasks_83_84_dry_run_20260613T1640Z.json --task-id 83 --task-id 84 --max-age-hours 24",
+      "command": "cd /home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132/apps/api && PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/verify_stale_task_approval.py /tmp/image_agent_stale_tasks_83_84_dry_run_20260614T080202Z.json --task-id 83 --task-id 84 --max-age-hours 24",
       "requires_operator_authorization": false,
       "mutates_remote_state": false,
       "expected_success": [
@@ -50,20 +50,20 @@
     {
       "id": "apply_approved_stale_task_resolution",
       "purpose": "After explicit operator authorization, mark only stale active task rows 83 and 84 as failed using the reviewed approval JSON.",
-      "command": "cd /home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132/apps/api && PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/reconcile_stale_tasks.py --apply --max-age-hours 24 --task-id 83 --task-id 84 --approval-json /tmp/image_agent_stale_tasks_83_84_dry_run_20260613T1640Z.json --reason \"operator confirmed no matching running Image Agent container\" > /tmp/image_agent_stale_tasks_83_84_apply_<timestamp>.json",
+      "command": "cd /home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132/apps/api && set -a; . /home/yyf/project/image_agent/.env; set +a; PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/reconcile_stale_tasks.py --apply --max-age-hours 24 --task-id 83 --task-id 84 --approval-json /tmp/image_agent_stale_tasks_83_84_dry_run_20260614T080202Z.json --reason \"operator confirmed no matching running Image Agent container\" > /tmp/image_agent_stale_tasks_83_84_apply_<timestamp>.json",
       "requires_operator_authorization": true,
       "mutates_remote_state": true,
       "expected_success": [
         "mode=apply",
         "updated_task_ids contains exactly 83 and 84",
-        "approval_fingerprint matches /tmp/image_agent_stale_tasks_83_84_dry_run_20260613T1640Z.json",
+        "approval_fingerprint matches /tmp/image_agent_stale_tasks_83_84_dry_run_20260614T080202Z.json",
         "running_container_task_ids is empty"
       ]
     },
     {
       "id": "collect_post_apply_clean_dry_run",
       "purpose": "Collect a second scoped read-only dry-run after apply to prove the targeted active tasks are no longer blocking restart.",
-      "command": "cd /home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132/apps/api && PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/reconcile_stale_tasks.py --max-age-hours 24 --check-containers --task-id 83 --task-id 84 > /tmp/image_agent_stale_tasks_83_84_resolved_dry_run_<timestamp>.json",
+      "command": "cd /home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132/apps/api && set -a; . /home/yyf/project/image_agent/.env; set +a; PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/reconcile_stale_tasks.py --max-age-hours 24 --check-containers --task-id 83 --task-id 84 > /tmp/image_agent_stale_tasks_83_84_resolved_dry_run_<timestamp>.json",
       "requires_operator_authorization": false,
       "mutates_remote_state": false,
       "expected_success": [

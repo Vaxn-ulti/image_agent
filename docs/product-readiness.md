@@ -152,6 +152,16 @@ The plan also includes `stale_task_approval_refresh` for
 `approval_json_missing_or_older_than_24h`; that command creates a fresh
 read-only `--check-containers --task-id 83 --task-id 84` dry-run and must be
 operator-reviewed before it replaces the approval JSON used by apply.
+The refresh/apply/post-apply dry-run commands now load the remote environment
+with `set -a; . /home/yyf/project/image_agent/.env; set +a` before Docker label
+checks, because `IMAGE_AGENT_SUDO_PASSWORD` is required for those checks. A
+fresh read-only approval refresh on 2026-06-14 saved
+`/tmp/image_agent_stale_tasks_83_84_dry_run_20260614T080202Z.json`; the remote
+approval verifier reported `status=passed`,
+`checked.generated_at_utc=2026-06-14T08:02:02.843606+00:00`,
+`checked.container_check_status=passed`,
+`checked.running_container_task_ids=[]`, and the same approval fingerprint
+`139113571daf0137a3e34be526fd25ccaa8066aed725ab7c0b846cfc7eb3abd0`.
 The non-live remote gate verifier overlay has also been refreshed with this
 command plan slice from local commit `dc1bdaf9`; on the remote server,
 `verify_release_gate_command_plan.py docs/deployment/remote-release-gate-command-plan.json`
