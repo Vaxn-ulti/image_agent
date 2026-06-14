@@ -1883,6 +1883,8 @@ def test_product_readiness_gate_blocks_frontend_until_agent_contracts_are_verifi
         "build_stale_task_apply_request.py",
         "verify_stale_task_apply_request.py",
         "stale_task_apply_approval",
+        "approval_expires_at_utc",
+        "2026-06-15T08:02:02.843606+00:00",
         "/tmp/image_agent_stale_tasks_83_84_apply_request_20260614T080202Z.json",
         "restart_api_normally",
         "run_strict_remote_smoke_acceptance",

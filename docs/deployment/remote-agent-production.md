@@ -156,8 +156,10 @@ The resulting `stale_task_apply_approval` JSON includes the reviewed
 `approval_fingerprint`, the exact env-loading apply command, and the required
 post-apply verification gates, including clean resolution verification,
 preflight-only restart, normal restart, strict remote smoke, and offline strict
-smoke JSON verification. It still requires explicit operator approval before
-anyone runs the apply command.
+smoke JSON verification. It also includes `approval_expires_at_utc`, which is
+computed from the reviewed evidence timestamp and the selected freshness limit
+so the operator can see the approval expiry without recomputing it manually. It
+still requires explicit operator approval before anyone runs the apply command.
 Before asking for approval, verify that request JSON:
 
 ```bash
