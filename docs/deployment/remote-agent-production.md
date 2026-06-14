@@ -158,6 +158,14 @@ post-apply verification gates, including clean resolution verification,
 preflight-only restart, normal restart, strict remote smoke, and offline strict
 smoke JSON verification. It still requires explicit operator approval before
 anyone runs the apply command.
+Before asking for approval, verify that request JSON:
+
+```bash
+PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/verify_stale_task_apply_request.py /tmp/image_agent_stale_tasks_83_84_apply_request_<timestamp>.json --task-id 83 --task-id 84 --max-age-hours 24
+```
+
+The verifier must print `status=passed`; it does not execute the embedded
+apply, restart, or smoke commands.
 
 ```bash
 cd /home/yyf/project/image_agent_releases/<accepted-release>/apps/api

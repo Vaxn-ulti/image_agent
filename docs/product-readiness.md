@@ -178,6 +178,10 @@ The non-live remote overlay generated an actual approval request at
 `request_type=stale_task_apply_approval`,
 `authorization_required=true`, and follow-up ids including
 `restart_api_normally` and `run_strict_remote_smoke_acceptance`.
+Before approval, check that request with
+`apps/api/scripts/verify_stale_task_apply_request.py`; the verifier must report
+`status=passed` and only statically validates the request JSON without running
+the embedded apply, restart, or smoke commands.
 The non-live remote gate verifier overlay has also been refreshed with this
 command plan slice from local commit `dc1bdaf9`; on the remote server,
 `verify_release_gate_command_plan.py docs/deployment/remote-release-gate-command-plan.json`

@@ -1881,6 +1881,7 @@ def test_product_readiness_gate_blocks_frontend_until_agent_contracts_are_verifi
         "remote-release-gate-command-plan.json",
         "verify_release_gate_command_plan.py",
         "build_stale_task_apply_request.py",
+        "verify_stale_task_apply_request.py",
         "stale_task_apply_approval",
         "/tmp/image_agent_stale_tasks_83_84_apply_request_20260614T080202Z.json",
         "restart_api_normally",
