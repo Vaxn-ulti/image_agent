@@ -148,5 +148,13 @@ restart without `IMAGE_AGENT_ALLOW_RESTART_WITH_ACTIVE_TASKS=1`, strict remote
 smoke, and offline strict smoke JSON verification with `--max-age-hours 24`.
 It is an execution plan and guardrail, not evidence that apply, restart, or
 strict smoke acceptance has already happened.
+The non-live remote gate verifier overlay has also been refreshed with this
+command plan slice from local commit `dc1bdaf9`; on the remote server,
+`verify_release_gate_command_plan.py docs/deployment/remote-release-gate-command-plan.json`
+reported `status=passed`, and the focused remote test slice
+`tests/test_release_gate_command_plan.py` plus the product-readiness gate test
+reported `4 passed`. This proves the operator command plan is present and
+machine-checkable on the remote verifier overlay, but it still does not mutate
+tasks, restart the service, or run strict smoke acceptance.
 Once those stale task records are resolved through this approved flow, normal
 restarts should no longer require overriding the active-task drain gate.
