@@ -173,6 +173,11 @@ records the reviewed `approval_fingerprint`, exact env-loading apply command,
 required post-apply clean verification, preflight-only restart, normal restart,
 strict remote smoke, offline strict smoke JSON verification, and
 `authorization_required=true`; generating it does not run `--apply`.
+The non-live remote overlay generated an actual approval request at
+`/tmp/image_agent_stale_tasks_83_84_apply_request_20260614T080202Z.json` with
+`request_type=stale_task_apply_approval`,
+`authorization_required=true`, and follow-up ids including
+`restart_api_normally` and `run_strict_remote_smoke_acceptance`.
 The non-live remote gate verifier overlay has also been refreshed with this
 command plan slice from local commit `dc1bdaf9`; on the remote server,
 `verify_release_gate_command_plan.py docs/deployment/remote-release-gate-command-plan.json`
