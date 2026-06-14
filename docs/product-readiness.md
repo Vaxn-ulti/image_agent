@@ -166,6 +166,12 @@ The non-live remote gate verifier overlay was refreshed with local commit
 `dc5e9471`; its command-plan verifier reported `status=passed` against the new
 approval JSON path, and the focused remote readiness test slice reported
 `6 passed`.
+Before the operator-approved mutation, use
+`apps/api/scripts/build_stale_task_apply_request.py` to turn the verified
+approval dry-run into a `stale_task_apply_approval` JSON handoff. That request
+records the reviewed `approval_fingerprint`, exact env-loading apply command,
+required post-apply gates, and `authorization_required=true`; generating it
+does not run `--apply`.
 The non-live remote gate verifier overlay has also been refreshed with this
 command plan slice from local commit `dc1bdaf9`; on the remote server,
 `verify_release_gate_command_plan.py docs/deployment/remote-release-gate-command-plan.json`

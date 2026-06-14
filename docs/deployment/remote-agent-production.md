@@ -145,6 +145,18 @@ dry-run commands must load the remote `.env` first with
 `set -a; . /home/yyf/project/image_agent/.env; set +a`, because Docker label
 checks require `IMAGE_AGENT_SUDO_PASSWORD`.
 
+To prepare the human approval handoff without mutating task rows, build a
+machine-readable apply request from the verified dry-run JSON:
+
+```bash
+PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/build_stale_task_apply_request.py /tmp/image_agent_stale_tasks_83_84_dry_run_<timestamp>.json --task-id 83 --task-id 84 --max-age-hours 24 --output-json /tmp/image_agent_stale_tasks_83_84_apply_request_<timestamp>.json
+```
+
+The resulting `stale_task_apply_approval` JSON includes the reviewed
+`approval_fingerprint`, the exact env-loading apply command, and the required
+post-apply verification gates. It still requires explicit operator approval
+before anyone runs the apply command.
+
 ```bash
 cd /home/yyf/project/image_agent_releases/<accepted-release>/apps/api
 PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/reconcile_stale_tasks.py --max-age-hours 24

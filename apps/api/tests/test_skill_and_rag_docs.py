@@ -1880,6 +1880,8 @@ def test_product_readiness_gate_blocks_frontend_until_agent_contracts_are_verifi
         "preflight-only command still fails at the drain gate",
         "remote-release-gate-command-plan.json",
         "verify_release_gate_command_plan.py",
+        "build_stale_task_apply_request.py",
+        "stale_task_apply_approval",
         "verify_stale_task_resolution.py",
         "model_smoke_status=passed",
         "container_native_qc_status=passed",
