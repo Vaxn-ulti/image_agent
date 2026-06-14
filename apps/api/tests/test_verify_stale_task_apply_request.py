@@ -49,6 +49,7 @@ def test_verify_stale_task_apply_request_accepts_complete_request(tmp_path):
     assert report["checked"]["authorization_required"] is True
     assert report["checked"]["target_task_ids"] == [83, 84]
     assert report["checked"]["approval_fingerprint"] == request["approval_fingerprint"]
+    assert report["checked"]["expires_at_utc"] == "2026-06-13T04:14:24.156875+00:00"
     assert report["checked"]["followup_step_ids"] == [
         "collect_post_apply_clean_dry_run",
         "verify_post_apply_clean_resolution",
@@ -57,6 +58,36 @@ def test_verify_stale_task_apply_request_accepts_complete_request(tmp_path):
         "run_strict_remote_smoke_acceptance",
         "verify_strict_remote_smoke_acceptance_json_after_normal_restart",
     ]
+
+
+def test_verify_stale_task_apply_request_accepts_exact_freshness_boundary(tmp_path):
+    verifier = load_verifier()
+    request = _request_payload(tmp_path)
+
+    report = verifier.verify_apply_request(
+        request,
+        expected_task_ids=[83, 84],
+        max_age_hours=24,
+        now_utc="2026-06-13T04:14:24.156875Z",
+    )
+
+    assert report["status"] == "passed"
+    assert report["checked"]["expires_at_utc"] == "2026-06-13T04:14:24.156875+00:00"
+
+
+def test_verify_stale_task_apply_request_rejects_after_freshness_boundary(tmp_path):
+    verifier = load_verifier()
+    request = _request_payload(tmp_path)
+
+    with pytest.raises(SystemExit) as exc:
+        verifier.verify_apply_request(
+            request,
+            expected_task_ids=[83, 84],
+            max_age_hours=24,
+            now_utc="2026-06-13T04:14:25Z",
+        )
+
+    assert "verified approval generated_at_utc is older than max_age_hours" in str(exc.value)
 
 
 @pytest.mark.parametrize(
@@ -114,3 +145,4 @@ def test_verify_stale_task_apply_request_cli_prints_passed_report(tmp_path, caps
     report = json.loads(capsys.readouterr().out)
     assert report["status"] == "passed"
     assert report["source_json"] == str(request_path)
+    assert report["checked"]["expires_at_utc"] == "2026-06-13T04:14:24.156875+00:00"

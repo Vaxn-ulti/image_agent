@@ -4,7 +4,7 @@ import argparse
 import json
 import re
 from collections.abc import Sequence
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -160,6 +160,7 @@ def verify_apply_request(
             "approval_fingerprint": approval_fingerprint,
             "verified_approval_generated_at_utc": generated_at_utc.isoformat(),
             "max_age_hours": float(max_age_hours),
+            "expires_at_utc": (generated_at_utc + timedelta(hours=max_age_hours)).isoformat(),
             "followup_step_ids": step_ids,
         },
     }
