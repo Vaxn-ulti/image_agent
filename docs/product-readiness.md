@@ -190,6 +190,11 @@ The non-live remote overlay verified
 `checked.authorization_required=true`, and
 `checked.verified_approval_generated_at_utc=2026-06-14T08:02:02.843606+00:00`,
 with `checked.expires_at_utc=2026-06-15T08:02:02.843606+00:00`.
+That expiry is computed from `verified_approval.checked.generated_at_utc +
+freshness_hours` and is also repeated as the top-level
+`approval_expires_at_utc` field in the saved apply request.
+The release plan records the same rule as `approval_request_requirements` so
+the approval request shape stays machine-checkable.
 The non-live remote gate verifier overlay has also been refreshed with this
 command plan slice from local commit `dc1bdaf9`; on the remote server,
 `verify_release_gate_command_plan.py docs/deployment/remote-release-gate-command-plan.json`

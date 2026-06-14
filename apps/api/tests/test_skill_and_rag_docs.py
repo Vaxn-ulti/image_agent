@@ -1310,6 +1310,19 @@ def test_remote_stale_task_verifier_commands_require_freshness_override():
         assert phrase in combined
 
 
+def test_remote_stale_task_apply_request_docs_expose_expiry_field():
+    production_doc = (REPO_ROOT / "docs" / "deployment" / "remote-agent-production.md").read_text(encoding="utf-8")
+    readiness_doc = (REPO_ROOT / "docs" / "product-readiness.md").read_text(encoding="utf-8")
+
+    for phrase in (
+        "approval_expires_at_utc",
+        "verified_approval.checked.generated_at_utc + freshness_hours",
+        "checked.expires_at_utc",
+        "approval_request_requirements",
+    ):
+        assert phrase in production_doc or phrase in readiness_doc
+
+
 def test_remote_script_timeout_and_log_safety_are_documented_for_agent_use():
     paths = [
         REPO_ROOT / "docs" / "deployment" / "remote-agent-production.md",
