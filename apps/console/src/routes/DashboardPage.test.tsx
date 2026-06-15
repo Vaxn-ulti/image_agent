@@ -1,22 +1,33 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { api } from '../lib/api';
-import { mockSeries, mockTasks } from '../mocks/data';
+import { mockSeries, mockT1Summary, mockTasks } from '../mocks/data';
 import { DashboardPage } from './DashboardPage';
 
 vi.mock('../lib/api', () => ({
   api: {
+    getResultSummary: vi.fn(),
+    listWorkflows: vi.fn(),
     listProjectTasks: vi.fn(),
     listSeries: vi.fn(),
+    runSeries: vi.fn(),
+    uploadDicom: vi.fn(),
+    uploadNifti: vi.fn(),
+    chat: vi.fn(),
   },
 }));
 
 describe('DashboardPage', () => {
-  it('renders project overview, modality readiness, and result coverage', async () => {
-    vi.mocked(api.listProjectTasks).mockResolvedValue(mockTasks);
-    vi.mocked(api.listSeries).mockResolvedValue(mockSeries);
+  it('uses the backend upload contract and refreshes detected series after upload', async () => {
+    vi.mocked(api.getResultSummary).mockResolvedValue(mockT1Summary);
+    vi.mocked(api.listWorkflows).mockResolvedValue({ workflows: ['t1_deepprep'] });
+    vi.mocked(api.listProjectTasks).mockResolvedValue([]);
+    vi.mocked(api.listSeries).mockResolvedValueOnce([]).mockResolvedValue([mockSeries[0]]);
+    vi.mocked(api.uploadNifti).mockResolvedValue({ file: {}, series: mockSeries[0] });
+    vi.mocked(api.chat).mockResolvedValue({ reply: 'Upload guidance.' });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
     render(
@@ -29,11 +40,60 @@ describe('DashboardPage', () => {
       </QueryClientProvider>,
     );
 
-    expect(await screen.findByRole('heading', { name: 'Overview' })).toBeInTheDocument();
-    expect(await screen.findByText('Modality readiness')).toBeInTheDocument();
-    expect(await screen.findByText('Result coverage')).toBeInTheDocument();
-    expect(await screen.findAllByText('T1')).toHaveLength(1);
-    expect(await screen.findAllByText('BOLD')).toHaveLength(1);
-    expect(await screen.findAllByText('DWI')).toHaveLength(1);
+    const uploadInput = await screen.findByLabelText('Upload DICOM or NIfTI files');
+    expect(uploadInput).toHaveAttribute('accept', '.nii,.nii.gz,.zip');
+
+    await userEvent.upload(uploadInput, new File(['nifti'], 'sub-01_T1w.nii.gz'));
+
+    expect(api.uploadNifti).toHaveBeenCalledWith(13, expect.any(File));
+    expect(await screen.findByText(/I found 1 brain MRI scan/)).toBeInTheDocument();
+    expect(await screen.findByText(/Pipeline: t1_deepprep/)).toBeInTheDocument();
+  });
+
+  it('renders the processing console with backend-backed upload, workflow, run, and result sections', async () => {
+    vi.mocked(api.getResultSummary).mockResolvedValue(mockT1Summary);
+    vi.mocked(api.listWorkflows).mockResolvedValue({ workflows: ['t1_deepprep', 'bold_second_level', 'dwi_fast_gpu_dti'] });
+    vi.mocked(api.listProjectTasks).mockResolvedValue(mockTasks);
+    vi.mocked(api.listSeries).mockResolvedValue(mockSeries);
+    vi.mocked(api.runSeries).mockResolvedValue({ id: 130, progress: 0, project_id: 13, series_id: 22, status: 'queued', workflow_type: 't1_deepprep' });
+    vi.mocked(api.chat).mockResolvedValue({ reply: 'I can help you with that.' });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/projects/13/dashboard']}>
+          <Routes>
+            <Route element={<DashboardPage />} path="/projects/:projectId/dashboard" />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Brain Imaging Processing Agent' })).toBeInTheDocument();
+    expect(screen.getByText('Upload Data')).toBeInTheDocument();
+    expect(screen.getByText('Workflow Status')).toBeInTheDocument();
+    expect(screen.getByText('Pipeline Parameters')).toBeInTheDocument();
+    expect(screen.getByText('Recent Runs')).toBeInTheDocument();
+    expect(screen.getByText('Results Preview')).toBeInTheDocument();
+    expect(screen.getByLabelText('Upload DICOM or NIfTI files')).toBeInTheDocument();
+    expect(await screen.findByText('RUN-41')).toBeInTheDocument();
+    expect(await screen.findByText('reports/t1_brain_measures_overview.png')).toBeInTheDocument();
+
+    // Verify chat elements
+    expect(screen.getByPlaceholderText('Ask the agent...')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Explain this step' })).toBeInTheDocument();
+
+    // Test quick action
+    await userEvent.click(screen.getByRole('button', { name: 'Explain this step' }));
+    expect(api.chat).toHaveBeenCalledWith(13, 'Explain this step');
+
+    // Test typed message
+    const input = screen.getByPlaceholderText('Ask the agent...');
+    await userEvent.type(input, 'Tell me more{enter}');
+    expect(api.chat).toHaveBeenCalledWith(13, 'Tell me more');
+
+    // Test original run behavior
+    await userEvent.click(screen.getByRole('button', { name: 'Start recommended pipeline' }));
+    expect(api.runSeries).toHaveBeenCalledWith(22, 't1_deepprep');
   });
 });

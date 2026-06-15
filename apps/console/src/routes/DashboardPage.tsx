@@ -1,86 +1,699 @@
-import { useQuery } from '@tanstack/react-query';
-import { Database, FileText, ListChecks } from 'lucide-react';
-import { useParams } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  Activity,
+  BarChart2,
+  Brain,
+  CheckCircle2,
+  ChevronDown,
+  Download,
+  ExternalLink,
+  Eye,
+  Info,
+  Play,
+  RotateCcw,
+  Send,
+  SlidersHorizontal,
+  Trash2,
+  UploadCloud,
+  Workflow,
+} from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import { StatusBadge } from '../components/StatusBadge';
-import { MetricBlock } from '../components/ui/MetricBlock';
-import { PageHeader } from '../components/ui/PageHeader';
-import { Panel, PanelBody, PanelHeader, PanelTitle } from '../components/ui/Panel';
+import { Button } from '../components/ui/Button';
 import { api } from '../lib/api';
 import { queryKeys } from '../lib/query';
+import type { OutputItem, ResultSummary, Series, Task } from '../lib/types';
+import { getWorkflowEligibility, normalizeWorkflowList, workflowGroup } from '../lib/workflows';
+
+const previewScans = [
+  { alt: 'T1w axial MRI preview', src: '/neuro-assets/mri-axial.png', title: 'T1w (Axial)' },
+  { alt: 'T1w sagittal MRI preview', src: '/neuro-assets/mri-sagittal.png', title: 'T1w (Sagittal)' },
+  { alt: 'T1w coronal MRI preview', src: '/neuro-assets/mri-coronal.png', title: 'T1w (Coronal)' },
+  { alt: 'Axial tissue segmentation preview', src: '/neuro-assets/mri-segmentation.png', title: 'Segmentation (Axial)' },
+];
+
+const legend = [
+  { label: 'Background', color: 'bg-slate-700' },
+  { label: 'Gray Matter', color: 'bg-emerald-600' },
+  { label: 'White Matter', color: 'bg-emerald-200' },
+  { label: 'CSF', color: 'bg-blue-400' },
+  { label: 'Deep Gray Matter', color: 'bg-fuchsia-500' },
+  { label: 'Brainstem', color: 'bg-rose-400' },
+  { label: 'Cerebellum', color: 'bg-pink-500' },
+  { label: 'Other', color: 'bg-slate-200' },
+];
+
+function completedTask(task: Task) {
+  return task.status === 'completed' || task.status === 'completed_with_partial_failures';
+}
+
+function activeTask(task: Task) {
+  return task.status === 'queued' || task.status === 'running';
+}
+
+function taskTimestamp(task: Task) {
+  return task.finished_at || task.started_at || task.created_at || '';
+}
+
+function latestCompletedTask(tasks: Task[]) {
+  return [...tasks].filter(completedTask).sort((a, b) => taskTimestamp(b).localeCompare(taskTimestamp(a)) || b.id - a.id)[0];
+}
+
+function defaultWorkflowForSeries(series: Series | undefined, workflows: string[]) {
+  if (!series) return workflows[0] || '';
+  const sameModality = workflows.find((workflow) => workflowGroup(workflow) === series.modality);
+  return sameModality || workflows[0] || '';
+}
+
+function flattenOutputs(summary: ResultSummary | undefined): OutputItem[] {
+  if (!summary) return [];
+  return Object.values(summary.outputs).flatMap((group) => (Array.isArray(group) ? group : Object.values(group).flat()));
+}
+
+function formatCompleted(task: Task) {
+  const raw = task.finished_at || task.started_at || task.created_at;
+  if (!raw) return task.status === 'running' ? 'Running now' : '--';
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(raw));
+}
+
+function selectFileUpload(projectId: number, file: File) {
+  const name = file.name.toLowerCase();
+  if (name.endsWith('.zip')) {
+    return api.uploadDicom(projectId, file);
+  }
+  return api.uploadNifti(projectId, file);
+}
 
 export function DashboardPage() {
   const projectId = Number(useParams().projectId);
-  const { data: series = [] } = useQuery({ enabled: Boolean(projectId), queryFn: () => api.listSeries(projectId), queryKey: queryKeys.series(projectId) });
-  const { data: tasks = [] } = useQuery({ enabled: Boolean(projectId), queryFn: () => api.listProjectTasks(projectId), queryKey: queryKeys.tasks(projectId) });
+  const queryClient = useQueryClient();
+  const [error, setError] = useState('');
+  const [selectedSeriesId, setSelectedSeriesId] = useState<number | null>(null);
+  const [selectedWorkflow, setSelectedWorkflow] = useState('');
+  const [skullStripping, setSkullStripping] = useState(true);
+  const [biasCorrection, setBiasCorrection] = useState(true);
+  const [chatInput, setChatInput] = useState('');
+  const [messages, setMessages] = useState<{ role: 'user' | 'agent'; content: string; meta?: string }[]>([]);
 
-  const active = tasks.filter((task) => task.status === 'queued' || task.status === 'running').length;
-  const completed = tasks.filter((task) => task.status === 'completed' || task.status === 'completed_with_partial_failures').length;
-  const modalityCounts = series.reduce<Record<string, number>>((counts, item) => {
-    counts[item.modality] = (counts[item.modality] || 0) + 1;
-    return counts;
-  }, {});
+  const { data: workflowPayload } = useQuery({ queryFn: api.listWorkflows, queryKey: queryKeys.workflows });
+  const { data: series = [] } = useQuery({ enabled: Boolean(projectId), queryFn: () => api.listSeries(projectId), queryKey: queryKeys.series(projectId) });
+  const { data: tasks = [] } = useQuery({ enabled: Boolean(projectId), queryFn: () => api.listProjectTasks(projectId), queryKey: queryKeys.tasks(projectId), refetchInterval: 5000 });
+
+  const chatMutation = useMutation({
+    mutationFn: (message: string) => api.chat(projectId, message),
+    onSuccess: (data) => {
+      setMessages((prev) => [...prev, { role: 'agent', content: data.reply }]);
+    },
+    onError: () => {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'agent',
+          content: "I'm sorry, I couldn't reach the backend chat service. Please check your connection or ensure the server is running. You can still try to upload data or run workflows using the dashboard controls.",
+        },
+      ]);
+    },
+  });
+
+  const workflowOptions = normalizeWorkflowList(workflowPayload);
+  const selectedSeries = series.find((item) => item.id === selectedSeriesId) || series[0];
+  const effectiveWorkflow = selectedWorkflow || defaultWorkflowForSeries(selectedSeries, workflowOptions);
+  const latestTask = latestCompletedTask(tasks);
+
+  const { data: resultSummary } = useQuery({
+    enabled: Boolean(latestTask?.id),
+    queryFn: () => api.getResultSummary(latestTask!.id),
+    queryKey: latestTask?.id ? queryKeys.resultSummary(latestTask.id) : ['result-summary', 'none'],
+    retry: false,
+  });
+
+  const uploadFile = useMutation({
+    mutationFn: (file: File) => selectFileUpload(projectId, file),
+    onError: (err) => setError(err instanceof Error ? err.message : 'Upload failed'),
+    onSuccess: () => {
+      setError('');
+      queryClient.invalidateQueries({ queryKey: queryKeys.series(projectId) });
+    },
+  });
+
+  const runPipeline = useMutation({
+    mutationFn: ({ seriesId, workflowType }: { seriesId: number; workflowType: string }) => api.runSeries(seriesId, workflowType),
+    onError: (err) => setError(err instanceof Error ? err.message : 'Pipeline launch failed'),
+    onSuccess: (task) => {
+      setError('');
+      queryClient.invalidateQueries({ queryKey: queryKeys.tasks(projectId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.task(task.id) });
+    },
+  });
+
+  const active = tasks.find(activeTask);
+  const completedCount = tasks.filter(completedTask).length;
+  const outputs = useMemo(() => flattenOutputs(resultSummary).slice(0, 5), [resultSummary]);
+  const eligibility = getWorkflowEligibility(selectedSeries || ({} as Series), effectiveWorkflow, tasks);
+  const canRun = Boolean(selectedSeries?.id && effectiveWorkflow && eligibility.runnable && !runPipeline.isPending);
+
+  function handleRun() {
+    if (!selectedSeries?.id || !effectiveWorkflow) {
+      setError('Select an imaging series and workflow before running the pipeline.');
+      return;
+    }
+    if (!eligibility.runnable) {
+      setError(eligibility.reason || 'Selected workflow cannot run for this series.');
+      return;
+    }
+    runPipeline.mutate({ seriesId: selectedSeries.id, workflowType: effectiveWorkflow });
+  }
+
+  function handleFile(file: File | undefined) {
+    if (!file) return;
+    uploadFile.mutate(file);
+  }
+
+  const seriesSummary = series.length > 0
+    ? `I found ${series.length} brain MRI scan${series.length === 1 ? '' : 's'} in this project. The primary series is identified as ${selectedSeries?.modality || 'unknown modality'} (${selectedSeries?.sequence_label || 'unlabeled'}).`
+    : "I haven't found any brain imaging data yet. Please upload DICOM or NIfTI files to get started.";
+
+  const recommendation = selectedSeries
+    ? `Based on the ${selectedSeries.modality} modality, I recommend running the ${effectiveWorkflow} pipeline. This will perform automated preprocessing, skull stripping, and tissue segmentation.`
+    : "Once you upload your data, I will analyze the scans and recommend the appropriate processing workflow.";
+
+  useEffect(() => {
+    if (messages.length === 0 && (series.length > 0 || workflowOptions.length > 0)) {
+      setMessages([{
+        role: 'agent',
+        content: `Hello! I'm your neuroimaging assistant. ${seriesSummary} ${recommendation}`
+      }]);
+    }
+  }, [series.length, workflowOptions.length, seriesSummary, recommendation, messages.length]);
+
+  const handleChatSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!chatInput.trim() || chatMutation.isPending) return;
+    const msg = chatInput;
+    setMessages((prev) => [...prev, { role: 'user', content: msg }]);
+    setChatInput('');
+    chatMutation.mutate(msg);
+  };
+
+  const sendQuickChat = (msg: string) => {
+    if (chatMutation.isPending) return;
+    setMessages((prev) => [...prev, { role: 'user', content: msg }]);
+    chatMutation.mutate(msg);
+  };
 
   return (
-    <div>
-      <PageHeader
-        description="Project health, modality readiness, active processing, and scientific result availability."
-        eyebrow="Project Console"
-        title="Overview"
-      />
-      <div className="grid gap-3 md:grid-cols-4">
-        <MetricBlock detail="Registered imaging series" label="Series" value={series.length} />
-        <MetricBlock detail="Queued or running" label="Active tasks" tone={active ? 'accent' : 'muted'} value={active} />
-        <MetricBlock detail="Completed or partial" label="Results" tone="success" value={completed} />
-        <MetricBlock detail="T1, BOLD, DWI coverage" label="Modalities" value={Object.keys(modalityCounts).length} />
+    <div className="max-w-7xl mx-auto space-y-8 px-4">
+      {/* Title Area */}
+      <div>
+        <h1 className="text-4xl font-bold text-gray-900 mb-3 tracking-tight">Brain Imaging Processing Agent</h1>
+        <p className="text-gray-500 max-w-3xl text-sm leading-relaxed">
+          Upload brain MRI data and let the agent guide you through preprocessing, segmentation, and analysis.
+          This tool is designed for efficient, automated neuroimaging workflows.
+        </p>
       </div>
-      <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1.2fr]">
-        <Panel>
-          <PanelHeader>
-            <PanelTitle>Modality readiness</PanelTitle>
-            <Database className="h-4 w-4 text-muted" />
-          </PanelHeader>
-          <PanelBody className="grid gap-2">
-            {['T1', 'BOLD', 'DWI'].map((modality) => (
-              <div className="flex items-center justify-between rounded-md border border-border bg-background px-3 py-2 text-sm" key={modality}>
-                <span className="font-semibold">{modality}</span>
-                <span className="text-muted">{modalityCounts[modality] || 0} series</span>
-              </div>
-            ))}
-          </PanelBody>
-        </Panel>
-        <Panel>
-          <PanelHeader>
-            <PanelTitle>Result coverage</PanelTitle>
-            <FileText className="h-4 w-4 text-muted" />
-          </PanelHeader>
-          <PanelBody>
-            <div className="grid gap-2 md:grid-cols-3">
-              <MetricBlock detail="Brain measures, cortical regions" label="T1 reports" tone={modalityCounts.T1 ? 'success' : 'muted'} value={modalityCounts.T1 ? 'Ready' : 'Missing'} />
-              <MetricBlock detail="ALFF, fALFF, ReHo, tSNR" label="BOLD reports" tone={modalityCounts.BOLD ? 'success' : 'muted'} value={modalityCounts.BOLD ? 'Ready' : 'Missing'} />
-              <MetricBlock detail="FA, MD, AD, RD" label="DWI reports" tone={modalityCounts.DWI ? 'success' : 'muted'} value={modalityCounts.DWI ? 'Ready' : 'Missing'} />
+
+      {error ? (
+        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 flex items-center gap-2">
+           <Info className="w-4 h-4 shrink-0" /> {error}
+        </div>
+      ) : null}
+
+      <div className="grid grid-cols-12 gap-8 items-start">
+        {/* Main Content Area */}
+        <div className="col-span-12 lg:col-span-8 space-y-8">
+          {/* Upload Data Card - Prominent */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col transition-all hover:shadow-md border-t-4 border-t-[#065F46]">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2 font-semibold text-gray-800 text-sm">
+              <UploadCloud className="w-4 h-4 text-[#065F46]" /> Upload Data
             </div>
-          </PanelBody>
-        </Panel>
-      </div>
-      <Panel className="mt-4">
-        <PanelHeader>
-          <PanelTitle>Recent tasks</PanelTitle>
-          <ListChecks className="h-4 w-4 text-muted" />
-        </PanelHeader>
-        <PanelBody>
-          <div className="divide-y divide-border">
-            {tasks.slice(0, 8).map((task) => (
-              <div className="flex items-center justify-between gap-3 py-2 text-sm" key={task.id}>
-                <span>
-                  <span className="font-mono text-xs text-muted">#{task.id}</span> {task.workflow_type}
+            <div className="p-5 flex-1 flex flex-col">
+              <label className="border-2 border-dashed border-gray-200 rounded-lg flex-1 flex flex-col items-center justify-center p-8 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer group">
+                <UploadCloud className="w-12 h-12 text-gray-400 mb-4 group-hover:text-[#065F46] transition-colors" />
+                <div className="text-base font-medium text-gray-700 mb-1">Drag & drop DICOM or NIfTI files here</div>
+                <div className="text-sm text-gray-500 mb-6">or click to browse from your computer</div>
+                <span className="bg-[#065F46] text-white px-6 py-2 rounded-md text-sm font-medium shadow-sm hover:bg-[#044E3A] transition-colors">
+                  Browse Files
                 </span>
-                <StatusBadge status={task.status} />
+                <input
+                  aria-label="Upload DICOM or NIfTI files"
+                  className="sr-only"
+                  type="file"
+                  accept=".nii,.nii.gz,.zip"
+                  onChange={(event) => handleFile(event.target.files?.[0])}
+                />
+              </label>
+              <div className="mt-4 flex justify-between items-center text-xs">
+                <span className="text-gray-500">Supported: DICOM archives (.zip), NIfTI (.nii, .nii.gz)</span>
+                <Link className="text-[#065F46] hover:underline font-medium inline-flex items-center gap-1" to={`/projects/${projectId}/ingest`}>
+                  Advanced Ingest <ExternalLink className="w-3 h-3" />
+                </Link>
               </div>
-            ))}
-            {tasks.length === 0 ? <p className="text-sm text-muted">No tasks yet. Upload data, then run an eligible workflow.</p> : null}
+            </div>
           </div>
-        </PanelBody>
-      </Panel>
+
+          {/* Agent Insights Section */}
+          {series.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-white rounded-xl border border-emerald-100 shadow-sm p-5 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+                  <Eye className="w-4 h-4 text-emerald-600" /> What the agent found
+                </div>
+                <p className="text-sm text-gray-600 leading-relaxed">
+                  {seriesSummary}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {series.slice(0, 3).map(s => (
+                    <span key={s.id} className="px-2 py-1 bg-gray-50 border border-gray-100 rounded text-[10px] font-medium text-gray-500">
+                      #{s.id} {s.modality}: {s.sequence_label || 'Unlabeled'}
+                    </span>
+                  ))}
+                  {series.length > 3 && <span className="text-[10px] text-gray-400">+{series.length - 3} more</span>}
+                </div>
+              </div>
+              <div className="bg-white rounded-xl border border-emerald-100 shadow-sm p-5 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+                  <Workflow className="w-4 h-4 text-emerald-600" /> Recommended plan
+                </div>
+                <p className="text-sm text-gray-600 leading-relaxed">
+                  {recommendation}
+                </p>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-mono text-gray-400">Pipeline: {effectiveWorkflow}</span>
+                  <button
+                    onClick={handleRun}
+                    disabled={!canRun}
+                    className="text-xs font-bold text-emerald-700 hover:text-emerald-800 disabled:text-gray-400 flex items-center gap-1"
+                  >
+                    <Play className="w-3 h-3 fill-current" /> Run now
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Workflow Status Card */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden transition-all hover:shadow-md">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2 font-semibold text-gray-800 text-sm">
+              <Activity className="w-4 h-4 text-[#065F46]" /> Workflow Status
+            </div>
+            <div className="p-6">
+              <div className="relative space-y-6 before:absolute before:inset-0 before:ml-[11px] before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-300 before:to-transparent">
+                <WorkflowStep
+                  title="Intake"
+                  description="Data uploaded"
+                  status={series.length ? 'completed' : 'pending'}
+                  meta={series.length ? `${series.length} series` : 'Waiting'}
+                />
+                <WorkflowStep
+                  title="Preprocessing"
+                  description="Bias correction, skull stripping, normalization"
+                  status={completedCount ? 'completed' : active ? 'active' : 'pending'}
+                  meta={active?.workflow_type || (completedCount ? 'Completed' : 'Pending')}
+                />
+                <WorkflowStep
+                  title="Segmentation"
+                  description="Automated tissue & structure segmentation"
+                  status={active ? 'active' : completedCount ? 'completed' : 'pending'}
+                  meta={active ? `${active.progress}%` : 'Pending'}
+                />
+                <WorkflowStep
+                  title="QC Review"
+                  description="Quality control checks"
+                  status={latestTask ? 'completed' : 'pending'}
+                  meta={latestTask ? 'Ready' : 'Pending'}
+                />
+                <WorkflowStep
+                  title="Report Generation"
+                  description="Generate PDF report"
+                  status={resultSummary ? 'completed' : 'pending'}
+                  meta={resultSummary ? 'Ready' : 'Pending'}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Advanced Pipeline Parameters */}
+          <details className="group bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <summary className="px-5 py-4 cursor-pointer flex items-center justify-between font-semibold text-gray-800 text-sm list-none hover:bg-gray-50">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal className="w-4 h-4 text-[#065F46]" /> Pipeline Parameters
+                <span className="text-xs font-normal text-gray-400 ml-2">Advanced settings</span>
+              </div>
+              <ChevronDown className="w-4 h-4 text-gray-400 transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="p-5 border-t border-gray-100 bg-gray-50/50 space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700 flex items-center gap-1">
+                  Input Series <Info className="w-3.5 h-3.5 text-gray-400" />
+                </span>
+                <select
+                  className="text-sm border border-gray-200 rounded-md px-3 py-1.5 bg-white outline-none w-[200px]"
+                  value={selectedSeries?.id || ''}
+                  onChange={(event) => setSelectedSeriesId(Number(event.target.value))}
+                >
+                  {series.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      #{item.id} {item.sequence_label || item.modality}
+                    </option>
+                  ))}
+                  {series.length === 0 ? <option value="">No series available</option> : null}
+                </select>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700 flex items-center gap-1">
+                  Preprocessing Preset <Info className="w-3.5 h-3.5 text-gray-400" />
+                </span>
+                <select
+                  className="text-sm border border-gray-200 rounded-md px-3 py-1.5 bg-white outline-none w-[200px]"
+                  value={effectiveWorkflow}
+                  onChange={(event) => setSelectedWorkflow(event.target.value)}
+                >
+                  {workflowOptions.map((workflow) => (
+                    <option key={workflow} value={workflow}>
+                      {workflow}
+                    </option>
+                  ))}
+                  {workflowOptions.length === 0 ? <option value="">No workflows available</option> : null}
+                </select>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700">Skull Stripping</span>
+                <Toggle checked={skullStripping} onChange={setSkullStripping} />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700">Bias Field Correction</span>
+                <Toggle checked={biasCorrection} onChange={setBiasCorrection} />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700 flex items-center gap-1">
+                  Tissue Segmentation <Info className="w-3.5 h-3.5 text-gray-400" />
+                </span>
+                <div className="text-sm font-medium text-gray-500 bg-white px-3 py-1.5 rounded-md border border-gray-100 w-[200px]">
+                  FastSurfer (Recommended)
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700 flex items-center gap-1">
+                  Parcellation Atlas <Info className="w-3.5 h-3.5 text-gray-400" />
+                </span>
+                <div className="text-sm font-medium text-gray-500 bg-white px-3 py-1.5 rounded-md border border-gray-100 w-[200px]">
+                  Desikan-Killiany (68)
+                </div>
+              </div>
+
+              {!eligibility.runnable && effectiveWorkflow && (
+                <div className="mt-2 p-2 rounded bg-amber-50 text-xs text-amber-700 border border-amber-100">
+                  {eligibility.reason}
+                </div>
+              )}
+            </div>
+          </details>
+
+          {/* Recent Runs Card */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col transition-all hover:shadow-md">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between font-semibold text-gray-800 text-sm">
+              <div className="flex items-center gap-2">
+                <RotateCcw className="w-4 h-4 text-[#065F46]" /> Recent Runs
+              </div>
+              <Link className="text-[#065F46] hover:underline font-medium text-xs" to={`/projects/${projectId}/tasks`}>
+                View all
+              </Link>
+            </div>
+            <div className="overflow-x-auto flex-1">
+              <table className="w-full text-left text-sm whitespace-nowrap">
+                <thead className="bg-gray-50 text-gray-500 border-b border-gray-100">
+                  <tr>
+                    <th className="px-5 py-3 font-medium">ID</th>
+                    <th className="px-5 py-3 font-medium">Dataset</th>
+                    <th className="px-5 py-3 font-medium">Status</th>
+                    <th className="px-5 py-3 font-medium">Completed</th>
+                    <th className="px-5 py-3 font-medium text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 text-gray-700">
+                  {tasks.slice(0, 5).map((task) => {
+                    const taskSeries = series.find((item) => item.id === task.series_id);
+                    return (
+                      <tr className="hover:bg-gray-50 transition-colors" key={task.id}>
+                        <td className="px-5 py-3 font-mono text-xs text-gray-500">RUN-{task.id}</td>
+                        <td className="px-5 py-3">{taskSeries?.sequence_label || task.workflow_type}</td>
+                        <td className="px-5 py-3">
+                          <StatusBadge status={task.status} />
+                        </td>
+                        <td className="px-5 py-3 text-gray-500">{formatCompleted(task)}</td>
+                        <td className="px-5 py-3 flex items-center justify-end gap-2">
+                          <Link className="p-1 hover:bg-gray-200 rounded text-gray-500 transition-colors" to={`/projects/${projectId}/results/${task.id}`}>
+                            <Eye className="w-4 h-4" />
+                          </Link>
+                          {completedTask(task) ? (
+                            <Link className="p-1 hover:bg-gray-200 rounded text-gray-500 transition-colors" to={`/projects/${projectId}/reports`}>
+                              <Download className="w-4 h-4" />
+                            </Link>
+                          ) : (
+                            <button className="p-1 hover:bg-red-50 rounded text-gray-400 hover:text-red-500 transition-colors">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {tasks.length === 0 && (
+                    <tr>
+                      <td className="px-5 py-10 text-center text-gray-400" colSpan={5}>
+                        No runs yet. Upload data and start the pipeline.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Results Preview Card */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col transition-all hover:shadow-md">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2 font-semibold text-gray-800 text-sm">
+              <BarChart2 className="w-4 h-4 text-[#065F46]" /> Results Preview
+            </div>
+            <div className="p-6 flex flex-col md:flex-row gap-8">
+              {/* Info Column */}
+              <div className="w-full md:w-[200px] flex-shrink-0 space-y-4 text-sm border-b md:border-b-0 md:border-r border-gray-100 pb-6 md:pb-0 md:pr-8">
+                <MetaItem label="Dataset" value={selectedSeries?.sequence_label || 'No dataset'} />
+                <MetaItem label="Date" value={latestTask ? formatCompleted(latestTask) : '--'} />
+                <MetaItem label="Pipeline" value={resultSummary?.workflow_type || effectiveWorkflow || '--'} />
+                <MetaItem label="Duration" value={resultSummary?.provenance?.runtime_sec ? `${resultSummary.provenance.runtime_sec}s` : '--'} />
+                <div className="pt-2">
+                  <Link
+                    className="w-full flex justify-center items-center gap-2 border border-gray-300 bg-white text-gray-700 px-3 py-2 rounded-md font-medium text-xs hover:bg-gray-50 shadow-sm transition-colors"
+                    to={latestTask ? `/projects/${projectId}/results/${latestTask.id}` : `/projects/${projectId}/results`}
+                  >
+                    View Full Results <ExternalLink className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+              </div>
+
+              {/* Gallery & Legend */}
+              <div className="flex-1">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                  {previewScans.map((scan) => (
+                    <div className="flex flex-col items-center" key={scan.title}>
+                      <span className="text-xs font-medium text-gray-700 mb-2">{scan.title}</span>
+                      <div className="w-full aspect-square bg-black rounded-xl overflow-hidden relative shadow-inner group">
+                        <img src={scan.src} alt={scan.alt} className="w-full h-full object-cover opacity-80 transition-opacity group-hover:opacity-100" />
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                           <div className="text-[10px] text-gray-500 font-mono opacity-20">MRI_VIEW</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Legend */}
+                <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-xs text-gray-600 px-4 mb-6">
+                  {legend.map((item) => (
+                    <div className="flex items-center gap-1.5" key={item.label}>
+                      <div className={`w-2.5 h-2.5 rounded-full ${item.color}`}></div> {item.label}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Artifacts List */}
+                <div className="space-y-2">
+                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Key Artifacts</div>
+                  {outputs.map((output) => (
+                    <div className="flex items-center justify-between gap-3 rounded-md border border-gray-100 bg-gray-50 px-3 py-2 text-xs" key={output.relative_path || output.path}>
+                      <span className="truncate font-mono text-gray-600">{output.relative_path || output.path}</span>
+                      <span className="shrink-0 px-2 py-0.5 rounded-full bg-white border border-gray-200 text-[#065F46] font-semibold text-[10px] uppercase">
+                        {output.feature_group || 'artifact'}
+                      </span>
+                    </div>
+                  ))}
+                  {!outputs.length && (
+                    <div className="text-center py-4 text-gray-400 text-xs bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                      No result artifacts available for this run.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Agent Copilot Sidebar */}
+        <aside className="col-span-12 lg:col-span-4 space-y-6 lg:sticky lg:top-8">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col border-l-4 border-l-[#065F46] h-[600px]">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2 font-bold text-gray-800 text-sm">
+              <Brain className="w-4 h-4 text-[#065F46]" /> Agent Copilot
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              {messages.map((msg, idx) => (
+                <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[85%] p-3 rounded-lg text-sm ${
+                    msg.role === 'user'
+                      ? 'bg-[#065F46] text-white rounded-br-none'
+                      : 'bg-gray-100 text-gray-800 rounded-bl-none shadow-sm'
+                  }`}>
+                    {msg.content}
+                  </div>
+                </div>
+              ))}
+              {chatMutation.isPending && (
+                <div className="flex justify-start">
+                  <div className="bg-gray-100 text-gray-400 p-3 rounded-lg rounded-bl-none text-xs flex items-center gap-2">
+                    <div className="flex gap-1">
+                      <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></span>
+                      <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:0.2s]"></span>
+                      <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:0.4s]"></span>
+                    </div>
+                    Agent is thinking...
+                  </div>
+                </div>
+              )}
+              {messages.length === 0 && !chatMutation.isPending && (
+                <div className="h-full flex flex-col items-center justify-center text-gray-400 space-y-2">
+                  <Brain className="w-8 h-8 opacity-20" />
+                  <p className="text-xs">Initializing agent...</p>
+                </div>
+              )}
+            </div>
+
+            <div className="px-5 py-3 border-t border-gray-50 bg-gray-50/50 flex flex-wrap gap-2">
+              <button
+                onClick={() => sendQuickChat("Explain this step")}
+                className="text-[10px] font-semibold bg-white border border-gray-200 px-2 py-1 rounded hover:bg-gray-50 text-gray-600 transition-colors"
+              >
+                Explain this step
+              </button>
+              <button
+                onClick={() => sendQuickChat(selectedSeries ? "Review detected scan" : "How do I upload data?")}
+                className="text-[10px] font-semibold bg-white border border-gray-200 px-2 py-1 rounded hover:bg-gray-50 text-gray-600 transition-colors"
+              >
+                Review detected scan
+              </button>
+              <Link
+                to={`/projects/${projectId}/agent`}
+                className="text-[10px] font-semibold bg-white border border-gray-200 px-2 py-1 rounded hover:bg-gray-50 text-gray-600 transition-colors"
+              >
+                Open full chat
+              </Link>
+            </div>
+
+            <div className="p-4 border-t border-gray-100 space-y-3">
+              <Button
+                onClick={handleRun}
+                disabled={!canRun}
+                variant="primary"
+                className="w-full justify-start gap-2 h-9 bg-[#065F46] hover:bg-[#044E3A] border-none text-white px-4 text-xs"
+              >
+                {runPipeline.isPending ? (
+                  <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <Play className="w-3 h-3 fill-current" />
+                )}
+                Start recommended pipeline
+              </Button>
+
+              <form onSubmit={handleChatSubmit} className="flex gap-2">
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="Ask the agent..."
+                  className="flex-1 bg-gray-50 border border-gray-200 rounded-md px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#065F46]"
+                  disabled={chatMutation.isPending}
+                />
+                <button
+                  type="submit"
+                  disabled={!chatInput.trim() || chatMutation.isPending}
+                  className="bg-[#065F46] text-white p-1.5 rounded-md hover:bg-[#044E3A] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  aria-label="Send message"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                </button>
+              </form>
+
+              <div className="flex items-center gap-1.5 text-[10px] text-gray-400 px-1">
+                <Info className="w-3 h-3 shrink-0" />
+                <span>No medical diagnosis provided.</span>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function WorkflowStep({ title, description, status, meta }: { title: string; description: string; status: 'completed' | 'active' | 'pending'; meta: string }) {
+  return (
+    <div className="relative flex items-center gap-4 text-sm">
+      <div className="z-10 flex-shrink-0">
+        {status === 'completed' ? (
+          <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center text-white border-2 border-white shadow-sm">
+            <CheckCircle2 className="w-4 h-4" />
+          </div>
+        ) : status === 'active' ? (
+          <div className="w-6 h-6 rounded-full bg-white border-2 border-blue-500 flex items-center justify-center shadow-sm relative">
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+          </div>
+        ) : (
+          <div className="w-6 h-6 rounded-full bg-gray-200 border-2 border-white flex items-center justify-center text-[10px] font-bold text-gray-500 shadow-sm">
+             {title === 'Intake' ? '1' : title === 'Preprocessing' ? '2' : title === 'Segmentation' ? '3' : title === 'QC Review' ? '4' : '5'}
+          </div>
+        )}
+      </div>
+      <div className="flex-1">
+        <h4 className={`font-semibold ${status === 'pending' ? 'text-gray-400' : 'text-gray-900'}`}>{title}</h4>
+        <p className="text-xs text-gray-500">{description}</p>
+      </div>
+      <div className="text-right text-xs flex flex-col items-end">
+        <span className={`font-medium ${status === 'active' ? 'text-blue-600' : status === 'completed' ? 'text-green-600' : 'text-gray-400'}`}>
+          {status === 'active' ? 'In Progress' : status === 'completed' ? 'Completed' : 'Pending'}
+        </span>
+        <span className="text-gray-500 text-[10px]">{meta}</span>
+      </div>
+    </div>
+  );
+}
+
+function Toggle({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <button
+      onClick={() => onChange(!checked)}
+      className={`w-10 h-5 rounded-full relative transition-colors ${checked ? 'bg-[#065F46]' : 'bg-gray-300'}`}
+    >
+      <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 shadow-sm transition-all ${checked ? 'right-0.5' : 'left-0.5'}`} />
+    </button>
+  );
+}
+
+function MetaItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="text-gray-500 text-[10px] uppercase tracking-wider font-bold mb-1">{label}</div>
+      <div className="font-medium text-gray-800 text-sm truncate">{value}</div>
     </div>
   );
 }
