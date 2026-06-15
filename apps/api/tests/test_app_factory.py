@@ -41,3 +41,19 @@ def test_production_cors_rejects_wildcard_origin(monkeypatch):
 
     with pytest.raises(RuntimeError, match="wildcard"):
         create_app()
+
+
+def test_deployment_readiness_blocks_localhost_only_production_cors(monkeypatch):
+    monkeypatch.setenv("IMAGE_AGENT_ENV", "production")
+    monkeypatch.setenv("IMAGE_AGENT_CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
+    monkeypatch.setenv("BACKEND_RUNTIME_MODE", "remote")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    result = TestClient(create_app()).get("/deployment")
+
+    assert result.status_code == 200
+    readiness = result.json()["production_readiness"]
+    assert readiness["required"] is True
+    assert readiness["ready"] is False
+    assert readiness["status"] == "blocked"
+    assert "Production CORS origins must include a non-localhost console origin." in readiness["blocking_reasons"]

@@ -30,6 +30,15 @@ def cors_origins() -> list[str]:
     return origins
 
 
+def production_cors_has_public_origin() -> bool:
+    if not is_production_mode():
+        return True
+    return any(
+        origin.startswith("https://") and "localhost" not in origin and "127.0.0.1" not in origin
+        for origin in cors_origins()
+    )
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="Brain Image Agent API", version="0.2.0")
     app.add_middleware(CORSMiddleware, allow_origins=cors_origins(), allow_methods=["*"], allow_headers=["*"])

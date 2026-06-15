@@ -61,12 +61,16 @@ def _production_mode() -> bool:
 
 
 def _production_readiness(*, mode: str, agent: dict) -> dict:
+    from app.app_factory import production_cors_has_public_origin
+
     required = _production_mode()
     blocking_reasons: list[str] = []
     if required and mode != "remote":
         blocking_reasons.append("Backend runtime mode is not remote.")
     if required and agent.get("configured") is not True:
         blocking_reasons.append("Agent model gateway is not configured.")
+    if required and not production_cors_has_public_origin():
+        blocking_reasons.append("Production CORS origins must include a non-localhost console origin.")
     return {
         "blocking_reasons": blocking_reasons,
         "ready": not blocking_reasons,
