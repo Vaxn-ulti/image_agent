@@ -70,6 +70,7 @@ def test_remote_release_gate_command_plan_orders_safe_remote_acceptance_steps():
     assert "restart_preflight:ok" in json.dumps(plan, sort_keys=True)
     assert "IMAGE_AGENT_ALLOW_RESTART_WITH_ACTIVE_TASKS=1" not in commands
     assert "--require-model" in commands
+    assert "--require-project-agent-context" in commands
     assert "--require-real-evidence-ids" in commands
     assert "--require-completed-upload" in commands
     assert "--require-completed-task" in commands
@@ -81,8 +82,10 @@ def test_remote_release_gate_command_plan_orders_safe_remote_acceptance_steps():
     assert "<upload_session_id>" in commands
     assert "<completed_task_id>" in commands
     assert "task_status_status=passed" in json.dumps(plan, sort_keys=True)
+    assert "agent_project_context_status=passed" in json.dumps(plan, sort_keys=True)
     assert "upload_inventory_completion_status=passed" in json.dumps(plan, sort_keys=True)
     assert "checked.task_status_status=passed" in json.dumps(plan, sort_keys=True)
+    assert "checked.agent_project_context_status=passed" in json.dumps(plan, sort_keys=True)
     assert "checked.upload_inventory_completion_status=passed" in json.dumps(plan, sort_keys=True)
 
 

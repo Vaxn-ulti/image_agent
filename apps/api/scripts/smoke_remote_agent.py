@@ -350,6 +350,13 @@ def _validate_agent_run(run: dict) -> None:
     _require(bool(run.get("selected_skill")), "agent run smoke failed: missing selected_skill")
 
 
+def _validate_agent_project_context(run: dict, project_id: int) -> None:
+    _require(
+        _int_metric(run.get("project_id")) == project_id,
+        "agent run project context failed: project_id mismatch",
+    )
+
+
 def _validate_completed_task(task: dict, task_id: int, project_id: int | None) -> dict:
     _require(int(task.get("id") or 0) == task_id, "completed task check failed: task_id mismatch")
     _require(task.get("status") == "completed", f"completed task check failed: status={task.get('status')}")
@@ -778,6 +785,11 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--message", default="Summarize the current Image Agent runtime status.")
     parser.add_argument("--require-model", action="store_true", help="Fail if the OpenAI model gateway is not configured.")
     parser.add_argument(
+        "--require-project-agent-context",
+        action="store_true",
+        help="Fail unless the live /agent/runs smoke is scoped to --project-id.",
+    )
+    parser.add_argument(
         "--require-deployment-identity",
         action="store_true",
         help="Fail unless --deployment-id names the accepted remote release or commit.",
@@ -873,6 +885,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     args = parser.parse_args(argv)
     if args.upload_session_id is not None and args.project_id is None:
         raise SystemExit("--upload-session-id requires --project-id")
+    if args.require_project_agent_context and args.project_id is None:
+        raise SystemExit("--require-project-agent-context requires --project-id")
     if args.require_completed_upload and (args.project_id is None or args.upload_session_id is None):
         raise SystemExit("--require-completed-upload requires --project-id and --upload-session-id")
     if args.require_real_evidence_ids and (
@@ -950,10 +964,13 @@ def main(argv: Sequence[str] | None = None) -> None:
     run = None
     model_smoke_status = "skipped_missing_model_config"
     if status.get("configured"):
-        run = _request("POST", f"{base}/agent/runs", {"project_id": None, "message": args.message})
+        agent_project_id = args.project_id if args.require_project_agent_context else None
+        run = _request("POST", f"{base}/agent/runs", {"project_id": agent_project_id, "message": args.message})
         _validate_agent_run(run)
+        if args.require_project_agent_context:
+            _validate_agent_project_context(run, args.project_id)
         model_smoke_status = "passed"
-    elif args.require_model:
+    elif args.require_model or args.require_project_agent_context:
         raise SystemExit("model gateway is not configured")
     project_contract = None
     task_artifact_manifest = None
@@ -998,6 +1015,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     smoke_gate = {
         "api_base": base,
         "require_model": bool(args.require_model),
+        "require_project_agent_context": bool(args.require_project_agent_context),
         "require_deployment_identity": bool(args.require_deployment_identity),
         "require_production_readiness": bool(args.require_production_readiness),
         "deployment_id": args.deployment_id,
@@ -1057,6 +1075,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         "rag_after": rag_after.get("index"),
         "agent_run_status": run.get("status") if run else "skipped",
         "agent_run_id": run.get("agent_run_id") if run else None,
+        "agent_project_context_status": "passed" if args.require_project_agent_context else "skipped",
+        "agent_run_project_id": run.get("project_id") if run else None,
         "intent": (run.get("intent") or run.get("agent_intent")) if run else None,
         "agent_intent": (run.get("agent_intent") or run.get("intent")) if run else None,
         "selected_skill": run.get("selected_skill") if run else None,

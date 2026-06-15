@@ -27,6 +27,7 @@ def _strict_smoke_payload():
             "min_chunks": 200,
             "require_production_readiness": True,
             "require_completed_task": True,
+            "require_project_agent_context": True,
             "require_raw_source_policy": True,
             "require_vendor_pointer_integrity": True,
             "require_real_evidence_ids": True,
@@ -58,6 +59,8 @@ def _strict_smoke_payload():
         },
         "agent_run_status": "answered",
         "agent_run_id": "agent_run_123",
+        "agent_project_context_status": "passed",
+        "agent_run_project_id": 7,
         "intent": "answer_question",
         "selected_skill": "image-agent-operator",
         "remote_evidence_ids_status": "passed",
@@ -300,6 +303,7 @@ def test_verify_remote_smoke_acceptance_accepts_strict_payload():
     assert report["status"] == "passed"
     assert report["summary"] == "status=passed"
     assert report["checked"]["model_smoke_status"] == "passed"
+    assert report["checked"]["agent_project_context_status"] == "passed"
     assert report["checked"]["rag_vendor_pointer_integrity_status"] == "passed"
     assert report["checked"]["rag_vendor_coverage_catalog_status"] == "complete"
     assert report["checked"]["container_native_qc_status"] == "passed"
@@ -353,6 +357,8 @@ def test_verify_remote_smoke_acceptance_rejects_stale_saved_evidence():
         ({"production_readiness_status": "blocked"}, "production_readiness_status must be passed"),
         ({"production_readiness": {"ready": False}}, "production_readiness.ready must be true"),
         ({"agent_run_id": "agent_run_123 C:/Users/A/private"}, "agent_run_id must be privacy-safe"),
+        ({"agent_project_context_status": "skipped"}, "agent_project_context_status must be passed"),
+        ({"agent_run_project_id": None}, "agent_run_project_id must match smoke_gate.project_id"),
         ({"selected_skill": "image-agent-operator sk-test-secret"}, "selected_skill must be privacy-safe"),
         ({"remote_evidence_ids_status": "skipped"}, "remote_evidence_ids_status must be passed"),
         ({"upload_inventory_completion_status": "skipped"}, "upload_inventory_completion_status must be passed"),
@@ -368,6 +374,7 @@ def test_verify_remote_smoke_acceptance_rejects_stale_saved_evidence():
         ({"smoke_gate": {"require_deployment_identity": False}}, "smoke_gate.require_deployment_identity must be true"),
         ({"smoke_gate": {"require_production_readiness": False}}, "smoke_gate.require_production_readiness must be true"),
         ({"smoke_gate": {"require_completed_task": False}}, "smoke_gate.require_completed_task must be true"),
+        ({"smoke_gate": {"require_project_agent_context": False}}, "smoke_gate.require_project_agent_context must be true"),
         ({"smoke_gate": {"deployment_id": "C:/srv/image_agent"}}, "deployment_id must be privacy-safe"),
         ({"smoke_gate": {"require_vendor_pointer_integrity": False}}, "smoke_gate.require_vendor_pointer_integrity must be true"),
         ({"smoke_gate": {"require_scientific_report_artifacts": False}}, "smoke_gate.require_scientific_report_artifacts must be true"),

@@ -806,6 +806,112 @@ def test_smoke_remote_agent_strict_gate_reports_successful_run(capsys, monkeypat
     assert calls[0][1].endswith("/health")
 
 
+def test_smoke_remote_agent_require_project_agent_context_requires_project_id(monkeypatch):
+    smoke = _load_smoke_module()
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(["--api-base", "http://api.local", "--require-project-agent-context"])
+
+    assert "--require-project-agent-context requires --project-id" in str(exc.value)
+
+
+def test_smoke_remote_agent_require_project_agent_context_sends_project_id_and_records_scope(capsys, monkeypatch):
+    smoke = _load_smoke_module()
+    calls = []
+
+    def fake_request(method, url, payload=None):
+        calls.append((method, url, payload))
+        if url.endswith("/health"):
+            return {"status": "ok", "app": "image_agent", "version": "0.2.0"}
+        if url.endswith("/agent/model/status"):
+            return {"configured": True, "provider": "OpenAI"}
+        if url.endswith("/agent/rag/status"):
+            return {
+                "index": {"document_count": 70, "chunk_count": 250, "engine": "llama_index"},
+                "vendor_raw_sources": _complete_vendor_raw_sources(),
+                "vendor_pointer_integrity": _complete_vendor_pointer_integrity(),
+            }
+        if url.endswith("/agent/rag/rebuild"):
+            return {"document_count": 70, "chunk_count": 250, "semantic_index": True}
+        if url.endswith("/agent/runs"):
+            assert payload == {
+                "project_id": 7,
+                "message": "Summarize the current Image Agent runtime status.",
+            }
+            return {
+                "agent_run_id": "agent_run_789",
+                "status": "answered",
+                "intent": "answer_question",
+                "selected_skill": "image-agent-operator",
+                "project_id": 7,
+            }
+        if url.endswith("/projects/7/series"):
+            return [{"id": 1, "modality": "T1", "workflow_eligibility": _good_workflow_eligibility()}]
+        raise AssertionError(f"unexpected request: {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    smoke.main(
+        [
+            "--api-base",
+            "http://api.local",
+            "--project-id",
+            "7",
+            "--require-project-agent-context",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["smoke_gate"]["require_project_agent_context"] is True
+    assert payload["agent_project_context_status"] == "passed"
+    assert payload["agent_run_project_id"] == 7
+    assert any(call[1].endswith("/agent/runs") and call[2]["project_id"] == 7 for call in calls)
+
+
+def test_smoke_remote_agent_require_project_agent_context_rejects_unscoped_agent_run(monkeypatch):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        if url.endswith("/health"):
+            return {"status": "ok", "app": "image_agent", "version": "0.2.0"}
+        if url.endswith("/agent/model/status"):
+            return {"configured": True, "provider": "OpenAI"}
+        if url.endswith("/agent/rag/status"):
+            return {
+                "index": {"document_count": 70, "chunk_count": 250, "engine": "llama_index"},
+                "vendor_raw_sources": _complete_vendor_raw_sources(),
+                "vendor_pointer_integrity": _complete_vendor_pointer_integrity(),
+            }
+        if url.endswith("/agent/rag/rebuild"):
+            return {"document_count": 70, "chunk_count": 250, "semantic_index": True}
+        if url.endswith("/agent/runs"):
+            return {
+                "agent_run_id": "agent_run_789",
+                "status": "answered",
+                "intent": "answer_question",
+                "selected_skill": "image-agent-operator",
+                "project_id": None,
+            }
+        if url.endswith("/projects/7/series"):
+            return [{"id": 1, "modality": "T1", "workflow_eligibility": _good_workflow_eligibility()}]
+        raise AssertionError(f"unexpected request: {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(
+            [
+                "--api-base",
+                "http://api.local",
+                "--project-id",
+                "7",
+                "--require-project-agent-context",
+            ]
+        )
+
+    assert "agent run project context failed: project_id mismatch" in str(exc.value)
+
+
 def test_smoke_remote_agent_require_real_evidence_ids_requires_all_ids(monkeypatch):
     smoke = _load_smoke_module()
 
@@ -2005,6 +2111,7 @@ def test_smoke_remote_agent_writes_acceptance_json_artifact(capsys, monkeypatch,
                 "status": "answered",
                 "intent": "answer_question",
                 "selected_skill": "image-agent-operator",
+                "project_id": 7,
             }
         raise AssertionError(f"unexpected request: {url}")
 
@@ -2036,6 +2143,7 @@ def test_smoke_remote_agent_writes_acceptance_json_artifact(capsys, monkeypatch,
     assert artifact_payload["smoke_gate"] == {
         "api_base": "http://api.local",
         "require_model": True,
+        "require_project_agent_context": False,
         "require_deployment_identity": True,
         "require_production_readiness": False,
         "deployment_id": "codex-f57a2ea-20260611T023456",
@@ -2115,6 +2223,7 @@ def test_smoke_remote_agent_rejects_vendor_coverage_catalog_curated_source_drift
                 "status": "answered",
                 "intent": "answer_question",
                 "selected_skill": "image-agent-operator",
+                "project_id": 7,
             }
         raise AssertionError(f"unexpected request: {url}")
 
@@ -2226,6 +2335,7 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
                 "status": "answered",
                 "intent": "answer_question",
                 "selected_skill": "image-agent-operator",
+                "project_id": 7,
             }
         if url.endswith("/projects/7/series"):
             return [{"id": 1, "modality": "T1", "workflow_eligibility": _good_workflow_eligibility()}]
@@ -2273,6 +2383,7 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
             "--api-base",
             "http://api.local",
             "--require-model",
+            "--require-project-agent-context",
             "--require-deployment-identity",
             "--require-production-readiness",
             "--deployment-id",

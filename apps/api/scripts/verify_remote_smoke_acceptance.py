@@ -153,6 +153,7 @@ def _verify_gate_settings(payload: dict) -> dict:
         "require_deployment_identity",
         "require_production_readiness",
         "require_completed_task",
+        "require_project_agent_context",
         "require_raw_source_policy",
         "require_vendor_pointer_integrity",
         "require_real_evidence_ids",
@@ -201,6 +202,17 @@ def _verify_task_status(payload: dict, gate: dict) -> None:
 def _verify_upload_completion(payload: dict) -> None:
     _require_status(payload, "upload_inventory_completion_status")
     _require(payload.get("upload_inventory_status") == "completed", "upload_inventory_status must be completed")
+
+
+def _verify_agent_project_context(payload: dict, gate: dict) -> None:
+    _require_status(payload, "agent_project_context_status")
+    project_id = payload.get("agent_run_project_id")
+    _require(
+        isinstance(project_id, int)
+        and not isinstance(project_id, bool)
+        and project_id == gate.get("project_id"),
+        "agent_run_project_id must match smoke_gate.project_id",
+    )
 
 
 def _is_unsafe_relative_path(value: object) -> bool:
@@ -700,6 +712,7 @@ def verify_acceptance_payload(
     _require(payload.get("agent_run_status") == "answered", "agent_run_status must be answered")
     for key in ("agent_run_id", "intent", "selected_skill"):
         _require_privacy_safe_symbol(payload, key)
+    _verify_agent_project_context(payload, gate)
     _require_int_metric(payload, "rag_document_count")
     _require_int_metric(payload, "rag_chunk_count")
     _require(payload["rag_document_count"] >= gate["min_documents"], "rag_document_count below smoke gate minimum")
@@ -726,6 +739,7 @@ def verify_acceptance_payload(
         "summary": "status=passed",
         "checked": {
             "model_smoke_status": payload["model_smoke_status"],
+            "agent_project_context_status": payload["agent_project_context_status"],
             "deployment_identity_status": payload["deployment_identity_status"],
             "production_readiness_status": payload["production_readiness_status"],
             "remote_evidence_ids_status": payload["remote_evidence_ids_status"],
