@@ -250,3 +250,18 @@ def test_dwi_sidecar_detection_lives_in_imaging_layer():
         "def _dwi_has_required_sidecars(",
     ):
         assert private_helper not in task_service
+
+
+def test_agent_backend_context_queries_live_in_agent_layer():
+    root = Path(__file__).resolve().parents[1]
+    agent_service = (root / "app" / "services" / "agent_service.py").read_text(encoding="utf-8")
+
+    assert (root / "app" / "agent" / "backend_context.py").exists()
+    for private_helper in (
+        "def _task_context(",
+        "def _output_context(",
+        "def _result_summary_context(",
+    ):
+        assert private_helper not in agent_service
+    assert "build_chat_backend_context" in agent_service
+    assert "build_rag_backend_context" in agent_service
