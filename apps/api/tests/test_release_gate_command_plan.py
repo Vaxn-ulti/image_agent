@@ -71,6 +71,7 @@ def test_remote_release_gate_command_plan_orders_safe_remote_acceptance_steps():
     assert "IMAGE_AGENT_ALLOW_RESTART_WITH_ACTIVE_TASKS=1" not in commands
     assert "--require-model" in commands
     assert "--require-real-evidence-ids" in commands
+    assert "--expected-health-version <expected_health_version>" in commands
     assert "--require-container-native-qc" in commands
     assert "--require-scientific-report-artifacts" in commands
     assert "verify_remote_smoke_acceptance.py" in commands

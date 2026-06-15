@@ -537,6 +537,18 @@ def test_verify_remote_smoke_acceptance_rejects_bad_deployment_identity(
     assert expected_message in str(exc.value)
 
 
+def test_verify_remote_smoke_acceptance_rejects_unexpected_health_version():
+    verifier = _load_verifier_module()
+    payload = _strict_smoke_payload()
+    payload["smoke_gate"]["expected_health_version"] = "codex-new-release"
+    payload["deployment_identity"]["health_version"] = "old-release"
+
+    with pytest.raises(SystemExit) as exc:
+        verifier.verify_acceptance_payload(payload)
+
+    assert "deployment_identity.health_version must match smoke_gate.expected_health_version" in str(exc.value)
+
+
 def test_verify_remote_smoke_acceptance_rejects_weak_curated_source_pointer_metadata():
     verifier = _load_verifier_module()
     payload = _strict_smoke_payload()

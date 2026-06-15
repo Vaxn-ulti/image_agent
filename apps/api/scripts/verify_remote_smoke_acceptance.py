@@ -161,6 +161,9 @@ def _verify_gate_settings(payload: dict) -> dict:
         _require(gate.get(key) is True, f"smoke_gate.{key} must be true")
     for key in ("project_id", "upload_session_id", "task_id"):
         _require_positive_id(gate, key, prefix="smoke_gate")
+    expected_health_version = gate.get("expected_health_version")
+    if expected_health_version is not None:
+        _require_privacy_safe_symbol(gate, "expected_health_version")
     _require_positive_int_metric(gate, "min_documents")
     _require_positive_int_metric(gate, "min_chunks")
     _require_positive_int_metric(gate, "min_native_qc_images")
@@ -437,6 +440,12 @@ def _verify_deployment_identity(payload: dict, gate: dict) -> None:
         _is_privacy_safe_symbol(health_version),
         "deployment_identity.health_version must be privacy-safe",
     )
+    expected_health_version = gate.get("expected_health_version")
+    if expected_health_version is not None:
+        _require(
+            health_version == expected_health_version,
+            "deployment_identity.health_version must match smoke_gate.expected_health_version",
+        )
 
 
 def _verify_official_source_ids(source_ids: object) -> set[str]:

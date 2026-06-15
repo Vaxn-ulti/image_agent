@@ -335,6 +335,32 @@ def test_smoke_remote_agent_rejects_bad_health_version_for_deployment_identity(
     assert expected_message in str(exc.value)
 
 
+def test_smoke_remote_agent_rejects_unexpected_health_version_for_deployment_identity(monkeypatch):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        if url.endswith("/health"):
+            return {"status": "ok", "app": "image_agent", "version": "old-release"}
+        raise AssertionError(f"unexpected request after bad deployment identity: {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(
+            [
+                "--api-base",
+                "http://api.local",
+                "--require-deployment-identity",
+                "--deployment-id",
+                "codex-new-release",
+                "--expected-health-version",
+                "new-release",
+            ]
+        )
+
+    assert "deployment identity health version must match --expected-health-version" in str(exc.value)
+
+
 def test_smoke_remote_agent_enforces_rag_thresholds_and_raw_source_policy(monkeypatch):
     smoke = _load_smoke_module()
 

@@ -34,6 +34,7 @@ from app.workflows.result_contract import result_contract_spec
 WORKFLOWS = registry_list_workflows()
 _DEFAULT_REPO_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_PROJECTS_ROOT = Path(config.PROJECTS_ROOT)
+DEFAULT_API_VERSION = "0.2.0"
 
 
 def _repo_root() -> Path:
@@ -44,9 +45,20 @@ def _projects_root() -> Path:
     return main_projects_root(_DEFAULT_PROJECTS_ROOT, require_override=True)
 
 
+def _privacy_safe_symbol(value: str) -> bool:
+    return bool(value) and len(value) <= 140 and all(char.isalnum() or char in "_.-" for char in value)
+
+
+def _deployment_version() -> str:
+    version = os.environ.get("IMAGE_AGENT_DEPLOYMENT_VERSION", "").strip()
+    if version and _privacy_safe_symbol(version):
+        return version
+    return DEFAULT_API_VERSION
+
+
 
 def health():
-    return {"status": "ok", "app": "image_agent", "version": "0.2.0"}
+    return {"status": "ok", "app": "image_agent", "version": _deployment_version()}
 
 
 def list_workflows():

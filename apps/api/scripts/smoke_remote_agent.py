@@ -740,6 +740,10 @@ def main(argv: Sequence[str] | None = None) -> None:
         "--deployment-id",
         help="Privacy-safe accepted release id or commit hash, e.g. codex-f57a2ea-20260611T023456.",
     )
+    parser.add_argument(
+        "--expected-health-version",
+        help="Optional privacy-safe /health.version value expected from the deployed API.",
+    )
     parser.add_argument("--min-documents", type=int, default=0, help="Minimum RAG document count after rebuild.")
     parser.add_argument("--min-chunks", type=int, default=0, help="Minimum RAG chunk count after rebuild.")
     parser.add_argument(
@@ -816,6 +820,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         raise SystemExit("--require-deployment-identity requires --deployment-id")
     if args.deployment_id is not None and not _is_privacy_safe_symbol(args.deployment_id):
         raise SystemExit("--deployment-id must be a privacy-safe release id or commit")
+    if args.expected_health_version is not None and not _is_privacy_safe_symbol(args.expected_health_version):
+        raise SystemExit("--expected-health-version must be a privacy-safe version")
     if args.require_container_native_qc and args.task_id is None:
         raise SystemExit("--require-container-native-qc requires --task-id")
     if args.min_native_qc_images > 0 and args.task_id is None:
@@ -839,6 +845,11 @@ def main(argv: Sequence[str] | None = None) -> None:
             _is_privacy_safe_symbol(health_version),
             "deployment identity health version must be privacy-safe",
         )
+        if args.expected_health_version is not None:
+            _require(
+                health_version == args.expected_health_version,
+                "deployment identity health version must match --expected-health-version",
+            )
         deployment_identity = {
             "deployment_id": args.deployment_id,
             "health_app": health.get("app"),
@@ -907,27 +918,31 @@ def main(argv: Sequence[str] | None = None) -> None:
                 base,
                 task_artifact_manifest["scientific_report_artifacts"],
             )
+    smoke_gate = {
+        "api_base": base,
+        "require_model": bool(args.require_model),
+        "require_deployment_identity": bool(args.require_deployment_identity),
+        "deployment_id": args.deployment_id,
+        "min_documents": max(args.min_documents, 0),
+        "min_chunks": max(args.min_chunks, 0),
+        "require_raw_source_policy": bool(args.require_raw_source_policy),
+        "require_vendor_pointer_integrity": bool(args.require_vendor_pointer_integrity),
+        "require_real_evidence_ids": bool(args.require_real_evidence_ids),
+        "require_launchability_matrix": bool(args.require_launchability_matrix),
+        "require_container_native_qc": bool(args.require_container_native_qc),
+        "min_native_qc_images": max(args.min_native_qc_images, 0),
+        "require_scientific_report_artifacts": bool(args.require_scientific_report_artifacts),
+        "min_scientific_report_images": max(args.min_scientific_report_images, 0),
+        "project_id": args.project_id,
+        "task_id": args.task_id,
+        "upload_session_id": args.upload_session_id,
+    }
+    if args.expected_health_version is not None:
+        smoke_gate["expected_health_version"] = args.expected_health_version
+
     payload = {
         "generated_at_utc": _generated_at_utc(),
-        "smoke_gate": {
-            "api_base": base,
-            "require_model": bool(args.require_model),
-            "require_deployment_identity": bool(args.require_deployment_identity),
-            "deployment_id": args.deployment_id,
-            "min_documents": max(args.min_documents, 0),
-            "min_chunks": max(args.min_chunks, 0),
-            "require_raw_source_policy": bool(args.require_raw_source_policy),
-            "require_vendor_pointer_integrity": bool(args.require_vendor_pointer_integrity),
-            "require_real_evidence_ids": bool(args.require_real_evidence_ids),
-            "require_launchability_matrix": bool(args.require_launchability_matrix),
-            "require_container_native_qc": bool(args.require_container_native_qc),
-            "min_native_qc_images": max(args.min_native_qc_images, 0),
-            "require_scientific_report_artifacts": bool(args.require_scientific_report_artifacts),
-            "min_scientific_report_images": max(args.min_scientific_report_images, 0),
-            "project_id": args.project_id,
-            "task_id": args.task_id,
-            "upload_session_id": args.upload_session_id,
-        },
+        "smoke_gate": smoke_gate,
         "health": health,
         "deployment_identity_status": "passed" if args.require_deployment_identity else "skipped",
         "deployment_identity": deployment_identity,

@@ -226,6 +226,7 @@ def verify_plan(plan: dict) -> dict:
     for required_flag in (
         "--require-model",
         "--require-deployment-identity",
+        "--expected-health-version <expected_health_version>",
         "--require-raw-source-policy",
         "--require-vendor-pointer-integrity",
         "--require-real-evidence-ids",

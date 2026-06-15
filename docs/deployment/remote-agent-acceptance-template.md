@@ -88,6 +88,7 @@ python scripts/smoke_remote_agent.py \
   --require-model \
   --require-deployment-identity \
   --deployment-id <accepted-release-or-commit> \
+  --expected-health-version <expected-health-version> \
   --min-documents 60 \
   --min-chunks 200 \
   --require-raw-source-policy \
@@ -110,7 +111,7 @@ Attach the strict smoke acceptance JSON and verify it contains:
 - `model_status.configured=true`, with only safe model gateway summary fields. It must not contain API keys, tokens, secrets, passwords, authorization headers, a `base_url` with embedded credentials, or nested deployment command details. `model_status.deployment`, when present, may only describe safe backend runtime mode and model gateway access.
 - `deployment_identity_status=passed`
 - `deployment_identity.deployment_id` matches `smoke_gate.deployment_id` and is a short release id or commit, not a full remote path
-- `deployment_identity.health_version` is present and is a short privacy-safe version string, not a full remote path
+- `deployment_identity.health_version` is present, is a short privacy-safe version string, and matches `smoke_gate.expected_health_version` when supplied
 - `agent_run_id`
 - `intent`
 - `selected_skill`
@@ -179,7 +180,7 @@ Run the offline strict smoke acceptance JSON verifier `apps/api/scripts/verify_r
 python scripts/verify_remote_smoke_acceptance.py "../../docs/deployment/remote-smoke-acceptance-<timestamp>.json" --max-age-hours 24
 ```
 
-Attach the verifier report only when `python scripts/verify_remote_smoke_acceptance.py` prints `status=passed` with `--max-age-hours 24`. This offline strict smoke acceptance JSON verifier does not replace running `smoke_remote_agent.py` on the remote server; it re-checks the saved evidence freshness and the same strict fields, including `deployment_identity_status=passed`, a privacy-safe `deployment_identity.deployment_id` matching `smoke_gate.deployment_id`, a privacy-safe `deployment_identity.health_version`, `model_smoke_status=passed`, `remote_evidence_ids_status=passed`, `rag_raw_sources.manifest_schema_version`, `rag_raw_sources.source_count`, `rag_raw_sources.vendor_doc_count`, `rag_vendor_pointer_integrity_status=passed`, `require_vendor_pointer_integrity`, `rag_vendor_pointer_integrity_referenced_vendor_docs`, `rag_vendor_coverage_catalog_status=complete`, `vendor_coverage_catalog`, `vendor_coverage_catalog.vendors`, `rag_raw_sources.curated_sources`, `rag_launchability_query_status=passed`, `container_native_qc_status=passed`, `container_native_qc_served_urls`, `container_native_qc_artifacts`, `container_native_qc_official_source_ids`, each container-native QC artifact `relative_path` is slash-relative and safe, each container-native QC artifact `download_url` is recomputed from `task_id` and `relative_path`, each container-native QC artifact `content_type` matches `preview_kind`, `scientific_report_artifacts_status=passed`, `scientific_report_served_urls`, and `scientific_report_artifacts`; `vendor_coverage_catalog.vendors` and `rag_raw_sources.curated_sources` must exactly match with no missing or extra vendor docs, each scientific report artifact `download_url` is served with non-empty bytes, and each scientific report artifact `content_type` matches `preview_kind`. The verifier also checks that `vendor_coverage_catalog` must not expose `manifest_path`, `persist_dir`, `raw_snapshots`, `raw_files`, or `sha256`.
+Attach the verifier report only when `python scripts/verify_remote_smoke_acceptance.py` prints `status=passed` with `--max-age-hours 24`. This offline strict smoke acceptance JSON verifier does not replace running `smoke_remote_agent.py` on the remote server; it re-checks the saved evidence freshness and the same strict fields, including `deployment_identity_status=passed`, a privacy-safe `deployment_identity.deployment_id` matching `smoke_gate.deployment_id`, a privacy-safe `deployment_identity.health_version` matching `smoke_gate.expected_health_version` when supplied, `model_smoke_status=passed`, `remote_evidence_ids_status=passed`, `rag_raw_sources.manifest_schema_version`, `rag_raw_sources.source_count`, `rag_raw_sources.vendor_doc_count`, `rag_vendor_pointer_integrity_status=passed`, `require_vendor_pointer_integrity`, `rag_vendor_pointer_integrity_referenced_vendor_docs`, `rag_vendor_coverage_catalog_status=complete`, `vendor_coverage_catalog`, `vendor_coverage_catalog.vendors`, `rag_raw_sources.curated_sources`, `rag_launchability_query_status=passed`, `container_native_qc_status=passed`, `container_native_qc_served_urls`, `container_native_qc_artifacts`, `container_native_qc_official_source_ids`, each container-native QC artifact `relative_path` is slash-relative and safe, each container-native QC artifact `download_url` is recomputed from `task_id` and `relative_path`, each container-native QC artifact `content_type` matches `preview_kind`, `scientific_report_artifacts_status=passed`, `scientific_report_served_urls`, and `scientific_report_artifacts`; `vendor_coverage_catalog.vendors` and `rag_raw_sources.curated_sources` must exactly match with no missing or extra vendor docs, each scientific report artifact `download_url` is served with non-empty bytes, and each scientific report artifact `content_type` matches `preview_kind`. The verifier also checks that `vendor_coverage_catalog` must not expose `manifest_path`, `persist_dir`, `raw_snapshots`, `raw_files`, or `sha256`.
 
 ## Production Acceptance Decision
 
@@ -189,7 +190,7 @@ Accepted only if all of the following are true:
 - `/agent/model/status` reports `configured=true`;
 - restart drain evidence includes `active_task_drain:ok`, `port_owner:image_agent`, and `health:ok app=image_agent`;
 - strict smoke acceptance JSON reports `deployment_identity_status=passed` for the accepted release id or commit;
-- strict smoke acceptance JSON reports a privacy-safe `deployment_identity.health_version`;
+- strict smoke acceptance JSON reports a privacy-safe `deployment_identity.health_version` matching the supplied `--expected-health-version`;
 - strict smoke acceptance JSON reports `model_smoke_status=passed`;
 - strict smoke acceptance JSON reports `model_status.configured=true` without secret-bearing keys, credentialed URLs, or nested deployment command details;
 - strict smoke acceptance JSON includes `agent_run_id`, `intent`, and `selected_skill`;

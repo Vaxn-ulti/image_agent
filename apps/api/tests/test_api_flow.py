@@ -1559,6 +1559,18 @@ def test_health_returns_app_identity():
     assert "version" in resp
 
 
+def test_health_can_report_deployment_version_from_environment(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    monkeypatch.setenv("IMAGE_AGENT_DEPLOYMENT_VERSION", "codex-new-release")
+    client = TestClient(app)
+
+    resp = client.get("/health").json()
+
+    assert resp["version"] == "codex-new-release"
+
+
 # ── Recovery safety checks ───────────────────────────────────────────────────
 
 
