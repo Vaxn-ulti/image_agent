@@ -1,5 +1,17 @@
 import { useQuery } from '@tanstack/react-query';
-import { Activity, Bot, Boxes, FileText, LayoutDashboard, ListChecks, Settings, UploadCloud } from 'lucide-react';
+import {
+  Activity,
+  Bot,
+  Boxes,
+  Brain,
+  ChevronDown,
+  ChevronLeft,
+  FileText,
+  LayoutDashboard,
+  ListChecks,
+  Settings,
+  UploadCloud,
+} from 'lucide-react';
 import { NavLink, Outlet, useParams } from 'react-router-dom';
 import { api, getApiBase } from '../lib/api';
 import { queryKeys } from '../lib/query';
@@ -21,52 +33,115 @@ export function AppShell() {
   const { data: runtime } = useQuery({ queryFn: api.runtimeContainers, queryKey: queryKeys.runtime, retry: false });
 
   return (
-    <div className="grid min-h-screen grid-cols-[248px_1fr] overflow-x-hidden bg-background text-foreground max-lg:grid-cols-1">
-      <aside className="min-w-0 border-r border-border bg-panel px-3 py-4 max-lg:overflow-hidden max-lg:border-b max-lg:border-r-0">
-        <div className="mb-4 flex items-center gap-2 px-2 text-sm font-semibold">
-          <span className="grid h-7 w-7 place-items-center rounded-md bg-accent text-xs font-bold text-paper">BI</span>
-          Brain Image Agent
-        </div>
-        <div className="mb-4 rounded-lg border border-border bg-paper p-3">
-          <div className="text-sm font-semibold">Project {projectId}</div>
-          <div className="mt-1 text-xs leading-5 text-muted">Research workspace</div>
-        </div>
-        <nav className="space-y-1 max-lg:flex max-lg:w-full max-lg:min-w-0 max-lg:overflow-x-auto">
-          {navItems.map((item) => (
-            <NavLink
-              className={({ isActive }) =>
-                `flex items-center gap-2 rounded-md px-3 py-2 text-sm ${
-                  isActive ? 'bg-background text-foreground shadow-hairline' : 'text-muted hover:bg-background hover:text-foreground'
-                }`
-              }
-              key={item.path}
-              to={`/projects/${projectId}/${item.path}`}
-            >
-              <item.icon className="h-4 w-4 shrink-0" />
-              <span className="whitespace-nowrap">{item.label}</span>
-            </NavLink>
-          ))}
-        </nav>
-      </aside>
-      <div className="min-w-0">
-        <header className="flex min-h-14 items-center justify-between gap-3 border-b border-border bg-paper px-5 max-md:flex-col max-md:items-start max-md:py-3">
-          <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-muted">
-            <span className="rounded-full border border-success/30 bg-success/10 px-2 py-1 text-success">API connected</span>
-            <span className="rounded-full border border-border bg-background px-2 py-1">{deployment?.backend_runtime_mode || 'Backend'}</span>
-            <span className="rounded-full border border-border bg-background px-2 py-1">{runtime?.fs_license_exists ? 'Runtime ready' : 'Runtime unknown'}</span>
-            <span className="rounded-full border border-border bg-background px-2 py-1">Agent {deployment?.agent?.configured ? 'configured' : 'fallback'}</span>
+    <div className="flex h-screen bg-[#F8FAFC] text-[#1E293B] font-sans antialiased overflow-hidden">
+      {/* Sidebar */}
+      <aside className="w-[260px] flex-shrink-0 border-r border-[#E2E8F0] bg-white flex flex-col justify-between overflow-y-auto max-lg:hidden">
+        <div>
+          {/* Logo */}
+          <div className="flex items-center gap-3 px-6 py-6 border-b border-[#E2E8F0]">
+            <div className="text-[#065F46]">
+              <Brain className="w-8 h-8" />
+            </div>
+            <div>
+              <div className="font-bold text-sm leading-tight text-gray-900">Neuro Imaging Agent</div>
+              <div className="text-xs text-gray-500 text-[10px] uppercase tracking-wider font-semibold">Console v1.0</div>
+            </div>
           </div>
-          <NavLink className="text-sm text-muted hover:text-foreground" to="/projects">
-            Switch project
+
+          {/* Project Context */}
+          <div className="px-4 py-4">
+            <div className="bg-gray-50 rounded-lg p-3 border border-[#E2E8F0]">
+              <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Project</div>
+              <div className="flex items-center justify-between font-medium text-gray-700 text-sm">
+                Project {projectId} <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+              </div>
+            </div>
+          </div>
+
+          {/* Navigation */}
+          <div className="px-4 py-2">
+            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 px-2">Navigation</div>
+            <nav className="space-y-1">
+              {navItems.map((item) => (
+                <NavLink
+                  key={item.path}
+                  to={`/projects/${projectId}/${item.path}`}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-3 py-2 rounded-md font-medium text-sm transition-colors ${
+                      isActive
+                        ? 'bg-[#ECFDF5] text-[#065F46]'
+                        : 'text-gray-600 hover:bg-gray-50'
+                    }`
+                  }
+                >
+                  <item.icon className="w-4 h-4" />
+                  {item.label}
+                </NavLink>
+              ))}
+            </nav>
+          </div>
+
+          {/* Runtime Status */}
+          <div className="px-4 py-4">
+            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 px-2">System Status</div>
+            <div className="bg-gray-50 rounded-lg p-3 space-y-3 text-xs border border-[#E2E8F0]">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-500">Backend</span>
+                <span className="font-medium text-gray-700 capitalize">{deployment?.backend_runtime_mode || 'local'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-500">Runtime</span>
+                <div className="flex items-center gap-1.5 font-medium text-gray-700">
+                  <div className={`w-2 h-2 rounded-full ${runtime?.fs_license_exists ? 'bg-green-500' : 'bg-amber-500'}`}></div>
+                  {runtime?.fs_license_exists ? 'Ready' : 'Incomplete'}
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-500">Agent</span>
+                <span className="font-medium text-gray-700">{deployment?.agent?.configured ? 'Enabled' : 'Fallback'}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-4 border-t border-[#E2E8F0]">
+          <NavLink to="/projects" className="flex items-center gap-2 text-gray-500 hover:text-gray-700 text-sm font-medium">
+            <ChevronLeft className="w-4 h-4" /> Switch project
           </NavLink>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 overflow-y-auto">
+        {/* Top Header */}
+        <header className="flex items-center justify-between p-6 h-16 border-b border-[#E2E8F0] bg-white">
+          <div className="flex items-center gap-2 text-xs font-semibold">
+            <span className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-green-50 text-green-700 border border-green-100">
+              <div className="w-1.5 h-1.5 rounded-full bg-green-500"></div>
+              API connected
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+             <button className="flex items-center gap-2 border border-gray-200 bg-white text-gray-700 px-3 py-1.5 rounded-md text-sm font-medium hover:bg-gray-50 shadow-sm transition-colors">
+              <Settings className="w-4 h-4" /> Settings
+            </button>
+            <div className="flex items-center gap-2 border border-gray-200 bg-white px-1.5 py-1.5 rounded-md cursor-pointer hover:bg-gray-50 shadow-sm transition-colors">
+              <div className="w-6 h-6 rounded bg-[#065F46] text-white flex items-center justify-center text-xs font-bold uppercase">NR</div>
+              <ChevronDown className="w-3.5 h-3.5 text-gray-500 mr-1" />
+            </div>
+          </div>
         </header>
-        <main className="p-5">
+
+        {/* Page Content Area */}
+        <div className="p-8 max-w-7xl mx-auto">
           <Outlet />
-        </main>
-        <footer className="border-t border-border px-5 py-3 text-xs text-muted">
-          API base: <span className="font-mono">{getApiBase()}</span>
+        </div>
+
+        <footer className="px-8 py-6 border-t border-[#E2E8F0] text-xs text-gray-400 flex items-center justify-between">
+          <div>API base: <span className="font-mono">{getApiBase()}</span></div>
+          <div>Neuro Imaging Agent &copy; 2026</div>
         </footer>
-      </div>
+      </main>
     </div>
   );
 }

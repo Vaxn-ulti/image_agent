@@ -36,13 +36,13 @@ describe('AgentPage', () => {
       </QueryClientProvider>,
     );
 
-    expect(await screen.findByText(/Grounding policy/)).toBeInTheDocument();
+    expect(await screen.findByText(/Grounding Enabled/)).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText('Agent query'), 'What happened to DWI?');
-    await userEvent.click(screen.getByRole('button', { name: 'Ask agent' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
     expect(await screen.findByText('Task 114 completed.')).toBeInTheDocument();
-    expect(await screen.findByText('Agent evidence review')).toBeInTheDocument();
-    expect(await screen.findByText('Backend context')).toBeInTheDocument();
-    expect(await screen.findByText(/status\s*\|\s*langgraph/)).toBeInTheDocument();
+    expect(await screen.findByText('Evidence Review')).toBeInTheDocument();
+    expect(await screen.findByText('Intent Detection')).toBeInTheDocument();
+    expect(await screen.findByText('status')).toBeInTheDocument();
     expect(await screen.findByText(/Read backend task\/output records first/)).toBeInTheDocument();
     expect(await screen.findByText(/inspect_task_status/)).toBeInTheDocument();
   });

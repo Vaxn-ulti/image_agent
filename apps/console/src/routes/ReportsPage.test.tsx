@@ -27,8 +27,8 @@ describe('ReportsPage', () => {
       </QueryClientProvider>,
     );
 
-    expect(await screen.findByRole('heading', { name: 'Reports' })).toBeInTheDocument();
-    expect(await screen.findByText('Report-ready tasks')).toBeInTheDocument();
-    expect(await screen.findByText('dwi_fast_gpu_dti')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Scientific Reports' })).toBeInTheDocument();
+    expect(await screen.findByText('3 Reports Available')).toBeInTheDocument();
+    expect(await screen.findByText('dwi fast gpu dti Report')).toBeInTheDocument();
   });
 });

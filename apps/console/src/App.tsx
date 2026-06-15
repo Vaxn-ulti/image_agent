@@ -12,6 +12,7 @@ import { ReportsPage } from './routes/ReportsPage';
 import { SettingsPage } from './routes/SettingsPage';
 import { TasksPage } from './routes/TasksPage';
 import { WorkflowsPage } from './routes/WorkflowsPage';
+import { GeminiStandaloneApp } from './routes/GeminiStandaloneApp';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -26,6 +27,7 @@ const router = createBrowserRouter([
   { element: <Navigate replace to="/projects" />, path: '/' },
   { element: <LoginPage />, path: '/login' },
   { element: <ProjectsPage />, path: '/projects' },
+  { element: <GeminiStandaloneApp />, path: '/gemini' },
   {
     children: [
       { element: <Navigate replace to="dashboard" />, index: true },

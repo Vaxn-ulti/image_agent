@@ -28,7 +28,7 @@ describe('SettingsPage', () => {
     );
 
     expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument();
-    expect(await screen.findByText('API connection')).toBeInTheDocument();
+    expect(await screen.findByText('API Connection')).toBeInTheDocument();
     expect(await screen.findByText('langgraph')).toBeInTheDocument();
   });
 });

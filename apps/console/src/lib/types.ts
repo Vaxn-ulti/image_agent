@@ -68,6 +68,8 @@ export type DeploymentResponse = {
 export type Inventory = {
   total_files?: number;
   bids_dataset_root?: string;
+  inventory_status?: TaskStatus;
+  error_message?: string;
   dicom?: {
     found_files?: number;
     conversion_status?: string;

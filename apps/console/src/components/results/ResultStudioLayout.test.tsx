@@ -8,13 +8,13 @@ describe('ResultStudioLayout', () => {
     render(<ResultStudioLayout apiBase="http://localhost:8000" summary={mockDwiSummary} />);
 
     expect(screen.getByRole('heading', { name: 'Scientific Results Studio' })).toBeInTheDocument();
-    expect(screen.getByText('#114')).toBeInTheDocument();
+    expect(screen.getByText('RUN-114')).toBeInTheDocument();
     expect(screen.getAllByText('DWI').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Scientific report figures')).toBeInTheDocument();
     expect(screen.getByText('dwi_tensor_metrics.png')).toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'Derived DWI report figure: dwi_tensor_metrics.png' })).toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'Derived DWI report figure: dwi_atlas_region_means.png' })).toBeInTheDocument();
-    expect(screen.getAllByText('Artifacts').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('Artifact Manifest')).toBeInTheDocument();
     expect(screen.getByText('Evidence chain')).toBeInTheDocument();
     expect(screen.getAllByText(/runtime_sec/).length).toBeGreaterThanOrEqual(1);
   });

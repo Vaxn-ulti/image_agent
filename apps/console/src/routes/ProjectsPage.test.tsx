@@ -34,8 +34,8 @@ describe('ProjectsPage', () => {
 
     expect(await screen.findByText('MCI mixed modality acceptance')).toBeInTheDocument();
 
-    await userEvent.type(screen.getByLabelText('Project name'), 'New cohort');
-    await userEvent.click(screen.getByRole('button', { name: 'Create project' }));
+    await userEvent.type(screen.getByLabelText('Project Name'), 'New cohort');
+    await userEvent.click(screen.getByRole('button', { name: 'Create Workspace' }));
 
     await waitFor(() => expect(api.createProject).toHaveBeenCalledWith({ description: '', name: 'New cohort' }));
   });

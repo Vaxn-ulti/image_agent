@@ -29,7 +29,7 @@ describe('TasksPage', () => {
       </QueryClientProvider>,
     );
 
-    expect(await screen.findByText('#114')).toBeInTheDocument();
+    expect(await screen.findByText('RUN-114')).toBeInTheDocument();
     expect((await screen.findAllByText('Completed')).length).toBeGreaterThanOrEqual(3);
     expect(screen.getAllByRole('link', { name: /Open result/ }).map((link) => link.getAttribute('href'))).toContain(
       '/projects/13/results/114',

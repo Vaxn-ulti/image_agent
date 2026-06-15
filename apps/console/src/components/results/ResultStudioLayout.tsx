@@ -21,19 +21,60 @@ export function ResultStudioLayout({ apiBase, summary }: ResultStudioLayoutProps
   const modality = summary.modality.toUpperCase();
 
   return (
-    <div className="space-y-4">
-      <ResultSummaryHeader artifactCount={artifacts.length + reportArtifacts.length} reportFigures={reportFigures} summary={summary} />
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="space-y-4">
-          <ReportFigureGallery apiBase={apiBase} figures={reportFigures} taskId={summary.task_id} />
-          {modality === 'T1' ? <T1ResultView artifactsByFeature={artifactGroups} summary={summary} /> : null}
-          {modality === 'BOLD' ? <BoldResultView apiBase={apiBase} artifactsByFeature={artifactGroups} reportFigures={reportFigures} summary={summary} /> : null}
-          {modality === 'DWI' ? <DwiResultView apiBase={apiBase} artifactsByFeature={artifactGroups} reportFigures={reportFigures} summary={summary} /> : null}
-          <ArtifactTable apiBase={apiBase} artifacts={artifacts} taskId={summary.task_id} />
-          <ArtifactTable apiBase={apiBase} artifacts={reportArtifacts} taskId={summary.task_id} title="Report files" />
+    <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
+      <ResultSummaryHeader
+        artifactCount={artifacts.length + reportArtifacts.length}
+        reportFigures={reportFigures}
+        summary={summary}
+      />
+
+      <div className="grid gap-8 xl:grid-cols-[1fr_320px]">
+        <div className="space-y-8 min-w-0">
+          {/* Scientific Visualization Area */}
+          <div className="space-y-6">
+            <ReportFigureGallery apiBase={apiBase} figures={reportFigures} taskId={summary.task_id} />
+
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden p-6">
+              {modality === 'T1' ? <T1ResultView artifactsByFeature={artifactGroups} summary={summary} /> : null}
+              {modality === 'BOLD' ? <BoldResultView apiBase={apiBase} artifactsByFeature={artifactGroups} reportFigures={reportFigures} summary={summary} /> : null}
+              {modality === 'DWI' ? <DwiResultView apiBase={apiBase} artifactsByFeature={artifactGroups} reportFigures={reportFigures} summary={summary} /> : null}
+            </div>
+          </div>
+
+          {/* Artifact Manifest Tables */}
+          <div className="space-y-6">
+             <div className="flex items-center gap-2 px-2">
+                <div className="w-1.5 h-6 bg-[#065F46] rounded-full"></div>
+                <h2 className="text-lg font-bold text-gray-900">Artifact Manifest</h2>
+             </div>
+
+             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <ArtifactTable apiBase={apiBase} artifacts={artifacts} taskId={summary.task_id} />
+             </div>
+
+             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <ArtifactTable apiBase={apiBase} artifacts={reportArtifacts} taskId={summary.task_id} title="Report files" />
+             </div>
+          </div>
         </div>
-        <aside className="space-y-4">
-          <ProvenancePanel provenance={summary.provenance} />
+
+        {/* Sidebar Context */}
+        <aside className="space-y-6">
+          <div className="sticky top-8">
+             <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-4 px-1">Execution Metadata</div>
+             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <ProvenancePanel provenance={summary.provenance} />
+             </div>
+
+             <div className="mt-6 p-5 bg-[#065F46]/5 rounded-xl border border-[#065F46]/10">
+                <h4 className="text-xs font-bold text-gray-900 mb-2">Scientific Integrity</h4>
+                <p className="text-[11px] text-gray-500 leading-relaxed">
+                  All outputs in this studio are generated using containerized OCI images.
+                  The provenance hash ensures that the results are reproducible across any
+                  compatible infrastructure.
+                </p>
+             </div>
+          </div>
         </aside>
       </div>
     </div>

@@ -36,7 +36,7 @@ describe('WorkflowsPage', () => {
 
     renderPage();
 
-    expect(await screen.findByText('DWI')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'DWI Workflows' })).toBeInTheDocument();
     expect(await screen.findByText(/JSON sidecar/)).toBeInTheDocument();
   });
 });
