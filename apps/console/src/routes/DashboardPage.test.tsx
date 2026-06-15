@@ -18,6 +18,8 @@ vi.mock('../lib/api', () => ({
     uploadDicom: vi.fn(),
     uploadDwi: vi.fn(),
     uploadNifti: vi.fn(),
+    createUploadSession: vi.fn(),
+    ingestDataset: vi.fn(),
     chat: vi.fn(),
   },
 }));
@@ -114,6 +116,36 @@ describe('DashboardPage', () => {
 
     expect(api.uploadDwi).toHaveBeenCalledWith(13, { nifti, bval, bvec, jsonSidecar: json });
     expect(api.uploadNifti).not.toHaveBeenCalled();
+    expect((await screen.findAllByText(/I found 1 brain MRI scan/)).length).toBeGreaterThan(0);
+  });
+
+  it('uses dataset ingest for zip uploads and shows the upload session id', async () => {
+    vi.mocked(api.getResultSummary).mockResolvedValue(mockT1Summary);
+    vi.mocked(api.listWorkflows).mockResolvedValue({ workflows: ['t1_deepprep'] });
+    vi.mocked(api.listProjectTasks).mockResolvedValue([]);
+    vi.mocked(api.listSeries).mockResolvedValueOnce([]).mockResolvedValue([mockSeries[0]]);
+    vi.mocked(api.createUploadSession).mockResolvedValue({ id: 77, project_id: 13, status: 'ready' });
+    vi.mocked(api.ingestDataset).mockResolvedValue({ inventory: { inventory_status: 'completed' } });
+    vi.mocked(api.runAgent).mockResolvedValue({ answer: 'Upload guidance.' });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/projects/13/dashboard']}>
+          <Routes>
+            <Route element={<DashboardPage />} path="/projects/:projectId/dashboard" />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    const archive = new File(['zip'], 'scanner-export.zip', { type: 'application/zip' });
+    await userEvent.upload(await screen.findByLabelText('Upload DICOM, NIfTI, or DWI sidecar set'), archive);
+
+    expect(api.createUploadSession).toHaveBeenCalledWith(13, { label: 'scanner-export.zip', source_type: 'folder_or_archive' });
+    expect(api.ingestDataset).toHaveBeenCalledWith(13, 77, archive);
+    expect(api.uploadDicom).not.toHaveBeenCalled();
+    expect(await screen.findByText('Upload session #77')).toBeInTheDocument();
     expect((await screen.findAllByText(/I found 1 brain MRI scan/)).length).toBeGreaterThan(0);
   });
 

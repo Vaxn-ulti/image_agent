@@ -23,7 +23,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { Button } from '../components/ui/Button';
 import { api } from '../lib/api';
 import { queryKeys } from '../lib/query';
-import type { DwiUploadFiles, OutputItem, ResultSummary, Series, Task } from '../lib/types';
+import type { DwiUploadFiles, Inventory, OutputItem, ResultSummary, Series, Task } from '../lib/types';
 import { getWorkflowEligibility, normalizeWorkflowList, selectQsiprepTaskId, workflowGroup } from '../lib/workflows';
 
 const previewScans = [
@@ -56,7 +56,14 @@ function taskTimestamp(task: Task) {
   return task.finished_at || task.started_at || task.created_at || '';
 }
 
-type DashboardUploadResponse = { file?: unknown; files?: unknown[]; series: Series };
+type DashboardUploadResponse = {
+  file?: unknown;
+  files?: unknown[];
+  inventory?: Inventory;
+  series?: Series;
+  status?: string;
+  upload_session_id?: number;
+};
 
 function latestCompletedTask(tasks: Task[]) {
   return [...tasks].filter(completedTask).sort((a, b) => taskTimestamp(b).localeCompare(taskTimestamp(a)) || b.id - a.id)[0];
@@ -112,7 +119,10 @@ function selectFileUpload(projectId: number, files: File[]): Promise<DashboardUp
   }
   const name = file.name.toLowerCase();
   if (name.endsWith('.zip')) {
-    return api.uploadDicom(projectId, file);
+    return api.createUploadSession(projectId, { label: file.name, source_type: 'folder_or_archive' }).then(async (session) => {
+      const ingest = await api.ingestDataset(projectId, session.id, file);
+      return { ...ingest, upload_session_id: session.id };
+    });
   }
   if (!isNiftiFile(file)) {
     throw new Error('Supported uploads are DICOM zip, NIfTI, or complete DWI sidecar sets.');
@@ -126,6 +136,7 @@ export function DashboardPage() {
   const [error, setError] = useState('');
   const [selectedSeriesId, setSelectedSeriesId] = useState<number | null>(null);
   const [selectedWorkflow, setSelectedWorkflow] = useState('');
+  const [lastUploadSessionId, setLastUploadSessionId] = useState<number | null>(null);
   const [skullStripping, setSkullStripping] = useState(true);
   const [biasCorrection, setBiasCorrection] = useState(true);
   const [chatInput, setChatInput] = useState('');
@@ -168,7 +179,10 @@ export function DashboardPage() {
     onError: (err) => setError(err instanceof Error ? err.message : 'Upload failed'),
     onSuccess: (data) => {
       setError('');
-      setSelectedSeriesId(data.series.id);
+      setLastUploadSessionId(data.upload_session_id ?? null);
+      if (data.series?.id) {
+        setSelectedSeriesId(data.series.id);
+      }
       setSelectedWorkflow('');
       queryClient.invalidateQueries({ queryKey: queryKeys.series(projectId) });
     },
@@ -300,6 +314,11 @@ export function DashboardPage() {
                   Advanced Ingest <ExternalLink className="w-3 h-3" />
                 </Link>
               </div>
+              {lastUploadSessionId ? (
+                <div className="mt-3 rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
+                  Upload session #{lastUploadSessionId}
+                </div>
+              ) : null}
             </div>
           </div>
 
