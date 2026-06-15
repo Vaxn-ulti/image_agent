@@ -18,6 +18,17 @@ vi.mock('../lib/api', () => ({
         tool_invocations: [{ tool: 'inspect_task_status', status: 'ok', result: { task_count: 1 } }],
         rag_mode: 'langgraph',
       }),
+      runAgent: vi.fn().mockResolvedValue({
+        answer: 'Task 114 completed.',
+        agent_run_id: 'agent_run_123',
+        citations: [],
+        intent: 'status',
+        recommended_next_step: 'Read backend task/output records first.',
+        selected_skill: 'image-agent-operator',
+        status: 'answered',
+        tool_chain_hint: 'Read backend task/output records first.',
+        tool_invocations: [{ tool: 'inspect_task_status', status: 'ok', result: { task_count: 1 } }],
+      }),
       ragStatus: vi.fn().mockResolvedValue({
         dependencies: { llama_index: { available: true } },
         grounding_policy: { backend_records_rank: 'first' },
@@ -54,6 +65,8 @@ describe('AgentPage', () => {
     expect(await screen.findByText('status')).toBeInTheDocument();
     expect(await screen.findByText(/Read backend task\/output records first/)).toBeInTheDocument();
     expect(await screen.findByText(/inspect_task_status/)).toBeInTheDocument();
+    expect(api.runAgent).toHaveBeenCalledWith(13, 'What happened to DWI?');
+    expect(api.ragQuery).not.toHaveBeenCalled();
   });
 
   it('shows fallback RAG status from the backend instead of hard-coded readiness', async () => {

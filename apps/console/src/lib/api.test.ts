@@ -46,6 +46,21 @@ describe('api client', () => {
     expect(fetchMock.mock.calls[1][0]).toContain('/tasks/4/artifacts/maps%2Ffa.nii.gz');
   });
 
+  it('runs project-scoped Agent chat through the Agent run endpoint', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ agent_run_id: 'agent_run_123', answer: 'ok' }), { status: 200 }));
+
+    await api.runAgent(13, 'Summarize this project');
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toContain('/agent/runs');
+    expect(init.method).toBe('POST');
+    expect(init.headers).toEqual({ 'Content-Type': 'application/json' });
+    expect(JSON.parse(init.body as string)).toEqual({
+      message: 'Summarize this project',
+      project_id: 13,
+    });
+  });
+
   it('preserves backend error text', async () => {
     fetchMock.mockResolvedValueOnce(new Response('DWI JSON sidecar is required', { status: 400 }));
     await expect(api.getTask(99)).rejects.toThrow('DWI JSON sidecar is required');

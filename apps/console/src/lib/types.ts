@@ -154,6 +154,12 @@ export type RagResponse = {
   rag_mode?: 'langgraph' | 'fallback' | string;
 };
 
+export type AgentRunResponse = RagResponse & {
+  agent_run_id?: string;
+  selected_skill?: string;
+  status?: string;
+};
+
 export type RagStatus = {
   dependencies?: Record<string, boolean | { available?: boolean; [key: string]: unknown }>;
   grounding_policy?: Record<string, unknown>;

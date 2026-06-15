@@ -17,12 +17,12 @@ import { useParams } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { api } from '../lib/api';
 import { queryKeys } from '../lib/query';
-import type { RagResponse, RagStatus } from '../lib/types';
+import type { AgentRunResponse, RagStatus } from '../lib/types';
 
 type Message = {
   role: 'user' | 'agent';
   content: string;
-  response?: RagResponse;
+  response?: AgentRunResponse;
   timestamp: Date;
 };
 
@@ -60,7 +60,7 @@ export function AgentPage() {
   });
 
   const ask = useMutation({
-    mutationFn: (message: string) => api.ragQuery(projectId, message),
+    mutationFn: (message: string) => api.runAgent(projectId, message),
     onSuccess: (data) => {
       const agentMsg: Message = {
         role: 'agent',

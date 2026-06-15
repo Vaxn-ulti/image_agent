@@ -1,6 +1,7 @@
 import type {
   DeploymentResponse,
   DwiUploadFiles,
+  AgentRunResponse,
   Inventory,
   LoginResponse,
   RagStatus,
@@ -94,6 +95,8 @@ export const api = {
   getArtifactUrl: (taskId: number, relativePath: string) => request<Blob>(`/tasks/${taskId}/artifacts/${encodeArtifactPath(relativePath)}`),
   ragStatus: () => request<RagStatus>('/agent/rag/status'),
   ragQuery: (projectId: number | null, query: string) => jsonRequest<RagResponse>('/agent/rag/query', { project_id: projectId, query }),
+  runAgent: (projectId: number | null, message: string) =>
+    jsonRequest<AgentRunResponse>('/agent/runs', { message, project_id: projectId }),
   chat: (
     projectId: number | null,
     message: string,
