@@ -3,12 +3,12 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from threading import Thread
 
 from fastapi import HTTPException
 
 from app.core import config
 from app.db.database import connect, now_iso
+from app.services.background import submit_background
 from app.workflows.deepprep import run_mock_deepprep
 from app.workflows.eligibility import build_workflow_eligibility
 from app.workflows.registry import allowed_runtime_workflows, resolve_runtime_workflow_type
@@ -228,10 +228,10 @@ def create_series_task(series_id, req):
         task = dict(conn.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone())
     if req.workflow_type == "t1_deepprep_mock":
         runner = _main_attr("run_mock_deepprep", run_mock_deepprep)
-        Thread(target=runner, args=(task_id,), daemon=True).start()
+        submit_background(runner, task_id)
     else:
         runner = _main_attr("run_pipeline_task", run_pipeline_task)
-        Thread(target=runner, args=(task_id, req.qsiprep_task_id), daemon=True).start()
+        submit_background(runner, task_id, req.qsiprep_task_id)
     return task
 
 

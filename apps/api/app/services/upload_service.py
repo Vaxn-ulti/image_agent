@@ -6,7 +6,6 @@ import os
 import sys
 import zipfile
 from pathlib import Path
-from threading import Thread
 
 from fastapi import HTTPException
 
@@ -14,6 +13,7 @@ from app.core import config
 from app.db.database import connect, now_iso
 from app.imaging.detect import detect_series
 from app.imaging.ingest import process_upload_session
+from app.services.background import submit_background
 from app.workflows.eligibility import build_workflow_eligibility
 
 
@@ -233,7 +233,7 @@ def ingest_dataset(project_id, upload_session_id, archive, sync_fast_path=True):
     if sync_fast_path and archive_path.stat().st_size <= threshold:
         inventory = processor(project_id, upload_session_id, archive_path)
         return {"upload_session_id": upload_session_id, "status": inventory["inventory_status"], "inventory": inventory}
-    Thread(target=processor, args=(project_id, upload_session_id, archive_path), daemon=True).start()
+    submit_background(processor, project_id, upload_session_id, archive_path)
     return {"upload_session_id": upload_session_id, "status": "running"}
 
 

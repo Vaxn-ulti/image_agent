@@ -115,3 +115,14 @@ def test_legacy_bridge_modules_are_removed():
     assert "services.compat" not in dependencies_source
     assert "legacy_service" not in dependencies_source
     assert "legacy()" not in dependencies_source
+
+
+def test_services_delegate_background_execution_to_executor_boundary():
+    root = Path(__file__).resolve().parents[1]
+
+    assert (root / "app" / "services" / "background.py").exists()
+    for service_name in ("task_service.py", "upload_service.py"):
+        service_source = (root / "app" / "services" / service_name).read_text(encoding="utf-8")
+        assert "from threading import Thread" not in service_source
+        assert "Thread(" not in service_source
+        assert "submit_background" in service_source
