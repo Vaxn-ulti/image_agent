@@ -10,15 +10,27 @@ import {
   Terminal,
   Zap
 } from 'lucide-react';
+import { useState } from 'react';
 import { PageHeader } from '../components/ui/PageHeader';
-import { api, getApiBase } from '../lib/api';
+import { api, getApiBase, resetApiBase, setApiBase } from '../lib/api';
 import { queryKeys } from '../lib/query';
 
 export function SettingsPage() {
   const { data: deployment } = useQuery({ queryFn: api.deployment, queryKey: queryKeys.deployment });
   const { data: runtime } = useQuery({ queryFn: api.runtimeContainers, queryKey: queryKeys.runtime, retry: false });
+  const [apiBaseInput, setApiBaseInput] = useState(getApiBase());
   const productionReadiness = deployment?.production_readiness;
   const readinessBlocked = productionReadiness?.ready === false;
+
+  function handleSave() {
+    setApiBase(apiBaseInput);
+    setApiBaseInput(getApiBase());
+  }
+
+  function handleReset() {
+    resetApiBase();
+    setApiBaseInput(getApiBase());
+  }
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
@@ -41,12 +53,15 @@ export function SettingsPage() {
           </div>
           <div className="p-6 space-y-5">
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5" htmlFor="api-base-endpoint">
                 <Terminal className="w-3.5 h-3.5" /> API Base Endpoint
               </label>
-              <div className="p-3 bg-gray-50 border border-gray-100 rounded-xl font-mono text-xs text-gray-600 break-all">
-                {getApiBase()}
-              </div>
+              <input
+                className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl font-mono text-xs text-gray-700 outline-none focus:border-[#065F46] focus:ring-1 focus:ring-[#065F46]"
+                id="api-base-endpoint"
+                onChange={(event) => setApiBaseInput(event.target.value)}
+                value={apiBaseInput}
+              />
               <p className="text-[10px] text-gray-400 italic">Target backend for all scientific queries and ingest triggers.</p>
             </div>
 
@@ -154,10 +169,16 @@ export function SettingsPage() {
       </div>
 
       <div className="flex justify-end gap-3 pt-4">
-        <button className="px-6 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-50 transition-colors">
+        <button
+          className="px-6 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-50 transition-colors"
+          onClick={handleReset}
+        >
           Reset Defaults
         </button>
-        <button className="px-8 py-2 bg-[#065F46] text-white rounded-xl text-xs font-bold hover:bg-[#044E3A] transition-colors shadow-lg flex items-center gap-2">
+        <button
+          className="px-8 py-2 bg-[#065F46] text-white rounded-xl text-xs font-bold hover:bg-[#044E3A] transition-colors shadow-lg flex items-center gap-2"
+          onClick={handleSave}
+        >
           <Save className="w-3.5 h-3.5" /> Save Changes
         </button>
       </div>

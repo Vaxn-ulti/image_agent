@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { api } from '../lib/api';
 import { SettingsPage } from './SettingsPage';
@@ -9,7 +10,9 @@ vi.mock('../lib/api', () => ({
     deployment: vi.fn(),
     runtimeContainers: vi.fn(),
   },
-  getApiBase: () => 'http://localhost:8000',
+  getApiBase: () => localStorage.getItem('apiBase') || 'http://localhost:8000',
+  resetApiBase: () => localStorage.removeItem('apiBase'),
+  setApiBase: (value: string) => localStorage.setItem('apiBase', value.trim().replace(/\/+$/, '')),
 }));
 
 describe('SettingsPage', () => {
@@ -55,5 +58,33 @@ describe('SettingsPage', () => {
     expect(await screen.findByText('Production Readiness')).toBeInTheDocument();
     expect(await screen.findByText('Blocked')).toBeInTheDocument();
     expect(await screen.findByText('Agent model gateway is not configured.')).toBeInTheDocument();
+  });
+
+  it('saves and resets the remote API base used by the console', async () => {
+    vi.mocked(api.deployment).mockResolvedValue({
+      agent: { configured: true, provider: 'OpenAI' },
+      backend_runtime_mode: 'remote',
+    });
+    vi.mocked(api.runtimeContainers).mockResolvedValue({ fs_license_exists: true });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={client}>
+        <SettingsPage />
+      </QueryClientProvider>,
+    );
+
+    const input = await screen.findByLabelText('API Base Endpoint');
+    await userEvent.clear(input);
+    await userEvent.type(input, 'https://image-agent.example.com/');
+    await userEvent.click(screen.getByRole('button', { name: /Save Changes/ }));
+
+    expect(localStorage.getItem('apiBase')).toBe('https://image-agent.example.com');
+    expect(await screen.findByDisplayValue('https://image-agent.example.com')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Reset Defaults' }));
+
+    expect(localStorage.getItem('apiBase')).toBeNull();
+    expect(await screen.findByDisplayValue('http://localhost:8000')).toBeInTheDocument();
   });
 });

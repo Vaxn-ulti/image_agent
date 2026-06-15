@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { api, getApiBase } from './api';
+import { api, getApiBase, resetApiBase, setApiBase } from './api';
 
 describe('api client', () => {
   const fetchMock = vi.fn();
@@ -15,6 +15,18 @@ describe('api client', () => {
   });
 
   it('defaults the API base to the current host on port 8000', () => {
+    expect(getApiBase()).toContain(':8000');
+  });
+
+  it('stores a normalized remote API base and resets to the default host', () => {
+    setApiBase('https://image-agent.example.com/');
+
+    expect(getApiBase()).toBe('https://image-agent.example.com');
+    expect(localStorage.getItem('apiBase')).toBe('https://image-agent.example.com');
+
+    resetApiBase();
+
+    expect(localStorage.getItem('apiBase')).toBeNull();
     expect(getApiBase()).toContain(':8000');
   });
 

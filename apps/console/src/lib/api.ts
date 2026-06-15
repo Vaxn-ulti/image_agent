@@ -15,9 +15,23 @@ import type {
 } from './types';
 
 const defaultApiBase = `${window.location.protocol}//${window.location.hostname}:8000`;
+const apiBaseStorageKey = 'apiBase';
 
 export function getApiBase() {
-  return localStorage.getItem('apiBase') || defaultApiBase;
+  return localStorage.getItem(apiBaseStorageKey) || defaultApiBase;
+}
+
+export function setApiBase(value: string) {
+  const normalized = value.trim().replace(/\/+$/, '');
+  if (!normalized) {
+    resetApiBase();
+    return;
+  }
+  localStorage.setItem(apiBaseStorageKey, normalized);
+}
+
+export function resetApiBase() {
+  localStorage.removeItem(apiBaseStorageKey);
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
