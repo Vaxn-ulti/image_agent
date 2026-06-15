@@ -41,6 +41,8 @@ def test_low_risk_services_do_not_delegate_simple_logic_to_legacy_service():
     assert "legacy" not in project_service
     assert "from app.services.compat import legacy" not in result_service
     assert "legacy()" not in result_service
+    assert "from app.services.compat import legacy" not in agent_service
+    assert "legacy()" not in agent_service
     for function_name in (
         "def health",
         "def list_workflows",
