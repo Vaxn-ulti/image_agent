@@ -56,6 +56,9 @@ def test_low_risk_services_do_not_delegate_simple_logic_to_legacy_service():
     for function_name in (
         "def list_project_tasks",
         "def get_series",
+        "def validate_run_request",
+        "def create_series_task",
+        "def run_series",
         "def get_task",
     ):
         start = task_service.index(function_name)
