@@ -103,3 +103,15 @@ def test_low_risk_services_do_not_delegate_simple_logic_to_legacy_service():
         next_function = upload_service.find("\ndef ", start + 1)
         body = upload_service[start:] if next_function == -1 else upload_service[start:next_function]
         assert "legacy()" not in body
+
+
+def test_legacy_bridge_modules_are_removed():
+    root = Path(__file__).resolve().parents[1]
+
+    assert not (root / "app" / "services" / "compat.py").exists()
+    assert not (root / "app" / "services" / "legacy_service.py").exists()
+
+    dependencies_source = (root / "app" / "dependencies.py").read_text(encoding="utf-8")
+    assert "services.compat" not in dependencies_source
+    assert "legacy_service" not in dependencies_source
+    assert "legacy()" not in dependencies_source
