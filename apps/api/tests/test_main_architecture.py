@@ -241,15 +241,26 @@ def test_project_existence_checks_live_in_project_service():
 def test_dwi_sidecar_detection_lives_in_imaging_layer():
     root = Path(__file__).resolve().parents[1]
     task_service = (root / "app" / "services" / "task_service.py").read_text(encoding="utf-8")
+    upload_service = (root / "app" / "services" / "upload_service.py").read_text(encoding="utf-8")
+    dwi_sidecars = (root / "app" / "imaging" / "dwi_sidecars.py").read_text(encoding="utf-8")
 
     assert (root / "app" / "imaging" / "dwi_sidecars.py").exists()
     assert "dwi_has_required_sidecars" in task_service
+    assert "dwi_json_metadata" in upload_service
+    assert "def dwi_json_metadata(" in dwi_sidecars
     for private_helper in (
         "def _dwi_sidecar_paths(",
         "def _dwi_has_eddy_json_metadata(",
         "def _dwi_has_required_sidecars(",
     ):
         assert private_helper not in task_service
+    for forbidden in (
+        "def _dwi_json_metadata(",
+        "PhaseEncodingDirection",
+        "TotalReadoutTime",
+        "DWI JSON sidecar must be valid JSON",
+    ):
+        assert forbidden not in upload_service
 
 
 def test_agent_backend_context_queries_live_in_agent_layer():

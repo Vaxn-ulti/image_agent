@@ -3,7 +3,28 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from fastapi import HTTPException
+
 from app.db.queries import fetch_rows
+
+
+def dwi_json_metadata(json_row: dict | None) -> dict:
+    if json_row is None:
+        return {"has_json": False, "has_dwi_eddy_metadata": False}
+    path = Path(json_row["storage_path"])
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(400, "DWI JSON sidecar must be valid JSON") from exc
+    phase_encoding = payload.get("PhaseEncodingDirection")
+    total_readout = payload.get("TotalReadoutTime")
+    return {
+        "has_json": True,
+        "json_file_id": json_row["id"],
+        "has_dwi_eddy_metadata": phase_encoding is not None and total_readout is not None,
+        "phase_encoding_direction": phase_encoding,
+        "total_readout_time": total_readout,
+    }
 
 
 def dwi_has_required_sidecars(series: dict, metadata: dict) -> bool:

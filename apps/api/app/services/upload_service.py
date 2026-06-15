@@ -10,6 +10,7 @@ from fastapi import HTTPException
 from app.db.database import connect, now_iso
 from app.db.queries import fetch_rows
 from app.imaging.detect import detect_series
+from app.imaging.dwi_sidecars import dwi_json_metadata
 from app.imaging.ingest import process_upload_session
 from app.imaging.series_records import parse_series_row
 from app.services.background import submit_background
@@ -63,25 +64,6 @@ def upload(project_id, file):
     return {"file": file_row, "series": parse_series_row(series_row)}
 
 
-def _dwi_json_metadata(json_row: dict | None) -> dict:
-    if json_row is None:
-        return {"has_json": False, "has_dwi_eddy_metadata": False}
-    path = Path(json_row["storage_path"])
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise HTTPException(400, "DWI JSON sidecar must be valid JSON") from exc
-    phase_encoding = payload.get("PhaseEncodingDirection")
-    total_readout = payload.get("TotalReadoutTime")
-    return {
-        "has_json": True,
-        "json_file_id": json_row["id"],
-        "has_dwi_eddy_metadata": phase_encoding is not None and total_readout is not None,
-        "phase_encoding_direction": phase_encoding,
-        "total_readout_time": total_readout,
-    }
-
-
 def upload_dwi(project_id, nifti, bval, bvec, json_sidecar=None):
     require_project(project_id)
     nifti_row = _save_upload(project_id, nifti, "NIFTI")
@@ -96,7 +78,7 @@ def upload_dwi(project_id, nifti, bval, bvec, json_sidecar=None):
             "has_bvec": True,
             "bval_file_id": bval_row["id"],
             "bvec_file_id": bvec_row["id"],
-            **_dwi_json_metadata(json_row),
+            **dwi_json_metadata(json_row),
         }
     )
     with connect() as conn:
