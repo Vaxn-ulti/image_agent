@@ -155,6 +155,15 @@ export function DashboardPage() {
       return status === 'running' || status === 'queued' ? 2000 : false;
     },
   });
+  const { data: latestStartedTask } = useQuery({
+    enabled: Boolean(lastStartedTask?.id),
+    queryFn: () => api.getTask(lastStartedTask!.id),
+    queryKey: lastStartedTask?.id ? queryKeys.task(lastStartedTask.id) : ['task', 'none'],
+    refetchInterval: (query) => {
+      const status = query.state.data?.status || lastStartedTask?.status;
+      return status === 'running' || status === 'queued' ? 5000 : false;
+    },
+  });
 
   const chatMutation = useMutation({
     mutationFn: (message: string) => api.runAgent(projectId, message),
@@ -218,6 +227,7 @@ export function DashboardPage() {
   const uploadInventory = uploadInventoryData?.inventory;
   const uploadInventoryStatus = uploadInventory?.inventory_status;
   const uploadInventoryComplete = uploadInventoryStatus === 'completed';
+  const displayedStartedTask = latestStartedTask || lastStartedTask;
 
   function handleRun() {
     if (!selectedSeries?.id || !effectiveWorkflow) {
@@ -389,10 +399,11 @@ export function DashboardPage() {
                     {eligibility.reason || 'Selected workflow cannot run for this series.'}
                   </div>
                 ) : null}
-                {lastStartedTask ? (
+                {displayedStartedTask ? (
                   <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
-                    <div className="font-semibold">Task #{lastStartedTask.id} {lastStartedTask.status}</div>
-                    <div className="mt-1 text-[11px] text-blue-700/80">Workflow: {lastStartedTask.workflow_type}</div>
+                    <div className="font-semibold">Task #{displayedStartedTask.id} {displayedStartedTask.status}</div>
+                    <div className="mt-1 text-[11px] text-blue-700/80">Progress: {displayedStartedTask.progress}%</div>
+                    <div className="mt-1 text-[11px] text-blue-700/80">Workflow: {displayedStartedTask.workflow_type}</div>
                   </div>
                 ) : null}
               </div>

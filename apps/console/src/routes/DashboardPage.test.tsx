@@ -13,6 +13,7 @@ vi.mock('../lib/api', () => ({
     listWorkflows: vi.fn(),
     listProjectTasks: vi.fn(),
     listSeries: vi.fn(),
+    getTask: vi.fn(),
     runSeries: vi.fn(),
     runAgent: vi.fn(),
     uploadDicom: vi.fn(),
@@ -258,6 +259,14 @@ describe('DashboardPage', () => {
     vi.mocked(api.listWorkflows).mockResolvedValue({ workflows: ['t1_deepprep', 't1_deepprep_anat_report'] });
     vi.mocked(api.listProjectTasks).mockResolvedValue([]);
     vi.mocked(api.listSeries).mockResolvedValue([recommendedSeries]);
+    vi.mocked(api.getTask).mockResolvedValue({
+      id: 131,
+      progress: 42,
+      project_id: 13,
+      series_id: 22,
+      status: 'running',
+      workflow_type: 't1_deepprep_anat_report',
+    });
     vi.mocked(api.runSeries).mockResolvedValue({
       id: 131,
       progress: 0,
@@ -283,7 +292,8 @@ describe('DashboardPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Start recommended pipeline' }));
     expect(api.runSeries).toHaveBeenCalledWith(22, 't1_deepprep_anat_report');
-    expect(await screen.findByText('Task #131 queued')).toBeInTheDocument();
+    expect(await screen.findByText('Task #131 running')).toBeInTheDocument();
+    expect(screen.getByText('Progress: 42%')).toBeInTheDocument();
     expect(screen.getByText('Workflow: t1_deepprep_anat_report')).toBeInTheDocument();
   });
 
