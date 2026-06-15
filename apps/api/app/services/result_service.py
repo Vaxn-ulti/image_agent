@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse
 from app.core import config
 from app.db.database import connect
 from app.db.queries import fetch_rows
+from app.services.project_service import require_project
 from app.services import task_service
 from app.services.runtime_overrides import main_patch_attr_if_changed, main_projects_root
 from app.workflows.artifact_manifest import build_artifact_manifest
@@ -147,8 +148,7 @@ def get_task_artifact(task_id, relative_path):
 
 
 def bold_group_analysis(project_id, req):
-    if not fetch_rows("SELECT * FROM projects WHERE id=?", (project_id,)):
-        raise HTTPException(404, "Project not found")
+    require_project(project_id)
     try:
         runner = main_patch_attr_if_changed("run_group_analysis", _INITIAL_RUN_GROUP_ANALYSIS, run_group_analysis)
         return runner(
@@ -164,8 +164,7 @@ def bold_group_analysis(project_id, req):
 
 
 def bold_descriptive_review(project_id, req):
-    if not fetch_rows("SELECT * FROM projects WHERE id=?", (project_id,)):
-        raise HTTPException(404, "Project not found")
+    require_project(project_id)
     try:
         runner = main_patch_attr_if_changed("run_descriptive_review", _INITIAL_RUN_DESCRIPTIVE_REVIEW, run_descriptive_review)
         return runner(

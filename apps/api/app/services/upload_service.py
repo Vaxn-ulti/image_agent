@@ -14,6 +14,7 @@ from app.imaging.detect import detect_series
 from app.imaging.ingest import process_upload_session
 from app.imaging.series_records import parse_series_row
 from app.services.background import submit_background
+from app.services.project_service import require_project
 from app.services.runtime_overrides import main_patch_attr, main_projects_root
 from app.workflows.eligibility import build_workflow_eligibility
 
@@ -49,13 +50,8 @@ def _save_upload(project_id: int, upload, file_type: str | None = None) -> dict:
         return dict(conn.execute("SELECT * FROM files WHERE id=?", (cur.lastrowid,)).fetchone())
 
 
-def _require_project(project_id: int) -> None:
-    if not fetch_rows("SELECT * FROM projects WHERE id=?", (project_id,)):
-        raise HTTPException(404, "Project not found")
-
-
 def upload(project_id, file):
-    _require_project(project_id)
+    require_project(project_id)
     file_row = _save_upload(project_id, file)
     detection = detect_series(file_row["storage_path"])
     metadata = detection["metadata"]
@@ -100,7 +96,7 @@ def _dwi_json_metadata(json_row: dict | None) -> dict:
 
 
 def upload_dwi(project_id, nifti, bval, bvec, json_sidecar=None):
-    _require_project(project_id)
+    require_project(project_id)
     nifti_row = _save_upload(project_id, nifti, "NIFTI")
     bval_row = _save_upload(project_id, bval, "BVAL")
     bvec_row = _save_upload(project_id, bvec, "BVEC")
@@ -141,7 +137,7 @@ def upload_dwi(project_id, nifti, bval, bvec, json_sidecar=None):
 
 
 def upload_dicom(project_id, archive):
-    _require_project(project_id)
+    require_project(project_id)
     archive_row = _save_upload(project_id, archive, "DICOM_ZIP")
     extract_dir = _projects_root() / str(project_id) / "raw" / f"dicom_{archive_row['id']}"
     extract_dir.mkdir(parents=True, exist_ok=True)
@@ -183,7 +179,7 @@ def upload_dicom(project_id, archive):
 
 
 def create_upload_session(project_id, req):
-    _require_project(project_id)
+    require_project(project_id)
     with connect() as conn:
         cursor = conn.execute(
             "INSERT INTO upload_sessions(project_id, label, source_type, status, progress, inventory_json, created_at) VALUES(?,?,?,?,?,?,?)",

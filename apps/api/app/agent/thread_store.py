@@ -67,13 +67,10 @@ class AgentThreadStore:
         return datetime.now(timezone.utc) >= expires_at
 
     def load(self, thread_id: str) -> dict[str, Any] | None:
-        sqlite_record = self._load_sqlite(thread_id)
-        if sqlite_record is not None:
-            return sqlite_record
         path = self._path(thread_id)
-        if not path.exists():
-            return None
-        return json.loads(path.read_text(encoding="utf-8"))
+        if path.exists():
+            return json.loads(path.read_text(encoding="utf-8"))
+        return self._load_sqlite(thread_id)
 
     def mark(self, thread_id: str, *, status: str, extra: dict[str, Any] | None = None) -> dict[str, Any]:
         record = self.load(thread_id)

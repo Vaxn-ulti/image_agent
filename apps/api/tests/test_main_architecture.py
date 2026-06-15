@@ -224,3 +224,15 @@ def test_services_use_shared_imaging_series_parser():
         service_source = (root / "app" / "services" / service_name).read_text(encoding="utf-8")
         assert "def _parse_series_row(" not in service_source
         assert "parse_series_row" in service_source
+
+
+def test_project_existence_checks_live_in_project_service():
+    root = Path(__file__).resolve().parents[1]
+    project_service = (root / "app" / "services" / "project_service.py").read_text(encoding="utf-8")
+
+    assert "def require_project(" in project_service
+    for service_name in ("upload_service.py", "result_service.py"):
+        service_source = (root / "app" / "services" / service_name).read_text(encoding="utf-8")
+        assert "require_project" in service_source
+        assert "Project not found" not in service_source
+        assert "SELECT * FROM projects WHERE id=?" not in service_source

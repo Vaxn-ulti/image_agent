@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from fastapi import HTTPException
+
 from app.db.database import connect, now_iso, row_to_dict
+from app.db.queries import fetch_rows
 from app.services.runtime_overrides import main_projects_root
 
 
@@ -24,6 +27,11 @@ def login(req):
 def list_projects():
     with connect() as conn:
         return [dict(row) for row in conn.execute("SELECT * FROM projects ORDER BY id DESC").fetchall()]
+
+
+def require_project(project_id: int) -> None:
+    if not fetch_rows("SELECT * FROM projects WHERE id=?", (project_id,)):
+        raise HTTPException(404, "Project not found")
 
 
 def create_project(req):
