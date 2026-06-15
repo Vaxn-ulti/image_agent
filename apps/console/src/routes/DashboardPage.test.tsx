@@ -283,6 +283,8 @@ describe('DashboardPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Start recommended pipeline' }));
     expect(api.runSeries).toHaveBeenCalledWith(22, 't1_deepprep_anat_report');
+    expect(await screen.findByText('Task #131 queued')).toBeInTheDocument();
+    expect(screen.getByText('Workflow: t1_deepprep_anat_report')).toBeInTheDocument();
   });
 
   it('passes the completed QSIPrep task id when the dashboard launches recommended QSIRecon', async () => {

@@ -137,6 +137,7 @@ export function DashboardPage() {
   const [selectedSeriesId, setSelectedSeriesId] = useState<number | null>(null);
   const [selectedWorkflow, setSelectedWorkflow] = useState('');
   const [lastUploadSessionId, setLastUploadSessionId] = useState<number | null>(null);
+  const [lastStartedTask, setLastStartedTask] = useState<Task | null>(null);
   const [skullStripping, setSkullStripping] = useState(true);
   const [biasCorrection, setBiasCorrection] = useState(true);
   const [chatInput, setChatInput] = useState('');
@@ -203,6 +204,7 @@ export function DashboardPage() {
     onError: (err) => setError(err instanceof Error ? err.message : 'Pipeline launch failed'),
     onSuccess: (task) => {
       setError('');
+      setLastStartedTask(task);
       queryClient.invalidateQueries({ queryKey: queryKeys.tasks(projectId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.task(task.id) });
     },
@@ -385,6 +387,12 @@ export function DashboardPage() {
                 {!eligibility.runnable && effectiveWorkflow ? (
                   <div className="rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700">
                     {eligibility.reason || 'Selected workflow cannot run for this series.'}
+                  </div>
+                ) : null}
+                {lastStartedTask ? (
+                  <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                    <div className="font-semibold">Task #{lastStartedTask.id} {lastStartedTask.status}</div>
+                    <div className="mt-1 text-[11px] text-blue-700/80">Workflow: {lastStartedTask.workflow_type}</div>
                   </div>
                 ) : null}
               </div>
