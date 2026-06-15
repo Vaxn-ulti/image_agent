@@ -1,6 +1,7 @@
 import json
 import os
 import shutil
+import sqlite3
 import subprocess
 import gzip
 import sys
@@ -893,10 +894,15 @@ def _write_bold_fmriprep_xcpd_summary(task_id, workflow_type, dirs, log_path):
         },
     )
     _append(log_path, f"Wrote BOLD fMRIPrep + XCP-D result summary: {summary_path}")
-    existing = _rows(
-        "SELECT id FROM outputs WHERE task_id=? AND path=? AND metadata_json=? LIMIT 1",
-        (task_id, str(summary_path), json.dumps({"kind": "result_summary", "modality": "BOLD"})),
-    )
+    try:
+        existing = _rows(
+            "SELECT id FROM outputs WHERE task_id=? AND path=? AND metadata_json=? LIMIT 1",
+            (task_id, str(summary_path), json.dumps({"kind": "result_summary", "modality": "BOLD"})),
+        )
+    except sqlite3.OperationalError as exc:
+        if "no such table: outputs" not in str(exc):
+            raise
+        existing = [{"registration_skipped": True}]
     if not existing:
         _insert_output(task_id, "json", summary_path, {"kind": "result_summary", "modality": "BOLD"})
     return summary_path
