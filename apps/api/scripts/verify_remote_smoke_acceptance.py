@@ -152,6 +152,7 @@ def _verify_gate_settings(payload: dict) -> dict:
         "require_model",
         "require_deployment_identity",
         "require_production_readiness",
+        "require_completed_task",
         "require_raw_source_policy",
         "require_vendor_pointer_integrity",
         "require_real_evidence_ids",
@@ -183,6 +184,17 @@ def _verify_production_readiness(payload: dict) -> None:
     blocking_reasons = readiness.get("blocking_reasons")
     _require(isinstance(blocking_reasons, list), "production_readiness.blocking_reasons must be a list")
     _require(not blocking_reasons, "production_readiness.blocking_reasons must be empty")
+
+
+def _verify_task_status(payload: dict, gate: dict) -> None:
+    _require_status(payload, "task_status_status")
+    task_status = payload.get("task_status")
+    _require(isinstance(task_status, dict), "task_status must be present")
+    _require(task_status.get("task_id") == gate.get("task_id"), "task_status.task_id must match smoke_gate.task_id")
+    _require(task_status.get("project_id") == gate.get("project_id"), "task_status.project_id must match smoke_gate.project_id")
+    _require(task_status.get("status") == "completed", "task_status.status must be completed")
+    _require_positive_id(task_status, "series_id", prefix="task_status")
+    _require_privacy_safe_symbol(task_status, "workflow_type")
 
 
 def _is_unsafe_relative_path(value: object) -> bool:
@@ -691,6 +703,7 @@ def verify_acceptance_payload(
     _verify_vendor_pointer_integrity(payload)
     _verify_vendor_coverage_catalog(payload)
     _verify_real_ids(payload, gate)
+    _verify_task_status(payload, gate)
     _verify_launchability(payload)
     _require_status(payload, "project_contract_status")
     _require_positive_int(payload, "series_with_workflow_eligibility")
@@ -709,6 +722,7 @@ def verify_acceptance_payload(
             "deployment_identity_status": payload["deployment_identity_status"],
             "production_readiness_status": payload["production_readiness_status"],
             "remote_evidence_ids_status": payload["remote_evidence_ids_status"],
+            "task_status_status": payload["task_status_status"],
             "rag_vendor_pointer_integrity_status": payload["rag_vendor_pointer_integrity_status"],
             "rag_vendor_coverage_catalog_status": payload["rag_vendor_coverage_catalog_status"],
             "rag_launchability_query_status": payload["rag_launchability_query_status"],

@@ -26,6 +26,7 @@ def _strict_smoke_payload():
             "min_documents": 60,
             "min_chunks": 200,
             "require_production_readiness": True,
+            "require_completed_task": True,
             "require_raw_source_policy": True,
             "require_vendor_pointer_integrity": True,
             "require_real_evidence_ids": True,
@@ -60,6 +61,14 @@ def _strict_smoke_payload():
         "selected_skill": "image-agent-operator",
         "remote_evidence_ids_status": "passed",
         "remote_evidence_ids": {"project_id": 7, "upload_session_id": 22, "task_id": 114},
+        "task_status_status": "passed",
+        "task_status": {
+            "project_id": 7,
+            "series_id": 1,
+            "status": "completed",
+            "task_id": 114,
+            "workflow_type": "t1_deepprep_anat_report",
+        },
         "rag_document_count": 72,
         "rag_chunk_count": 260,
         "rag_semantic_index": True,
@@ -292,6 +301,7 @@ def test_verify_remote_smoke_acceptance_accepts_strict_payload():
     assert report["checked"]["rag_vendor_coverage_catalog_status"] == "complete"
     assert report["checked"]["container_native_qc_status"] == "passed"
     assert report["checked"]["scientific_report_artifacts_status"] == "passed"
+    assert report["checked"]["task_status_status"] == "passed"
 
 
 def test_verify_remote_smoke_acceptance_rejects_stale_saved_evidence():
@@ -342,12 +352,16 @@ def test_verify_remote_smoke_acceptance_rejects_stale_saved_evidence():
         ({"agent_run_id": "agent_run_123 C:/Users/A/private"}, "agent_run_id must be privacy-safe"),
         ({"selected_skill": "image-agent-operator sk-test-secret"}, "selected_skill must be privacy-safe"),
         ({"remote_evidence_ids_status": "skipped"}, "remote_evidence_ids_status must be passed"),
+        ({"task_status_status": "skipped"}, "task_status_status must be passed"),
+        ({"task_status": {"status": "running"}}, "task_status.status must be completed"),
+        ({"task_status": {"task_id": 115}}, "task_status.task_id must match smoke_gate.task_id"),
         ({"rag_launchability_query_source": "Answer mentions docs/rag/workflows/workflow_launchability_matrix.md"}, "launchability query source must cite workflow matrix"),
         ({"container_native_qc_served_urls": []}, "container_native_qc_served_urls must be non-empty"),
         ({"container_native_qc_official_source_ids": ["docs/rag/vendor/fake.md"]}, "container_native_qc_official_source_ids contains unsupported source"),
         ({"smoke_gate": {"require_real_evidence_ids": False}}, "smoke_gate.require_real_evidence_ids must be true"),
         ({"smoke_gate": {"require_deployment_identity": False}}, "smoke_gate.require_deployment_identity must be true"),
         ({"smoke_gate": {"require_production_readiness": False}}, "smoke_gate.require_production_readiness must be true"),
+        ({"smoke_gate": {"require_completed_task": False}}, "smoke_gate.require_completed_task must be true"),
         ({"smoke_gate": {"deployment_id": "C:/srv/image_agent"}}, "deployment_id must be privacy-safe"),
         ({"smoke_gate": {"require_vendor_pointer_integrity": False}}, "smoke_gate.require_vendor_pointer_integrity must be true"),
         ({"smoke_gate": {"require_scientific_report_artifacts": False}}, "smoke_gate.require_scientific_report_artifacts must be true"),

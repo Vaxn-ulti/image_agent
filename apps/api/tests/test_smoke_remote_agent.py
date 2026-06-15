@@ -873,6 +873,92 @@ def test_smoke_remote_agent_require_real_evidence_ids_reports_supplied_ids(capsy
     assert payload["remote_evidence_ids"] == {"project_id": 7, "upload_session_id": 22, "task_id": 114}
 
 
+def test_smoke_remote_agent_require_completed_task_requires_task_id():
+    smoke = _load_smoke_module()
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(["--api-base", "http://api.local", "--require-completed-task"])
+
+    assert "--require-completed-task requires --task-id" in str(exc.value)
+
+
+def test_smoke_remote_agent_require_completed_task_rejects_running_task(monkeypatch):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        base_response = _good_remote_smoke_response(url)
+        if base_response is not None:
+            return base_response
+        if url.endswith("/tasks/114"):
+            return {
+                "id": 114,
+                "project_id": 7,
+                "series_id": 1,
+                "workflow_type": "t1_deepprep_anat_report",
+                "status": "running",
+            }
+        raise AssertionError(f"unexpected request: {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(["--api-base", "http://api.local", "--task-id", "114", "--require-completed-task"])
+
+    assert "completed task check failed: status=running" in str(exc.value)
+
+
+def test_smoke_remote_agent_require_completed_task_records_safe_task_status(capsys, monkeypatch):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        base_response = _good_remote_smoke_response(url)
+        if base_response is not None:
+            return base_response
+        if url.endswith("/tasks/114"):
+            return {
+                "id": 114,
+                "project_id": 7,
+                "series_id": 1,
+                "workflow_type": "t1_deepprep_anat_report",
+                "status": "completed",
+                "log_path": "/home/yyf/project/image_agent/data/projects/7/logs/114.log",
+            }
+        if url.endswith("/tasks/114/artifact-manifest"):
+            return {
+                "contract_version": "artifact_manifest_v1",
+                "task_id": 114,
+                "result_summary": {"available": True},
+                "artifacts": [
+                    {
+                        "relative_path": "reports/index.html",
+                        "download_url": "/tasks/114/artifacts/reports/index.html",
+                        "preview_kind": "html",
+                        "content_type": "text/html",
+                        "size_bytes": 12,
+                        "exists": True,
+                    }
+                ],
+                "omitted_artifacts": [],
+            }
+        raise AssertionError(f"unexpected request: {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    smoke.main(["--api-base", "http://api.local", "--task-id", "114", "--require-completed-task"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["smoke_gate"]["require_completed_task"] is True
+    assert payload["task_status_status"] == "passed"
+    assert payload["task_status"] == {
+        "project_id": 7,
+        "series_id": 1,
+        "status": "completed",
+        "task_id": 114,
+        "workflow_type": "t1_deepprep_anat_report",
+    }
+    assert "log_path" not in json.dumps(payload["task_status"])
+
+
 def test_smoke_remote_agent_require_container_native_qc_requires_task_id():
     smoke = _load_smoke_module()
 
@@ -1871,6 +1957,7 @@ def test_smoke_remote_agent_writes_acceptance_json_artifact(capsys, monkeypatch,
         "require_raw_source_policy": True,
         "require_vendor_pointer_integrity": True,
         "require_real_evidence_ids": False,
+        "require_completed_task": False,
         "require_launchability_matrix": False,
         "require_container_native_qc": False,
         "min_native_qc_images": 0,
@@ -2062,6 +2149,14 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
                     "series": [{"series_id": 1, "modality": "T1", "workflow_eligibility": _good_workflow_eligibility()}],
                 },
             }
+        if url.endswith("/tasks/114"):
+            return {
+                "id": 114,
+                "project_id": 7,
+                "series_id": 1,
+                "workflow_type": "bold_fmriprep_xcpd",
+                "status": "completed",
+            }
         if url.endswith("/tasks/114/artifact-manifest"):
             return {
                 "contract_version": "artifact_manifest_v1",
@@ -2100,6 +2195,7 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
             "--require-raw-source-policy",
             "--require-vendor-pointer-integrity",
             "--require-real-evidence-ids",
+            "--require-completed-task",
             "--require-launchability-matrix",
             "--require-container-native-qc",
             "--min-native-qc-images",

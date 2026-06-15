@@ -350,6 +350,28 @@ def _validate_agent_run(run: dict) -> None:
     _require(bool(run.get("selected_skill")), "agent run smoke failed: missing selected_skill")
 
 
+def _validate_completed_task(task: dict, task_id: int, project_id: int | None) -> dict:
+    _require(int(task.get("id") or 0) == task_id, "completed task check failed: task_id mismatch")
+    _require(task.get("status") == "completed", f"completed task check failed: status={task.get('status')}")
+    safe_workflow_type = task.get("workflow_type")
+    _require(
+        isinstance(safe_workflow_type, str) and _is_privacy_safe_symbol(safe_workflow_type),
+        "completed task check failed: workflow_type invalid",
+    )
+    task_project_id = _int_metric(task.get("project_id"))
+    if project_id is not None:
+        _require(task_project_id == project_id, "completed task check failed: project_id mismatch")
+    series_id = _int_metric(task.get("series_id"))
+    _require(series_id > 0, "completed task check failed: series_id missing")
+    return {
+        "project_id": task_project_id,
+        "series_id": series_id,
+        "status": "completed",
+        "task_id": task_id,
+        "workflow_type": safe_workflow_type,
+    }
+
+
 def _validate_project_series_contract(series: list[dict]) -> dict:
     _require(isinstance(series, list), "project series contract failed: response is not a list")
     _require(series, "project series contract failed: no series found")
@@ -786,6 +808,11 @@ def main(argv: Sequence[str] | None = None) -> None:
         help="Fail unless --project-id, --upload-session-id, and --task-id are all supplied.",
     )
     parser.add_argument(
+        "--require-completed-task",
+        action="store_true",
+        help="Fail unless --task-id resolves to a completed task with safe task status metadata.",
+    )
+    parser.add_argument(
         "--require-launchability-matrix",
         action="store_true",
         help="Fail unless RAG status and query evidence cite the workflow launchability matrix source.",
@@ -848,6 +875,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         raise SystemExit("--expected-health-version must be a privacy-safe version")
     if args.require_container_native_qc and args.task_id is None:
         raise SystemExit("--require-container-native-qc requires --task-id")
+    if args.require_completed_task and args.task_id is None:
+        raise SystemExit("--require-completed-task requires --task-id")
     if args.min_native_qc_images > 0 and args.task_id is None:
         raise SystemExit("--min-native-qc-images requires --task-id")
     if args.require_scientific_report_artifacts and args.task_id is None:
@@ -916,6 +945,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         raise SystemExit("model gateway is not configured")
     project_contract = None
     task_artifact_manifest = None
+    completed_task = None
     upload_inventory_contract = None
     if args.project_id is not None:
         project_contract = _validate_project_series_contract(
@@ -927,6 +957,12 @@ def main(argv: Sequence[str] | None = None) -> None:
                 args.upload_session_id,
             )
     if args.task_id is not None:
+        if args.require_completed_task:
+            completed_task = _validate_completed_task(
+                _request("GET", f"{base}/tasks/{args.task_id}"),
+                args.task_id,
+                args.project_id,
+            )
         task_artifact_manifest = _validate_task_artifact_manifest(
             _request("GET", f"{base}/tasks/{args.task_id}/artifact-manifest"),
             args.task_id,
@@ -956,6 +992,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         "require_raw_source_policy": bool(args.require_raw_source_policy),
         "require_vendor_pointer_integrity": bool(args.require_vendor_pointer_integrity),
         "require_real_evidence_ids": bool(args.require_real_evidence_ids),
+        "require_completed_task": bool(args.require_completed_task),
         "require_launchability_matrix": bool(args.require_launchability_matrix),
         "require_container_native_qc": bool(args.require_container_native_qc),
         "min_native_qc_images": max(args.min_native_qc_images, 0),
@@ -1016,6 +1053,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         }
         if args.require_real_evidence_ids
         else None,
+        "task_status_status": "passed" if args.require_completed_task else "skipped",
+        "task_status": completed_task,
         "rag_launchability_matrix_status": launchability_matrix.get("status") if launchability_matrix else "skipped",
         "rag_launchability_matrix_source": launchability_matrix.get("source") if launchability_matrix else None,
         "rag_launchability_query_status": launchability_query.get("status") if launchability_query else "skipped",
