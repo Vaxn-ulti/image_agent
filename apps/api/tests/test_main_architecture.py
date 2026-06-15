@@ -214,3 +214,13 @@ def test_fastapi_app_factory_owns_middleware_routes_and_hooks():
         "app.include_router",
     ):
         assert forbidden not in main_source
+
+
+def test_services_use_shared_imaging_series_parser():
+    root = Path(__file__).resolve().parents[1]
+
+    assert (root / "app" / "imaging" / "series_records.py").exists()
+    for service_name in ("task_service.py", "upload_service.py"):
+        service_source = (root / "app" / "services" / service_name).read_text(encoding="utf-8")
+        assert "def _parse_series_row(" not in service_source
+        assert "parse_series_row" in service_source

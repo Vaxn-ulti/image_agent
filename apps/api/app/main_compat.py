@@ -11,6 +11,7 @@ from app.agent.rag_orchestration import build_rag_response
 from app.agent.tools import read_project_context
 from app.core.config import PROJECTS_ROOT
 from app.db.queries import fetch_rows
+from app.imaging.series_records import parse_series_row
 from app.scripts.verify_scientific_reports import check_output as check_scientific_report_output
 from app.scripts.verify_scientific_reports import resolve_task_output_dirs
 from app.schemas import (
@@ -79,7 +80,7 @@ def install_main_compat_exports(module: ModuleType) -> None:
         "get_result_summary": result_service.get_result_summary,
         "get_task": task_service.get_task,
         "local_rag_index_status": local_rag_index_status,
-        "parse_series_row": task_service._parse_series_row,
+        "parse_series_row": parse_series_row,
         "read_project_context": read_project_context,
         "resolve_task_output_dirs": resolve_task_output_dirs,
         "rows": fetch_rows,

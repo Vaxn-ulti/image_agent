@@ -8,10 +8,10 @@ from fastapi import HTTPException
 from app.core import config
 from app.db.database import connect, now_iso
 from app.db.queries import fetch_rows
+from app.imaging.series_records import parse_series_row
 from app.services.background import submit_background
 from app.services.runtime_overrides import main_patch_attr, main_projects_root
 from app.workflows.deepprep import run_mock_deepprep
-from app.workflows.eligibility import build_workflow_eligibility
 from app.workflows.registry import allowed_runtime_workflows, resolve_runtime_workflow_type
 
 try:
@@ -31,20 +31,6 @@ _DEFAULT_PROJECTS_ROOT = Path(config.PROJECTS_ROOT)
 
 def _projects_root() -> Path:
     return main_projects_root(_DEFAULT_PROJECTS_ROOT, require_override=True)
-
-
-def _parse_series_row(row: dict):
-    item = dict(row)
-    item["metadata"] = json.loads(item.pop("metadata_json"))
-    item["supported_for_processing"] = bool(item.get("supported_for_processing", 1))
-    file_rows = fetch_rows("SELECT storage_path, file_type FROM files WHERE id=?", (item.get("file_id"),))
-    if file_rows:
-        item["file_storage_path"] = file_rows[0]["storage_path"]
-        item["file_type"] = file_rows[0]["file_type"]
-    item["workflow_eligibility"] = build_workflow_eligibility(item)
-    item.pop("file_storage_path", None)
-    item.pop("file_type", None)
-    return item
 
 
 def _qsiprep_output_dir(task_id: int) -> Path:
@@ -122,7 +108,7 @@ def get_series(series_id):
     found = fetch_rows("SELECT * FROM imaging_series WHERE id=?", (series_id,))
     if not found:
         raise HTTPException(404, "Series not found")
-    return _parse_series_row(found[0])
+    return parse_series_row(found[0])
 
 
 def validate_run_request(series, req):

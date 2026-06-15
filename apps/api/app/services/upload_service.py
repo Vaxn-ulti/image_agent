@@ -12,6 +12,7 @@ from app.db.database import connect, now_iso
 from app.db.queries import fetch_rows
 from app.imaging.detect import detect_series
 from app.imaging.ingest import process_upload_session
+from app.imaging.series_records import parse_series_row
 from app.services.background import submit_background
 from app.services.runtime_overrides import main_patch_attr, main_projects_root
 from app.workflows.eligibility import build_workflow_eligibility
@@ -23,20 +24,6 @@ def _projects_root() -> Path:
 
 def _process_upload_session():
     return main_patch_attr("process_upload_session", process_upload_session)
-
-
-def _parse_series_row(row: dict):
-    item = dict(row)
-    item["metadata"] = json.loads(item.pop("metadata_json"))
-    item["supported_for_processing"] = bool(item.get("supported_for_processing", 1))
-    file_rows = fetch_rows("SELECT storage_path, file_type FROM files WHERE id=?", (item.get("file_id"),))
-    if file_rows:
-        item["file_storage_path"] = file_rows[0]["storage_path"]
-        item["file_type"] = file_rows[0]["file_type"]
-    item["workflow_eligibility"] = build_workflow_eligibility(item)
-    item.pop("file_storage_path", None)
-    item.pop("file_type", None)
-    return item
 
 
 def _save_upload(project_id: int, upload, file_type: str | None = None) -> dict:
@@ -90,7 +77,7 @@ def upload(project_id, file):
             ),
         )
         series_row = conn.execute("SELECT * FROM imaging_series WHERE id=?", (cursor.lastrowid,)).fetchone()
-    return {"file": file_row, "series": _parse_series_row(series_row)}
+    return {"file": file_row, "series": parse_series_row(series_row)}
 
 
 def _dwi_json_metadata(json_row: dict | None) -> dict:
@@ -150,7 +137,7 @@ def upload_dwi(project_id, nifti, bval, bvec, json_sidecar=None):
     file_rows = [nifti_row, bval_row, bvec_row]
     if json_row is not None:
         file_rows.append(json_row)
-    return {"files": file_rows, "series": _parse_series_row(series_row)}
+    return {"files": file_rows, "series": parse_series_row(series_row)}
 
 
 def upload_dicom(project_id, archive):
@@ -192,7 +179,7 @@ def upload_dicom(project_id, archive):
             ),
         )
         series_row = conn.execute("SELECT * FROM imaging_series WHERE id=?", (cursor.lastrowid,)).fetchone()
-    return {"file": archive_row, "series": _parse_series_row(series_row)}
+    return {"file": archive_row, "series": parse_series_row(series_row)}
 
 
 def create_upload_session(project_id, req):
@@ -266,6 +253,6 @@ def enrich_inventory_workflow_eligibility(inventory: dict) -> dict:
 
 def list_series(project_id):
     return [
-        _parse_series_row(row)
+        parse_series_row(row)
         for row in fetch_rows("SELECT * FROM imaging_series WHERE project_id=? ORDER BY id DESC", (project_id,))
     ]
