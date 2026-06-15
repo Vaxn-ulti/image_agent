@@ -17,11 +17,12 @@ import { queryKeys } from '../lib/query';
 
 export function SettingsPage() {
   const queryClient = useQueryClient();
-  const { data: deployment } = useQuery({ queryFn: api.deployment, queryKey: queryKeys.deployment });
-  const { data: runtime } = useQuery({ queryFn: api.runtimeContainers, queryKey: queryKeys.runtime, retry: false });
+  const { data: deployment, isError: deploymentError } = useQuery({ queryFn: api.deployment, queryKey: queryKeys.deployment });
+  const { data: runtime, isError: runtimeError } = useQuery({ queryFn: api.runtimeContainers, queryKey: queryKeys.runtime, retry: false });
   const [apiBaseInput, setApiBaseInput] = useState(getApiBase());
   const productionReadiness = deployment?.production_readiness;
   const readinessBlocked = productionReadiness?.ready === false;
+  const apiDisconnected = deploymentError || runtimeError;
 
   function handleSave() {
     setApiBase(apiBaseInput);
@@ -55,8 +56,11 @@ export function SettingsPage() {
             <div className="flex items-center gap-2">
               <Globe className="w-4 h-4 text-[#065F46]" /> API Connection
             </div>
-            <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-50 text-green-700 text-[10px] font-bold">
-              <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div> Connected
+            <span className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+              apiDisconnected ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'
+            }`}>
+              <div className={`w-1.5 h-1.5 rounded-full ${apiDisconnected ? 'bg-red-500' : 'bg-green-500 animate-pulse'}`}></div>
+              {apiDisconnected ? 'API disconnected' : 'Connected'}
             </span>
           </div>
           <div className="p-6 space-y-5">
@@ -79,10 +83,10 @@ export function SettingsPage() {
               </label>
               <div className="p-3 bg-white border border-gray-200 rounded-xl flex items-center justify-between">
                 <span className="text-sm font-semibold text-gray-800 capitalize">
-                  {deployment?.backend_runtime_mode || 'local'}
+                  {deploymentError ? 'Backend status unavailable' : deployment?.backend_runtime_mode || 'local'}
                 </span>
                 <span className="px-2 py-0.5 rounded bg-[#ECFDF5] text-[#065F46] text-[10px] font-bold uppercase tracking-tight">
-                  {deployment?.backend_runtime_mode === 'remote' ? 'Production' : 'Development'}
+                  {deploymentError ? 'Unavailable' : deployment?.backend_runtime_mode === 'remote' ? 'Production' : 'Development'}
                 </span>
               </div>
             </div>
@@ -137,7 +141,7 @@ export function SettingsPage() {
                   </div>
                </div>
                <span className={`text-xs font-bold uppercase tracking-wider ${runtime?.fs_license_exists ? 'text-green-600' : 'text-amber-600'}`}>
-                 {runtime?.fs_license_exists ? 'Available' : 'Missing'}
+                 {runtimeError ? 'Container status unavailable' : runtime?.fs_license_exists ? 'Available' : 'Missing'}
                </span>
             </div>
 

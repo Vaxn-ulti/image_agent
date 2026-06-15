@@ -65,6 +65,22 @@ describe('SettingsPage', () => {
     expect(await screen.findByText('Agent model gateway is not configured.')).toBeInTheDocument();
   });
 
+  it('shows disconnected API status when deployment cannot be loaded', async () => {
+    vi.mocked(api.deployment).mockRejectedValue(new Error('backend unavailable'));
+    vi.mocked(api.runtimeContainers).mockRejectedValue(new Error('runtime unavailable'));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={client}>
+        <SettingsPage />
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText('API disconnected')).toBeInTheDocument();
+    expect(await screen.findByText('Backend status unavailable')).toBeInTheDocument();
+    expect(await screen.findByText('Container status unavailable')).toBeInTheDocument();
+  });
+
   it('saves and resets the remote API base used by the console', async () => {
     vi.mocked(api.deployment).mockResolvedValue({
       agent: { configured: true, provider: 'OpenAI' },
