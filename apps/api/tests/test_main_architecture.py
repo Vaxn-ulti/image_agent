@@ -6,6 +6,8 @@ def test_main_entrypoint_is_thin_and_routes_are_split():
     main_source = (root / "app" / "main.py").read_text(encoding="utf-8")
 
     assert len(main_source.splitlines()) <= 450
+    assert "legacy_service" not in main_source
+    assert "_legacy" not in main_source
     for route_name in (
         "system",
         "agent",

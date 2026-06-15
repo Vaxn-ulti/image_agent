@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from fastapi import FastAPI, Request
 from fastapi.exception_handlers import (
     request_validation_exception_handler as fastapi_request_validation_exception_handler,
@@ -6,9 +8,18 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.agent.deepseek import DeepSeekUnavailable, complete_chat
+from app.agent.graph import AgentRunner
+from app.agent.model_gateway import ModelGateway, ModelGatewayError
+from app.agent.rag_index import build_local_rag_index, local_rag_index_status
+from app.agent.rag_orchestration import build_rag_response
+from app.agent.tools import read_project_context
 from app.agent.contracts import agent_api_error_detail
+from app.core.config import PROJECTS_ROOT
 from app.db.database import init_db
 from app.routes import agent, auth, chat, projects, reports, results, series, system, tasks, uploads
+from app.scripts.verify_scientific_reports import check_output as check_scientific_report_output
+from app.scripts.verify_scientific_reports import resolve_task_output_dirs
 from app.schemas import (
     AgentResumeConfirmation,
     AgentResumeRequest,
@@ -23,7 +34,25 @@ from app.schemas import (
     ScientificReportVerifyRequest,
     UploadSessionCreate,
 )
-from app.services import legacy_service as _legacy
+from app.services import result_service, task_service, upload_service
+from app.services.agent_service import WORKFLOWS
+from app.workflows.deepprep import run_mock_deepprep
+from app.workflows.registry import allowed_runtime_workflows
+from app.workflows.pipeline import run_pipeline_task
+
+try:
+    from app.workflows.bold_group_analysis import run_group_analysis
+except ImportError:
+
+    def run_group_analysis(*args, **kwargs):
+        raise RuntimeError("bold group analysis unavailable")
+
+try:
+    from app.workflows.bold_descriptive_review import run_descriptive_review
+except ImportError:
+
+    def run_descriptive_review(*args, **kwargs):
+        raise RuntimeError("bold descriptive review unavailable")
 
 app = FastAPI(title="Brain Image Agent API", version="0.2.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -64,31 +93,14 @@ async def request_validation_exception_handler(request: Request, exc: RequestVal
 
 
 # Compatibility exports for existing tests and scripts that monkeypatch app.main.
-PROJECTS_ROOT = _legacy.PROJECTS_ROOT
-REPO_ROOT = _legacy.REPO_ROOT
-WORKFLOWS = _legacy.WORKFLOWS
-ALLOWED_WORKFLOWS = _legacy.ALLOWED_WORKFLOWS
-AgentRunner = _legacy.AgentRunner
-ModelGateway = _legacy.ModelGateway
-ModelGatewayError = _legacy.ModelGatewayError
-DeepSeekUnavailable = _legacy.DeepSeekUnavailable
-complete_chat = _legacy.complete_chat
-build_rag_response = _legacy.build_rag_response
-local_rag_index_status = _legacy.local_rag_index_status
-build_local_rag_index = _legacy.build_local_rag_index
-resolve_task_output_dirs = _legacy.resolve_task_output_dirs
-check_scientific_report_output = _legacy.check_scientific_report_output
-run_pipeline_task = _legacy.run_pipeline_task
-run_mock_deepprep = _legacy.run_mock_deepprep
-run_group_analysis = _legacy.run_group_analysis
-run_descriptive_review = _legacy.run_descriptive_review
-read_project_context = _legacy.read_project_context
+REPO_ROOT = Path(__file__).resolve().parents[3]
+ALLOWED_WORKFLOWS = allowed_runtime_workflows()
 
-rows = _legacy.rows
-parse_series_row = _legacy.parse_series_row
-save_upload = _legacy.save_upload
-validate_run_request = _legacy.validate_run_request
-create_series_task = _legacy.create_series_task
-get_task = _legacy.get_task
-get_outputs = _legacy.get_outputs
-get_result_summary = _legacy.get_result_summary
+rows = task_service._rows
+parse_series_row = task_service._parse_series_row
+save_upload = upload_service._save_upload
+validate_run_request = task_service.validate_run_request
+create_series_task = task_service.create_series_task
+get_task = task_service.get_task
+get_outputs = result_service.get_outputs
+get_result_summary = result_service.get_result_summary
