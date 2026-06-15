@@ -255,6 +255,7 @@ def test_dwi_sidecar_detection_lives_in_imaging_layer():
 def test_agent_backend_context_queries_live_in_agent_layer():
     root = Path(__file__).resolve().parents[1]
     agent_service = (root / "app" / "services" / "agent_service.py").read_text(encoding="utf-8")
+    agent_chat = (root / "app" / "agent" / "chat.py").read_text(encoding="utf-8")
 
     assert (root / "app" / "agent" / "backend_context.py").exists()
     for private_helper in (
@@ -263,7 +264,7 @@ def test_agent_backend_context_queries_live_in_agent_layer():
         "def _result_summary_context(",
     ):
         assert private_helper not in agent_service
-    assert "build_chat_backend_context" in agent_service
+    assert "build_chat_backend_context" in agent_chat
     assert "build_rag_backend_context" in agent_service
 
 
@@ -324,5 +325,33 @@ def test_agent_status_and_rag_health_live_in_agent_layer():
         "vendor_raw_source_status",
         "rag_dependency_status",
         "rag_grounding_policy",
+    ):
+        assert forbidden not in agent_service
+
+
+def test_legacy_chat_runtime_lives_in_agent_layer():
+    root = Path(__file__).resolve().parents[1]
+    agent_service = (root / "app" / "services" / "agent_service.py").read_text(encoding="utf-8")
+    agent_chat = root / "app" / "agent" / "chat.py"
+
+    assert agent_chat.exists()
+    chat_source = agent_chat.read_text(encoding="utf-8")
+    for function_name in (
+        "def handle_legacy_chat(",
+        "def _chat_intent(",
+        "def _status_reply(",
+    ):
+        assert function_name in chat_source
+
+    for forbidden in (
+        "def _chat_intent(",
+        "def _status_reply(",
+        "build_chat_backend_context",
+        "build_chat_compatibility_response",
+        "ModelGateway",
+        "complete_chat",
+        "DeepSeekUnavailable",
+        "connect",
+        "now_iso",
     ):
         assert forbidden not in agent_service
