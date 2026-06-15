@@ -17,6 +17,7 @@ from app.agent.tools import read_project_context
 from app.agent.contracts import agent_api_error_detail
 from app.core.config import PROJECTS_ROOT
 from app.db.database import init_db
+from app.db.queries import fetch_rows
 from app.routes import agent, auth, chat, projects, reports, results, series, system, tasks, uploads
 from app.scripts.verify_scientific_reports import check_output as check_scientific_report_output
 from app.scripts.verify_scientific_reports import resolve_task_output_dirs
@@ -96,7 +97,7 @@ async def request_validation_exception_handler(request: Request, exc: RequestVal
 REPO_ROOT = Path(__file__).resolve().parents[3]
 ALLOWED_WORKFLOWS = allowed_runtime_workflows()
 
-rows = task_service._rows
+rows = fetch_rows
 parse_series_row = task_service._parse_series_row
 save_upload = upload_service._save_upload
 validate_run_request = task_service.validate_run_request

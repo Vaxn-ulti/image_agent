@@ -9,6 +9,7 @@ from pathlib import Path
 from fastapi import HTTPException
 
 from app.db.database import connect, now_iso
+from app.db.queries import fetch_rows
 from app.imaging.detect import detect_series
 from app.imaging.ingest import process_upload_session
 from app.services.background import submit_background
@@ -24,16 +25,11 @@ def _process_upload_session():
     return main_patch_attr("process_upload_session", process_upload_session)
 
 
-def _rows(sql: str, params=()):
-    with connect() as conn:
-        return [dict(row) for row in conn.execute(sql, params).fetchall()]
-
-
 def _parse_series_row(row: dict):
     item = dict(row)
     item["metadata"] = json.loads(item.pop("metadata_json"))
     item["supported_for_processing"] = bool(item.get("supported_for_processing", 1))
-    file_rows = _rows("SELECT storage_path, file_type FROM files WHERE id=?", (item.get("file_id"),))
+    file_rows = fetch_rows("SELECT storage_path, file_type FROM files WHERE id=?", (item.get("file_id"),))
     if file_rows:
         item["file_storage_path"] = file_rows[0]["storage_path"]
         item["file_type"] = file_rows[0]["file_type"]
@@ -67,7 +63,7 @@ def _save_upload(project_id: int, upload, file_type: str | None = None) -> dict:
 
 
 def _require_project(project_id: int) -> None:
-    if not _rows("SELECT * FROM projects WHERE id=?", (project_id,)):
+    if not fetch_rows("SELECT * FROM projects WHERE id=?", (project_id,)):
         raise HTTPException(404, "Project not found")
 
 
@@ -210,7 +206,7 @@ def create_upload_session(project_id, req):
 
 
 def ingest_dataset(project_id, upload_session_id, archive, sync_fast_path=True):
-    sessions = _rows("SELECT * FROM upload_sessions WHERE id=? AND project_id=?", (upload_session_id, project_id))
+    sessions = fetch_rows("SELECT * FROM upload_sessions WHERE id=? AND project_id=?", (upload_session_id, project_id))
     if not sessions:
         raise HTTPException(404, "Upload session not found")
     upload_dir = _projects_root() / str(project_id) / "uploads" / str(upload_session_id) / "originals"
@@ -230,7 +226,7 @@ def ingest_dataset(project_id, upload_session_id, archive, sync_fast_path=True):
 
 
 def get_inventory(project_id, upload_session_id):
-    found = _rows("SELECT * FROM upload_sessions WHERE id=? AND project_id=?", (upload_session_id, project_id))
+    found = fetch_rows("SELECT * FROM upload_sessions WHERE id=? AND project_id=?", (upload_session_id, project_id))
     if not found:
         raise HTTPException(404, "Upload session not found")
     session = found[0]
@@ -271,5 +267,5 @@ def enrich_inventory_workflow_eligibility(inventory: dict) -> dict:
 def list_series(project_id):
     return [
         _parse_series_row(row)
-        for row in _rows("SELECT * FROM imaging_series WHERE project_id=? ORDER BY id DESC", (project_id,))
+        for row in fetch_rows("SELECT * FROM imaging_series WHERE project_id=? ORDER BY id DESC", (project_id,))
     ]

@@ -35,6 +35,7 @@ from app.agent.run_ledger import finish_agent_run, list_project_agent_runs, load
 from app.agent.tools import read_project_context
 from app.core import config
 from app.db.database import connect, now_iso
+from app.db.queries import fetch_rows
 from app.scripts.verify_scientific_reports import check_output as check_scientific_report_output
 from app.scripts.verify_scientific_reports import resolve_task_output_dirs
 from app.schemas import RunRequest
@@ -66,11 +67,6 @@ def _repo_root() -> Path:
 
 def _projects_root() -> Path:
     return main_projects_root(_DEFAULT_PROJECTS_ROOT, require_override=True)
-
-
-def _rows(sql: str, params=()):
-    with connect() as conn:
-        return [dict(row) for row in conn.execute(sql, params).fetchall()]
 
 
 def _requested_task_ids(message: str) -> list[int]:
@@ -112,7 +108,7 @@ def _task_context(project_id: int | None, message: str) -> list[dict]:
             "SELECT id, project_id, workflow_type, status, progress, error_message "
             f"FROM tasks WHERE project_id=? AND id IN ({placeholders}) ORDER BY id DESC"
         )
-        explicit = _rows(query, (project_id, *requested_ids))
+        explicit = fetch_rows(query, (project_id, *requested_ids))
         found_ids = {task["id"] for task in explicit}
         missing = [
             {
@@ -127,29 +123,29 @@ def _task_context(project_id: int | None, message: str) -> list[dict]:
         ]
         return sorted([*explicit, *missing], key=lambda task: int(task["id"]), reverse=True)
     if project_id:
-        return _rows(
+        return fetch_rows(
             "SELECT id, project_id, workflow_type, status, progress, error_message FROM tasks WHERE project_id=? ORDER BY id DESC LIMIT 50",
             (project_id,),
         )
     if requested_ids:
         placeholders = ",".join("?" for _ in requested_ids)
-        return _rows(
+        return fetch_rows(
             f"SELECT id, project_id, workflow_type, status, progress, error_message FROM tasks WHERE id IN ({placeholders}) ORDER BY id DESC",
             tuple(requested_ids),
         )
-    return _rows("SELECT id, project_id, workflow_type, status, progress, error_message FROM tasks ORDER BY id DESC LIMIT 10")
+    return fetch_rows("SELECT id, project_id, workflow_type, status, progress, error_message FROM tasks ORDER BY id DESC LIMIT 10")
 
 
 def _output_context(project_id: int | None, task_ids: list[int] | None = None) -> list[dict]:
     if task_ids:
         placeholders = ",".join("?" for _ in task_ids)
-        return _rows(
+        return fetch_rows(
             "SELECT outputs.task_id, outputs.output_type, outputs.path, outputs.metadata_json "
             f"FROM outputs JOIN tasks ON tasks.id=outputs.task_id WHERE outputs.task_id IN ({placeholders}) ORDER BY outputs.id DESC",
             tuple(task_ids),
         )
     if project_id:
-        return _rows(
+        return fetch_rows(
             "SELECT outputs.task_id, outputs.output_type, outputs.path, outputs.metadata_json FROM outputs JOIN tasks ON tasks.id=outputs.task_id WHERE tasks.project_id=? ORDER BY outputs.id DESC LIMIT 100",
             (project_id,),
         )
@@ -273,7 +269,7 @@ def agent_run(req):
     agent_run_id = start_agent_run(request_type="run", project_id=req.project_id, message=message)
     project_context_reader = main_patch_attr("read_project_context", read_project_context)
     runner_factory = main_patch_attr("AgentRunner", AgentRunner)
-    project_context = project_context_reader(req.project_id, rows_fn=_rows, workflows=main_patch_attr("WORKFLOWS", WORKFLOWS))
+    project_context = project_context_reader(req.project_id, rows_fn=fetch_rows, workflows=main_patch_attr("WORKFLOWS", WORKFLOWS))
     try:
         result = normalize_agent_run_result(dict(runner_factory().run(message=message, project_context=project_context)))
         result["agent_run_id"] = agent_run_id
@@ -363,13 +359,13 @@ def agent_resume(thread_id, req):
 def agent_rag_query(req):
     backend_context = {
         "project_id": req.project_id,
-        "tasks": _rows(
+        "tasks": fetch_rows(
             "SELECT id, workflow_type, status, progress, error_message FROM tasks WHERE project_id=? ORDER BY id DESC LIMIT 20",
             (req.project_id,),
         )
         if req.project_id
         else [],
-        "outputs": _rows(
+        "outputs": fetch_rows(
             "SELECT outputs.task_id, outputs.output_type, outputs.path, outputs.metadata_json FROM outputs JOIN tasks ON tasks.id=outputs.task_id WHERE tasks.project_id=? ORDER BY outputs.id DESC LIMIT 20",
             (req.project_id,),
         )
@@ -444,7 +440,7 @@ def chat(req):
     task_ids = [task["id"] for task in task_context if task.get("status") != "not_found_in_project"]
     project_context = {
         "project_id": req.project_id,
-        "series": _rows(
+        "series": fetch_rows(
             "SELECT id, modality, sequence_label, supported_for_processing, status, confidence FROM imaging_series WHERE project_id=? ORDER BY id DESC LIMIT 20",
             (req.project_id,),
         )

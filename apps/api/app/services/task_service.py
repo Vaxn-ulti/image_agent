@@ -7,6 +7,7 @@ from fastapi import HTTPException
 
 from app.core import config
 from app.db.database import connect, now_iso
+from app.db.queries import fetch_rows
 from app.services.background import submit_background
 from app.services.runtime_overrides import main_patch_attr, main_projects_root
 from app.workflows.deepprep import run_mock_deepprep
@@ -32,16 +33,11 @@ def _projects_root() -> Path:
     return main_projects_root(_DEFAULT_PROJECTS_ROOT, require_override=True)
 
 
-def _rows(sql: str, params=()):
-    with connect() as conn:
-        return [dict(row) for row in conn.execute(sql, params).fetchall()]
-
-
 def _parse_series_row(row: dict):
     item = dict(row)
     item["metadata"] = json.loads(item.pop("metadata_json"))
     item["supported_for_processing"] = bool(item.get("supported_for_processing", 1))
-    file_rows = _rows("SELECT storage_path, file_type FROM files WHERE id=?", (item.get("file_id"),))
+    file_rows = fetch_rows("SELECT storage_path, file_type FROM files WHERE id=?", (item.get("file_id"),))
     if file_rows:
         item["file_storage_path"] = file_rows[0]["storage_path"]
         item["file_type"] = file_rows[0]["file_type"]
@@ -77,7 +73,7 @@ def _dwi_sidecar_paths(series: dict, metadata: dict) -> dict[str, Path]:
             sidecars[suffix] = path
 
     try:
-        main_file = _rows("SELECT storage_path, file_type FROM files WHERE id=?", (series["file_id"],))[0]
+        main_file = fetch_rows("SELECT storage_path, file_type FROM files WHERE id=?", (series["file_id"],))[0]
     except (IndexError, KeyError):
         main_file = None
     allow_same_stem_fallback = bool(
@@ -119,11 +115,11 @@ def _dwi_has_required_sidecars(series: dict, metadata: dict) -> bool:
 
 
 def list_project_tasks(project_id):
-    return _rows("SELECT * FROM tasks WHERE project_id=? ORDER BY id DESC", (project_id,))
+    return fetch_rows("SELECT * FROM tasks WHERE project_id=? ORDER BY id DESC", (project_id,))
 
 
 def get_series(series_id):
-    found = _rows("SELECT * FROM imaging_series WHERE id=?", (series_id,))
+    found = fetch_rows("SELECT * FROM imaging_series WHERE id=?", (series_id,))
     if not found:
         raise HTTPException(404, "Series not found")
     return _parse_series_row(found[0])
@@ -147,7 +143,7 @@ def validate_run_request(series, req):
         if modality != "DWI" or not metadata.get("has_bval") or not metadata.get("has_bvec"):
             raise HTTPException(400, "DWI workflows require DWI series with bval and bvec")
         if workflow_type.startswith("dwi_qsi_full"):
-            companion_t1 = _rows(
+            companion_t1 = fetch_rows(
                 "SELECT id FROM imaging_series WHERE project_id=? AND modality='T1' AND supported_for_processing=1 ORDER BY id DESC LIMIT 1",
                 (series["project_id"],),
             )
@@ -162,7 +158,7 @@ def validate_run_request(series, req):
     if workflow_type.startswith("dwi_qsirecon"):
         if not req.qsiprep_task_id:
             raise HTTPException(400, "QSIRecon requires qsiprep_task_id")
-        candidates = _rows("SELECT * FROM tasks WHERE id=?", (req.qsiprep_task_id,))
+        candidates = fetch_rows("SELECT * FROM tasks WHERE id=?", (req.qsiprep_task_id,))
         if not candidates:
             raise HTTPException(400, "qsiprep_task_id not found")
         if not candidates[0]["workflow_type"].startswith("dwi_qsiprep") and candidates[0]["workflow_type"] != "dwi_qsi_full":
@@ -179,7 +175,7 @@ def validate_run_request(series, req):
     if workflow_type.startswith("bold_") and modality != "BOLD":
         raise HTTPException(400, "BOLD workflows require BOLD series")
     if workflow_type.startswith("bold_alff") or workflow_type.startswith("bold_falff") or workflow_type.startswith("bold_second_level"):
-        prior = _rows(
+        prior = fetch_rows(
             "SELECT workflow_type, status FROM tasks WHERE project_id=? AND series_id=? ORDER BY id DESC",
             (series["project_id"], series["id"]),
         )
@@ -198,7 +194,7 @@ def create_series_task(series_id, req):
         req.workflow_type = resolve_runtime_workflow_type(req.workflow_type)
     except KeyError as exc:
         raise HTTPException(400, f"Unknown workflow_type: {req.workflow_type}") from exc
-    series = _rows("SELECT * FROM imaging_series WHERE id=?", (series_id,))
+    series = fetch_rows("SELECT * FROM imaging_series WHERE id=?", (series_id,))
     if not series:
         raise HTTPException(404, "Series not found")
     series_row = series[0]
@@ -228,7 +224,7 @@ def run_series(series_id, req):
 
 
 def get_task(task_id):
-    found = _rows("SELECT * FROM tasks WHERE id=?", (task_id,))
+    found = fetch_rows("SELECT * FROM tasks WHERE id=?", (task_id,))
     if not found:
         raise HTTPException(404, "Task not found")
     return found[0]

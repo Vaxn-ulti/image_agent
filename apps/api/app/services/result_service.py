@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse
 
 from app.core import config
 from app.db.database import connect
+from app.db.queries import fetch_rows
 from app.services import task_service
 from app.services.runtime_overrides import main_patch_attr_if_changed, main_projects_root
 from app.workflows.artifact_manifest import build_artifact_manifest
@@ -37,11 +38,6 @@ _INITIAL_RUN_DESCRIPTIVE_REVIEW = run_descriptive_review
 
 def _projects_root() -> Path:
     return main_projects_root(_DEFAULT_PROJECTS_ROOT, require_override=True)
-
-
-def _rows(sql: str, params=()):
-    with connect() as conn:
-        return [dict(row) for row in conn.execute(sql, params).fetchall()]
 
 
 def get_logs(task_id):
@@ -76,7 +72,7 @@ def get_logs(task_id):
 
 def get_outputs(task_id):
     result = []
-    for row in _rows("SELECT * FROM outputs WHERE task_id=? ORDER BY id", (task_id,)):
+    for row in fetch_rows("SELECT * FROM outputs WHERE task_id=? ORDER BY id", (task_id,)):
         item = dict(row)
         item["metadata"] = json.loads(item.pop("metadata_json"))
         result.append(item)
@@ -151,7 +147,7 @@ def get_task_artifact(task_id, relative_path):
 
 
 def bold_group_analysis(project_id, req):
-    if not _rows("SELECT * FROM projects WHERE id=?", (project_id,)):
+    if not fetch_rows("SELECT * FROM projects WHERE id=?", (project_id,)):
         raise HTTPException(404, "Project not found")
     try:
         runner = main_patch_attr_if_changed("run_group_analysis", _INITIAL_RUN_GROUP_ANALYSIS, run_group_analysis)
@@ -168,7 +164,7 @@ def bold_group_analysis(project_id, req):
 
 
 def bold_descriptive_review(project_id, req):
-    if not _rows("SELECT * FROM projects WHERE id=?", (project_id,)):
+    if not fetch_rows("SELECT * FROM projects WHERE id=?", (project_id,)):
         raise HTTPException(404, "Project not found")
     try:
         runner = main_patch_attr_if_changed("run_descriptive_review", _INITIAL_RUN_DESCRIPTIVE_REVIEW, run_descriptive_review)
