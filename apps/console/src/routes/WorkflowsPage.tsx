@@ -14,7 +14,7 @@ import { Button } from '../components/ui/Button';
 import { PageHeader } from '../components/ui/PageHeader';
 import { api } from '../lib/api';
 import { queryKeys } from '../lib/query';
-import { getWorkflowEligibility, groupWorkflows, normalizeWorkflowList } from '../lib/workflows';
+import { getWorkflowEligibility, groupWorkflows, normalizeWorkflowList, selectQsiprepTaskId } from '../lib/workflows';
 
 export function WorkflowsPage() {
   const projectId = Number(useParams().projectId);
@@ -24,7 +24,8 @@ export function WorkflowsPage() {
   const { data: tasks = [] } = useQuery({ enabled: Boolean(projectId), queryFn: () => api.listProjectTasks(projectId), queryKey: queryKeys.tasks(projectId) });
 
   const runWorkflow = useMutation({
-    mutationFn: ({ seriesId, workflowType }: { seriesId: number; workflowType: string }) => api.runSeries(seriesId, workflowType),
+    mutationFn: ({ qsiprepTaskId, seriesId, workflowType }: { qsiprepTaskId?: number | null; seriesId: number; workflowType: string }) =>
+      qsiprepTaskId == null ? api.runSeries(seriesId, workflowType) : api.runSeries(seriesId, workflowType, qsiprepTaskId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.tasks(projectId) });
     },
@@ -106,7 +107,11 @@ export function WorkflowsPage() {
                               <Button
                                 size="sm"
                                 disabled={!eligibility.runnable || runWorkflow.isPending}
-                                onClick={() => runWorkflow.mutate({ seriesId: item.id, workflowType: workflow })}
+                                onClick={() => runWorkflow.mutate({
+                                  qsiprepTaskId: workflow.startsWith('dwi_qsirecon') ? selectQsiprepTaskId(tasks, item.id) : null,
+                                  seriesId: item.id,
+                                  workflowType: workflow,
+                                })}
                                 className={`${
                                   eligibility.runnable
                                     ? 'bg-[#065F46] hover:bg-[#044E3A] text-white'

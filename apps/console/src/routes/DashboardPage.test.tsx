@@ -158,6 +158,52 @@ describe('DashboardPage', () => {
     expect(api.runSeries).toHaveBeenCalledWith(22, 't1_deepprep_anat_report');
   });
 
+  it('passes the completed QSIPrep task id when the dashboard launches recommended QSIRecon', async () => {
+    const recommendedDwi = {
+      ...mockSeries[2],
+      workflow_eligibility: {
+        blocked_workflows: [],
+        policy_version: 'workflow_eligibility_v1',
+        primary_recommendation: { workflow_type: 'dwi_qsirecon' },
+        production_task_created: false,
+        runnable_workflows: [{ workflow_type: 'dwi_qsirecon' }],
+      },
+    };
+    vi.mocked(api.getResultSummary).mockResolvedValue(mockT1Summary);
+    vi.mocked(api.listWorkflows).mockResolvedValue({ workflows: ['dwi_qsirecon'] });
+    vi.mocked(api.listProjectTasks).mockResolvedValue([
+      { ...mockTasks[0], id: 188, series_id: recommendedDwi.id, status: 'completed', workflow_type: 'dwi_qsiprep' },
+    ]);
+    vi.mocked(api.listSeries).mockResolvedValue([recommendedDwi]);
+    vi.mocked(api.runSeries).mockResolvedValue({
+      id: 189,
+      progress: 0,
+      project_id: 13,
+      qsiprep_task_id: 188,
+      series_id: recommendedDwi.id,
+      status: 'queued',
+      workflow_type: 'dwi_qsirecon',
+    });
+    vi.mocked(api.chat).mockResolvedValue({ reply: 'Use QSIRecon.' });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/projects/13/dashboard']}>
+          <Routes>
+            <Route element={<DashboardPage />} path="/projects/:projectId/dashboard" />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText(/Pipeline: dwi_qsirecon/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Start recommended pipeline' }));
+
+    expect(api.runSeries).toHaveBeenCalledWith(recommendedDwi.id, 'dwi_qsirecon', 188);
+  });
+
   it('renders the processing console with backend-backed upload, workflow, run, and result sections', async () => {
     vi.mocked(api.getResultSummary).mockResolvedValue(mockT1Summary);
     vi.mocked(api.listWorkflows).mockResolvedValue({ workflows: ['t1_deepprep', 'bold_second_level', 'dwi_fast_gpu_dti'] });

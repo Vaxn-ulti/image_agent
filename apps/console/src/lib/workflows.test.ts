@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { mockSeries, mockTasks } from '../mocks/data';
-import { getWorkflowEligibility, groupWorkflows, normalizeWorkflowList } from './workflows';
+import { getWorkflowEligibility, groupWorkflows, normalizeWorkflowList, selectQsiprepTaskId } from './workflows';
 
 describe('workflow helpers', () => {
   it('groups backend workflow names by modality', () => {
@@ -61,5 +61,15 @@ describe('workflow helpers', () => {
     const result = getWorkflowEligibility(bold, 'bold_second_level', tasks);
 
     expect(result.runnable).toBe(true);
+  });
+
+  it('selects a completed QSIPrep-compatible task for QSIRecon launch', () => {
+    const tasks = [
+      { ...mockTasks[0], id: 85, series_id: 999, status: 'completed' as const, workflow_type: 'dwi_qsiprep' },
+      { ...mockTasks[1], id: 86, series_id: mockSeries[2].id, status: 'running' as const, workflow_type: 'dwi_qsiprep' },
+      { ...mockTasks[2], id: 87, series_id: mockSeries[2].id, status: 'completed' as const, workflow_type: 'dwi_qsiprep_gpu' },
+    ];
+
+    expect(selectQsiprepTaskId(tasks, mockSeries[2].id)).toBe(87);
   });
 });

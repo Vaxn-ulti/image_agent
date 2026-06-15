@@ -48,6 +48,18 @@ function hasCompletedTask(tasks: Task[], workflowTypes: string[], seriesId?: num
   );
 }
 
+function isQsiprepCompatibleTask(task: Task) {
+  return task.workflow_type.startsWith('dwi_qsiprep') || task.workflow_type === 'dwi_qsi_full';
+}
+
+export function selectQsiprepTaskId(tasks: Task[], seriesId?: number | null): number | null {
+  const candidates = tasks
+    .filter((task) => task.status === 'completed' && isQsiprepCompatibleTask(task))
+    .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '') || b.id - a.id);
+  const sameSeries = candidates.find((task) => seriesId == null || task.series_id === seriesId);
+  return (sameSeries || candidates[0])?.id ?? null;
+}
+
 function backendWorkflowEligibility(series: Series, workflowType: string): WorkflowEligibility | null {
   const eligibility = series.workflow_eligibility;
   if (!eligibility || eligibility.policy_version !== 'workflow_eligibility_v1') return null;
@@ -100,8 +112,7 @@ export function getWorkflowEligibility(series: Series, workflowType: string, tas
   }
 
   if (workflowType.startsWith('dwi_qsirecon')) {
-    const hasQsiprep = hasCompletedTask(tasks, ['dwi_qsiprep', 'dwi_qsi_full'], undefined);
-    if (!hasQsiprep) {
+    if (!selectQsiprepTaskId(tasks, series.id)) {
       return { reason: 'QSIRecon requires a completed QSIPrep-compatible task.', runnable: false };
     }
   }

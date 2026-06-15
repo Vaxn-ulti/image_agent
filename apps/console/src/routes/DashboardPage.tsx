@@ -24,7 +24,7 @@ import { Button } from '../components/ui/Button';
 import { api } from '../lib/api';
 import { queryKeys } from '../lib/query';
 import type { DwiUploadFiles, OutputItem, ResultSummary, Series, Task } from '../lib/types';
-import { getWorkflowEligibility, normalizeWorkflowList, workflowGroup } from '../lib/workflows';
+import { getWorkflowEligibility, normalizeWorkflowList, selectQsiprepTaskId, workflowGroup } from '../lib/workflows';
 
 const previewScans = [
   { alt: 'T1w axial MRI preview', src: '/neuro-assets/mri-axial.png', title: 'T1w (Axial)' },
@@ -173,7 +173,8 @@ export function DashboardPage() {
   });
 
   const runPipeline = useMutation({
-    mutationFn: ({ seriesId, workflowType }: { seriesId: number; workflowType: string }) => api.runSeries(seriesId, workflowType),
+    mutationFn: ({ qsiprepTaskId, seriesId, workflowType }: { qsiprepTaskId?: number | null; seriesId: number; workflowType: string }) =>
+      qsiprepTaskId == null ? api.runSeries(seriesId, workflowType) : api.runSeries(seriesId, workflowType, qsiprepTaskId),
     onError: (err) => setError(err instanceof Error ? err.message : 'Pipeline launch failed'),
     onSuccess: (task) => {
       setError('');
@@ -197,7 +198,11 @@ export function DashboardPage() {
       setError(eligibility.reason || 'Selected workflow cannot run for this series.');
       return;
     }
-    runPipeline.mutate({ seriesId: selectedSeries.id, workflowType: effectiveWorkflow });
+    runPipeline.mutate({
+      qsiprepTaskId: effectiveWorkflow.startsWith('dwi_qsirecon') ? selectQsiprepTaskId(tasks, selectedSeries.id) : null,
+      seriesId: selectedSeries.id,
+      workflowType: effectiveWorkflow,
+    });
   }
 
   function handleFiles(fileList: FileList | null) {
