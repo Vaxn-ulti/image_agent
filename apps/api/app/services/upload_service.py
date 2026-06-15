@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import zipfile
@@ -16,6 +15,7 @@ from app.imaging.series_records import parse_series_row
 from app.services.background import submit_background
 from app.services.project_service import require_project
 from app.services.runtime_overrides import main_patch_attr, main_projects_root
+from app.storage.upload_files import save_project_upload, save_stream_to_path
 from app.workflows.eligibility import build_workflow_eligibility
 
 
@@ -28,26 +28,13 @@ def _process_upload_session():
 
 
 def _save_upload(project_id: int, upload, file_type: str | None = None) -> dict:
-    raw_dir = _projects_root() / str(project_id) / "raw"
-    raw_dir.mkdir(parents=True, exist_ok=True)
-    safe_name = Path(upload.filename or "upload.bin").name
-    dest = raw_dir / safe_name
-    sha = hashlib.sha256()
-    with dest.open("wb") as out:
-        while chunk := upload.file.read(1024 * 1024):
-            sha.update(chunk)
-            out.write(chunk)
-    inferred = file_type or (
-        "NIFTI"
-        if safe_name.lower().endswith((".nii", ".nii.gz"))
-        else Path(safe_name).suffix.lower().lstrip(".").upper()
+    return save_project_upload(
+        project_id=project_id,
+        filename=upload.filename,
+        stream=upload.file,
+        projects_root=_projects_root(),
+        file_type=file_type,
     )
-    with connect() as conn:
-        cur = conn.execute(
-            "INSERT INTO files(project_id, original_name, storage_path, file_type, size, sha256, created_at) VALUES(?,?,?,?,?,?,?)",
-            (project_id, safe_name, str(dest), inferred, dest.stat().st_size, sha.hexdigest(), now_iso()),
-        )
-        return dict(conn.execute("SELECT * FROM files WHERE id=?", (cur.lastrowid,)).fetchone())
 
 
 def upload(project_id, file):
@@ -196,9 +183,7 @@ def ingest_dataset(project_id, upload_session_id, archive, sync_fast_path=True):
     upload_dir.mkdir(parents=True, exist_ok=True)
     safe_name = Path(archive.filename or "dataset.zip").name
     archive_path = upload_dir / safe_name
-    with archive_path.open("wb") as out:
-        while chunk := archive.file.read(1024 * 1024):
-            out.write(chunk)
+    save_stream_to_path(archive.file, archive_path)
     threshold = int(os.environ.get("IMAGE_AGENT_SYNC_INGEST_MAX_BYTES", str(32 * 1024 * 1024)))
     processor = _process_upload_session()
     if sync_fast_path and archive_path.stat().st_size <= threshold:

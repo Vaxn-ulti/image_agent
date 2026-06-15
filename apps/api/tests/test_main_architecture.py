@@ -289,3 +289,13 @@ def test_artifact_file_response_is_owned_by_route_layer():
     assert "def resolve_task_artifact(" in result_service
     assert "from fastapi.responses import FileResponse" in results_route
     assert "result_service.resolve_task_artifact" in results_route
+
+
+def test_upload_file_persistence_lives_in_storage_layer():
+    root = Path(__file__).resolve().parents[1]
+    upload_service = (root / "app" / "services" / "upload_service.py").read_text(encoding="utf-8")
+
+    assert (root / "app" / "storage" / "upload_files.py").exists()
+    assert "save_project_upload" in upload_service
+    assert "hashlib" not in upload_service
+    assert ".file.read(" not in upload_service
