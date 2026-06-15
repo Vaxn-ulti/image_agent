@@ -32,6 +32,29 @@ describe('workflow helpers', () => {
     expect(result.reason).toContain('JSON sidecar');
   });
 
+  it('uses backend workflow_eligibility before frontend fallback guesses', () => {
+    const t1BlockedByBackend = {
+      ...mockSeries[0],
+      workflow_eligibility: {
+        blocked_workflows: [
+          {
+            blocking_reasons: ['Remote DeepPrep runtime is not configured.'],
+            workflow_type: 't1_deepprep_anat_report',
+          },
+        ],
+        policy_version: 'workflow_eligibility_v1',
+        primary_recommendation: null,
+        production_task_created: false,
+        runnable_workflows: [],
+      },
+    };
+
+    const result = getWorkflowEligibility(t1BlockedByBackend, 't1_deepprep_anat_report', []);
+
+    expect(result.runnable).toBe(false);
+    expect(result.reason).toBe('Remote DeepPrep runtime is not configured.');
+  });
+
   it('allows BOLD downstream workflow after completed preprocessing', () => {
     const bold = mockSeries[1];
     const tasks = [{ ...mockTasks[0], series_id: bold.id, status: 'completed' as const, workflow_type: 'bold_deepprep' }];

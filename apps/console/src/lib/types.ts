@@ -29,6 +29,7 @@ export type Series = {
   unsupported_reason?: string;
   status?: string;
   metadata?: Record<string, unknown>;
+  workflow_eligibility?: WorkflowEligibilityContract | null;
 };
 
 export type Task = {
@@ -56,6 +57,20 @@ export type WorkflowCatalogItem = {
 
 export type WorkflowCatalogResponse = {
   workflows: Array<string | WorkflowCatalogItem>;
+};
+
+export type WorkflowEligibilityItem = {
+  workflow_type: string;
+  blocking_reasons?: string[];
+  reason?: string;
+};
+
+export type WorkflowEligibilityContract = {
+  policy_version?: string;
+  primary_recommendation?: WorkflowEligibilityItem | null;
+  production_task_created?: boolean;
+  runnable_workflows?: WorkflowEligibilityItem[];
+  blocked_workflows?: WorkflowEligibilityItem[];
 };
 
 export type RuntimeResponse = {

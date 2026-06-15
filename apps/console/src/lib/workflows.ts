@@ -48,7 +48,26 @@ function hasCompletedTask(tasks: Task[], workflowTypes: string[], seriesId?: num
   );
 }
 
+function backendWorkflowEligibility(series: Series, workflowType: string): WorkflowEligibility | null {
+  const eligibility = series.workflow_eligibility;
+  if (!eligibility || eligibility.policy_version !== 'workflow_eligibility_v1') return null;
+
+  const runnable = eligibility.runnable_workflows?.find((item) => item.workflow_type === workflowType);
+  if (runnable) return { runnable: true };
+
+  const blocked = eligibility.blocked_workflows?.find((item) => item.workflow_type === workflowType);
+  if (!blocked) return null;
+
+  return {
+    reason: blocked.blocking_reasons?.filter(Boolean).join(' ') || blocked.reason || 'Backend workflow eligibility blocked this workflow.',
+    runnable: false,
+  };
+}
+
 export function getWorkflowEligibility(series: Series, workflowType: string, tasks: Task[]): WorkflowEligibility {
+  const backendEligibility = backendWorkflowEligibility(series, workflowType);
+  if (backendEligibility) return backendEligibility;
+
   if (workflowType.startsWith('t1_') && series.modality !== 'T1') {
     return { reason: 'Requires a T1 series.', runnable: false };
   }
