@@ -64,6 +64,10 @@ function latestCompletedTask(tasks: Task[]) {
 
 function defaultWorkflowForSeries(series: Series | undefined, workflows: string[]) {
   if (!series) return workflows[0] || '';
+  const backendRecommendation = series.workflow_eligibility?.primary_recommendation?.workflow_type;
+  if (backendRecommendation && workflows.includes(backendRecommendation)) {
+    return backendRecommendation;
+  }
   const sameModality = workflows.find((workflow) => workflowGroup(workflow) === series.modality);
   return sameModality || workflows[0] || '';
 }

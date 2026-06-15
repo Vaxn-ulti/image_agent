@@ -116,6 +116,48 @@ describe('DashboardPage', () => {
     expect((await screen.findAllByText(/I found 1 brain MRI scan/)).length).toBeGreaterThan(0);
   });
 
+  it('defaults workflow selection to backend primary recommendation', async () => {
+    const recommendedSeries = {
+      ...mockSeries[0],
+      workflow_eligibility: {
+        blocked_workflows: [],
+        policy_version: 'workflow_eligibility_v1',
+        primary_recommendation: { workflow_type: 't1_deepprep_anat_report' },
+        production_task_created: false,
+        runnable_workflows: [{ workflow_type: 't1_deepprep_anat_report' }],
+      },
+    };
+    vi.mocked(api.getResultSummary).mockResolvedValue(mockT1Summary);
+    vi.mocked(api.listWorkflows).mockResolvedValue({ workflows: ['t1_deepprep', 't1_deepprep_anat_report'] });
+    vi.mocked(api.listProjectTasks).mockResolvedValue([]);
+    vi.mocked(api.listSeries).mockResolvedValue([recommendedSeries]);
+    vi.mocked(api.runSeries).mockResolvedValue({
+      id: 131,
+      progress: 0,
+      project_id: 13,
+      series_id: 22,
+      status: 'queued',
+      workflow_type: 't1_deepprep_anat_report',
+    });
+    vi.mocked(api.chat).mockResolvedValue({ reply: 'Use backend recommendation.' });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/projects/13/dashboard']}>
+          <Routes>
+            <Route element={<DashboardPage />} path="/projects/:projectId/dashboard" />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText(/Pipeline: t1_deepprep_anat_report/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Start recommended pipeline' }));
+    expect(api.runSeries).toHaveBeenCalledWith(22, 't1_deepprep_anat_report');
+  });
+
   it('renders the processing console with backend-backed upload, workflow, run, and result sections', async () => {
     vi.mocked(api.getResultSummary).mockResolvedValue(mockT1Summary);
     vi.mocked(api.listWorkflows).mockResolvedValue({ workflows: ['t1_deepprep', 'bold_second_level', 'dwi_fast_gpu_dti'] });
