@@ -17,7 +17,7 @@ import { useParams } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { api } from '../lib/api';
 import { queryKeys } from '../lib/query';
-import type { RagResponse } from '../lib/types';
+import type { RagResponse, RagStatus } from '../lib/types';
 
 type Message = {
   role: 'user' | 'agent';
@@ -32,6 +32,21 @@ const SUGGESTIONS = [
   "Analyze the latest T1 result summary",
   "Recommend next steps for project review"
 ];
+
+function dependencyAvailable(status: RagStatus | undefined, name: string) {
+  const dependency = status?.dependencies?.[name];
+  if (typeof dependency === 'boolean') return dependency;
+  return Boolean(dependency?.available);
+}
+
+function formatEngine(engine: string | null | undefined) {
+  if (!engine) return 'Not reported';
+  const words = engine
+    .split('_')
+    .filter(Boolean)
+    .join(' ');
+  return words.charAt(0).toUpperCase() + words.slice(1).toLowerCase();
+}
 
 export function AgentPage() {
   const projectId = Number(useParams().projectId);
@@ -79,6 +94,13 @@ export function AgentPage() {
   }
 
   const lastResponse = [...messages].reverse().find(m => m.response)?.response;
+  const semanticIndexReady = Boolean(status?.index?.semantic_index);
+  const llamaIndexAvailable = dependencyAvailable(status, 'llama_index');
+  const groundingLabel = semanticIndexReady ? 'Grounding Enabled' : 'Grounding Fallback';
+  const retrievalLabel = semanticIndexReady ? 'Semantic Index' : 'Fallback Retrieval';
+  const engineLabel = formatEngine(status?.index?.engine);
+  const documentCount = status?.index?.document_count ?? 0;
+  const chunkCount = status?.index?.chunk_count ?? 0;
 
   return (
     <div className="max-w-7xl mx-auto h-[calc(100vh-160px)] flex flex-col gap-6">
@@ -92,7 +114,7 @@ export function AgentPage() {
         </div>
         <div className="flex items-center gap-2">
            <div className="px-3 py-1.5 rounded-lg bg-white border border-gray-200 shadow-sm flex items-center gap-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-             <ShieldCheck className="w-3.5 h-3.5 text-green-500" /> Grounding Enabled
+             {semanticIndexReady ? <ShieldCheck className="w-3.5 h-3.5 text-green-500" /> : <AlertCircle className="w-3.5 h-3.5 text-amber-500" />} {groundingLabel}
            </div>
         </div>
       </div>
@@ -207,15 +229,19 @@ export function AgentPage() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-gray-500">Retrieval Model</span>
-                <span className="text-xs font-semibold text-gray-900">semantic-v3</span>
+                <span className="text-xs font-semibold text-gray-900">{retrievalLabel}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-gray-500">Vector Index</span>
-                <span className="text-xs font-semibold text-gray-900">ready</span>
+                <span className="text-xs font-semibold text-gray-900">{engineLabel}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-500">Last Synced</span>
-                <span className="text-xs font-semibold text-gray-900">2 min ago</span>
+                <span className="text-xs text-gray-500">Indexed Content</span>
+                <span className="text-xs font-semibold text-gray-900">{documentCount} docs / {chunkCount} chunks</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-500">LlamaIndex</span>
+                <span className="text-xs font-semibold text-gray-900">{llamaIndexAvailable ? 'available' : 'unavailable'}</span>
               </div>
             </div>
           </div>

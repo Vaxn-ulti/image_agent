@@ -18,7 +18,16 @@ vi.mock('../lib/api', () => ({
         tool_invocations: [{ tool: 'inspect_task_status', status: 'ok', result: { task_count: 1 } }],
         rag_mode: 'langgraph',
       }),
-      ragStatus: vi.fn().mockResolvedValue({ dependencies: { llama_index: false }, grounding_policy: { backend_records_rank: 'first' } }),
+      ragStatus: vi.fn().mockResolvedValue({
+        dependencies: { llama_index: { available: true } },
+        grounding_policy: { backend_records_rank: 'first' },
+        index: {
+          chunk_count: 240,
+          document_count: 60,
+          engine: 'llama_index',
+          semantic_index: true,
+        },
+      }),
     },
   }));
 
@@ -45,5 +54,38 @@ describe('AgentPage', () => {
     expect(await screen.findByText('status')).toBeInTheDocument();
     expect(await screen.findByText(/Read backend task\/output records first/)).toBeInTheDocument();
     expect(await screen.findByText(/inspect_task_status/)).toBeInTheDocument();
+  });
+
+  it('shows fallback RAG status from the backend instead of hard-coded readiness', async () => {
+    vi.mocked(api.ragStatus).mockResolvedValueOnce({
+      dependencies: {
+        langgraph: { available: false },
+        llama_index: { available: false },
+      },
+      grounding_policy: { backend_records_rank: 'first' },
+      index: {
+        chunk_count: 0,
+        document_count: 0,
+        engine: 'local_manifest',
+        semantic_index: false,
+      },
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/projects/13/agent']}>
+          <Routes>
+            <Route element={<AgentPage />} path="/projects/:projectId/agent" />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText('Fallback Retrieval')).toBeInTheDocument();
+    expect(await screen.findByText('Local manifest')).toBeInTheDocument();
+    expect(await screen.findByText('0 docs / 0 chunks')).toBeInTheDocument();
+    expect(screen.queryByText('semantic-v3')).not.toBeInTheDocument();
+    expect(screen.queryByText('2 min ago')).not.toBeInTheDocument();
   });
 });

@@ -3,6 +3,7 @@ import type {
   DwiUploadFiles,
   Inventory,
   LoginResponse,
+  RagStatus,
   Project,
   RagResponse,
   ResultSummary,
@@ -91,7 +92,7 @@ export const api = {
   getOutputs: (taskId: number) => request<unknown[]>(`/tasks/${taskId}/outputs`),
   getResultSummary: (taskId: number) => request<ResultSummary>(`/tasks/${taskId}/result-summary`),
   getArtifactUrl: (taskId: number, relativePath: string) => request<Blob>(`/tasks/${taskId}/artifacts/${encodeArtifactPath(relativePath)}`),
-  ragStatus: () => request<Record<string, unknown>>('/agent/rag/status'),
+  ragStatus: () => request<RagStatus>('/agent/rag/status'),
   ragQuery: (projectId: number | null, query: string) => jsonRequest<RagResponse>('/agent/rag/query', { project_id: projectId, query }),
   chat: (
     projectId: number | null,

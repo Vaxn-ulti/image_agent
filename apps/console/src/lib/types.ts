@@ -148,6 +148,17 @@ export type RagResponse = {
   rag_mode?: 'langgraph' | 'fallback' | string;
 };
 
+export type RagStatus = {
+  dependencies?: Record<string, boolean | { available?: boolean; [key: string]: unknown }>;
+  grounding_policy?: Record<string, unknown>;
+  index?: {
+    chunk_count?: number;
+    document_count?: number;
+    engine?: string | null;
+    semantic_index?: boolean;
+  };
+};
+
 export type DwiUploadFiles = {
   nifti: File;
   bval: File;
