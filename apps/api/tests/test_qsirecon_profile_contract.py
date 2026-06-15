@@ -56,6 +56,8 @@ def test_qsirecon_invalid_profile_fails_fast(monkeypatch, tmp_path):
     with pytest.raises(RuntimeError, match="Unsupported IMAGE_AGENT_QSIRECON_PROFILE"):
         pipeline._commands("dwi_qsirecon", _dirs(tmp_path))
 
+    _reload_pipeline(monkeypatch)
+
 
 def test_qsirecon_legacy_snapshot_is_written(tmp_path):
     from app.workflows import pipeline

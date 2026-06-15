@@ -265,3 +265,16 @@ def test_agent_backend_context_queries_live_in_agent_layer():
         assert private_helper not in agent_service
     assert "build_chat_backend_context" in agent_service
     assert "build_rag_backend_context" in agent_service
+
+
+def test_qsiprep_output_checks_live_in_workflows_layer():
+    root = Path(__file__).resolve().parents[1]
+    task_service = (root / "app" / "services" / "task_service.py").read_text(encoding="utf-8")
+
+    assert (root / "app" / "workflows" / "qsiprep_outputs.py").exists()
+    assert "qsiprep_output_has_anat" in task_service
+    for private_helper in (
+        "def _qsiprep_output_dir(",
+        "def _qsiprep_output_has_anat(",
+    ):
+        assert private_helper not in task_service

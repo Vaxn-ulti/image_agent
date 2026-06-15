@@ -13,6 +13,7 @@ from app.imaging.series_records import parse_series_row
 from app.services.background import submit_background
 from app.services.runtime_overrides import main_patch_attr, main_projects_root
 from app.workflows.deepprep import run_mock_deepprep
+from app.workflows.qsiprep_outputs import qsiprep_output_has_anat
 from app.workflows.registry import allowed_runtime_workflows, resolve_runtime_workflow_type
 
 try:
@@ -32,19 +33,6 @@ _DEFAULT_PROJECTS_ROOT = Path(config.PROJECTS_ROOT)
 
 def _projects_root() -> Path:
     return main_projects_root(_DEFAULT_PROJECTS_ROOT, require_override=True)
-
-
-def _qsiprep_output_dir(task_id: int) -> Path:
-    for project_dir in _projects_root().iterdir() if _projects_root().exists() else []:
-        candidate = project_dir / "derivatives" / str(task_id) / "output"
-        if candidate.exists():
-            return candidate
-    return _projects_root() / "__missing__" / str(task_id) / "output"
-
-
-def _qsiprep_output_has_anat(task_id: int) -> bool:
-    anat_dir = _qsiprep_output_dir(task_id) / "sub-01" / "anat"
-    return anat_dir.exists() and any(anat_dir.iterdir())
 
 
 def list_project_tasks(project_id):
@@ -98,7 +86,7 @@ def validate_run_request(series, req):
             raise HTTPException(400, "qsiprep_task_id must reference QSIPrep task")
         if not req.workflow_type.endswith("_validate") and candidates[0]["status"] != "completed":
             raise HTTPException(400, "QSIRecon requires completed QSIPrep task")
-        if candidates[0]["status"] == "completed" and not _qsiprep_output_has_anat(req.qsiprep_task_id):
+        if candidates[0]["status"] == "completed" and not qsiprep_output_has_anat(req.qsiprep_task_id, projects_root=_projects_root()):
             raise HTTPException(
                 400,
                 "QSIRecon requires QSIPrep output with subject anat derivatives; rerun QSIPrep in a project that includes T1/anat input",
