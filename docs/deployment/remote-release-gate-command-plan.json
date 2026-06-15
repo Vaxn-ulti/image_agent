@@ -120,8 +120,8 @@
     },
     {
       "id": "run_strict_remote_smoke_acceptance",
-      "purpose": "Run strict remote acceptance with model, production readiness, real evidence ids, completed task status, launchability, native QC, and scientific report artifact gates.",
-      "command": "cd /home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132/apps/api && /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/smoke_remote_agent.py --api-base http://127.0.0.1:8000 --require-model --require-deployment-identity --require-production-readiness --deployment-id <accepted_release_or_commit> --expected-health-version <expected_health_version> --min-documents 60 --min-chunks 200 --require-raw-source-policy --require-vendor-pointer-integrity --require-real-evidence-ids --require-completed-task --require-launchability-matrix --require-container-native-qc --min-native-qc-images 1 --require-scientific-report-artifacts --min-scientific-report-images 1 --project-id <project_id> --upload-session-id <upload_session_id> --task-id <completed_task_id> --output-json /tmp/image_agent_remote_smoke_acceptance_<timestamp>.json",
+      "purpose": "Run strict remote acceptance with model, production readiness, real evidence ids, completed upload ingestion, completed task status, launchability, native QC, and scientific report artifact gates.",
+      "command": "cd /home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132/apps/api && /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/smoke_remote_agent.py --api-base http://127.0.0.1:8000 --require-model --require-deployment-identity --require-production-readiness --deployment-id <accepted_release_or_commit> --expected-health-version <expected_health_version> --min-documents 60 --min-chunks 200 --require-raw-source-policy --require-vendor-pointer-integrity --require-real-evidence-ids --require-completed-upload --require-completed-task --require-launchability-matrix --require-container-native-qc --min-native-qc-images 1 --require-scientific-report-artifacts --min-scientific-report-images 1 --project-id <project_id> --upload-session-id <upload_session_id> --task-id <completed_task_id> --output-json /tmp/image_agent_remote_smoke_acceptance_<timestamp>.json",
       "requires_operator_authorization": false,
       "mutates_remote_state": false,
       "expected_success": [
@@ -129,6 +129,7 @@
         "deployment_identity_status=passed",
         "production_readiness_status=passed",
         "remote_evidence_ids_status=passed",
+        "upload_inventory_completion_status=passed",
         "task_status_status=passed",
         "container_native_qc_status=passed",
         "scientific_report_artifacts_status=passed",
@@ -146,6 +147,7 @@
         "checked.generated_at_utc is within 24 hours",
         "checked.model_smoke_status=passed",
         "checked.production_readiness_status=passed",
+        "checked.upload_inventory_completion_status=passed",
         "checked.task_status_status=passed",
         "checked.container_native_qc_status=passed",
         "checked.scientific_report_artifacts_status=passed"

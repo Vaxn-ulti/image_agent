@@ -427,6 +427,11 @@ def _validate_upload_inventory_contract(response: dict, upload_session_id: int) 
     }
 
 
+def _validate_completed_upload_inventory(upload_inventory_contract: dict) -> None:
+    status = upload_inventory_contract.get("inventory_status")
+    _require(status == "completed", f"upload inventory completion check failed: status={status}")
+
+
 def _is_unsafe_path(value: str) -> bool:
     normalized = value.replace("\\", "/")
     path_parts = [part for part in normalized.split("/") if part]
@@ -808,6 +813,11 @@ def main(argv: Sequence[str] | None = None) -> None:
         help="Fail unless --project-id, --upload-session-id, and --task-id are all supplied.",
     )
     parser.add_argument(
+        "--require-completed-upload",
+        action="store_true",
+        help="Fail unless --upload-session-id inventory reports completed upload ingestion.",
+    )
+    parser.add_argument(
         "--require-completed-task",
         action="store_true",
         help="Fail unless --task-id resolves to a completed task with safe task status metadata.",
@@ -863,6 +873,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     args = parser.parse_args(argv)
     if args.upload_session_id is not None and args.project_id is None:
         raise SystemExit("--upload-session-id requires --project-id")
+    if args.require_completed_upload and (args.project_id is None or args.upload_session_id is None):
+        raise SystemExit("--require-completed-upload requires --project-id and --upload-session-id")
     if args.require_real_evidence_ids and (
         args.project_id is None or args.upload_session_id is None or args.task_id is None
     ):
@@ -956,6 +968,8 @@ def main(argv: Sequence[str] | None = None) -> None:
                 _request("GET", f"{base}/projects/{args.project_id}/datasets/{args.upload_session_id}/inventory"),
                 args.upload_session_id,
             )
+            if args.require_completed_upload:
+                _validate_completed_upload_inventory(upload_inventory_contract)
     if args.task_id is not None:
         if args.require_completed_task:
             completed_task = _validate_completed_task(
@@ -992,6 +1006,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         "require_raw_source_policy": bool(args.require_raw_source_policy),
         "require_vendor_pointer_integrity": bool(args.require_vendor_pointer_integrity),
         "require_real_evidence_ids": bool(args.require_real_evidence_ids),
+        "require_completed_upload": bool(args.require_completed_upload),
         "require_completed_task": bool(args.require_completed_task),
         "require_launchability_matrix": bool(args.require_launchability_matrix),
         "require_container_native_qc": bool(args.require_container_native_qc),
@@ -1065,6 +1080,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         "series_with_workflow_eligibility": project_contract.get("series_with_workflow_eligibility") if project_contract else 0,
         "series_modalities": project_contract.get("modalities") if project_contract else [],
         "upload_inventory_contract_status": upload_inventory_contract.get("status") if upload_inventory_contract else "skipped",
+        "upload_inventory_completion_status": "passed" if args.require_completed_upload else "skipped",
         "upload_inventory_session_id": upload_inventory_contract.get("upload_session_id") if upload_inventory_contract else None,
         "upload_inventory_status": upload_inventory_contract.get("inventory_status") if upload_inventory_contract else None,
         "upload_inventory_series_count": upload_inventory_contract.get("series_count") if upload_inventory_contract else 0,

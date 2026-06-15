@@ -959,6 +959,93 @@ def test_smoke_remote_agent_require_completed_task_records_safe_task_status(caps
     assert "log_path" not in json.dumps(payload["task_status"])
 
 
+def test_smoke_remote_agent_require_completed_upload_requires_upload_session_id():
+    smoke = _load_smoke_module()
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(["--api-base", "http://api.local", "--require-completed-upload", "--project-id", "7"])
+
+    assert "--require-completed-upload requires --project-id and --upload-session-id" in str(exc.value)
+
+
+def test_smoke_remote_agent_require_completed_upload_rejects_running_inventory(monkeypatch):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        base_response = _good_remote_smoke_response(url)
+        if base_response is not None:
+            return base_response
+        if url.endswith("/projects/7/series"):
+            return [{"id": 1, "modality": "T1", "workflow_eligibility": _good_workflow_eligibility()}]
+        if url.endswith("/projects/7/datasets/22/inventory"):
+            return {
+                "upload_session_id": 22,
+                "status": "running",
+                "inventory": {
+                    "inventory_status": "running",
+                    "series": [{"series_id": 1, "modality": "T1", "workflow_eligibility": _good_workflow_eligibility()}],
+                },
+            }
+        raise AssertionError(f"unexpected request: {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(
+            [
+                "--api-base",
+                "http://api.local",
+                "--project-id",
+                "7",
+                "--upload-session-id",
+                "22",
+                "--require-completed-upload",
+            ]
+        )
+
+    assert "upload inventory completion check failed: status=running" in str(exc.value)
+
+
+def test_smoke_remote_agent_require_completed_upload_records_completion(capsys, monkeypatch):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        base_response = _good_remote_smoke_response(url)
+        if base_response is not None:
+            return base_response
+        if url.endswith("/projects/7/series"):
+            return [{"id": 1, "modality": "T1", "workflow_eligibility": _good_workflow_eligibility()}]
+        if url.endswith("/projects/7/datasets/22/inventory"):
+            return {
+                "upload_session_id": 22,
+                "status": "completed",
+                "inventory": {
+                    "inventory_status": "completed",
+                    "series": [{"series_id": 1, "modality": "T1", "workflow_eligibility": _good_workflow_eligibility()}],
+                },
+            }
+        raise AssertionError(f"unexpected request: {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    smoke.main(
+        [
+            "--api-base",
+            "http://api.local",
+            "--project-id",
+            "7",
+            "--upload-session-id",
+            "22",
+            "--require-completed-upload",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["smoke_gate"]["require_completed_upload"] is True
+    assert payload["upload_inventory_completion_status"] == "passed"
+    assert payload["upload_inventory_status"] == "completed"
+
+
 def test_smoke_remote_agent_require_container_native_qc_requires_task_id():
     smoke = _load_smoke_module()
 
@@ -1957,6 +2044,7 @@ def test_smoke_remote_agent_writes_acceptance_json_artifact(capsys, monkeypatch,
         "require_raw_source_policy": True,
         "require_vendor_pointer_integrity": True,
         "require_real_evidence_ids": False,
+        "require_completed_upload": False,
         "require_completed_task": False,
         "require_launchability_matrix": False,
         "require_container_native_qc": False,
@@ -1975,6 +2063,7 @@ def test_smoke_remote_agent_writes_acceptance_json_artifact(capsys, monkeypatch,
     }
     assert artifact_payload["production_readiness_status"] == "skipped"
     assert artifact_payload["production_readiness"] is None
+    assert artifact_payload["upload_inventory_completion_status"] == "skipped"
     assert artifact_payload["rag_vendor_pointer_integrity_status"] == "passed"
     assert artifact_payload["rag_vendor_pointer_integrity_referenced_vendor_docs"] == [
         "fmriprep_official_outputs.md",
@@ -2195,6 +2284,7 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
             "--require-raw-source-policy",
             "--require-vendor-pointer-integrity",
             "--require-real-evidence-ids",
+            "--require-completed-upload",
             "--require-completed-task",
             "--require-launchability-matrix",
             "--require-container-native-qc",

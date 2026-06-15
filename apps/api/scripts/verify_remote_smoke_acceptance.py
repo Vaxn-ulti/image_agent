@@ -156,6 +156,7 @@ def _verify_gate_settings(payload: dict) -> dict:
         "require_raw_source_policy",
         "require_vendor_pointer_integrity",
         "require_real_evidence_ids",
+        "require_completed_upload",
         "require_launchability_matrix",
         "require_container_native_qc",
         "require_scientific_report_artifacts",
@@ -195,6 +196,11 @@ def _verify_task_status(payload: dict, gate: dict) -> None:
     _require(task_status.get("status") == "completed", "task_status.status must be completed")
     _require_positive_id(task_status, "series_id", prefix="task_status")
     _require_privacy_safe_symbol(task_status, "workflow_type")
+
+
+def _verify_upload_completion(payload: dict) -> None:
+    _require_status(payload, "upload_inventory_completion_status")
+    _require(payload.get("upload_inventory_status") == "completed", "upload_inventory_status must be completed")
 
 
 def _is_unsafe_relative_path(value: object) -> bool:
@@ -708,6 +714,7 @@ def verify_acceptance_payload(
     _require_status(payload, "project_contract_status")
     _require_positive_int(payload, "series_with_workflow_eligibility")
     _require_status(payload, "upload_inventory_contract_status")
+    _verify_upload_completion(payload)
     _require_positive_int(payload, "upload_inventory_series_with_workflow_eligibility")
     _require_status(payload, "task_artifact_manifest_status")
     _require_positive_int(payload, "artifact_manifest_artifact_count")
@@ -728,6 +735,7 @@ def verify_acceptance_payload(
             "rag_launchability_query_status": payload["rag_launchability_query_status"],
             "project_contract_status": payload["project_contract_status"],
             "upload_inventory_contract_status": payload["upload_inventory_contract_status"],
+            "upload_inventory_completion_status": payload["upload_inventory_completion_status"],
             "task_artifact_manifest_status": payload["task_artifact_manifest_status"],
             "container_native_qc_status": payload["container_native_qc_status"],
             "scientific_report_artifacts_status": payload["scientific_report_artifacts_status"],
