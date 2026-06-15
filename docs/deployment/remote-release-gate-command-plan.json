@@ -132,6 +132,7 @@
         "remote_evidence_ids_status=passed",
         "upload_inventory_completion_status=passed",
         "task_status_status=passed",
+        "task_workflow_selection_status=passed",
         "container_native_qc_status=passed",
         "scientific_report_artifacts_status=passed",
         "skipped_missing_model_config is not accepted"
@@ -151,6 +152,7 @@
         "checked.production_readiness_status=passed",
         "checked.upload_inventory_completion_status=passed",
         "checked.task_status_status=passed",
+        "checked.task_workflow_selection_status=passed",
         "checked.container_native_qc_status=passed",
         "checked.scientific_report_artifacts_status=passed"
       ]

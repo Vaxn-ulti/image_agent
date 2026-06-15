@@ -82,9 +82,11 @@ def test_remote_release_gate_command_plan_orders_safe_remote_acceptance_steps():
     assert "<upload_session_id>" in commands
     assert "<completed_task_id>" in commands
     assert "task_status_status=passed" in json.dumps(plan, sort_keys=True)
+    assert "task_workflow_selection_status=passed" in json.dumps(plan, sort_keys=True)
     assert "agent_project_context_status=passed" in json.dumps(plan, sort_keys=True)
     assert "upload_inventory_completion_status=passed" in json.dumps(plan, sort_keys=True)
     assert "checked.task_status_status=passed" in json.dumps(plan, sort_keys=True)
+    assert "checked.task_workflow_selection_status=passed" in json.dumps(plan, sort_keys=True)
     assert "checked.agent_project_context_status=passed" in json.dumps(plan, sort_keys=True)
     assert "checked.upload_inventory_completion_status=passed" in json.dumps(plan, sort_keys=True)
 

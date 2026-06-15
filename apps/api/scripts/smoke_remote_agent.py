@@ -392,6 +392,40 @@ def _validate_project_series_contract(series: list[dict]) -> dict:
     }
 
 
+def _workflow_type_from_runnable_entry(entry: object) -> str | None:
+    if isinstance(entry, str):
+        return entry
+    if isinstance(entry, dict) and isinstance(entry.get("workflow_type"), str):
+        return entry["workflow_type"]
+    return None
+
+
+def _validate_task_workflow_selection(series: list[dict], completed_task: dict) -> dict:
+    task_series_id = completed_task.get("series_id")
+    workflow_type = completed_task.get("workflow_type")
+    _require(isinstance(task_series_id, int) and not isinstance(task_series_id, bool), "task workflow selection check failed: series_id missing")
+    _require(isinstance(workflow_type, str) and bool(workflow_type), "task workflow selection check failed: workflow_type missing")
+    matching_series = [item for item in series if _int_metric(item.get("id"), item.get("series_id")) == task_series_id]
+    _require(matching_series, "task workflow selection check failed: completed task series missing from project series")
+    eligibility = matching_series[0].get("workflow_eligibility")
+    _validate_workflow_eligibility(eligibility, "task workflow selection check failed")
+    runnable = eligibility.get("runnable_workflows") if isinstance(eligibility, dict) else []
+    runnable_workflows = {
+        value
+        for value in (_workflow_type_from_runnable_entry(entry) for entry in runnable)
+        if isinstance(value, str) and value
+    }
+    _require(
+        workflow_type in runnable_workflows,
+        "task workflow selection check failed: workflow_type not runnable for completed task series",
+    )
+    return {
+        "series_id": task_series_id,
+        "workflow_type": workflow_type,
+        "matched_runnable_workflow": True,
+    }
+
+
 def _validate_workflow_eligibility(value: object, context: str) -> None:
     _require(isinstance(value, dict), f"{context}: workflow_eligibility missing")
     _require(
@@ -973,12 +1007,15 @@ def main(argv: Sequence[str] | None = None) -> None:
     elif args.require_model or args.require_project_agent_context:
         raise SystemExit("model gateway is not configured")
     project_contract = None
+    project_series = None
     task_artifact_manifest = None
     completed_task = None
+    task_workflow_selection = None
     upload_inventory_contract = None
     if args.project_id is not None:
+        project_series = _request("GET", f"{base}/projects/{args.project_id}/series")
         project_contract = _validate_project_series_contract(
-            _request("GET", f"{base}/projects/{args.project_id}/series")
+            project_series
         )
         if args.upload_session_id is not None:
             upload_inventory_contract = _validate_upload_inventory_contract(
@@ -994,6 +1031,10 @@ def main(argv: Sequence[str] | None = None) -> None:
                 args.task_id,
                 args.project_id,
             )
+            if args.project_id is not None:
+                if project_series is None:
+                    project_series = _request("GET", f"{base}/projects/{args.project_id}/series")
+                task_workflow_selection = _validate_task_workflow_selection(project_series, completed_task)
         task_artifact_manifest = _validate_task_artifact_manifest(
             _request("GET", f"{base}/tasks/{args.task_id}/artifact-manifest"),
             args.task_id,
@@ -1090,6 +1131,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         else None,
         "task_status_status": "passed" if args.require_completed_task else "skipped",
         "task_status": completed_task,
+        "task_workflow_selection_status": "passed" if task_workflow_selection else "skipped",
+        "task_workflow_selection": task_workflow_selection,
         "rag_launchability_matrix_status": launchability_matrix.get("status") if launchability_matrix else "skipped",
         "rag_launchability_matrix_source": launchability_matrix.get("source") if launchability_matrix else None,
         "rag_launchability_query_status": launchability_query.get("status") if launchability_query else "skipped",

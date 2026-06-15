@@ -199,6 +199,26 @@ def _verify_task_status(payload: dict, gate: dict) -> None:
     _require_privacy_safe_symbol(task_status, "workflow_type")
 
 
+def _verify_task_workflow_selection(payload: dict) -> None:
+    _require_status(payload, "task_workflow_selection_status")
+    task_status = payload.get("task_status")
+    selection = payload.get("task_workflow_selection")
+    _require(isinstance(task_status, dict), "task_status must be present")
+    _require(isinstance(selection, dict), "task_workflow_selection must be present")
+    _require(
+        selection.get("matched_runnable_workflow") is True,
+        "task_workflow_selection.matched_runnable_workflow must be true",
+    )
+    _require(
+        selection.get("series_id") == task_status.get("series_id"),
+        "task_workflow_selection.series_id must match task_status.series_id",
+    )
+    _require(
+        selection.get("workflow_type") == task_status.get("workflow_type"),
+        "task_workflow_selection.workflow_type must match task_status.workflow_type",
+    )
+
+
 def _verify_upload_completion(payload: dict) -> None:
     _require_status(payload, "upload_inventory_completion_status")
     _require(payload.get("upload_inventory_status") == "completed", "upload_inventory_status must be completed")
@@ -723,6 +743,7 @@ def verify_acceptance_payload(
     _verify_vendor_coverage_catalog(payload)
     _verify_real_ids(payload, gate)
     _verify_task_status(payload, gate)
+    _verify_task_workflow_selection(payload)
     _verify_launchability(payload)
     _require_status(payload, "project_contract_status")
     _require_positive_int(payload, "series_with_workflow_eligibility")
@@ -744,6 +765,7 @@ def verify_acceptance_payload(
             "production_readiness_status": payload["production_readiness_status"],
             "remote_evidence_ids_status": payload["remote_evidence_ids_status"],
             "task_status_status": payload["task_status_status"],
+            "task_workflow_selection_status": payload["task_workflow_selection_status"],
             "rag_vendor_pointer_integrity_status": payload["rag_vendor_pointer_integrity_status"],
             "rag_vendor_coverage_catalog_status": payload["rag_vendor_coverage_catalog_status"],
             "rag_launchability_query_status": payload["rag_launchability_query_status"],

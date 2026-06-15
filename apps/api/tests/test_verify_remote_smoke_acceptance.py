@@ -73,6 +73,12 @@ def _strict_smoke_payload():
             "task_id": 114,
             "workflow_type": "t1_deepprep_anat_report",
         },
+        "task_workflow_selection_status": "passed",
+        "task_workflow_selection": {
+            "series_id": 1,
+            "workflow_type": "t1_deepprep_anat_report",
+            "matched_runnable_workflow": True,
+        },
         "rag_document_count": 72,
         "rag_chunk_count": 260,
         "rag_semantic_index": True,
@@ -309,6 +315,7 @@ def test_verify_remote_smoke_acceptance_accepts_strict_payload():
     assert report["checked"]["container_native_qc_status"] == "passed"
     assert report["checked"]["scientific_report_artifacts_status"] == "passed"
     assert report["checked"]["task_status_status"] == "passed"
+    assert report["checked"]["task_workflow_selection_status"] == "passed"
 
 
 def test_verify_remote_smoke_acceptance_rejects_stale_saved_evidence():
@@ -366,6 +373,10 @@ def test_verify_remote_smoke_acceptance_rejects_stale_saved_evidence():
         ({"task_status_status": "skipped"}, "task_status_status must be passed"),
         ({"task_status": {"status": "running"}}, "task_status.status must be completed"),
         ({"task_status": {"task_id": 115}}, "task_status.task_id must match smoke_gate.task_id"),
+        ({"task_workflow_selection_status": "skipped"}, "task_workflow_selection_status must be passed"),
+        ({"task_workflow_selection": {"matched_runnable_workflow": False}}, "task_workflow_selection.matched_runnable_workflow must be true"),
+        ({"task_workflow_selection": {"workflow_type": "bold_fmriprep_xcpd"}}, "task_workflow_selection.workflow_type must match task_status.workflow_type"),
+        ({"task_workflow_selection": {"series_id": 2}}, "task_workflow_selection.series_id must match task_status.series_id"),
         ({"rag_launchability_query_source": "Answer mentions docs/rag/workflows/workflow_launchability_matrix.md"}, "launchability query source must cite workflow matrix"),
         ({"container_native_qc_served_urls": []}, "container_native_qc_served_urls must be non-empty"),
         ({"container_native_qc_official_source_ids": ["docs/rag/vendor/fake.md"]}, "container_native_qc_official_source_ids contains unsupported source"),

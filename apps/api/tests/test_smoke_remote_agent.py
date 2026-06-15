@@ -929,14 +929,32 @@ def test_smoke_remote_agent_require_real_evidence_ids_reports_supplied_ids(capsy
         if base_response is not None:
             return base_response
         if url.endswith("/projects/7/series"):
-            return [{"id": 1, "modality": "T1", "workflow_eligibility": _good_workflow_eligibility()}]
+            return [
+                {
+                    "id": 1,
+                    "modality": "BOLD",
+                    "workflow_eligibility": {
+                        **_good_workflow_eligibility(),
+                        "runnable_workflows": [{"workflow_type": "bold_fmriprep_xcpd"}],
+                    },
+                }
+            ]
         if url.endswith("/projects/7/datasets/22/inventory"):
             return {
                 "upload_session_id": 22,
                 "status": "completed",
                 "inventory": {
                     "inventory_status": "completed",
-                    "series": [{"series_id": 1, "modality": "T1", "workflow_eligibility": _good_workflow_eligibility()}],
+                    "series": [
+                        {
+                            "series_id": 1,
+                            "modality": "BOLD",
+                            "workflow_eligibility": {
+                                **_good_workflow_eligibility(),
+                                "runnable_workflows": [{"workflow_type": "bold_fmriprep_xcpd"}],
+                            },
+                        }
+                    ],
                 },
             }
         if url.endswith("/tasks/114/artifact-manifest"):
@@ -1065,6 +1083,137 @@ def test_smoke_remote_agent_require_completed_task_records_safe_task_status(caps
     assert "log_path" not in json.dumps(payload["task_status"])
 
 
+def test_smoke_remote_agent_require_completed_task_records_workflow_selection(capsys, monkeypatch):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        base_response = _good_remote_smoke_response(url)
+        if base_response is not None:
+            return base_response
+        if url.endswith("/projects/7/series"):
+            return [
+                {
+                    "id": 1,
+                    "modality": "T1",
+                    "workflow_eligibility": {
+                        **_good_workflow_eligibility(),
+                        "runnable_workflows": [{"workflow_type": "t1_deepprep_anat_report"}],
+                    },
+                }
+            ]
+        if url.endswith("/tasks/114"):
+            return {
+                "id": 114,
+                "project_id": 7,
+                "series_id": 1,
+                "workflow_type": "t1_deepprep_anat_report",
+                "status": "completed",
+            }
+        if url.endswith("/tasks/114/artifact-manifest"):
+            return {
+                "contract_version": "artifact_manifest_v1",
+                "task_id": 114,
+                "result_summary": {"available": True},
+                "artifacts": [
+                    {
+                        "relative_path": "reports/index.html",
+                        "download_url": "/tasks/114/artifacts/reports/index.html",
+                        "preview_kind": "html",
+                        "content_type": "text/html",
+                        "size_bytes": 12,
+                        "exists": True,
+                    }
+                ],
+                "omitted_artifacts": [],
+            }
+        raise AssertionError(f"unexpected request: {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    smoke.main(
+        [
+            "--api-base",
+            "http://api.local",
+            "--project-id",
+            "7",
+            "--task-id",
+            "114",
+            "--require-completed-task",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["task_workflow_selection_status"] == "passed"
+    assert payload["task_workflow_selection"] == {
+        "series_id": 1,
+        "workflow_type": "t1_deepprep_anat_report",
+        "matched_runnable_workflow": True,
+    }
+
+
+def test_smoke_remote_agent_require_completed_task_rejects_task_not_in_runnable_workflows(monkeypatch):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        base_response = _good_remote_smoke_response(url)
+        if base_response is not None:
+            return base_response
+        if url.endswith("/projects/7/series"):
+            return [
+                {
+                    "id": 1,
+                    "modality": "T1",
+                    "workflow_eligibility": {
+                        **_good_workflow_eligibility(),
+                        "runnable_workflows": [{"workflow_type": "t1_deepprep_anat_report"}],
+                    },
+                }
+            ]
+        if url.endswith("/tasks/114"):
+            return {
+                "id": 114,
+                "project_id": 7,
+                "series_id": 1,
+                "workflow_type": "bold_fmriprep_xcpd",
+                "status": "completed",
+            }
+        if url.endswith("/tasks/114/artifact-manifest"):
+            return {
+                "contract_version": "artifact_manifest_v1",
+                "task_id": 114,
+                "result_summary": {"available": True},
+                "artifacts": [
+                    {
+                        "relative_path": "reports/index.html",
+                        "download_url": "/tasks/114/artifacts/reports/index.html",
+                        "preview_kind": "html",
+                        "content_type": "text/html",
+                        "size_bytes": 12,
+                        "exists": True,
+                    }
+                ],
+                "omitted_artifacts": [],
+            }
+        raise AssertionError(f"unexpected request: {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(
+            [
+                "--api-base",
+                "http://api.local",
+                "--project-id",
+                "7",
+                "--task-id",
+                "114",
+                "--require-completed-task",
+            ]
+        )
+
+    assert "task workflow selection check failed: workflow_type not runnable for completed task series" in str(exc.value)
+
+
 def test_smoke_remote_agent_require_completed_upload_requires_upload_session_id():
     smoke = _load_smoke_module()
 
@@ -1120,14 +1269,32 @@ def test_smoke_remote_agent_require_completed_upload_records_completion(capsys, 
         if base_response is not None:
             return base_response
         if url.endswith("/projects/7/series"):
-            return [{"id": 1, "modality": "T1", "workflow_eligibility": _good_workflow_eligibility()}]
+            return [
+                {
+                    "id": 1,
+                    "modality": "BOLD",
+                    "workflow_eligibility": {
+                        **_good_workflow_eligibility(),
+                        "runnable_workflows": [{"workflow_type": "bold_fmriprep_xcpd"}],
+                    },
+                }
+            ]
         if url.endswith("/projects/7/datasets/22/inventory"):
             return {
                 "upload_session_id": 22,
                 "status": "completed",
                 "inventory": {
                     "inventory_status": "completed",
-                    "series": [{"series_id": 1, "modality": "T1", "workflow_eligibility": _good_workflow_eligibility()}],
+                    "series": [
+                        {
+                            "series_id": 1,
+                            "modality": "BOLD",
+                            "workflow_eligibility": {
+                                **_good_workflow_eligibility(),
+                                "runnable_workflows": [{"workflow_type": "bold_fmriprep_xcpd"}],
+                            },
+                        }
+                    ],
                 },
             }
         raise AssertionError(f"unexpected request: {url}")
@@ -2338,14 +2505,32 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
                 "project_id": 7,
             }
         if url.endswith("/projects/7/series"):
-            return [{"id": 1, "modality": "T1", "workflow_eligibility": _good_workflow_eligibility()}]
+            return [
+                {
+                    "id": 1,
+                    "modality": "BOLD",
+                    "workflow_eligibility": {
+                        **_good_workflow_eligibility(),
+                        "runnable_workflows": [{"workflow_type": "bold_fmriprep_xcpd"}],
+                    },
+                }
+            ]
         if url.endswith("/projects/7/datasets/22/inventory"):
             return {
                 "upload_session_id": 22,
                 "status": "completed",
                 "inventory": {
                     "inventory_status": "completed",
-                    "series": [{"series_id": 1, "modality": "T1", "workflow_eligibility": _good_workflow_eligibility()}],
+                    "series": [
+                        {
+                            "series_id": 1,
+                            "modality": "BOLD",
+                            "workflow_eligibility": {
+                                **_good_workflow_eligibility(),
+                                "runnable_workflows": [{"workflow_type": "bold_fmriprep_xcpd"}],
+                            },
+                        }
+                    ],
                 },
             }
         if url.endswith("/tasks/114"):
