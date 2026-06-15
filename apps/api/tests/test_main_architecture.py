@@ -303,6 +303,25 @@ def test_artifact_file_response_is_owned_by_route_layer():
     assert "result_service.resolve_task_artifact" in results_route
 
 
+def test_remote_workflow_log_collection_lives_in_workflows_layer():
+    root = Path(__file__).resolve().parents[1]
+    result_service = (root / "app" / "services" / "result_service.py").read_text(encoding="utf-8")
+    task_logs = root / "app" / "workflows" / "task_logs.py"
+
+    assert task_logs.exists()
+    task_logs_source = task_logs.read_text(encoding="utf-8")
+    assert "def collect_remote_task_logs(" in task_logs_source
+    assert "classify_bold_fmriprep_xcpd_artifact_stage" in task_logs_source
+    assert "collect_remote_task_logs" in result_service
+    for forbidden in (
+        "from app.workflows.remote_scripts import classify_bold_fmriprep_xcpd_artifact_stage",
+        "remote_logs = []",
+        'glob("*.log")',
+        "log_text[-12000:]",
+    ):
+        assert forbidden not in result_service
+
+
 def test_upload_file_persistence_lives_in_storage_layer():
     root = Path(__file__).resolve().parents[1]
     upload_service = (root / "app" / "services" / "upload_service.py").read_text(encoding="utf-8")

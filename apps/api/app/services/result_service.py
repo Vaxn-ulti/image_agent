@@ -13,8 +13,8 @@ from app.services.project_service import require_project
 from app.services import task_service
 from app.services.runtime_overrides import main_patch_attr_if_changed, main_projects_root
 from app.workflows.artifact_manifest import build_artifact_manifest
-from app.workflows.remote_scripts import classify_bold_fmriprep_xcpd_artifact_stage
 from app.workflows.result_contract import load_result_summary
+from app.workflows.task_logs import collect_remote_task_logs
 
 try:
     from app.workflows.bold_group_analysis import run_group_analysis
@@ -45,23 +45,7 @@ def get_logs(task_id):
     path = Path(task["log_path"])
     text = path.read_text(encoding="utf-8") if path.exists() else ""
     output_dir = _projects_root() / str(task["project_id"]) / "derivatives" / str(task_id) / "output"
-    output_log_dir = output_dir / "logs"
-    remote_logs = []
-    if output_log_dir.exists():
-        for log_file in sorted(output_log_dir.glob("*.log")):
-            try:
-                log_text = log_file.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-            remote_logs.append(
-                {
-                    "name": log_file.name,
-                    "path": str(log_file),
-                    "source_stage": classify_bold_fmriprep_xcpd_artifact_stage(log_file, output_dir),
-                    "size_bytes": log_file.stat().st_size,
-                    "tail": log_text[-12000:],
-                }
-            )
+    remote_logs = collect_remote_task_logs(output_dir)
     return {
         "task_id": task_id,
         "text": text,
