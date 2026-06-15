@@ -274,6 +274,94 @@ def test_smoke_remote_agent_require_model_fails_when_gateway_unconfigured(monkey
     assert "model gateway is not configured" in str(exc.value)
 
 
+def test_smoke_remote_agent_require_production_readiness_fails_when_blocked(monkeypatch):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        if url.endswith("/health"):
+            return {"status": "ok", "app": "image_agent", "version": "0.2.0"}
+        if url.endswith("/deployment"):
+            return {
+                "production_readiness": {
+                    "blocking_reasons": ["Agent model gateway is not configured."],
+                    "ready": False,
+                    "required": True,
+                    "status": "blocked",
+                }
+            }
+        raise AssertionError(f"unexpected request after blocked readiness: {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(["--api-base", "http://api.local", "--require-production-readiness"])
+
+    assert "production readiness is blocked: Agent model gateway is not configured." in str(exc.value)
+
+
+def test_smoke_remote_agent_require_production_readiness_fails_when_ready_with_blockers(monkeypatch):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        if url.endswith("/health"):
+            return {"status": "ok", "app": "image_agent", "version": "0.2.0"}
+        if url.endswith("/deployment"):
+            return {
+                "production_readiness": {
+                    "blocking_reasons": ["Remote runtime mode is not enabled."],
+                    "ready": True,
+                    "required": True,
+                    "status": "ready",
+                }
+            }
+        raise AssertionError(f"unexpected request after blocked readiness: {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(["--api-base", "http://api.local", "--require-production-readiness"])
+
+    assert "production readiness is blocked: Remote runtime mode is not enabled." in str(exc.value)
+
+
+def test_smoke_remote_agent_records_production_readiness_when_required(capsys, monkeypatch):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        if url.endswith("/health"):
+            return {"status": "ok", "app": "image_agent", "version": "0.2.0"}
+        if url.endswith("/deployment"):
+            return {
+                "production_readiness": {
+                    "blocking_reasons": [],
+                    "ready": True,
+                    "required": True,
+                    "status": "ready",
+                }
+            }
+        if url.endswith("/agent/model/status"):
+            return {"configured": False, "provider": "OpenAI"}
+        if url.endswith("/agent/rag/status"):
+            return {"index": {"document_count": 72, "chunk_count": 260, "engine": "llama_index"}}
+        if url.endswith("/agent/rag/rebuild"):
+            return {"document_count": 72, "chunk_count": 260, "semantic_index": True}
+        raise AssertionError(f"unexpected request: {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    smoke.main(["--api-base", "http://api.local", "--require-production-readiness"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["smoke_gate"]["require_production_readiness"] is True
+    assert payload["production_readiness_status"] == "passed"
+    assert payload["production_readiness"] == {
+        "blocking_reasons": [],
+        "ready": True,
+        "required": True,
+        "status": "ready",
+    }
+
+
 def test_smoke_remote_agent_requires_deployment_id_for_identity_gate():
     smoke = _load_smoke_module()
 
@@ -1776,6 +1864,7 @@ def test_smoke_remote_agent_writes_acceptance_json_artifact(capsys, monkeypatch,
         "api_base": "http://api.local",
         "require_model": True,
         "require_deployment_identity": True,
+        "require_production_readiness": False,
         "deployment_id": "codex-f57a2ea-20260611T023456",
         "min_documents": 60,
         "min_chunks": 200,
@@ -1797,6 +1886,8 @@ def test_smoke_remote_agent_writes_acceptance_json_artifact(capsys, monkeypatch,
         "health_app": "image_agent",
         "health_version": "0.2.0",
     }
+    assert artifact_payload["production_readiness_status"] == "skipped"
+    assert artifact_payload["production_readiness"] is None
     assert artifact_payload["rag_vendor_pointer_integrity_status"] == "passed"
     assert artifact_payload["rag_vendor_pointer_integrity_referenced_vendor_docs"] == [
         "fmriprep_official_outputs.md",
@@ -1914,6 +2005,15 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
     def fake_request(method, url, payload=None):
         if url.endswith("/health"):
             return {"status": "ok", "app": "image_agent", "version": "0.2.0"}
+        if url.endswith("/deployment"):
+            return {
+                "production_readiness": {
+                    "required": True,
+                    "ready": True,
+                    "status": "ready",
+                    "blocking_reasons": [],
+                }
+            }
         if url.endswith("/agent/model/status"):
             return {
                 "configured": True,
@@ -1990,6 +2090,7 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
             "http://api.local",
             "--require-model",
             "--require-deployment-identity",
+            "--require-production-readiness",
             "--deployment-id",
             "codex-f57a2ea-20260611T023456",
             "--min-documents",

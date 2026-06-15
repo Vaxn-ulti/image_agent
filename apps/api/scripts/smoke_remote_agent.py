@@ -115,6 +115,25 @@ def _safe_model_status(status: dict) -> dict:
     return safe
 
 
+def _safe_production_readiness(deployment: dict) -> dict:
+    readiness = deployment.get("production_readiness")
+    _require(isinstance(readiness, dict), "production readiness is missing from /deployment")
+    blocking_reasons = readiness.get("blocking_reasons")
+    if not isinstance(blocking_reasons, list):
+        blocking_reasons = []
+    safe_reasons = [reason for reason in blocking_reasons if isinstance(reason, str) and reason]
+    safe = {
+        "required": readiness.get("required") is True,
+        "ready": readiness.get("ready") is True,
+        "status": readiness.get("status") if isinstance(readiness.get("status"), str) else "",
+        "blocking_reasons": safe_reasons,
+    }
+    if safe["required"] is not True or safe["ready"] is not True or safe["status"] != "ready" or safe_reasons:
+        reason_text = "; ".join(safe_reasons) if safe_reasons else "production readiness is not ready"
+        raise SystemExit(f"production readiness is blocked: {reason_text}")
+    return safe
+
+
 def _int_metric(*values: object) -> int:
     for value in values:
         try:
@@ -737,6 +756,11 @@ def main(argv: Sequence[str] | None = None) -> None:
         help="Fail unless --deployment-id names the accepted remote release or commit.",
     )
     parser.add_argument(
+        "--require-production-readiness",
+        action="store_true",
+        help="Fail unless /deployment.production_readiness reports required=true, ready=true, and status=ready.",
+    )
+    parser.add_argument(
         "--deployment-id",
         help="Privacy-safe accepted release id or commit hash, e.g. codex-f57a2ea-20260611T023456.",
     )
@@ -834,6 +858,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     base = args.api_base.rstrip("/")
     health = _request("GET", f"{base}/health")
     _validate_health(health)
+    production_readiness = None
+    if args.require_production_readiness:
+        production_readiness = _safe_production_readiness(_request("GET", f"{base}/deployment"))
     deployment_identity = None
     if args.deployment_id:
         health_version = health.get("version")
@@ -922,6 +949,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         "api_base": base,
         "require_model": bool(args.require_model),
         "require_deployment_identity": bool(args.require_deployment_identity),
+        "require_production_readiness": bool(args.require_production_readiness),
         "deployment_id": args.deployment_id,
         "min_documents": max(args.min_documents, 0),
         "min_chunks": max(args.min_chunks, 0),
@@ -946,6 +974,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         "health": health,
         "deployment_identity_status": "passed" if args.require_deployment_identity else "skipped",
         "deployment_identity": deployment_identity,
+        "production_readiness_status": "passed" if args.require_production_readiness else "skipped",
+        "production_readiness": production_readiness,
         "model_status": safe_model_status,
         "model_smoke_status": model_smoke_status,
         "rag_before": rag_before.get("index"),

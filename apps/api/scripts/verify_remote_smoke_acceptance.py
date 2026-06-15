@@ -151,6 +151,7 @@ def _verify_gate_settings(payload: dict) -> dict:
     for key in (
         "require_model",
         "require_deployment_identity",
+        "require_production_readiness",
         "require_raw_source_policy",
         "require_vendor_pointer_integrity",
         "require_real_evidence_ids",
@@ -170,6 +171,18 @@ def _verify_gate_settings(payload: dict) -> dict:
     _require_positive_int_metric(gate, "min_scientific_report_images")
     _require_privacy_safe_symbol(gate, "deployment_id")
     return gate
+
+
+def _verify_production_readiness(payload: dict) -> None:
+    _require_status(payload, "production_readiness_status")
+    readiness = payload.get("production_readiness")
+    _require(isinstance(readiness, dict), "production_readiness must be present")
+    _require(readiness.get("required") is True, "production_readiness.required must be true")
+    _require(readiness.get("ready") is True, "production_readiness.ready must be true")
+    _require(readiness.get("status") == "ready", "production_readiness.status must be ready")
+    blocking_reasons = readiness.get("blocking_reasons")
+    _require(isinstance(blocking_reasons, list), "production_readiness.blocking_reasons must be a list")
+    _require(not blocking_reasons, "production_readiness.blocking_reasons must be empty")
 
 
 def _is_unsafe_relative_path(value: object) -> bool:
@@ -663,6 +676,7 @@ def verify_acceptance_payload(
     gate = _verify_gate_settings(payload)
     _require(isinstance(payload.get("health"), dict) and payload["health"].get("app") == "image_agent", "health.app must be image_agent")
     _verify_deployment_identity(payload, gate)
+    _verify_production_readiness(payload)
     _verify_model_status(payload)
     _require_status(payload, "model_smoke_status")
     _require(payload.get("agent_run_status") == "answered", "agent_run_status must be answered")
@@ -693,6 +707,7 @@ def verify_acceptance_payload(
         "checked": {
             "model_smoke_status": payload["model_smoke_status"],
             "deployment_identity_status": payload["deployment_identity_status"],
+            "production_readiness_status": payload["production_readiness_status"],
             "remote_evidence_ids_status": payload["remote_evidence_ids_status"],
             "rag_vendor_pointer_integrity_status": payload["rag_vendor_pointer_integrity_status"],
             "rag_vendor_coverage_catalog_status": payload["rag_vendor_coverage_catalog_status"],
