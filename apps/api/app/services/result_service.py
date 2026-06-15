@@ -5,7 +5,6 @@ import mimetypes
 from pathlib import Path
 
 from fastapi import HTTPException
-from fastapi.responses import FileResponse
 
 from app.core import config
 from app.db.database import connect
@@ -133,7 +132,7 @@ def get_task_artifact_manifest(task_id):
     return build_artifact_manifest(task, output_dir, summary, get_outputs(task_id))
 
 
-def get_task_artifact(task_id, relative_path):
+def resolve_task_artifact(task_id, relative_path):
     if "\\" in relative_path:
         raise HTTPException(400, "Artifact path is outside the task output directory")
     task = task_service.get_task(task_id)
@@ -144,7 +143,11 @@ def get_task_artifact(task_id, relative_path):
     if not target.exists() or not target.is_file():
         raise HTTPException(404, "Artifact not found")
     media_type = "application/gzip" if target.name.endswith(".nii.gz") else mimetypes.guess_type(target.name)[0]
-    return FileResponse(target, media_type=media_type)
+    return {"path": target, "media_type": media_type}
+
+
+def get_task_artifact(task_id, relative_path):
+    return resolve_task_artifact(task_id, relative_path)
 
 
 def bold_group_analysis(project_id, req):

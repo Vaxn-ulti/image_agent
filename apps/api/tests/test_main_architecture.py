@@ -278,3 +278,14 @@ def test_qsiprep_output_checks_live_in_workflows_layer():
         "def _qsiprep_output_has_anat(",
     ):
         assert private_helper not in task_service
+
+
+def test_artifact_file_response_is_owned_by_route_layer():
+    root = Path(__file__).resolve().parents[1]
+    result_service = (root / "app" / "services" / "result_service.py").read_text(encoding="utf-8")
+    results_route = (root / "app" / "routes" / "results.py").read_text(encoding="utf-8")
+
+    assert "FileResponse" not in result_service
+    assert "def resolve_task_artifact(" in result_service
+    assert "from fastapi.responses import FileResponse" in results_route
+    assert "result_service.resolve_task_artifact" in results_route

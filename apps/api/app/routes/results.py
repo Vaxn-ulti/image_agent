@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+from fastapi.responses import FileResponse
 
 from app.services import result_service
 
@@ -17,4 +18,5 @@ def get_task_artifact_manifest(task_id: int):
 
 @router.get("/tasks/{task_id}/artifacts/{relative_path:path}")
 def get_task_artifact(task_id: int, relative_path: str):
-    return result_service.get_task_artifact(task_id, relative_path)
+    artifact = result_service.resolve_task_artifact(task_id, relative_path)
+    return FileResponse(artifact["path"], media_type=artifact["media_type"])
