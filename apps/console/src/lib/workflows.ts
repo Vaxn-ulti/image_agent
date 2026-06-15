@@ -1,4 +1,5 @@
 import type { Series, Task } from './types';
+import type { WorkflowCatalogItem } from './types';
 
 export type WorkflowGroup = 'T1' | 'BOLD' | 'DWI' | 'DICOM' | 'Other';
 
@@ -7,9 +8,17 @@ export type WorkflowEligibility = {
   reason?: string;
 };
 
-export function normalizeWorkflowList(payload: string[] | { workflows: string[] } | undefined): string[] {
+function workflowName(item: string | WorkflowCatalogItem): string | null {
+  if (typeof item === 'string') return item;
+  if (!item || typeof item !== 'object') return null;
+  if (!item.api_runnable && (!item.requires_confirmation || !item.runtime_workflow_type)) return null;
+  return item.type || item.workflow_type || item.runtime_workflow_type || null;
+}
+
+export function normalizeWorkflowList(payload: Array<string | WorkflowCatalogItem> | { workflows: Array<string | WorkflowCatalogItem> } | undefined): string[] {
   if (!payload) return [];
-  return Array.isArray(payload) ? payload : payload.workflows || [];
+  const workflows = Array.isArray(payload) ? payload : payload.workflows || [];
+  return workflows.map(workflowName).filter((workflow): workflow is string => Boolean(workflow));
 }
 
 export function workflowGroup(workflowType: string): WorkflowGroup {

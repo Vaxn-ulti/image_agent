@@ -46,8 +46,16 @@ export type Task = {
   finished_at?: string | null;
 };
 
+export type WorkflowCatalogItem = {
+  type?: string;
+  workflow_type?: string;
+  requires_confirmation?: boolean;
+  runtime_workflow_type?: string | null;
+  api_runnable?: boolean;
+};
+
 export type WorkflowCatalogResponse = {
-  workflows: string[];
+  workflows: Array<string | WorkflowCatalogItem>;
 };
 
 export type RuntimeResponse = {

@@ -94,7 +94,7 @@ export function DashboardPage() {
   const [skullStripping, setSkullStripping] = useState(true);
   const [biasCorrection, setBiasCorrection] = useState(true);
   const [chatInput, setChatInput] = useState('');
-  const [messages, setMessages] = useState<{ role: 'user' | 'agent'; content: string; meta?: string }[]>([]);
+  const [messages, setMessages] = useState<{ role: 'user' | 'agent'; content: string; meta?: 'initial-greeting' }[]>([]);
 
   const { data: workflowPayload } = useQuery({ queryFn: api.listWorkflows, queryKey: queryKeys.workflows });
   const { data: series = [] } = useQuery({ enabled: Boolean(projectId), queryFn: () => api.listSeries(projectId), queryKey: queryKeys.series(projectId) });
@@ -179,10 +179,12 @@ export function DashboardPage() {
     : "Once you upload your data, I will analyze the scans and recommend the appropriate processing workflow.";
 
   useEffect(() => {
-    if (messages.length === 0 && (series.length > 0 || workflowOptions.length > 0)) {
+    const canRefreshGreeting = messages.length === 0 || messages.every((message) => message.meta === 'initial-greeting');
+    if (canRefreshGreeting && (series.length > 0 || workflowOptions.length > 0)) {
       setMessages([{
         role: 'agent',
-        content: `Hello! I'm your neuroimaging assistant. ${seriesSummary} ${recommendation}`
+        content: `Hello! I'm your neuroimaging assistant. ${seriesSummary} ${recommendation}`,
+        meta: 'initial-greeting',
       }]);
     }
   }, [series.length, workflowOptions.length, seriesSummary, recommendation, messages.length]);

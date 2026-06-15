@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { mockSeries, mockTasks } from '../mocks/data';
-import { getWorkflowEligibility, groupWorkflows } from './workflows';
+import { getWorkflowEligibility, groupWorkflows, normalizeWorkflowList } from './workflows';
 
 describe('workflow helpers', () => {
   it('groups backend workflow names by modality', () => {
@@ -10,6 +10,18 @@ describe('workflow helpers', () => {
     expect(grouped.BOLD).toContain('bold_second_level');
     expect(grouped.DWI).toContain('dwi_fast_gpu_dti');
     expect(grouped.DICOM).toContain('dicom_convert');
+  });
+
+  it('normalizes backend workflow registry objects to API-runnable workflow types', () => {
+    const workflows = normalizeWorkflowList({
+      workflows: [
+        { type: 't1_deepprep_anat_report', requires_confirmation: true, runtime_workflow_type: 't1_deepprep' },
+        { type: 'toolchain_proposal', requires_confirmation: false, runtime_workflow_type: null },
+        { type: 't1_deepprep_mock', api_runnable: true, requires_confirmation: true, runtime_workflow_type: 't1_deepprep_mock' },
+      ],
+    });
+
+    expect(workflows).toEqual(['t1_deepprep_anat_report', 't1_deepprep_mock']);
   });
 
   it('requires JSON eddy metadata for DWI fast GPU DTI', () => {

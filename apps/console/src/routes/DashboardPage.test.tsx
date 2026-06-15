@@ -21,6 +21,33 @@ vi.mock('../lib/api', () => ({
 }));
 
 describe('DashboardPage', () => {
+  it('updates the initial agent greeting when series load after workflows', async () => {
+    vi.mocked(api.getResultSummary).mockResolvedValue(mockT1Summary);
+    vi.mocked(api.listWorkflows).mockResolvedValue({ workflows: ['t1_deepprep_anat_report'] });
+    vi.mocked(api.listProjectTasks).mockResolvedValue([]);
+    vi.mocked(api.listSeries).mockResolvedValueOnce([]).mockResolvedValue([mockSeries[0]]);
+    vi.mocked(api.chat).mockResolvedValue({ reply: 'Upload guidance.' });
+    vi.mocked(api.uploadNifti).mockResolvedValue({ file: {}, series: mockSeries[0] });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/projects/13/dashboard']}>
+          <Routes>
+            <Route element={<DashboardPage />} path="/projects/:projectId/dashboard" />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText(/I haven't found any brain imaging data yet/)).toBeInTheDocument();
+
+    await userEvent.upload(await screen.findByLabelText('Upload DICOM or NIfTI files'), new File(['nifti'], 'sub-01_T1w.nii.gz'));
+
+    expect((await screen.findAllByText(/I found 1 brain MRI scan/)).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/I haven't found any brain imaging data yet/)).not.toBeInTheDocument();
+  });
+
   it('uses the backend upload contract and refreshes detected series after upload', async () => {
     vi.mocked(api.getResultSummary).mockResolvedValue(mockT1Summary);
     vi.mocked(api.listWorkflows).mockResolvedValue({ workflows: ['t1_deepprep'] });
@@ -46,7 +73,7 @@ describe('DashboardPage', () => {
     await userEvent.upload(uploadInput, new File(['nifti'], 'sub-01_T1w.nii.gz'));
 
     expect(api.uploadNifti).toHaveBeenCalledWith(13, expect.any(File));
-    expect(await screen.findByText(/I found 1 brain MRI scan/)).toBeInTheDocument();
+    expect((await screen.findAllByText(/I found 1 brain MRI scan/)).length).toBeGreaterThan(0);
     expect(await screen.findByText(/Pipeline: t1_deepprep/)).toBeInTheDocument();
   });
 
