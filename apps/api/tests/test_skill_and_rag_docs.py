@@ -1911,3 +1911,28 @@ def test_product_readiness_gate_blocks_frontend_until_agent_contracts_are_verifi
 
     assert "skipped_missing_model_config" in gate
     assert "is not production acceptance" in gate
+
+
+def test_product_readiness_documents_fast_launch_main_flow_and_boundaries():
+    gate = (REPO_ROOT / "docs" / "product-readiness.md").read_text(encoding="utf-8")
+
+    for phrase in (
+        "Fast Launch Main Flow Goal",
+        "upload imaging data",
+        "Agent interaction",
+        "select a workflow",
+        "start processing",
+        "/projects/{project_id}/upload",
+        "/projects/{project_id}/upload-dwi",
+        "/projects/{project_id}/upload-dicom",
+        "/projects/{project_id}/series",
+        "/workflows",
+        "/series/{series_id}/run",
+        "/chat",
+        "/agent/rag/query",
+        "IMAGE_AGENT_CORS_ORIGINS",
+        "Agent may recommend or explain workflows, but task creation must still go through deterministic backend APIs",
+        "RAG may explain official sources, but backend project/task state remains authoritative",
+        "Real processing acceptance still belongs on the remote server",
+    ):
+        assert phrase in gate

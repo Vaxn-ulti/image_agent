@@ -4,6 +4,28 @@ This gate defines when Image Agent is mature enough to tell the user that fronte
 
 Until every required evidence item below is current and verified, the product is still in backend/agent hardening mode. Do not start frontend page design, do not present the existing console UI as production-ready, and do not treat local-only checks as acceptance.
 
+## Fast Launch Main Flow Goal
+
+The current near-term product goal is to make the existing console usable as quickly as possible for the core workflow: upload imaging data, Agent interaction, select a workflow, and start processing. This is a product-smoke milestone, not a replacement for strict remote production acceptance.
+
+Minimum backend/frontend contract for this fast launch:
+
+- Upload imaging data through `/projects/{project_id}/upload`, `/projects/{project_id}/upload-dwi`, `/projects/{project_id}/upload-dicom`, or the upload-session ingest endpoints.
+- Refresh detected series through `/projects/{project_id}/series`, including modality, sequence label, support status, and `workflow_eligibility` where available.
+- List selectable workflows through `/workflows`, and show blocked/runnable state from backend contracts rather than frontend guesses.
+- Start processing through `/series/{series_id}/run` only after backend validation accepts the selected workflow and series.
+- Show task state through `/projects/{project_id}/tasks`, `/tasks/{task_id}`, `/tasks/{task_id}/logs`, `/tasks/{task_id}/outputs`, `/tasks/{task_id}/result-summary`, and `/tasks/{task_id}/artifact-manifest`.
+- Support dashboard chat with `/chat` and grounded Agent review with `/agent/rag/query`; the model may be configured later, but the UI must clearly handle fallback/rules-based status.
+- Configure browser access with `IMAGE_AGENT_CORS_ORIGINS`; local development may use localhost defaults, but public deployment must not rely on wildcard CORS.
+
+Fast-launch boundary rules:
+
+- Agent may recommend or explain workflows, but task creation must still go through deterministic backend APIs and backend validation.
+- RAG may explain official sources, but backend project/task state remains authoritative.
+- Real processing acceptance still belongs on the remote server; local upload and API tests prove contracts, not Docker/remote-script execution readiness.
+- Container-native QC and result artifact display must rely on workflow outputs and artifact manifests, not locally invented frontend previews.
+- No API keys, patient identifiers, raw source snapshots, backend absolute paths, or sensitive logs may be exposed through chat, RAG status, task logs, artifact manifests, or frontend settings.
+
 ## Frontend Design Freeze Gate
 
 Frontend page design may start only after all rows are marked with fresh evidence:
