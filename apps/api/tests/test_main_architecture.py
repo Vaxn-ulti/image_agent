@@ -36,6 +36,7 @@ def test_low_risk_services_do_not_delegate_simple_logic_to_legacy_service():
     agent_service = (root / "app" / "services" / "agent_service.py").read_text(encoding="utf-8")
     task_service = (root / "app" / "services" / "task_service.py").read_text(encoding="utf-8")
     result_service = (root / "app" / "services" / "result_service.py").read_text(encoding="utf-8")
+    upload_service = (root / "app" / "services" / "upload_service.py").read_text(encoding="utf-8")
 
     assert "legacy" not in project_service
     for function_name in (
@@ -72,4 +73,18 @@ def test_low_risk_services_do_not_delegate_simple_logic_to_legacy_service():
         start = result_service.index(function_name)
         next_function = result_service.find("\ndef ", start + 1)
         body = result_service[start:] if next_function == -1 else result_service[start:next_function]
+        assert "legacy()" not in body
+
+    for function_name in (
+        "def upload",
+        "def upload_dwi",
+        "def upload_dicom",
+        "def create_upload_session",
+        "def ingest_dataset",
+        "def get_inventory",
+        "def list_series",
+    ):
+        start = upload_service.index(function_name)
+        next_function = upload_service.find("\ndef ", start + 1)
+        body = upload_service[start:] if next_function == -1 else upload_service[start:next_function]
         assert "legacy()" not in body
