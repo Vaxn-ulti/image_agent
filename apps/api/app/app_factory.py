@@ -14,11 +14,20 @@ DEFAULT_CORS_ORIGINS = (
 )
 
 
+def is_production_mode() -> bool:
+    return os.environ.get("IMAGE_AGENT_ENV", "").strip().lower() in {"prod", "production"}
+
+
 def cors_origins() -> list[str]:
     raw = os.environ.get("IMAGE_AGENT_CORS_ORIGINS", "")
     if not raw.strip():
+        if is_production_mode():
+            raise RuntimeError("IMAGE_AGENT_CORS_ORIGINS must be set explicitly when IMAGE_AGENT_ENV=production")
         return list(DEFAULT_CORS_ORIGINS)
-    return [origin.strip() for origin in raw.split(",") if origin.strip()]
+    origins = [origin.strip() for origin in raw.split(",") if origin.strip()]
+    if is_production_mode() and "*" in origins:
+        raise RuntimeError("CORS wildcard origin is not allowed when IMAGE_AGENT_ENV=production")
+    return origins
 
 
 def create_app() -> FastAPI:

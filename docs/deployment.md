@@ -12,6 +12,15 @@ pip install -r requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
+For production, set an explicit frontend allowlist before starting the API:
+
+```bash
+export IMAGE_AGENT_ENV=production
+export IMAGE_AGENT_CORS_ORIGINS=https://<console-hostname>
+```
+
+The API refuses production startup if `IMAGE_AGENT_CORS_ORIGINS` is missing or contains `*`. Leave `IMAGE_AGENT_ENV` unset for local development defaults.
+
 Frontend:
 
 ```bash

@@ -30,6 +30,17 @@ export OPENAI_API_KEY=<provided-by-operator>
 
 `/agent/model/status` reports whether the key is configured, whether request metadata is enabled, and a safe gateway-access summary. It never returns the API key or reverse-tunnel command text.
 
+## Production API Environment
+
+Production API startup must use explicit CORS origins. Set these in the remote `.env` loaded by `IMAGE_AGENT_ENV_FILE` before restarting the API:
+
+```bash
+export IMAGE_AGENT_ENV=production
+export IMAGE_AGENT_CORS_ORIGINS=https://<console-hostname>
+```
+
+`IMAGE_AGENT_CORS_ORIGINS` is a comma-separated allowlist. Do not use `*` in production. When `IMAGE_AGENT_ENV=production`, the API refuses to start if `IMAGE_AGENT_CORS_ORIGINS` is missing or contains a wildcard origin. Development can leave `IMAGE_AGENT_ENV` unset and use the local defaults for `http://localhost:5173` and `http://127.0.0.1:5173`.
+
 ## BOLD fMRIPrep + XCP-D Remote Scripts
 
 Default script paths:
