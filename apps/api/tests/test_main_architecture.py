@@ -157,3 +157,25 @@ def test_services_use_shared_db_query_helpers_for_row_reads():
         service_source = (root / "app" / "services" / service_name).read_text(encoding="utf-8")
         assert "def _rows(" not in service_source
         assert "fetch_rows" in service_source
+
+
+def test_main_compatibility_exports_live_outside_fastapi_entrypoint():
+    root = Path(__file__).resolve().parents[1]
+    main_source = (root / "app" / "main.py").read_text(encoding="utf-8")
+
+    assert (root / "app" / "main_compat.py").exists()
+    assert "install_main_compat_exports" in main_source
+    for forbidden_import in (
+        "from app.agent.deepseek",
+        "from app.agent.graph",
+        "from app.agent.model_gateway",
+        "from app.agent.rag_index",
+        "from app.agent.rag_orchestration",
+        "from app.agent.tools",
+        "from app.schemas import",
+        "from app.workflows.deepprep",
+        "from app.workflows.pipeline",
+        "from app.workflows.bold_group_analysis",
+        "from app.workflows.bold_descriptive_review",
+    ):
+        assert forbidden_import not in main_source
