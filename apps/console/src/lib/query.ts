@@ -3,6 +3,7 @@ import type { Task } from './types';
 export const queryKeys = {
   deployment: ['deployment'] as const,
   health: ['health'] as const,
+  inventory: (projectId: number, uploadSessionId: number) => ['inventory', projectId, uploadSessionId] as const,
   logs: (taskId: number) => ['logs', taskId] as const,
   outputs: (taskId: number) => ['outputs', taskId] as const,
   project: (projectId: number) => ['project', projectId] as const,

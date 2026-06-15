@@ -19,6 +19,7 @@ vi.mock('../lib/api', () => ({
     uploadDwi: vi.fn(),
     uploadNifti: vi.fn(),
     createUploadSession: vi.fn(),
+    getInventory: vi.fn(),
     ingestDataset: vi.fn(),
     chat: vi.fn(),
   },
@@ -126,6 +127,7 @@ describe('DashboardPage', () => {
     vi.mocked(api.listSeries).mockResolvedValueOnce([]).mockResolvedValue([mockSeries[0]]);
     vi.mocked(api.createUploadSession).mockResolvedValue({ id: 77, project_id: 13, status: 'ready' });
     vi.mocked(api.ingestDataset).mockResolvedValue({ inventory: { inventory_status: 'completed' } });
+    vi.mocked(api.getInventory).mockResolvedValue({ inventory: { inventory_status: 'completed', total_files: 4 } });
     vi.mocked(api.runAgent).mockResolvedValue({ answer: 'Upload guidance.' });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
@@ -146,6 +148,9 @@ describe('DashboardPage', () => {
     expect(api.ingestDataset).toHaveBeenCalledWith(13, 77, archive);
     expect(api.uploadDicom).not.toHaveBeenCalled();
     expect(await screen.findByText('Upload session #77')).toBeInTheDocument();
+    expect(api.getInventory).toHaveBeenCalledWith(13, 77);
+    expect(await screen.findByText('Ingest completed')).toBeInTheDocument();
+    expect(screen.getByText('4 files inventoried')).toBeInTheDocument();
     expect((await screen.findAllByText(/I found 1 brain MRI scan/)).length).toBeGreaterThan(0);
   });
 

@@ -145,6 +145,15 @@ export function DashboardPage() {
   const { data: workflowPayload } = useQuery({ queryFn: api.listWorkflows, queryKey: queryKeys.workflows });
   const { data: series = [] } = useQuery({ enabled: Boolean(projectId), queryFn: () => api.listSeries(projectId), queryKey: queryKeys.series(projectId) });
   const { data: tasks = [] } = useQuery({ enabled: Boolean(projectId), queryFn: () => api.listProjectTasks(projectId), queryKey: queryKeys.tasks(projectId), refetchInterval: 5000 });
+  const { data: uploadInventoryData } = useQuery({
+    enabled: Boolean(projectId && lastUploadSessionId),
+    queryFn: () => api.getInventory(projectId, lastUploadSessionId!),
+    queryKey: lastUploadSessionId ? queryKeys.inventory(projectId, lastUploadSessionId) : ['inventory', projectId, 'none'],
+    refetchInterval: (query) => {
+      const status = query.state.data?.inventory?.inventory_status;
+      return status === 'running' || status === 'queued' ? 2000 : false;
+    },
+  });
 
   const chatMutation = useMutation({
     mutationFn: (message: string) => api.runAgent(projectId, message),
@@ -204,6 +213,9 @@ export function DashboardPage() {
   const outputs = useMemo(() => flattenOutputs(resultSummary).slice(0, 5), [resultSummary]);
   const eligibility = getWorkflowEligibility(selectedSeries || ({} as Series), effectiveWorkflow, tasks);
   const canRun = Boolean(selectedSeries?.id && effectiveWorkflow && eligibility.runnable && !runPipeline.isPending);
+  const uploadInventory = uploadInventoryData?.inventory;
+  const uploadInventoryStatus = uploadInventory?.inventory_status;
+  const uploadInventoryComplete = uploadInventoryStatus === 'completed';
 
   function handleRun() {
     if (!selectedSeries?.id || !effectiveWorkflow) {
@@ -250,6 +262,12 @@ export function DashboardPage() {
       }]);
     }
   }, [series.length, workflowOptions.length, seriesSummary, recommendation, messages.length]);
+
+  useEffect(() => {
+    if (uploadInventoryComplete) {
+      queryClient.invalidateQueries({ queryKey: queryKeys.series(projectId) });
+    }
+  }, [projectId, queryClient, uploadInventoryComplete]);
 
   const handleChatSubmit = (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -316,7 +334,13 @@ export function DashboardPage() {
               </div>
               {lastUploadSessionId ? (
                 <div className="mt-3 rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
-                  Upload session #{lastUploadSessionId}
+                  <div>Upload session #{lastUploadSessionId}</div>
+                  {uploadInventoryStatus ? (
+                    <div className="mt-1 space-y-0.5 text-[11px] text-emerald-700/80">
+                      <div>Ingest {uploadInventoryComplete ? 'completed' : uploadInventoryStatus}</div>
+                      {typeof uploadInventory?.total_files === 'number' ? <div>{uploadInventory.total_files} files inventoried</div> : null}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
             </div>
