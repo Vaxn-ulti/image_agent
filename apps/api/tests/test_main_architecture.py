@@ -375,3 +375,29 @@ def test_scientific_report_verification_lives_in_agent_layer():
         "resolution_errors",
     ):
         assert forbidden not in agent_service
+
+
+def test_runtime_container_inspection_lives_in_agent_layer():
+    root = Path(__file__).resolve().parents[1]
+    agent_service = (root / "app" / "services" / "agent_service.py").read_text(encoding="utf-8")
+    agent_runtime = root / "app" / "agent" / "runtime.py"
+
+    assert agent_runtime.exists()
+    runtime_source = agent_runtime.read_text(encoding="utf-8")
+    for function_name in (
+        "def runtime_containers(",
+        "def admin_containers(",
+    ):
+        assert function_name in runtime_source
+    assert "inspect_runtime" in runtime_source
+    assert "list_image_agent_containers" in runtime_source
+
+    for forbidden in (
+        "from app.workflows.pipeline import inspect_runtime",
+        "from app.workflows.recovery import list_image_agent_containers",
+        "def inspect_runtime(",
+        "def _list_agent_containers(",
+        'main_patch_attr("inspect_runtime"',
+        'main_patch_attr("_list_agent_containers"',
+    ):
+        assert forbidden not in agent_service

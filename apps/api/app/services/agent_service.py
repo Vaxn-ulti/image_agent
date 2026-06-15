@@ -19,6 +19,8 @@ from app.agent.graph import AgentRunner
 from app.agent.rag_orchestration import build_rag_response
 from app.agent.report_verification import verify_scientific_reports
 from app.agent.run_ledger import finish_agent_run, list_project_agent_runs, load_agent_run, start_agent_run
+from app.agent.runtime import admin_containers as agent_admin_containers
+from app.agent.runtime import runtime_containers as agent_runtime_containers
 from app.agent.status import public_model_status, rag_status, rebuild_rag_index
 from app.agent.tools import read_project_context
 from app.core import config
@@ -28,17 +30,6 @@ from app.services import task_service
 from app.services.runtime_overrides import main_patch_attr, main_projects_root
 from app.workflows.registry import list_workflows as registry_list_workflows
 from app.workflows.result_contract import result_contract_spec
-
-try:
-    from app.workflows.pipeline import inspect_runtime
-    from app.workflows.recovery import list_image_agent_containers as _list_agent_containers
-except ImportError:
-    def inspect_runtime() -> dict:
-        return {"error": "pipeline runner missing", "workflows": {}}
-
-    def _list_agent_containers():
-        return []
-
 
 WORKFLOWS = registry_list_workflows()
 _DEFAULT_REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -198,14 +189,11 @@ def agent_verify_scientific_reports(req):
 
 
 def runtime_containers():
-    runtime_inspector = main_patch_attr("inspect_runtime", inspect_runtime)
-    return runtime_inspector()
+    return agent_runtime_containers()
 
 
 def admin_containers():
-    container_lister = main_patch_attr("_list_agent_containers", _list_agent_containers)
-    containers = container_lister()
-    return {"containers": containers, "count": len(containers)}
+    return agent_admin_containers()
 
 
 def list_project_agent_run_history(project_id):
