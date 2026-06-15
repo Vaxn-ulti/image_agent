@@ -136,9 +136,9 @@ export function DashboardPage() {
   const { data: tasks = [] } = useQuery({ enabled: Boolean(projectId), queryFn: () => api.listProjectTasks(projectId), queryKey: queryKeys.tasks(projectId), refetchInterval: 5000 });
 
   const chatMutation = useMutation({
-    mutationFn: (message: string) => api.chat(projectId, message),
+    mutationFn: (message: string) => api.runAgent(projectId, message),
     onSuccess: (data) => {
-      setMessages((prev) => [...prev, { role: 'agent', content: data.reply }]);
+      setMessages((prev) => [...prev, { role: 'agent', content: data.answer }]);
     },
     onError: () => {
       setMessages((prev) => [

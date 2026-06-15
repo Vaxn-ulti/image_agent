@@ -14,6 +14,7 @@ vi.mock('../lib/api', () => ({
     listProjectTasks: vi.fn(),
     listSeries: vi.fn(),
     runSeries: vi.fn(),
+    runAgent: vi.fn(),
     uploadDicom: vi.fn(),
     uploadDwi: vi.fn(),
     uploadNifti: vi.fn(),
@@ -31,7 +32,7 @@ describe('DashboardPage', () => {
     vi.mocked(api.listWorkflows).mockResolvedValue({ workflows: ['t1_deepprep_anat_report'] });
     vi.mocked(api.listProjectTasks).mockResolvedValue([]);
     vi.mocked(api.listSeries).mockResolvedValueOnce([]).mockResolvedValue([mockSeries[0]]);
-    vi.mocked(api.chat).mockResolvedValue({ reply: 'Upload guidance.' });
+    vi.mocked(api.runAgent).mockResolvedValue({ answer: 'Upload guidance.' });
     vi.mocked(api.uploadNifti).mockResolvedValue({ file: {}, series: mockSeries[0] });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
@@ -59,7 +60,7 @@ describe('DashboardPage', () => {
     vi.mocked(api.listProjectTasks).mockResolvedValue([]);
     vi.mocked(api.listSeries).mockResolvedValueOnce([]).mockResolvedValue([mockSeries[0]]);
     vi.mocked(api.uploadNifti).mockResolvedValue({ file: {}, series: mockSeries[0] });
-    vi.mocked(api.chat).mockResolvedValue({ reply: 'Upload guidance.' });
+    vi.mocked(api.runAgent).mockResolvedValue({ answer: 'Upload guidance.' });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
     render(
@@ -88,7 +89,7 @@ describe('DashboardPage', () => {
     vi.mocked(api.listProjectTasks).mockResolvedValue([]);
     vi.mocked(api.listSeries).mockResolvedValueOnce([]).mockResolvedValue([mockSeries[1]]);
     vi.mocked(api.uploadDwi).mockResolvedValue({ files: [], series: mockSeries[1] });
-    vi.mocked(api.chat).mockResolvedValue({ reply: 'Upload guidance.' });
+    vi.mocked(api.runAgent).mockResolvedValue({ answer: 'Upload guidance.' });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
     render(
@@ -139,7 +140,7 @@ describe('DashboardPage', () => {
       status: 'queued',
       workflow_type: 't1_deepprep_anat_report',
     });
-    vi.mocked(api.chat).mockResolvedValue({ reply: 'Use backend recommendation.' });
+    vi.mocked(api.runAgent).mockResolvedValue({ answer: 'Use backend recommendation.' });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
     render(
@@ -184,7 +185,7 @@ describe('DashboardPage', () => {
       status: 'queued',
       workflow_type: 'dwi_qsirecon',
     });
-    vi.mocked(api.chat).mockResolvedValue({ reply: 'Use QSIRecon.' });
+    vi.mocked(api.runAgent).mockResolvedValue({ answer: 'Use QSIRecon.' });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
     render(
@@ -210,7 +211,7 @@ describe('DashboardPage', () => {
     vi.mocked(api.listProjectTasks).mockResolvedValue(mockTasks);
     vi.mocked(api.listSeries).mockResolvedValue(mockSeries);
     vi.mocked(api.runSeries).mockResolvedValue({ id: 130, progress: 0, project_id: 13, series_id: 22, status: 'queued', workflow_type: 't1_deepprep' });
-    vi.mocked(api.chat).mockResolvedValue({ reply: 'I can help you with that.' });
+    vi.mocked(api.runAgent).mockResolvedValue({ answer: 'I can help you with that.' });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
     render(
@@ -239,12 +240,13 @@ describe('DashboardPage', () => {
 
     // Test quick action
     await userEvent.click(screen.getByRole('button', { name: 'Explain this step' }));
-    expect(api.chat).toHaveBeenCalledWith(13, 'Explain this step');
+    expect(api.runAgent).toHaveBeenCalledWith(13, 'Explain this step');
+    expect(api.chat).not.toHaveBeenCalled();
 
     // Test typed message
     const input = screen.getByPlaceholderText('Ask the agent...');
     await userEvent.type(input, 'Tell me more{enter}');
-    expect(api.chat).toHaveBeenCalledWith(13, 'Tell me more');
+    expect(api.runAgent).toHaveBeenCalledWith(13, 'Tell me more');
 
     // Test original run behavior
     await userEvent.click(screen.getByRole('button', { name: 'Start recommended pipeline' }));
