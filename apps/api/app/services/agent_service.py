@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import json
 from pathlib import Path
-from typing import Any
 
 from fastapi import HTTPException
 
@@ -20,18 +19,9 @@ from app.agent.deepseek import DeepSeekUnavailable, complete_chat
 from app.agent.deepseek import provider_status as legacy_chat_provider_status
 from app.agent.graph import AgentRunner
 from app.agent.model_gateway import ModelGateway, ModelGatewayError
-from app.agent.model_gateway import provider_status as model_provider_status
-from app.agent.rag_index import (
-    build_local_rag_index,
-    local_rag_index_status,
-    rag_vendor_coverage_catalog,
-    rag_vendor_pointer_integrity,
-    vendor_raw_source_status,
-)
 from app.agent.rag_orchestration import build_rag_response
-from app.agent.rag_orchestration import dependency_status as rag_dependency_status
-from app.agent.rag_orchestration import grounding_policy as rag_grounding_policy
 from app.agent.run_ledger import finish_agent_run, list_project_agent_runs, load_agent_run, start_agent_run
+from app.agent.status import public_model_status, rag_status, rebuild_rag_index
 from app.agent.tools import read_project_context
 from app.core import config
 from app.db.database import connect, now_iso
@@ -106,69 +96,21 @@ def deployment():
     return {
         "backend_runtime_mode": mode,
         "api_base_hint": os.environ.get("IMAGE_AGENT_PUBLIC_BASE_URL", ""),
-        "agent": _public_model_status(),
+        "agent": public_model_status(),
         "legacy_chat_provider": legacy_chat_provider_status(),
     }
 
 
-def _public_model_status() -> dict[str, Any]:
-    status = model_provider_status()
-    safe: dict[str, Any] = {
-        key: value
-        for key, value in status.items()
-        if key
-        in {
-            "provider",
-            "configured",
-            "base_url",
-            "model",
-            "review_model",
-            "wire_api",
-            "reasoning_effort",
-            "store",
-            "metadata_enabled",
-            "context_window",
-            "auto_compact_token_limit",
-        }
-    }
-    deployment_status = status.get("deployment") if isinstance(status.get("deployment"), dict) else {}
-    safe_deployment = {
-        key: deployment_status[key]
-        for key in ("backend_runtime_mode", "model_gateway_access")
-        if key in deployment_status
-    }
-    if safe_deployment:
-        safe["deployment"] = safe_deployment
-    return safe
-
-
 def agent_rag_status():
-    root = _repo_root()
-    index_status = local_rag_index_status(root=root, persist_dir=root / ".rag_index")
-    indexed_sources = index_status.get("indexed_sources") or []
-    return {
-        "dependencies": rag_dependency_status(),
-        "grounding_policy": rag_grounding_policy(),
-        "index": index_status,
-        "vendor_raw_sources": vendor_raw_source_status(
-            root=root,
-            indexed_sources=indexed_sources,
-        ),
-        "vendor_pointer_integrity": rag_vendor_pointer_integrity(root=root),
-        "vendor_coverage_catalog": rag_vendor_coverage_catalog(
-            root=root,
-            indexed_sources=indexed_sources,
-        ),
-    }
+    return rag_status(_repo_root())
 
 
 def agent_rag_rebuild():
-    root = _repo_root()
-    return build_local_rag_index(root=root, persist_dir=root / ".rag_index")
+    return rebuild_rag_index(_repo_root())
 
 
 def agent_model_status():
-    return _public_model_status()
+    return public_model_status()
 
 
 def agent_run(req):

@@ -299,3 +299,30 @@ def test_upload_file_persistence_lives_in_storage_layer():
     assert "save_project_upload" in upload_service
     assert "hashlib" not in upload_service
     assert ".file.read(" not in upload_service
+
+
+def test_agent_status_and_rag_health_live_in_agent_layer():
+    root = Path(__file__).resolve().parents[1]
+    agent_service = (root / "app" / "services" / "agent_service.py").read_text(encoding="utf-8")
+    agent_status = root / "app" / "agent" / "status.py"
+
+    assert agent_status.exists()
+    status_source = agent_status.read_text(encoding="utf-8")
+    for function_name in (
+        "def public_model_status(",
+        "def rag_status(",
+        "def rebuild_rag_index(",
+    ):
+        assert function_name in status_source
+
+    for forbidden in (
+        "def _public_model_status(",
+        "model_provider_status",
+        "local_rag_index_status",
+        "rag_vendor_coverage_catalog",
+        "rag_vendor_pointer_integrity",
+        "vendor_raw_source_status",
+        "rag_dependency_status",
+        "rag_grounding_policy",
+    ):
+        assert forbidden not in agent_service
