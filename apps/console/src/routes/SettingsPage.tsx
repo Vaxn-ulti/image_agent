@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
   Cpu,
@@ -16,6 +16,7 @@ import { api, getApiBase, resetApiBase, setApiBase } from '../lib/api';
 import { queryKeys } from '../lib/query';
 
 export function SettingsPage() {
+  const queryClient = useQueryClient();
   const { data: deployment } = useQuery({ queryFn: api.deployment, queryKey: queryKeys.deployment });
   const { data: runtime } = useQuery({ queryFn: api.runtimeContainers, queryKey: queryKeys.runtime, retry: false });
   const [apiBaseInput, setApiBaseInput] = useState(getApiBase());
@@ -25,11 +26,18 @@ export function SettingsPage() {
   function handleSave() {
     setApiBase(apiBaseInput);
     setApiBaseInput(getApiBase());
+    refreshConnectionStatus();
   }
 
   function handleReset() {
     resetApiBase();
     setApiBaseInput(getApiBase());
+    refreshConnectionStatus();
+  }
+
+  function refreshConnectionStatus() {
+    queryClient.invalidateQueries({ queryKey: queryKeys.deployment });
+    queryClient.invalidateQueries({ queryKey: queryKeys.runtime });
   }
 
   return (
