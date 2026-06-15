@@ -9,11 +9,30 @@ from fastapi import HTTPException
 from fastapi.responses import FileResponse
 
 from app.core import config
+from app.db.database import connect
 from app.services import task_service
-from app.services.compat import legacy
 from app.workflows.artifact_manifest import build_artifact_manifest
 from app.workflows.remote_scripts import classify_bold_fmriprep_xcpd_artifact_stage
 from app.workflows.result_contract import load_result_summary
+
+try:
+    from app.workflows.bold_group_analysis import run_group_analysis
+except ImportError:
+
+    def run_group_analysis(*args, **kwargs):
+        raise RuntimeError("bold group analysis unavailable")
+
+try:
+    from app.workflows.bold_descriptive_review import run_descriptive_review
+except ImportError:
+
+    def run_descriptive_review(*args, **kwargs):
+        raise RuntimeError("bold descriptive review unavailable")
+
+
+_DEFAULT_PROJECTS_ROOT = Path(config.PROJECTS_ROOT)
+_INITIAL_RUN_GROUP_ANALYSIS = run_group_analysis
+_INITIAL_RUN_DESCRIPTIVE_REVIEW = run_descriptive_review
 
 
 def _main_attr(name: str, default):
@@ -23,15 +42,29 @@ def _main_attr(name: str, default):
     return default
 
 
+def _main_attr_if_patched(name: str, initial, current):
+    if current is not initial:
+        return current
+    main = sys.modules.get("app.main")
+    if main is not None and hasattr(main, name):
+        value = getattr(main, name)
+        if value is not initial:
+            return value
+    return current
+
+
 def _projects_root() -> Path:
-    return Path(_main_attr("PROJECTS_ROOT", config.PROJECTS_ROOT))
+    main = sys.modules.get("app.main")
+    if main is not None and hasattr(main, "PROJECTS_ROOT"):
+        main_root = Path(getattr(main, "PROJECTS_ROOT"))
+        if main_root != _DEFAULT_PROJECTS_ROOT:
+            return main_root
+    return Path(config.PROJECTS_ROOT)
 
 
 def _rows(sql: str, params=()):
-    main = sys.modules.get("app.main")
-    if main is not None and hasattr(main, "rows"):
-        return getattr(main, "rows")(sql, params)
-    return legacy().rows(sql, params)
+    with connect() as conn:
+        return [dict(row) for row in conn.execute(sql, params).fetchall()]
 
 
 def get_logs(task_id):
@@ -141,8 +174,31 @@ def get_task_artifact(task_id, relative_path):
 
 
 def bold_group_analysis(project_id, req):
-    return legacy().bold_group_analysis(project_id, req)
+    if not _rows("SELECT * FROM projects WHERE id=?", (project_id,)):
+        raise HTTPException(404, "Project not found")
+    try:
+        runner = _main_attr_if_patched("run_group_analysis", _INITIAL_RUN_GROUP_ANALYSIS, run_group_analysis)
+        return runner(
+            project_id=project_id,
+            group_a_tasks=req.group_a_task_ids,
+            group_b_tasks=req.group_b_task_ids,
+            seed_query=req.seed_query,
+            label_a=req.label_a,
+            label_b=req.label_b,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 def bold_descriptive_review(project_id, req):
-    return legacy().bold_descriptive_review(project_id, req)
+    if not _rows("SELECT * FROM projects WHERE id=?", (project_id,)):
+        raise HTTPException(404, "Project not found")
+    try:
+        runner = _main_attr_if_patched("run_descriptive_review", _INITIAL_RUN_DESCRIPTIVE_REVIEW, run_descriptive_review)
+        return runner(
+            project_id=project_id,
+            deepprep_task_ids=req.deepprep_task_ids,
+            seed_preset=req.seed_preset,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(400, str(exc)) from exc

@@ -39,6 +39,8 @@ def test_low_risk_services_do_not_delegate_simple_logic_to_legacy_service():
     upload_service = (root / "app" / "services" / "upload_service.py").read_text(encoding="utf-8")
 
     assert "legacy" not in project_service
+    assert "from app.services.compat import legacy" not in result_service
+    assert "legacy()" not in result_service
     for function_name in (
         "def health",
         "def list_workflows",
@@ -72,6 +74,8 @@ def test_low_risk_services_do_not_delegate_simple_logic_to_legacy_service():
         "def get_result_summary",
         "def get_task_artifact_manifest",
         "def get_task_artifact",
+        "def bold_group_analysis",
+        "def bold_descriptive_review",
     ):
         start = result_service.index(function_name)
         next_function = result_service.find("\ndef ", start + 1)

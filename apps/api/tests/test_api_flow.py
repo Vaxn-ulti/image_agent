@@ -1053,6 +1053,75 @@ def test_bold_deepprep_validate_allowed_for_fmri(tmp_path, monkeypatch):
     assert accepted.status_code == 200
 
 
+def test_bold_report_routes_dispatch_through_result_service(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
+    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
+    from app.db import database
+    from app.services import result_service
+
+    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
+    database.init_db()
+
+    calls = []
+
+    def fake_group_analysis(**kwargs):
+        calls.append(('group', kwargs))
+        return {'kind': 'group', 'project_id': kwargs['project_id'], 'seed_query': kwargs['seed_query']}
+
+    def fake_descriptive_review(**kwargs):
+        calls.append(('descriptive', kwargs))
+        return {'kind': 'descriptive', 'project_id': kwargs['project_id'], 'seed_preset': kwargs['seed_preset']}
+
+    monkeypatch.setattr(result_service, 'run_group_analysis', fake_group_analysis)
+    monkeypatch.setattr(result_service, 'run_descriptive_review', fake_descriptive_review)
+
+    client = TestClient(app)
+    project = client.post('/projects', json={'name': 'P-bold-report-service'}).json()
+
+    missing = client.post(
+        '/projects/999/bold/group-analysis',
+        json={'group_a_task_ids': [1, 2], 'group_b_task_ids': [3, 4], 'seed_query': 'PCC_DMN'},
+    )
+    assert missing.status_code == 404
+
+    group = client.post(
+        f"/projects/{project['id']}/bold/group-analysis",
+        json={'group_a_task_ids': [1, 2], 'group_b_task_ids': [3, 4], 'seed_query': 'PCC_DMN'},
+    )
+    assert group.status_code == 200
+    assert group.json()['kind'] == 'group'
+
+    descriptive = client.post(
+        f"/projects/{project['id']}/bold/descriptive-review",
+        json={'deepprep_task_ids': [7], 'seed_preset': 'PCC_DMN'},
+    )
+    assert descriptive.status_code == 200
+    assert descriptive.json()['kind'] == 'descriptive'
+
+    assert calls == [
+        (
+            'group',
+            {
+                'project_id': project['id'],
+                'group_a_tasks': [1, 2],
+                'group_b_tasks': [3, 4],
+                'seed_query': 'PCC_DMN',
+                'label_a': 'group_a',
+                'label_b': 'group_b',
+            },
+        ),
+        (
+            'descriptive',
+            {
+                'project_id': project['id'],
+                'deepprep_task_ids': [7],
+                'seed_preset': 'PCC_DMN',
+            },
+        ),
+    ]
+
+
 def test_mixed_dataset_ingest_inventory_and_bids(tmp_path, monkeypatch):
     monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
     monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
