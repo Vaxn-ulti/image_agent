@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from app.core import config
 from app.db.database import connect, now_iso
 from app.db.queries import fetch_rows
+from app.imaging.dwi_sidecars import dwi_has_required_sidecars
 from app.imaging.series_records import parse_series_row
 from app.services.background import submit_background
 from app.services.runtime_overrides import main_patch_attr, main_projects_root
@@ -46,60 +47,6 @@ def _qsiprep_output_has_anat(task_id: int) -> bool:
     return anat_dir.exists() and any(anat_dir.iterdir())
 
 
-def _sidecar_base(path: Path) -> str:
-    return path.name[:-7] if path.name.lower().endswith(".nii.gz") else path.stem
-
-
-def _dwi_sidecar_paths(series: dict, metadata: dict) -> dict[str, Path]:
-    sidecars: dict[str, Path] = {}
-    for raw_path in metadata.get("sidecars") or []:
-        path = Path(raw_path)
-        suffix = path.suffix.lower()
-        if suffix in {".json", ".bval", ".bvec"} and path.exists():
-            sidecars[suffix] = path
-
-    try:
-        main_file = fetch_rows("SELECT storage_path, file_type FROM files WHERE id=?", (series["file_id"],))[0]
-    except (IndexError, KeyError):
-        main_file = None
-    allow_same_stem_fallback = bool(
-        metadata.get("sidecars")
-        or metadata.get("bids_path")
-        or series.get("format") == "NIFTI_BIDS"
-        or (main_file and main_file.get("file_type") == "NIFTI_BIDS")
-    )
-    if main_file and allow_same_stem_fallback:
-        src = Path(main_file["storage_path"])
-        base = _sidecar_base(src)
-        for suffix in (".json", ".bval", ".bvec"):
-            candidate = src.with_name(base + suffix)
-            if suffix not in sidecars and candidate.exists():
-                sidecars[suffix] = candidate
-    return sidecars
-
-
-def _dwi_has_eddy_json_metadata(series: dict, metadata: dict) -> bool:
-    if metadata.get("has_json") and metadata.get("has_dwi_eddy_metadata"):
-        return True
-    json_path = _dwi_sidecar_paths(series, metadata).get(".json")
-    if json_path is None:
-        return False
-    try:
-        payload = json.loads(json_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return False
-    return payload.get("PhaseEncodingDirection") is not None and payload.get("TotalReadoutTime") is not None
-
-
-def _dwi_has_required_sidecars(series: dict, metadata: dict) -> bool:
-    sidecars = _dwi_sidecar_paths(series, metadata)
-    return (
-        bool(metadata.get("has_bval") or ".bval" in sidecars)
-        and bool(metadata.get("has_bvec") or ".bvec" in sidecars)
-        and _dwi_has_eddy_json_metadata(series, metadata)
-    )
-
-
 def list_project_tasks(project_id):
     return fetch_rows("SELECT * FROM tasks WHERE project_id=? ORDER BY id DESC", (project_id,))
 
@@ -136,7 +83,7 @@ def validate_run_request(series, req):
             if not companion_t1:
                 raise HTTPException(400, "DWI QSIPrep + QSIRecon requires T1/anat data in the same project")
     if workflow_type.startswith("dwi_fast_gpu_dti"):
-        if modality != "DWI" or not _dwi_has_required_sidecars(series, metadata):
+        if modality != "DWI" or not dwi_has_required_sidecars(series, metadata):
             raise HTTPException(
                 400,
                 "DWI fast GPU DTI requires DWI series with bval, bvec, and JSON sidecar containing PhaseEncodingDirection and TotalReadoutTime",

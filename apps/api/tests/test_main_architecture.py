@@ -236,3 +236,17 @@ def test_project_existence_checks_live_in_project_service():
         assert "require_project" in service_source
         assert "Project not found" not in service_source
         assert "SELECT * FROM projects WHERE id=?" not in service_source
+
+
+def test_dwi_sidecar_detection_lives_in_imaging_layer():
+    root = Path(__file__).resolve().parents[1]
+    task_service = (root / "app" / "services" / "task_service.py").read_text(encoding="utf-8")
+
+    assert (root / "app" / "imaging" / "dwi_sidecars.py").exists()
+    assert "dwi_has_required_sidecars" in task_service
+    for private_helper in (
+        "def _dwi_sidecar_paths(",
+        "def _dwi_has_eddy_json_metadata(",
+        "def _dwi_has_required_sidecars(",
+    ):
+        assert private_helper not in task_service
