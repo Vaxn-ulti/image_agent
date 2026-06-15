@@ -23,7 +23,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { Button } from '../components/ui/Button';
 import { api } from '../lib/api';
 import { queryKeys } from '../lib/query';
-import type { OutputItem, ResultSummary, Series, Task } from '../lib/types';
+import type { DwiUploadFiles, OutputItem, ResultSummary, Series, Task } from '../lib/types';
 import { getWorkflowEligibility, normalizeWorkflowList, workflowGroup } from '../lib/workflows';
 
 const previewScans = [
@@ -56,6 +56,8 @@ function taskTimestamp(task: Task) {
   return task.finished_at || task.started_at || task.created_at || '';
 }
 
+type DashboardUploadResponse = { file?: unknown; files?: unknown[]; series: Series };
+
 function latestCompletedTask(tasks: Task[]) {
   return [...tasks].filter(completedTask).sort((a, b) => taskTimestamp(b).localeCompare(taskTimestamp(a)) || b.id - a.id)[0];
 }
@@ -77,10 +79,39 @@ function formatCompleted(task: Task) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(raw));
 }
 
-function selectFileUpload(projectId: number, file: File) {
+function isNiftiFile(file: File) {
+  const name = file.name.toLowerCase();
+  return name.endsWith('.nii') || name.endsWith('.nii.gz');
+}
+
+function selectDwiFiles(files: File[]): DwiUploadFiles | null {
+  const nifti = files.find(isNiftiFile);
+  const bval = files.find((file) => file.name.toLowerCase().endsWith('.bval'));
+  const bvec = files.find((file) => file.name.toLowerCase().endsWith('.bvec'));
+  const jsonSidecar = files.find((file) => file.name.toLowerCase().endsWith('.json'));
+  if (!nifti || !bval || !bvec || !jsonSidecar) return null;
+  return { nifti, bval, bvec, jsonSidecar };
+}
+
+function selectFileUpload(projectId: number, files: File[]): Promise<DashboardUploadResponse> {
+  if (files.length > 1) {
+    const dwiFiles = selectDwiFiles(files);
+    if (!dwiFiles) {
+      throw new Error('Select one DICOM zip, one NIfTI file, or a complete DWI set with NIfTI, bval, bvec, and JSON sidecar.');
+    }
+    return api.uploadDwi(projectId, dwiFiles);
+  }
+
+  const file = files[0];
+  if (!file) {
+    throw new Error('Select an imaging file before uploading.');
+  }
   const name = file.name.toLowerCase();
   if (name.endsWith('.zip')) {
     return api.uploadDicom(projectId, file);
+  }
+  if (!isNiftiFile(file)) {
+    throw new Error('Supported uploads are DICOM zip, NIfTI, or complete DWI sidecar sets.');
   }
   return api.uploadNifti(projectId, file);
 }
@@ -128,8 +159,8 @@ export function DashboardPage() {
     retry: false,
   });
 
-  const uploadFile = useMutation({
-    mutationFn: (file: File) => selectFileUpload(projectId, file),
+  const uploadFile = useMutation<DashboardUploadResponse, Error, File[]>({
+    mutationFn: (files: File[]) => selectFileUpload(projectId, files),
     onError: (err) => setError(err instanceof Error ? err.message : 'Upload failed'),
     onSuccess: () => {
       setError('');
@@ -165,9 +196,10 @@ export function DashboardPage() {
     runPipeline.mutate({ seriesId: selectedSeries.id, workflowType: effectiveWorkflow });
   }
 
-  function handleFile(file: File | undefined) {
-    if (!file) return;
-    uploadFile.mutate(file);
+  function handleFiles(fileList: FileList | null) {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    uploadFile.mutate(files);
   }
 
   const seriesSummary = series.length > 0
@@ -232,21 +264,22 @@ export function DashboardPage() {
             <div className="p-5 flex-1 flex flex-col">
               <label className="border-2 border-dashed border-gray-200 rounded-lg flex-1 flex flex-col items-center justify-center p-8 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer group">
                 <UploadCloud className="w-12 h-12 text-gray-400 mb-4 group-hover:text-[#065F46] transition-colors" />
-                <div className="text-base font-medium text-gray-700 mb-1">Drag & drop DICOM or NIfTI files here</div>
+                <div className="text-base font-medium text-gray-700 mb-1">Drag & drop DICOM, NIfTI, or DWI sidecar files here</div>
                 <div className="text-sm text-gray-500 mb-6">or click to browse from your computer</div>
                 <span className="bg-[#065F46] text-white px-6 py-2 rounded-md text-sm font-medium shadow-sm hover:bg-[#044E3A] transition-colors">
                   Browse Files
                 </span>
                 <input
-                  aria-label="Upload DICOM or NIfTI files"
+                  aria-label="Upload DICOM, NIfTI, or DWI sidecar set"
                   className="sr-only"
                   type="file"
-                  accept=".nii,.nii.gz,.zip"
-                  onChange={(event) => handleFile(event.target.files?.[0])}
+                  accept=".nii,.nii.gz,.zip,.bval,.bvec,.json"
+                  multiple
+                  onChange={(event) => handleFiles(event.target.files)}
                 />
               </label>
               <div className="mt-4 flex justify-between items-center text-xs">
-                <span className="text-gray-500">Supported: DICOM archives (.zip), NIfTI (.nii, .nii.gz)</span>
+                <span className="text-gray-500">Supported: DICOM archives, NIfTI, or DWI set (.nii.gz + .bval + .bvec + .json)</span>
                 <Link className="text-[#065F46] hover:underline font-medium inline-flex items-center gap-1" to={`/projects/${projectId}/ingest`}>
                   Advanced Ingest <ExternalLink className="w-3 h-3" />
                 </Link>

@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../lib/api';
 import { mockSeries, mockT1Summary, mockTasks } from '../mocks/data';
 import { DashboardPage } from './DashboardPage';
@@ -15,12 +15,17 @@ vi.mock('../lib/api', () => ({
     listSeries: vi.fn(),
     runSeries: vi.fn(),
     uploadDicom: vi.fn(),
+    uploadDwi: vi.fn(),
     uploadNifti: vi.fn(),
     chat: vi.fn(),
   },
 }));
 
 describe('DashboardPage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('updates the initial agent greeting when series load after workflows', async () => {
     vi.mocked(api.getResultSummary).mockResolvedValue(mockT1Summary);
     vi.mocked(api.listWorkflows).mockResolvedValue({ workflows: ['t1_deepprep_anat_report'] });
@@ -42,7 +47,7 @@ describe('DashboardPage', () => {
 
     expect(await screen.findByText(/I haven't found any brain imaging data yet/)).toBeInTheDocument();
 
-    await userEvent.upload(await screen.findByLabelText('Upload DICOM or NIfTI files'), new File(['nifti'], 'sub-01_T1w.nii.gz'));
+    await userEvent.upload(await screen.findByLabelText('Upload DICOM, NIfTI, or DWI sidecar set'), new File(['nifti'], 'sub-01_T1w.nii.gz'));
 
     expect((await screen.findAllByText(/I found 1 brain MRI scan/)).length).toBeGreaterThan(0);
     expect(screen.queryByText(/I haven't found any brain imaging data yet/)).not.toBeInTheDocument();
@@ -67,14 +72,48 @@ describe('DashboardPage', () => {
       </QueryClientProvider>,
     );
 
-    const uploadInput = await screen.findByLabelText('Upload DICOM or NIfTI files');
-    expect(uploadInput).toHaveAttribute('accept', '.nii,.nii.gz,.zip');
+    const uploadInput = await screen.findByLabelText('Upload DICOM, NIfTI, or DWI sidecar set');
+    expect(uploadInput).toHaveAttribute('accept', '.nii,.nii.gz,.zip,.bval,.bvec,.json');
 
     await userEvent.upload(uploadInput, new File(['nifti'], 'sub-01_T1w.nii.gz'));
 
     expect(api.uploadNifti).toHaveBeenCalledWith(13, expect.any(File));
     expect((await screen.findAllByText(/I found 1 brain MRI scan/)).length).toBeGreaterThan(0);
     expect(await screen.findByText(/Pipeline: t1_deepprep/)).toBeInTheDocument();
+  });
+
+  it('uploads a complete DWI sidecar set through the dashboard backend contract', async () => {
+    vi.mocked(api.getResultSummary).mockResolvedValue(mockT1Summary);
+    vi.mocked(api.listWorkflows).mockResolvedValue({ workflows: ['dwi_fast_gpu_dti'] });
+    vi.mocked(api.listProjectTasks).mockResolvedValue([]);
+    vi.mocked(api.listSeries).mockResolvedValueOnce([]).mockResolvedValue([mockSeries[1]]);
+    vi.mocked(api.uploadDwi).mockResolvedValue({ files: [], series: mockSeries[1] });
+    vi.mocked(api.chat).mockResolvedValue({ reply: 'Upload guidance.' });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/projects/13/dashboard']}>
+          <Routes>
+            <Route element={<DashboardPage />} path="/projects/:projectId/dashboard" />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    const uploadInput = await screen.findByLabelText('Upload DICOM, NIfTI, or DWI sidecar set');
+    expect(uploadInput).toHaveAttribute('multiple');
+    expect(uploadInput).toHaveAttribute('accept', '.nii,.nii.gz,.zip,.bval,.bvec,.json');
+
+    const nifti = new File(['nifti'], 'sub-01_dwi.nii.gz');
+    const bval = new File(['bval'], 'sub-01_dwi.bval');
+    const bvec = new File(['bvec'], 'sub-01_dwi.bvec');
+    const json = new File(['{}'], 'sub-01_dwi.json');
+    await userEvent.upload(uploadInput, [nifti, bval, bvec, json]);
+
+    expect(api.uploadDwi).toHaveBeenCalledWith(13, { nifti, bval, bvec, jsonSidecar: json });
+    expect(api.uploadNifti).not.toHaveBeenCalled();
+    expect((await screen.findAllByText(/I found 1 brain MRI scan/)).length).toBeGreaterThan(0);
   });
 
   it('renders the processing console with backend-backed upload, workflow, run, and result sections', async () => {
@@ -102,7 +141,7 @@ describe('DashboardPage', () => {
     expect(screen.getByText('Pipeline Parameters')).toBeInTheDocument();
     expect(screen.getByText('Recent Runs')).toBeInTheDocument();
     expect(screen.getByText('Results Preview')).toBeInTheDocument();
-    expect(screen.getByLabelText('Upload DICOM or NIfTI files')).toBeInTheDocument();
+    expect(screen.getByLabelText('Upload DICOM, NIfTI, or DWI sidecar set')).toBeInTheDocument();
     expect(await screen.findByText('RUN-41')).toBeInTheDocument();
     expect(await screen.findByText('reports/t1_brain_measures_overview.png')).toBeInTheDocument();
 
