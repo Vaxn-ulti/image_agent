@@ -355,3 +355,23 @@ def test_legacy_chat_runtime_lives_in_agent_layer():
         "now_iso",
     ):
         assert forbidden not in agent_service
+
+
+def test_scientific_report_verification_lives_in_agent_layer():
+    root = Path(__file__).resolve().parents[1]
+    agent_service = (root / "app" / "services" / "agent_service.py").read_text(encoding="utf-8")
+    report_verification = root / "app" / "agent" / "report_verification.py"
+
+    assert report_verification.exists()
+    report_source = report_verification.read_text(encoding="utf-8")
+    assert "def verify_scientific_reports(" in report_source
+    assert "check_scientific_report_output" in report_source
+    assert "resolve_task_output_dirs" in report_source
+    for forbidden in (
+        "check_scientific_report_output",
+        "resolve_task_output_dirs",
+        "required_modalities",
+        "missing_modalities",
+        "resolution_errors",
+    ):
+        assert forbidden not in agent_service
