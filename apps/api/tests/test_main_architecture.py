@@ -179,3 +179,20 @@ def test_main_compatibility_exports_live_outside_fastapi_entrypoint():
         "from app.workflows.bold_descriptive_review",
     ):
         assert forbidden_import not in main_source
+
+
+def test_main_lifecycle_and_error_handlers_live_outside_entrypoint():
+    root = Path(__file__).resolve().parents[1]
+    main_source = (root / "app" / "main.py").read_text(encoding="utf-8")
+
+    assert (root / "app" / "app_hooks.py").exists()
+    assert "register_app_hooks(app)" in main_source
+    for forbidden in (
+        "from app.db.database import init_db",
+        "from app.agent.contracts import agent_api_error_detail",
+        "RequestValidationError",
+        "request_validation_exception_handler",
+        "@app.on_event",
+        "@app.exception_handler",
+    ):
+        assert forbidden not in main_source
