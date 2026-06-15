@@ -339,6 +339,11 @@ export function DashboardPage() {
                     <Play className="w-3 h-3 fill-current" /> Run now
                   </button>
                 </div>
+                {!eligibility.runnable && effectiveWorkflow ? (
+                  <div className="rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                    {eligibility.reason || 'Selected workflow cannot run for this series.'}
+                  </div>
+                ) : null}
               </div>
             </div>
           )}

@@ -178,6 +178,34 @@ describe('DashboardPage', () => {
     expect(await screen.findByText(/Pipeline: dwi_fast_gpu_dti/)).toBeInTheDocument();
   });
 
+  it('shows the workflow block reason in the recommended plan', async () => {
+    vi.mocked(api.getResultSummary).mockResolvedValue(mockT1Summary);
+    vi.mocked(api.listWorkflows).mockResolvedValue({ workflows: ['t1_deepprep', 'dwi_fast_gpu_dti'] });
+    vi.mocked(api.listProjectTasks).mockResolvedValue([]);
+    vi.mocked(api.listSeries).mockResolvedValue([mockSeries[0]]);
+    vi.mocked(api.runAgent).mockResolvedValue({ answer: 'Use the selected data.' });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/projects/13/dashboard']}>
+          <Routes>
+            <Route element={<DashboardPage />} path="/projects/:projectId/dashboard" />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    const recommendedPlan = (await screen.findByText('Recommended plan')).parentElement;
+    expect(recommendedPlan).toHaveTextContent('Pipeline: t1_deepprep');
+
+    await userEvent.click(screen.getByText('Pipeline Parameters'));
+    await userEvent.selectOptions(screen.getByDisplayValue('t1_deepprep'), 'dwi_fast_gpu_dti');
+
+    expect(recommendedPlan).toHaveTextContent('Requires a DWI series.');
+    expect(screen.getByRole('button', { name: 'Run now' })).toBeDisabled();
+  });
+
   it('defaults workflow selection to backend primary recommendation', async () => {
     const recommendedSeries = {
       ...mockSeries[0],
