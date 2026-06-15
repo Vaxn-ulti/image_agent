@@ -117,6 +117,37 @@ describe('DashboardPage', () => {
     expect((await screen.findAllByText(/I found 1 brain MRI scan/)).length).toBeGreaterThan(0);
   });
 
+  it('selects the newly uploaded series before recommending the next workflow', async () => {
+    vi.mocked(api.getResultSummary).mockResolvedValue(mockT1Summary);
+    vi.mocked(api.listWorkflows).mockResolvedValue({ workflows: ['t1_deepprep', 'dwi_fast_gpu_dti'] });
+    vi.mocked(api.listProjectTasks).mockResolvedValue([]);
+    vi.mocked(api.listSeries).mockResolvedValue([mockSeries[0], mockSeries[2]]);
+    vi.mocked(api.uploadDwi).mockResolvedValue({ files: [], series: mockSeries[2] });
+    vi.mocked(api.runAgent).mockResolvedValue({ answer: 'Upload guidance.' });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/projects/13/dashboard']}>
+          <Routes>
+            <Route element={<DashboardPage />} path="/projects/:projectId/dashboard" />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText(/Pipeline: t1_deepprep/)).toBeInTheDocument();
+
+    await userEvent.upload(await screen.findByLabelText('Upload DICOM, NIfTI, or DWI sidecar set'), [
+      new File(['nifti'], 'sub-01_dwi.nii.gz'),
+      new File(['bval'], 'sub-01_dwi.bval'),
+      new File(['bvec'], 'sub-01_dwi.bvec'),
+      new File(['{}'], 'sub-01_dwi.json'),
+    ]);
+
+    expect(await screen.findByText(/Pipeline: dwi_fast_gpu_dti/)).toBeInTheDocument();
+  });
+
   it('defaults workflow selection to backend primary recommendation', async () => {
     const recommendedSeries = {
       ...mockSeries[0],

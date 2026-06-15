@@ -166,8 +166,10 @@ export function DashboardPage() {
   const uploadFile = useMutation<DashboardUploadResponse, Error, File[]>({
     mutationFn: (files: File[]) => selectFileUpload(projectId, files),
     onError: (err) => setError(err instanceof Error ? err.message : 'Upload failed'),
-    onSuccess: () => {
+    onSuccess: (data) => {
       setError('');
+      setSelectedSeriesId(data.series.id);
+      setSelectedWorkflow('');
       queryClient.invalidateQueries({ queryKey: queryKeys.series(projectId) });
     },
   });
