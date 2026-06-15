@@ -184,9 +184,10 @@ def test_main_compatibility_exports_live_outside_fastapi_entrypoint():
 def test_main_lifecycle_and_error_handlers_live_outside_entrypoint():
     root = Path(__file__).resolve().parents[1]
     main_source = (root / "app" / "main.py").read_text(encoding="utf-8")
+    factory_source = (root / "app" / "app_factory.py").read_text(encoding="utf-8")
 
     assert (root / "app" / "app_hooks.py").exists()
-    assert "register_app_hooks(app)" in main_source
+    assert "register_app_hooks(app)" in factory_source
     for forbidden in (
         "from app.db.database import init_db",
         "from app.agent.contracts import agent_api_error_detail",
@@ -194,5 +195,22 @@ def test_main_lifecycle_and_error_handlers_live_outside_entrypoint():
         "request_validation_exception_handler",
         "@app.on_event",
         "@app.exception_handler",
+    ):
+        assert forbidden not in main_source
+
+
+def test_fastapi_app_factory_owns_middleware_routes_and_hooks():
+    root = Path(__file__).resolve().parents[1]
+    main_source = (root / "app" / "main.py").read_text(encoding="utf-8")
+
+    assert (root / "app" / "app_factory.py").exists()
+    assert "app = create_app()" in main_source
+    for forbidden in (
+        "from fastapi import FastAPI",
+        "from fastapi.middleware.cors import CORSMiddleware",
+        "from app.routes import",
+        "register_app_hooks(app)",
+        "app.add_middleware",
+        "app.include_router",
     ):
         assert forbidden not in main_source
