@@ -29,8 +29,9 @@ const navItems = [
 
 export function AppShell() {
   const { projectId } = useParams();
-  const { data: deployment } = useQuery({ queryFn: api.deployment, queryKey: queryKeys.deployment });
+  const { data: deployment, isError: deploymentError } = useQuery({ queryFn: api.deployment, queryKey: queryKeys.deployment });
   const { data: runtime } = useQuery({ queryFn: api.runtimeContainers, queryKey: queryKeys.runtime, retry: false });
+  const apiConnected = Boolean(deployment) && !deploymentError;
 
   return (
     <div className="flex h-screen bg-[#F8FAFC] text-[#1E293B] font-sans antialiased overflow-hidden">
@@ -87,7 +88,7 @@ export function AppShell() {
             <div className="bg-gray-50 rounded-lg p-3 space-y-3 text-xs border border-[#E2E8F0]">
               <div className="flex items-center justify-between">
                 <span className="text-gray-500">Backend</span>
-                <span className="font-medium text-gray-700 capitalize">{deployment?.backend_runtime_mode || 'local'}</span>
+                <span className="font-medium text-gray-700 capitalize">{apiConnected ? deployment?.backend_runtime_mode || 'local' : 'Unavailable'}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-500">Runtime</span>
@@ -116,9 +117,11 @@ export function AppShell() {
         {/* Top Header */}
         <header className="flex items-center justify-between p-6 h-16 border-b border-[#E2E8F0] bg-white">
           <div className="flex items-center gap-2 text-xs font-semibold">
-            <span className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-green-50 text-green-700 border border-green-100">
-              <div className="w-1.5 h-1.5 rounded-full bg-green-500"></div>
-              API connected
+            <span className={`flex items-center gap-1.5 px-2 py-1 rounded-full border ${
+              apiConnected ? 'bg-green-50 text-green-700 border-green-100' : 'bg-red-50 text-red-700 border-red-100'
+            }`}>
+              <div className={`w-1.5 h-1.5 rounded-full ${apiConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+              {apiConnected ? 'API connected' : 'API disconnected'}
             </span>
           </div>
           <div className="flex items-center gap-3">
