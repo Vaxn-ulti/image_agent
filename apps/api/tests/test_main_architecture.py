@@ -46,7 +46,11 @@ def test_low_risk_services_do_not_delegate_simple_logic_to_legacy_service():
         "def list_workflows",
         "def get_result_contract",
         "def deployment",
+        "def agent_rag_status",
+        "def agent_rag_rebuild",
         "def agent_model_status",
+        "def agent_rag_query",
+        "def agent_verify_scientific_reports",
         "def runtime_containers",
         "def admin_containers",
     ):
