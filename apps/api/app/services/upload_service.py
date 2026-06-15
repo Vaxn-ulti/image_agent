@@ -3,33 +3,25 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import sys
 import zipfile
 from pathlib import Path
 
 from fastapi import HTTPException
 
-from app.core import config
 from app.db.database import connect, now_iso
 from app.imaging.detect import detect_series
 from app.imaging.ingest import process_upload_session
 from app.services.background import submit_background
+from app.services.runtime_overrides import main_patch_attr, main_projects_root
 from app.workflows.eligibility import build_workflow_eligibility
 
 
-def _main_attr(name: str, default):
-    main = sys.modules.get("app.main")
-    if main is not None and hasattr(main, name):
-        return getattr(main, name)
-    return default
-
-
 def _projects_root() -> Path:
-    return Path(_main_attr("PROJECTS_ROOT", config.PROJECTS_ROOT))
+    return main_projects_root()
 
 
 def _process_upload_session():
-    return _main_attr("process_upload_session", process_upload_session)
+    return main_patch_attr("process_upload_session", process_upload_session)
 
 
 def _rows(sql: str, params=()):

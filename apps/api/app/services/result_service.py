@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import mimetypes
-import sys
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -11,6 +10,7 @@ from fastapi.responses import FileResponse
 from app.core import config
 from app.db.database import connect
 from app.services import task_service
+from app.services.runtime_overrides import main_patch_attr_if_changed, main_projects_root
 from app.workflows.artifact_manifest import build_artifact_manifest
 from app.workflows.remote_scripts import classify_bold_fmriprep_xcpd_artifact_stage
 from app.workflows.result_contract import load_result_summary
@@ -35,31 +35,8 @@ _INITIAL_RUN_GROUP_ANALYSIS = run_group_analysis
 _INITIAL_RUN_DESCRIPTIVE_REVIEW = run_descriptive_review
 
 
-def _main_attr(name: str, default):
-    main = sys.modules.get("app.main")
-    if main is not None and hasattr(main, name):
-        return getattr(main, name)
-    return default
-
-
-def _main_attr_if_patched(name: str, initial, current):
-    if current is not initial:
-        return current
-    main = sys.modules.get("app.main")
-    if main is not None and hasattr(main, name):
-        value = getattr(main, name)
-        if value is not initial:
-            return value
-    return current
-
-
 def _projects_root() -> Path:
-    main = sys.modules.get("app.main")
-    if main is not None and hasattr(main, "PROJECTS_ROOT"):
-        main_root = Path(getattr(main, "PROJECTS_ROOT"))
-        if main_root != _DEFAULT_PROJECTS_ROOT:
-            return main_root
-    return Path(config.PROJECTS_ROOT)
+    return main_projects_root(_DEFAULT_PROJECTS_ROOT, require_override=True)
 
 
 def _rows(sql: str, params=()):
@@ -177,7 +154,7 @@ def bold_group_analysis(project_id, req):
     if not _rows("SELECT * FROM projects WHERE id=?", (project_id,)):
         raise HTTPException(404, "Project not found")
     try:
-        runner = _main_attr_if_patched("run_group_analysis", _INITIAL_RUN_GROUP_ANALYSIS, run_group_analysis)
+        runner = main_patch_attr_if_changed("run_group_analysis", _INITIAL_RUN_GROUP_ANALYSIS, run_group_analysis)
         return runner(
             project_id=project_id,
             group_a_tasks=req.group_a_task_ids,
@@ -194,7 +171,7 @@ def bold_descriptive_review(project_id, req):
     if not _rows("SELECT * FROM projects WHERE id=?", (project_id,)):
         raise HTTPException(404, "Project not found")
     try:
-        runner = _main_attr_if_patched("run_descriptive_review", _INITIAL_RUN_DESCRIPTIVE_REVIEW, run_descriptive_review)
+        runner = main_patch_attr_if_changed("run_descriptive_review", _INITIAL_RUN_DESCRIPTIVE_REVIEW, run_descriptive_review)
         return runner(
             project_id=project_id,
             deepprep_task_ids=req.deepprep_task_ids,

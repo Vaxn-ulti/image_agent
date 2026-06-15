@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import re
-import sys
 import json
 from pathlib import Path
 from typing import Any
@@ -40,6 +39,7 @@ from app.scripts.verify_scientific_reports import check_output as check_scientif
 from app.scripts.verify_scientific_reports import resolve_task_output_dirs
 from app.schemas import RunRequest
 from app.services import task_service
+from app.services.runtime_overrides import main_patch_attr, main_projects_root
 from app.workflows.registry import list_workflows as registry_list_workflows
 from app.workflows.result_contract import result_contract_spec
 from app.workflows.result_contract import load_result_summary
@@ -55,29 +55,17 @@ except ImportError:
         return []
 
 
-def _main_attr(name: str, default: Any) -> Any:
-    main = sys.modules.get("app.main")
-    if main is not None and hasattr(main, name):
-        return getattr(main, name)
-    return default
-
-
 WORKFLOWS = registry_list_workflows()
 _DEFAULT_REPO_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_PROJECTS_ROOT = Path(config.PROJECTS_ROOT)
 
 
 def _repo_root() -> Path:
-    return Path(_main_attr("REPO_ROOT", _DEFAULT_REPO_ROOT))
+    return Path(main_patch_attr("REPO_ROOT", _DEFAULT_REPO_ROOT))
 
 
 def _projects_root() -> Path:
-    main = sys.modules.get("app.main")
-    if main is not None and hasattr(main, "PROJECTS_ROOT"):
-        main_root = Path(getattr(main, "PROJECTS_ROOT"))
-        if main_root != _DEFAULT_PROJECTS_ROOT:
-            return main_root
-    return Path(config.PROJECTS_ROOT)
+    return main_projects_root(_DEFAULT_PROJECTS_ROOT, require_override=True)
 
 
 def _rows(sql: str, params=()):
@@ -198,7 +186,7 @@ def health():
 
 
 def list_workflows():
-    return {"workflows": _main_attr("WORKFLOWS", WORKFLOWS)}
+    return {"workflows": main_patch_attr("WORKFLOWS", WORKFLOWS)}
 
 
 def get_result_contract():
@@ -283,9 +271,9 @@ def agent_run(req):
             agent_api_error_detail("message_required", "message is required"),
         )
     agent_run_id = start_agent_run(request_type="run", project_id=req.project_id, message=message)
-    project_context_reader = _main_attr("read_project_context", read_project_context)
-    runner_factory = _main_attr("AgentRunner", AgentRunner)
-    project_context = project_context_reader(req.project_id, rows_fn=_rows, workflows=_main_attr("WORKFLOWS", WORKFLOWS))
+    project_context_reader = main_patch_attr("read_project_context", read_project_context)
+    runner_factory = main_patch_attr("AgentRunner", AgentRunner)
+    project_context = project_context_reader(req.project_id, rows_fn=_rows, workflows=main_patch_attr("WORKFLOWS", WORKFLOWS))
     try:
         result = normalize_agent_run_result(dict(runner_factory().run(message=message, project_context=project_context)))
         result["agent_run_id"] = agent_run_id
@@ -341,7 +329,7 @@ def agent_resume(thread_id, req):
         approved=req.approved,
         confirmation=confirmation,
     )
-    runner_factory = _main_attr("AgentRunner", AgentRunner)
+    runner_factory = main_patch_attr("AgentRunner", AgentRunner)
     try:
         result = normalize_agent_run_result(dict(runner_factory().resume(
             thread_id=thread_id,
@@ -388,14 +376,14 @@ def agent_rag_query(req):
         if req.project_id
         else [],
     }
-    builder = _main_attr("build_rag_response", build_rag_response)
+    builder = main_patch_attr("build_rag_response", build_rag_response)
     return builder(req.query, root=_repo_root(), backend_context=backend_context)
 
 
 def agent_verify_scientific_reports(req):
     projects_root = Path(req.projects_root) if req.projects_root else _projects_root()
-    resolver = _main_attr("resolve_task_output_dirs", resolve_task_output_dirs)
-    checker = _main_attr("check_scientific_report_output", check_scientific_report_output)
+    resolver = main_patch_attr("resolve_task_output_dirs", resolve_task_output_dirs)
+    checker = main_patch_attr("check_scientific_report_output", check_scientific_report_output)
     task_output_dirs, resolution_errors = resolver(projects_root, req.task_ids)
     explicit_output_dirs = [Path(path) for path in req.output_dirs]
     output_paths = [*explicit_output_dirs, *task_output_dirs]
@@ -434,12 +422,12 @@ def agent_verify_scientific_reports(req):
 
 
 def runtime_containers():
-    runtime_inspector = _main_attr("inspect_runtime", inspect_runtime)
+    runtime_inspector = main_patch_attr("inspect_runtime", inspect_runtime)
     return runtime_inspector()
 
 
 def admin_containers():
-    container_lister = _main_attr("_list_agent_containers", _list_agent_containers)
+    container_lister = main_patch_attr("_list_agent_containers", _list_agent_containers)
     containers = container_lister()
     return {"containers": containers, "count": len(containers)}
 
@@ -465,9 +453,9 @@ def chat(req):
         "tasks": task_context,
         "outputs": _output_context(req.project_id, task_ids=task_ids),
         "result_summaries": _result_summary_context(task_context),
-        "supported_workflows": _main_attr("WORKFLOWS", WORKFLOWS),
+        "supported_workflows": main_patch_attr("WORKFLOWS", WORKFLOWS),
     }
-    rag_builder = _main_attr("build_rag_response", build_rag_response)
+    rag_builder = main_patch_attr("build_rag_response", build_rag_response)
     rag_response = rag_builder(req.message, root=_repo_root(), backend_context=project_context)
     intent = rag_response.get("intent") or _chat_intent(req.message)
     tool_recommendation = next(
@@ -483,7 +471,7 @@ def chat(req):
     provider_error = ""
     if intent not in {"status", "next_step", "launchability"}:
         try:
-            gateway_factory = _main_attr("ModelGateway", ModelGateway)
+            gateway_factory = main_patch_attr("ModelGateway", ModelGateway)
             reply = gateway_factory().complete_text(
                 [
                     {
@@ -509,7 +497,7 @@ def chat(req):
         except ModelGatewayError as exc:
             provider_error = str(exc)
             try:
-                chat_fallback = _main_attr("complete_chat", complete_chat)
+                chat_fallback = main_patch_attr("complete_chat", complete_chat)
                 reply = chat_fallback(req.message, project_context)
                 used_provider = "deepseek"
                 provider_error = ""

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -9,6 +8,7 @@ from fastapi import HTTPException
 from app.core import config
 from app.db.database import connect, now_iso
 from app.services.background import submit_background
+from app.services.runtime_overrides import main_patch_attr, main_projects_root
 from app.workflows.deepprep import run_mock_deepprep
 from app.workflows.eligibility import build_workflow_eligibility
 from app.workflows.registry import allowed_runtime_workflows, resolve_runtime_workflow_type
@@ -28,20 +28,8 @@ except ImportError:
 _DEFAULT_PROJECTS_ROOT = Path(config.PROJECTS_ROOT)
 
 
-def _main_attr(name: str, default):
-    main = sys.modules.get("app.main")
-    if main is not None and hasattr(main, name):
-        return getattr(main, name)
-    return default
-
-
 def _projects_root() -> Path:
-    main = sys.modules.get("app.main")
-    if main is not None and hasattr(main, "PROJECTS_ROOT"):
-        main_root = Path(getattr(main, "PROJECTS_ROOT"))
-        if main_root != _DEFAULT_PROJECTS_ROOT:
-            return main_root
-    return Path(config.PROJECTS_ROOT)
+    return main_projects_root(_DEFAULT_PROJECTS_ROOT, require_override=True)
 
 
 def _rows(sql: str, params=()):
@@ -227,10 +215,10 @@ def create_series_task(series_id, req):
         conn.execute("UPDATE tasks SET log_path=? WHERE id=?", (str(final_log), task_id))
         task = dict(conn.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone())
     if req.workflow_type == "t1_deepprep_mock":
-        runner = _main_attr("run_mock_deepprep", run_mock_deepprep)
+        runner = main_patch_attr("run_mock_deepprep", run_mock_deepprep)
         submit_background(runner, task_id)
     else:
-        runner = _main_attr("run_pipeline_task", run_pipeline_task)
+        runner = main_patch_attr("run_pipeline_task", run_pipeline_task)
         submit_background(runner, task_id, req.qsiprep_task_id)
     return task
 

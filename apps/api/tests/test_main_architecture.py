@@ -126,3 +126,19 @@ def test_services_delegate_background_execution_to_executor_boundary():
         assert "from threading import Thread" not in service_source
         assert "Thread(" not in service_source
         assert "submit_background" in service_source
+
+
+def test_services_use_shared_runtime_overrides_for_main_patch_compatibility():
+    root = Path(__file__).resolve().parents[1]
+
+    assert (root / "app" / "services" / "runtime_overrides.py").exists()
+    for service_name in (
+        "agent_service.py",
+        "project_service.py",
+        "result_service.py",
+        "task_service.py",
+        "upload_service.py",
+    ):
+        service_source = (root / "app" / "services" / service_name).read_text(encoding="utf-8")
+        assert 'sys.modules.get("app.main")' not in service_source
+        assert "main_patch_attr" in service_source or "main_projects_root" in service_source

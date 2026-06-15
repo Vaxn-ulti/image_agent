@@ -1,17 +1,13 @@
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
-from app.core import config
 from app.db.database import connect, now_iso, row_to_dict
+from app.services.runtime_overrides import main_projects_root
 
 
 def _projects_root() -> Path:
-    main = sys.modules.get("app.main")
-    if main is not None and hasattr(main, "PROJECTS_ROOT"):
-        return Path(getattr(main, "PROJECTS_ROOT"))
-    return Path(config.PROJECTS_ROOT)
+    return main_projects_root()
 
 
 def login(req):
