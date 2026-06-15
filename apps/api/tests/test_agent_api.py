@@ -47,6 +47,25 @@ def test_deployment_status_uses_safe_agent_model_summary(monkeypatch):
     assert "secret-value" not in body_json
 
 
+def test_deployment_status_reports_production_readiness_blockers(monkeypatch):
+    monkeypatch.setenv("IMAGE_AGENT_ENV", "production")
+    monkeypatch.setenv("IMAGE_AGENT_CORS_ORIGINS", "https://console.example.com")
+    monkeypatch.setenv("BACKEND_RUNTIME_MODE", "remote")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    from app.main import app
+
+    result = TestClient(app).get("/deployment")
+
+    assert result.status_code == 200
+    body = result.json()
+    assert body["production_readiness"] == {
+        "required": True,
+        "ready": False,
+        "status": "blocked",
+        "blocking_reasons": ["Agent model gateway is not configured."],
+    }
+
+
 def test_agent_run_returns_answer_and_persists_privacy_safe_ledger(tmp_path, monkeypatch):
     from app.core import config
     from app.db import database

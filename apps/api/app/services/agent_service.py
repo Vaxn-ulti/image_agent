@@ -56,6 +56,25 @@ def _deployment_version() -> str:
     return DEFAULT_API_VERSION
 
 
+def _production_mode() -> bool:
+    return os.environ.get("IMAGE_AGENT_ENV", "").strip().lower() in {"prod", "production"}
+
+
+def _production_readiness(*, mode: str, agent: dict) -> dict:
+    required = _production_mode()
+    blocking_reasons: list[str] = []
+    if required and mode != "remote":
+        blocking_reasons.append("Backend runtime mode is not remote.")
+    if required and agent.get("configured") is not True:
+        blocking_reasons.append("Agent model gateway is not configured.")
+    return {
+        "blocking_reasons": blocking_reasons,
+        "ready": not blocking_reasons,
+        "required": required,
+        "status": "ready" if not blocking_reasons else "blocked",
+    }
+
+
 
 def health():
     return {"status": "ok", "app": "image_agent", "version": _deployment_version()}
@@ -71,11 +90,13 @@ def get_result_contract():
 
 def deployment():
     mode = os.environ.get("BACKEND_RUNTIME_MODE", "remote")
+    agent = public_model_status()
     return {
         "backend_runtime_mode": mode,
         "api_base_hint": os.environ.get("IMAGE_AGENT_PUBLIC_BASE_URL", ""),
-        "agent": public_model_status(),
+        "agent": agent,
         "legacy_chat_provider": legacy_chat_provider_status(),
+        "production_readiness": _production_readiness(mode=mode, agent=agent),
     }
 
 

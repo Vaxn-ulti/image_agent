@@ -41,6 +41,13 @@ export IMAGE_AGENT_CORS_ORIGINS=https://<console-hostname>
 
 `IMAGE_AGENT_CORS_ORIGINS` is a comma-separated allowlist. Do not use `*` in production. When `IMAGE_AGENT_ENV=production`, the API refuses to start if `IMAGE_AGENT_CORS_ORIGINS` is missing or contains a wildcard origin. Development can leave `IMAGE_AGENT_ENV` unset and use the local defaults for `http://localhost:5173` and `http://127.0.0.1:5173`.
 
+After restart, check `/deployment`. In production it returns
+`production_readiness.required=true`; `production_readiness.ready` must be true
+before the console is treated as launchable. A blocked response lists
+operator-facing reasons such as `Agent model gateway is not configured.` The
+Settings page renders the same readiness status, but the remote smoke gate with
+`--require-model` remains the release evidence source.
+
 ## BOLD fMRIPrep + XCP-D Remote Scripts
 
 Default script paths:

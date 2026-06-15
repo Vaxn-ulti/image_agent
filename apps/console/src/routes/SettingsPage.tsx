@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import {
+  AlertTriangle,
   Cpu,
   Globe,
   Key,
@@ -16,6 +17,8 @@ import { queryKeys } from '../lib/query';
 export function SettingsPage() {
   const { data: deployment } = useQuery({ queryFn: api.deployment, queryKey: queryKeys.deployment });
   const { data: runtime } = useQuery({ queryFn: api.runtimeContainers, queryKey: queryKeys.runtime, retry: false });
+  const productionReadiness = deployment?.production_readiness;
+  const readinessBlocked = productionReadiness?.ready === false;
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
@@ -60,6 +63,35 @@ export function SettingsPage() {
                 </span>
               </div>
             </div>
+
+            {productionReadiness?.required ? (
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5" /> Production Readiness
+                </label>
+                <div className={`p-3 border rounded-xl space-y-2 ${
+                  readinessBlocked ? 'bg-amber-50 border-amber-100' : 'bg-green-50 border-green-100'
+                }`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className={`text-sm font-bold ${readinessBlocked ? 'text-amber-800' : 'text-green-700'}`}>
+                      {readinessBlocked ? 'Blocked' : 'Ready'}
+                    </span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${
+                      readinessBlocked ? 'bg-white text-amber-700 border border-amber-200' : 'bg-white text-green-700 border border-green-200'
+                    }`}>
+                      Production
+                    </span>
+                  </div>
+                  {readinessBlocked ? (
+                    <div className="space-y-1">
+                      {(productionReadiness.blocking_reasons || []).map((reason) => (
+                        <div key={reason} className="text-xs font-medium text-amber-700">{reason}</div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -97,7 +129,7 @@ export function SettingsPage() {
                   </div>
                </div>
                <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">
-                 {deployment?.agent?.provider || 'fallback'}
+                 {deployment?.agent?.configured === false ? 'not configured' : deployment?.agent?.provider || 'fallback'}
                </span>
             </div>
           </div>

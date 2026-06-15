@@ -86,6 +86,12 @@ export type DeploymentResponse = {
     model?: string;
     configured?: boolean;
   };
+  production_readiness?: {
+    blocking_reasons?: string[];
+    ready?: boolean;
+    required?: boolean;
+    status?: 'ready' | 'blocked' | string;
+  };
 };
 
 export type Inventory = {
