@@ -213,6 +213,11 @@ export function DashboardPage() {
     uploadFile.mutate(files);
   }
 
+  function handleSeriesChange(seriesId: number) {
+    setSelectedSeriesId(seriesId);
+    setSelectedWorkflow('');
+  }
+
   const seriesSummary = series.length > 0
     ? `I found ${series.length} brain MRI scan${series.length === 1 ? '' : 's'} in this project. The primary series is identified as ${selectedSeries?.modality || 'unknown modality'} (${selectedSeries?.sequence_label || 'unlabeled'}).`
     : "I haven't found any brain imaging data yet. Please upload DICOM or NIfTI files to get started.";
@@ -396,7 +401,7 @@ export function DashboardPage() {
                 <select
                   className="text-sm border border-gray-200 rounded-md px-3 py-1.5 bg-white outline-none w-[200px]"
                   value={selectedSeries?.id || ''}
-                  onChange={(event) => setSelectedSeriesId(Number(event.target.value))}
+                  onChange={(event) => handleSeriesChange(Number(event.target.value))}
                 >
                   {series.map((item) => (
                     <option key={item.id} value={item.id}>

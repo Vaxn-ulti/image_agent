@@ -148,6 +148,36 @@ describe('DashboardPage', () => {
     expect(await screen.findByText(/Pipeline: dwi_fast_gpu_dti/)).toBeInTheDocument();
   });
 
+  it('recomputes the recommended workflow when the user changes input series', async () => {
+    vi.mocked(api.getResultSummary).mockResolvedValue(mockT1Summary);
+    vi.mocked(api.listWorkflows).mockResolvedValue({ workflows: ['t1_deepprep', 't1_deepprep_anat_report', 'dwi_fast_gpu_dti'] });
+    vi.mocked(api.listProjectTasks).mockResolvedValue([]);
+    vi.mocked(api.listSeries).mockResolvedValue([mockSeries[0], mockSeries[2]]);
+    vi.mocked(api.runAgent).mockResolvedValue({ answer: 'Use the selected data.' });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/projects/13/dashboard']}>
+          <Routes>
+            <Route element={<DashboardPage />} path="/projects/:projectId/dashboard" />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText(/Pipeline: t1_deepprep/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText('Pipeline Parameters'));
+    const workflowSelect = screen.getByDisplayValue('t1_deepprep');
+    await userEvent.selectOptions(workflowSelect, 't1_deepprep_anat_report');
+    expect(await screen.findByText(/Pipeline: t1_deepprep_anat_report/)).toBeInTheDocument();
+
+    await userEvent.selectOptions(screen.getByDisplayValue('#22 T1w'), '24');
+
+    expect(await screen.findByText(/Pipeline: dwi_fast_gpu_dti/)).toBeInTheDocument();
+  });
+
   it('defaults workflow selection to backend primary recommendation', async () => {
     const recommendedSeries = {
       ...mockSeries[0],
