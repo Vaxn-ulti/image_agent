@@ -34,6 +34,8 @@ def test_low_risk_services_do_not_delegate_simple_logic_to_legacy_service():
     root = Path(__file__).resolve().parents[1]
     project_service = (root / "app" / "services" / "project_service.py").read_text(encoding="utf-8")
     agent_service = (root / "app" / "services" / "agent_service.py").read_text(encoding="utf-8")
+    task_service = (root / "app" / "services" / "task_service.py").read_text(encoding="utf-8")
+    result_service = (root / "app" / "services" / "result_service.py").read_text(encoding="utf-8")
 
     assert "legacy" not in project_service
     for function_name in (
@@ -48,4 +50,26 @@ def test_low_risk_services_do_not_delegate_simple_logic_to_legacy_service():
         start = agent_service.index(function_name)
         next_function = agent_service.find("\ndef ", start + 1)
         body = agent_service[start:] if next_function == -1 else agent_service[start:next_function]
+        assert "legacy()" not in body
+
+    for function_name in (
+        "def list_project_tasks",
+        "def get_series",
+        "def get_task",
+    ):
+        start = task_service.index(function_name)
+        next_function = task_service.find("\ndef ", start + 1)
+        body = task_service[start:] if next_function == -1 else task_service[start:next_function]
+        assert "legacy()" not in body
+
+    for function_name in (
+        "def get_logs",
+        "def get_outputs",
+        "def get_result_summary",
+        "def get_task_artifact_manifest",
+        "def get_task_artifact",
+    ):
+        start = result_service.index(function_name)
+        next_function = result_service.find("\ndef ", start + 1)
+        body = result_service[start:] if next_function == -1 else result_service[start:next_function]
         assert "legacy()" not in body
