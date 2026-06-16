@@ -664,6 +664,63 @@ def _validate_task_artifact_manifest(
     }
 
 
+def _count_result_summary_output_items(outputs: dict) -> int:
+    count = 0
+    for group in outputs.values():
+        if isinstance(group, list):
+            count += len(group)
+        elif isinstance(group, dict):
+            count += sum(len(items) for items in group.values() if isinstance(items, list))
+    return count
+
+
+def _validate_task_result_summary(summary: dict, task_id: int, completed_task: dict | None = None) -> dict:
+    _require(isinstance(summary, dict), "task result summary must be an object")
+    _require(isinstance(summary.get("contract_version"), str) and summary["contract_version"], "task result summary contract_version missing")
+    _require(int(summary.get("task_id") or 0) == task_id, "task result summary task_id mismatch")
+    workflow_type = summary.get("workflow_type")
+    _require(isinstance(workflow_type, str) and _is_privacy_safe_symbol(workflow_type), "task result summary workflow_type invalid")
+    if completed_task is not None:
+        _require(
+            workflow_type == completed_task.get("workflow_type"),
+            "task result summary workflow_type mismatch",
+        )
+    modality = summary.get("modality")
+    _require(isinstance(modality, str) and _is_privacy_safe_symbol(modality), "task result summary modality invalid")
+    feature_groups = summary.get("feature_groups")
+    _require(
+        isinstance(feature_groups, list)
+        and feature_groups
+        and all(isinstance(item, str) and _is_privacy_safe_symbol(item) for item in feature_groups),
+        "task result summary feature_groups invalid",
+    )
+    outputs = summary.get("outputs")
+    _require(isinstance(outputs, dict) and outputs, "task result summary outputs missing")
+    output_item_count = _count_result_summary_output_items(outputs)
+    _require(output_item_count > 0, "task result summary output_item_count missing")
+    provenance = summary.get("provenance")
+    _require(isinstance(provenance, dict) and provenance, "task result summary provenance missing")
+    _validate_no_artifact_path_leakage(
+        {
+            key: value
+            for key, value in summary.items()
+            if key not in {"outputs", "summary_path"}
+        },
+        "task result summary",
+        allow_relative_path=False,
+    )
+    return {
+        "contract_version": summary["contract_version"],
+        "task_id": task_id,
+        "workflow_type": workflow_type,
+        "modality": modality,
+        "feature_groups": feature_groups,
+        "output_group_count": len(outputs),
+        "output_item_count": output_item_count,
+        "provenance_keys": sorted(str(key) for key in provenance),
+    }
+
+
 def _validate_container_native_qc_routes(base: str, artifacts: list[dict[str, object]]) -> list[str]:
     served_urls = []
     for artifact in artifacts:
@@ -1009,6 +1066,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     project_contract = None
     project_series = None
     task_artifact_manifest = None
+    task_result_summary = None
     completed_task = None
     task_workflow_selection = None
     upload_inventory_contract = None
@@ -1042,6 +1100,11 @@ def main(argv: Sequence[str] | None = None) -> None:
             min_native_qc_images=max(args.min_native_qc_images, 0),
             require_scientific_report_artifacts=bool(args.require_scientific_report_artifacts),
             min_scientific_report_images=max(args.min_scientific_report_images, 0),
+        )
+        task_result_summary = _validate_task_result_summary(
+            _request("GET", f"{base}/tasks/{args.task_id}/result-summary"),
+            args.task_id,
+            completed_task,
         )
         if args.require_container_native_qc or args.min_native_qc_images > 0:
             task_artifact_manifest["container_native_qc_served_urls"] = _validate_container_native_qc_routes(
@@ -1150,6 +1213,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         "upload_inventory_series_with_workflow_eligibility": upload_inventory_contract.get("series_with_workflow_eligibility") if upload_inventory_contract else 0,
         "upload_inventory_modalities": upload_inventory_contract.get("modalities") if upload_inventory_contract else [],
         "task_artifact_manifest_status": task_artifact_manifest.get("status") if task_artifact_manifest else "skipped",
+        "task_result_summary_status": "passed" if task_result_summary else "skipped",
+        "task_result_summary": task_result_summary,
         "artifact_manifest_task_id": task_artifact_manifest.get("task_id") if task_artifact_manifest else None,
         "artifact_manifest_artifact_count": task_artifact_manifest.get("artifact_count") if task_artifact_manifest else 0,
         "artifact_manifest_preview_kinds": task_artifact_manifest.get("preview_kinds") if task_artifact_manifest else [],

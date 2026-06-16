@@ -203,6 +203,17 @@ def _strict_smoke_payload():
         "upload_inventory_status": "completed",
         "upload_inventory_series_with_workflow_eligibility": 1,
         "task_artifact_manifest_status": "passed",
+        "task_result_summary_status": "passed",
+        "task_result_summary": {
+            "contract_version": "1.0",
+            "task_id": 114,
+            "workflow_type": "t1_deepprep_anat_report",
+            "modality": "T1",
+            "feature_groups": ["anat"],
+            "output_group_count": 1,
+            "output_item_count": 1,
+            "provenance_keys": ["generated_from"],
+        },
         "artifact_manifest_artifact_count": 5,
         "artifact_manifest_preview_kinds": ["html", "image", "json"],
         "container_native_qc_status": "passed",
@@ -316,6 +327,7 @@ def test_verify_remote_smoke_acceptance_accepts_strict_payload():
     assert report["checked"]["scientific_report_artifacts_status"] == "passed"
     assert report["checked"]["task_status_status"] == "passed"
     assert report["checked"]["task_workflow_selection_status"] == "passed"
+    assert report["checked"]["task_result_summary_status"] == "passed"
 
 
 def test_verify_remote_smoke_acceptance_rejects_stale_saved_evidence():
@@ -373,6 +385,11 @@ def test_verify_remote_smoke_acceptance_rejects_stale_saved_evidence():
         ({"task_status_status": "skipped"}, "task_status_status must be passed"),
         ({"task_status": {"status": "running"}}, "task_status.status must be completed"),
         ({"task_status": {"task_id": 115}}, "task_status.task_id must match smoke_gate.task_id"),
+        ({"task_result_summary_status": "skipped"}, "task_result_summary_status must be passed"),
+        ({"task_result_summary": {"task_id": 115}}, "task_result_summary.task_id must match smoke_gate.task_id"),
+        ({"task_result_summary": {"workflow_type": "dwi_fast_gpu_dti"}}, "task_result_summary.workflow_type must match task_status.workflow_type"),
+        ({"task_result_summary": {"output_item_count": 0}}, "task_result_summary.output_item_count must be greater than zero"),
+        ({"task_result_summary": {"provenance_keys": []}}, "task_result_summary.provenance_keys must be non-empty"),
         ({"task_workflow_selection_status": "skipped"}, "task_workflow_selection_status must be passed"),
         ({"task_workflow_selection": {"matched_runnable_workflow": False}}, "task_workflow_selection.matched_runnable_workflow must be true"),
         ({"task_workflow_selection": {"workflow_type": "bold_fmriprep_xcpd"}}, "task_workflow_selection.workflow_type must match task_status.workflow_type"),

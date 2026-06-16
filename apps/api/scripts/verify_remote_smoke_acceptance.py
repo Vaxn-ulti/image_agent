@@ -219,6 +219,44 @@ def _verify_task_workflow_selection(payload: dict) -> None:
     )
 
 
+def _verify_task_result_summary(payload: dict, gate: dict) -> None:
+    _require_status(payload, "task_result_summary_status")
+    task_status = payload.get("task_status")
+    summary = payload.get("task_result_summary")
+    _require(isinstance(task_status, dict), "task_status must be present")
+    _require(isinstance(summary, dict), "task_result_summary must be present")
+    _require(
+        isinstance(summary.get("contract_version"), str) and bool(summary.get("contract_version")),
+        "task_result_summary.contract_version must be present",
+    )
+    _require(
+        summary.get("task_id") == gate.get("task_id"),
+        "task_result_summary.task_id must match smoke_gate.task_id",
+    )
+    _require(
+        summary.get("workflow_type") == task_status.get("workflow_type"),
+        "task_result_summary.workflow_type must match task_status.workflow_type",
+    )
+    _require_privacy_safe_symbol(summary, "workflow_type")
+    _require_privacy_safe_symbol(summary, "modality")
+    feature_groups = summary.get("feature_groups")
+    _require(
+        isinstance(feature_groups, list)
+        and feature_groups
+        and all(_is_privacy_safe_symbol(item) for item in feature_groups),
+        "task_result_summary.feature_groups must be non-empty",
+    )
+    _require_positive_int_metric_with_prefix(summary, "output_group_count", prefix="task_result_summary")
+    _require_positive_int_metric_with_prefix(summary, "output_item_count", prefix="task_result_summary")
+    provenance_keys = summary.get("provenance_keys")
+    _require(
+        isinstance(provenance_keys, list)
+        and provenance_keys
+        and all(_is_privacy_safe_symbol(item) for item in provenance_keys),
+        "task_result_summary.provenance_keys must be non-empty",
+    )
+
+
 def _verify_upload_completion(payload: dict) -> None:
     _require_status(payload, "upload_inventory_completion_status")
     _require(payload.get("upload_inventory_status") == "completed", "upload_inventory_status must be completed")
@@ -744,6 +782,7 @@ def verify_acceptance_payload(
     _verify_real_ids(payload, gate)
     _verify_task_status(payload, gate)
     _verify_task_workflow_selection(payload)
+    _verify_task_result_summary(payload, gate)
     _verify_launchability(payload)
     _require_status(payload, "project_contract_status")
     _require_positive_int(payload, "series_with_workflow_eligibility")
@@ -766,6 +805,7 @@ def verify_acceptance_payload(
             "remote_evidence_ids_status": payload["remote_evidence_ids_status"],
             "task_status_status": payload["task_status_status"],
             "task_workflow_selection_status": payload["task_workflow_selection_status"],
+            "task_result_summary_status": payload["task_result_summary_status"],
             "rag_vendor_pointer_integrity_status": payload["rag_vendor_pointer_integrity_status"],
             "rag_vendor_coverage_catalog_status": payload["rag_vendor_coverage_catalog_status"],
             "rag_launchability_query_status": payload["rag_launchability_query_status"],
