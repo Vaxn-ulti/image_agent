@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import zipfile
 from pathlib import Path
+from typing import Any
 
 from fastapi import HTTPException
 
@@ -38,6 +40,53 @@ def _save_upload(project_id: int, upload, file_type: str | None = None) -> dict:
     )
 
 
+def _public_file(row: dict) -> dict:
+    item = dict(row)
+    item.pop("storage_path", None)
+    return item
+
+
+_INVENTORY_PATH_KEYS = {
+    "source",
+    "storage_path",
+    "file_storage_path",
+    "dicom_dir",
+    "sidecars",
+    "output_dir",
+    "work_dir",
+    "log_path",
+}
+
+
+def _redact_path_text(value: str) -> str:
+    text = str(value)
+    text = re.sub(r"[A-Za-z]:[\\/][^\s\"']+", "[redacted-host-path]", text)
+    text = re.sub(r"/(?:home|Users|mnt|data|tmp|var)/[^\s\"']+", "[redacted-host-path]", text)
+    return text
+
+
+def _public_inventory_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        public = {}
+        for key, item in value.items():
+            if key in _INVENTORY_PATH_KEYS:
+                continue
+            if key == "bids_dataset_root":
+                public[key] = "bids/rawdata"
+                continue
+            public[key] = _public_inventory_value(item)
+        return public
+    if isinstance(value, list):
+        return [_public_inventory_value(item) for item in value]
+    if isinstance(value, str):
+        return _redact_path_text(value)
+    return value
+
+
+def public_inventory(inventory: dict) -> dict:
+    return _public_inventory_value(inventory)
+
+
 def upload(project_id, file):
     require_project(project_id)
     file_row = _save_upload(project_id, file)
@@ -61,7 +110,7 @@ def upload(project_id, file):
             ),
         )
         series_row = conn.execute("SELECT * FROM imaging_series WHERE id=?", (cursor.lastrowid,)).fetchone()
-    return {"file": file_row, "series": parse_series_row(series_row)}
+    return {"file": _public_file(file_row), "series": parse_series_row(series_row)}
 
 
 def upload_dwi(project_id, nifti, bval, bvec, json_sidecar=None):
@@ -102,7 +151,7 @@ def upload_dwi(project_id, nifti, bval, bvec, json_sidecar=None):
     file_rows = [nifti_row, bval_row, bvec_row]
     if json_row is not None:
         file_rows.append(json_row)
-    return {"files": file_rows, "series": parse_series_row(series_row)}
+    return {"files": [_public_file(row) for row in file_rows], "series": parse_series_row(series_row)}
 
 
 def upload_dicom(project_id, archive):
@@ -144,7 +193,7 @@ def upload_dicom(project_id, archive):
             ),
         )
         series_row = conn.execute("SELECT * FROM imaging_series WHERE id=?", (cursor.lastrowid,)).fetchone()
-    return {"file": archive_row, "series": parse_series_row(series_row)}
+    return {"file": _public_file(archive_row), "series": parse_series_row(series_row)}
 
 
 def create_upload_session(project_id, req):
@@ -170,7 +219,7 @@ def ingest_dataset(project_id, upload_session_id, archive, sync_fast_path=True):
     processor = _process_upload_session()
     if sync_fast_path and archive_path.stat().st_size <= threshold:
         inventory = processor(project_id, upload_session_id, archive_path)
-        return {"upload_session_id": upload_session_id, "status": inventory["inventory_status"], "inventory": inventory}
+        return {"upload_session_id": upload_session_id, "status": inventory["inventory_status"], "inventory": public_inventory(inventory)}
     submit_background(processor, project_id, upload_session_id, archive_path)
     return {"upload_session_id": upload_session_id, "status": "running"}
 
@@ -181,13 +230,13 @@ def get_inventory(project_id, upload_session_id):
         raise HTTPException(404, "Upload session not found")
     session = found[0]
     inventory = json.loads(session["inventory_json"] or "{}")
-    inventory = enrich_inventory_workflow_eligibility(inventory)
+    inventory = public_inventory(enrich_inventory_workflow_eligibility(inventory))
     return {
         "upload_session_id": upload_session_id,
         "status": session["status"],
         "progress": session["progress"],
         "inventory": inventory,
-        "error_message": session.get("error_message"),
+        "error_message": _redact_path_text(session.get("error_message") or "") if session.get("error_message") else None,
     }
 
 
@@ -215,6 +264,7 @@ def enrich_inventory_workflow_eligibility(inventory: dict) -> dict:
 
 
 def list_series(project_id):
+    require_project(project_id)
     return [
         parse_series_row(row)
         for row in fetch_rows("SELECT * FROM imaging_series WHERE project_id=? ORDER BY id DESC", (project_id,))

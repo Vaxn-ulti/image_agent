@@ -15,6 +15,8 @@ def test_workflow_registry_exposes_openai_style_contract_fields():
     assert workflow["requires_confirmation"] is True
     assert workflow["runtime_class"]
     assert workflow["runtime_backend"] == "remote_script_wrapper"
+    assert workflow["execution_location"] == "deployment_server_local"
+    assert workflow["external_worker_server_required"] is False
     assert workflow["result_summary_schema"] == "BOLD"
     assert workflow["input_requirements"]
     assert workflow["expected_outputs"]

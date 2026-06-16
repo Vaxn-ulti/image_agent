@@ -46,6 +46,9 @@ image_agent_pre_slice_cached_names_*.txt
 apps/*/*-vite-*.out
 apps/*/*-vite-*.err
 apps/*/*-vite-*.pid
+apps/*/*-smoke-*.out
+apps/*/*-smoke-*.err
+apps/*/*-smoke-*.pid
 
 # Local/editor/system files
 .DS_Store

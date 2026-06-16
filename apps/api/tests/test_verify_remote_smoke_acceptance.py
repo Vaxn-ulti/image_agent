@@ -28,17 +28,24 @@ def _strict_smoke_payload():
             "require_production_readiness": True,
             "require_completed_task": True,
             "require_project_agent_context": True,
+            "require_agent_workflow_confirmation": True,
             "require_raw_source_policy": True,
             "require_vendor_pointer_integrity": True,
             "require_real_evidence_ids": True,
             "require_completed_upload": True,
+            "require_uploaded_series": True,
             "require_launchability_matrix": True,
+            "require_launched_task": True,
             "require_container_native_qc": True,
             "min_native_qc_images": 1,
             "require_scientific_report_artifacts": True,
             "min_scientific_report_images": 1,
+            "expected_model_wire_api": "responses",
+            "expected_model_provider_profile": "rawchat",
+            "require_model_tool_loop": True,
             "project_id": 7,
             "upload_session_id": 22,
+            "uploaded_series_id": 1,
             "task_id": 114,
         },
         "health": {"status": "ok", "app": "image_agent"},
@@ -48,7 +55,18 @@ def _strict_smoke_payload():
             "health_app": "image_agent",
             "health_version": "0.2.0",
         },
-        "model_status": {"configured": True, "provider": "OpenAI"},
+        "model_status": {
+            "configured": True,
+            "provider": "rawchat",
+            "provider_profile": "rawchat",
+            "model": "gpt-5.5",
+            "wire_api": "responses",
+            "capabilities": {
+                "text": True,
+                "structured_json": True,
+                "model_tool_loop": True,
+            },
+        },
         "model_smoke_status": "passed",
         "production_readiness_status": "passed",
         "production_readiness": {
@@ -59,8 +77,22 @@ def _strict_smoke_payload():
         },
         "agent_run_status": "answered",
         "agent_run_id": "agent_run_123",
+        "agent_model_gateway_status": "passed",
+        "agent_model_gateway_access": "openai_sdk_gateway",
+        "agent_safe_metadata": {},
         "agent_project_context_status": "passed",
         "agent_run_project_id": 7,
+        "agent_workflow_confirmation_status": "passed",
+        "agent_workflow_confirmation": {
+            "agent_run_id": "agent_run_confirm",
+            "status": "confirmation_required",
+            "intent": "run_workflow",
+            "project_id": 7,
+            "series_id": 1,
+            "workflow_type": "t1_deepprep_anat_report",
+            "selected_skill": "image-agent-workflow-runner",
+            "production_task_created": False,
+        },
         "intent": "answer_question",
         "selected_skill": "image-agent-operator",
         "remote_evidence_ids_status": "passed",
@@ -70,6 +102,14 @@ def _strict_smoke_payload():
             "project_id": 7,
             "series_id": 1,
             "status": "completed",
+            "task_id": 114,
+            "workflow_type": "t1_deepprep_anat_report",
+        },
+        "launched_task_status": "passed",
+        "launched_task": {
+            "initial_status": "queued",
+            "project_id": 7,
+            "series_id": 1,
             "task_id": 114,
             "workflow_type": "t1_deepprep_anat_report",
         },
@@ -202,6 +242,14 @@ def _strict_smoke_payload():
         "upload_inventory_completion_status": "passed",
         "upload_inventory_status": "completed",
         "upload_inventory_series_with_workflow_eligibility": 1,
+        "upload_inventory_series_ids": [1],
+        "uploaded_series_status": "passed",
+        "uploaded_series": {
+            "project_id": 7,
+            "series_id": 1,
+            "modality": "T1",
+            "sequence_label": "T1w",
+        },
         "task_artifact_manifest_status": "passed",
         "task_result_summary_status": "passed",
         "task_result_summary": {
@@ -337,7 +385,13 @@ def test_verify_remote_smoke_acceptance_accepts_strict_payload():
     assert report["status"] == "passed"
     assert report["summary"] == "status=passed"
     assert report["checked"]["model_smoke_status"] == "passed"
+    assert report["checked"]["expected_model_wire_api"] == "responses"
+    assert report["checked"]["model_wire_api"] == "responses"
+    assert report["checked"]["expected_model_provider_profile"] == "rawchat"
+    assert report["checked"]["model_provider_profile"] == "rawchat"
+    assert report["checked"]["model_tool_loop"] is True
     assert report["checked"]["agent_project_context_status"] == "passed"
+    assert report["checked"]["agent_workflow_confirmation_status"] == "passed"
     assert report["checked"]["rag_vendor_pointer_integrity_status"] == "passed"
     assert report["checked"]["rag_vendor_coverage_catalog_status"] == "complete"
     assert report["checked"]["container_native_qc_status"] == "passed"
@@ -345,6 +399,7 @@ def test_verify_remote_smoke_acceptance_accepts_strict_payload():
     assert report["checked"]["task_status_status"] == "passed"
     assert report["checked"]["task_workflow_selection_status"] == "passed"
     assert report["checked"]["task_result_summary_status"] == "passed"
+    assert report["checked"]["uploaded_series_status"] == "passed"
 
 
 def test_verify_remote_smoke_acceptance_rejects_stale_saved_evidence():
@@ -368,6 +423,26 @@ def test_verify_remote_smoke_acceptance_rejects_stale_saved_evidence():
         ({"generated_at_utc": "2026-06-08T12:00:00"}, "generated_at_utc must be timezone-aware"),
         ({"model_smoke_status": "skipped_missing_model_config"}, "model_smoke_status must be passed"),
         (
+            {"model_status": {"wire_api": "chat_completions"}},
+            "model_status.wire_api must match smoke_gate.expected_model_wire_api",
+        ),
+        (
+            {"model_status": {"provider_profile": "deepseek"}},
+            "model_status.provider_profile must match smoke_gate.expected_model_provider_profile",
+        ),
+        (
+            {"model_status": {"capabilities": {"model_tool_loop": False}}},
+            "model_status.capabilities.model_tool_loop must be true",
+        ),
+        (
+            {"smoke_gate": {"expected_model_wire_api": "chat/completions"}},
+            "expected_model_wire_api must be privacy-safe",
+        ),
+        (
+            {"smoke_gate": {"expected_model_provider_profile": "rawchat/v1"}},
+            "expected_model_provider_profile must be privacy-safe",
+        ),
+        (
             {"model_status": {"base_url": "https://sk-test-secret@example.invalid/v1"}},
             "model_status.base_url must not contain credentials",
         ),
@@ -389,19 +464,56 @@ def test_verify_remote_smoke_acceptance_rejects_stale_saved_evidence():
             {"model_status": {"deployment": {"access_token": "sk-test-secret"}}},
             "model_status.deployment must not expose access_token",
         ),
+        (
+            {"model_status": {"gateway_diagnostics": {"authorization": "Bearer secret-value"}}},
+            "model_status.gateway_diagnostics must not expose authorization",
+        ),
         ({"deployment_identity_status": "skipped"}, "deployment_identity_status must be passed"),
         ({"production_readiness_status": "blocked"}, "production_readiness_status must be passed"),
         ({"production_readiness": {"ready": False}}, "production_readiness.ready must be true"),
         ({"agent_run_id": "agent_run_123 C:/Users/A/private"}, "agent_run_id must be privacy-safe"),
+        ({"agent_model_gateway_status": "fallback"}, "agent_model_gateway_status must be passed"),
+        ({"agent_model_gateway_access": None}, "agent_model_gateway_access must be privacy-safe"),
+        (
+            {"agent_safe_metadata": {"fallback_reason": "model_gateway_unconfigured"}},
+            "agent_safe_metadata must not report model_gateway_unconfigured",
+        ),
         ({"agent_project_context_status": "skipped"}, "agent_project_context_status must be passed"),
         ({"agent_run_project_id": None}, "agent_run_project_id must match smoke_gate.project_id"),
+        ({"agent_workflow_confirmation_status": "skipped"}, "agent_workflow_confirmation_status must be passed"),
+        (
+            {"agent_workflow_confirmation": {"status": "answered"}},
+            "agent_workflow_confirmation.status must be confirmation_required",
+        ),
+        (
+            {"agent_workflow_confirmation": {"production_task_created": True}},
+            "agent_workflow_confirmation.production_task_created must be false",
+        ),
+        (
+            {"agent_workflow_confirmation": {"workflow_type": "dwi_fast_gpu_dti"}},
+            "agent_workflow_confirmation.workflow_type must match task_status.workflow_type",
+        ),
+        (
+            {"smoke_gate": {"require_agent_workflow_confirmation": False}},
+            "smoke_gate.require_agent_workflow_confirmation must be true",
+        ),
         ({"selected_skill": "image-agent-operator sk-test-secret"}, "selected_skill must be privacy-safe"),
         ({"remote_evidence_ids_status": "skipped"}, "remote_evidence_ids_status must be passed"),
         ({"upload_inventory_completion_status": "skipped"}, "upload_inventory_completion_status must be passed"),
         ({"upload_inventory_status": "running"}, "upload_inventory_status must be completed"),
+        ({"upload_inventory_series_ids": []}, "upload_inventory_series_ids must include task_status.series_id"),
+        ({"upload_inventory_series_ids": [2]}, "upload_inventory_series_ids must include task_status.series_id"),
+        ({"uploaded_series_status": "skipped"}, "uploaded_series_status must be passed"),
+        ({"uploaded_series": {"series_id": 2}}, "uploaded_series.series_id must match task_status.series_id"),
+        ({"uploaded_series": {"project_id": 8}}, "uploaded_series.project_id must match smoke_gate.project_id"),
         ({"task_status_status": "skipped"}, "task_status_status must be passed"),
         ({"task_status": {"status": "running"}}, "task_status.status must be completed"),
         ({"task_status": {"task_id": 115}}, "task_status.task_id must match smoke_gate.task_id"),
+        ({"launched_task_status": "skipped"}, "launched_task_status must be passed"),
+        ({"launched_task": {"task_id": 115}}, "launched_task.task_id must match smoke_gate.task_id"),
+        ({"launched_task": {"series_id": 2}}, "launched_task.series_id must match task_status.series_id"),
+        ({"launched_task": {"workflow_type": "dwi_fast_gpu_dti"}}, "launched_task.workflow_type must match task_status.workflow_type"),
+        ({"launched_task": {"project_id": 8}}, "launched_task.project_id must match smoke_gate.project_id"),
         ({"task_result_summary_status": "skipped"}, "task_result_summary_status must be passed"),
         ({"task_result_summary": {"task_id": 115}}, "task_result_summary.task_id must match smoke_gate.task_id"),
         ({"task_result_summary": {"workflow_type": "dwi_fast_gpu_dti"}}, "task_result_summary.workflow_type must match task_status.workflow_type"),
@@ -423,10 +535,14 @@ def test_verify_remote_smoke_acceptance_rejects_stale_saved_evidence():
         ({"container_native_qc_official_source_ids": ["docs/rag/vendor/fake.md"]}, "container_native_qc_official_source_ids contains unsupported source"),
         ({"smoke_gate": {"require_real_evidence_ids": False}}, "smoke_gate.require_real_evidence_ids must be true"),
         ({"smoke_gate": {"require_completed_upload": False}}, "smoke_gate.require_completed_upload must be true"),
+        ({"smoke_gate": {"require_launched_task": False}}, "smoke_gate.require_launched_task must be true"),
         ({"smoke_gate": {"require_deployment_identity": False}}, "smoke_gate.require_deployment_identity must be true"),
         ({"smoke_gate": {"require_production_readiness": False}}, "smoke_gate.require_production_readiness must be true"),
         ({"smoke_gate": {"require_completed_task": False}}, "smoke_gate.require_completed_task must be true"),
         ({"smoke_gate": {"require_project_agent_context": False}}, "smoke_gate.require_project_agent_context must be true"),
+        ({"task_status": {"workflow_type": "t1_deepprep_mock"}}, "strict deployment acceptance cannot use debug-only workflow"),
+        ({"launched_task": {"workflow_type": "t1_deepprep_mock"}}, "strict deployment acceptance cannot use debug-only workflow"),
+        ({"agent_workflow_confirmation": {"workflow_type": "t1_deepprep_mock"}}, "strict deployment acceptance cannot use debug-only workflow"),
         ({"smoke_gate": {"deployment_id": "C:/srv/image_agent"}}, "deployment_id must be privacy-safe"),
         ({"smoke_gate": {"require_vendor_pointer_integrity": False}}, "smoke_gate.require_vendor_pointer_integrity must be true"),
         ({"smoke_gate": {"require_scientific_report_artifacts": False}}, "smoke_gate.require_scientific_report_artifacts must be true"),
@@ -823,6 +939,40 @@ def test_verify_remote_smoke_acceptance_cli_prints_passed_report(tmp_path, capsy
     assert report["source_json"] == str(payload_path)
     assert report["checked"]["max_age_hours"] == 24.0
     assert report["checked"]["generated_at_utc"] == "2026-06-08T12:00:00+00:00"
+
+
+def test_verify_remote_smoke_acceptance_cli_can_emit_fast_launch_env(tmp_path, capsys):
+    verifier = _load_verifier_module()
+    payload_path = tmp_path / "remote-smoke-acceptance.json"
+    payload_path.write_text(json.dumps(_strict_smoke_payload()), encoding="utf-8")
+
+    verifier.main([
+        str(payload_path),
+        "--max-age-hours",
+        "24",
+        "--now-utc",
+        "2026-06-08T12:30:00Z",
+        "--emit-fast-launch-env",
+    ])
+
+    assert capsys.readouterr().out.splitlines() == [
+        "IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_STATUS=passed",
+        "IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_ID=codex-f57a2ea-20260611T023456",
+    ]
+
+
+def test_verify_remote_smoke_acceptance_cli_env_export_rejects_unsafe_deployment_id(tmp_path):
+    verifier = _load_verifier_module()
+    payload = _strict_smoke_payload()
+    payload["smoke_gate"]["deployment_id"] = "release/with/slash"
+    payload["deployment_identity"]["deployment_id"] = "release/with/slash"
+    payload_path = tmp_path / "remote-smoke-acceptance.json"
+    payload_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc:
+        verifier.main([str(payload_path), "--emit-fast-launch-env"])
+
+    assert "deployment_id must be privacy-safe" in str(exc.value)
 
 
 def test_verify_remote_smoke_acceptance_cli_rejects_stale_report(tmp_path):

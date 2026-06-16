@@ -3,12 +3,12 @@ import json
 import re
 from pathlib import Path
 
-from test_verify_stale_task_approval import _approval_payload
+from tests.test_verify_stale_task_approval import _approval_payload
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT_PATH = REPO_ROOT / "apps" / "api" / "scripts" / "build_stale_task_apply_request.py"
-API_KEY_SHAPED_RE = re.compile(r"sk-[A-Za-z0-9_-]{10,}")
+API_KEY_SHAPED_RE = re.compile(r"(?<![A-Za-z0-9_-])sk-[A-Za-z0-9_-]{20,}")
 
 
 def load_module():
@@ -69,6 +69,7 @@ def test_build_stale_task_apply_request_includes_post_apply_gates(tmp_path):
     )
 
     commands = "\n".join(step["command"] for step in request["required_followup_steps"])
+    steps_by_id = {step["id"]: step for step in request["required_followup_steps"]}
     assert "reconcile_stale_tasks.py --max-age-hours 24 --check-containers --task-id 83 --task-id 84" in commands
     assert "verify_stale_task_resolution.py" in commands
     assert "--require-empty-active --max-age-hours 24" in commands
@@ -77,12 +78,31 @@ def test_build_stale_task_apply_request_includes_post_apply_gates(tmp_path):
     assert "bash tools/restart_remote_image_agent_api.sh" in commands
     assert "smoke_remote_agent.py" in commands
     assert "--require-model" in commands
+    assert "--expected-model-wire-api responses" in commands
+    assert "--expected-model-provider-profile rawchat" in commands
+    assert "--require-model-tool-loop" in commands
+    assert "--require-project-agent-context" in commands
+    assert "--require-agent-workflow-confirmation" in commands
+    assert "--require-production-readiness" in commands
+    assert "--expected-health-version <expected_health_version>" in commands
     assert "--require-real-evidence-ids" in commands
+    assert "--require-completed-upload" in commands
+    assert "--require-uploaded-series" in commands
+    assert "--upload-nifti-file <remote_nifti_file>" in commands
+    assert "--require-completed-task" in commands
+    assert "--require-launched-task" in commands
+    assert "--launch-series-id <uploaded_series_id>" not in commands
+    assert "--launch-workflow-type <real_registered_workflow_type>" in commands
+    assert "--wait-task-completion-timeout-seconds 21600" in commands
+    assert "--wait-task-completion-poll-seconds 30" in commands
     assert "--require-container-native-qc" in commands
     assert "--require-scientific-report-artifacts" in commands
     assert "restart_preflight:ok" in json.dumps(request)
     assert "verify_remote_smoke_acceptance.py" in commands
     assert "--max-age-hours 24" in commands
+    assert "--emit-fast-launch-env" in commands
+    assert steps_by_id["run_strict_remote_smoke_acceptance"]["mutates_remote_state"] is True
+    assert steps_by_id["emit_fast_launch_acceptance_env_after_strict_verify"]["mutates_remote_state"] is False
 
 
 def test_build_stale_task_apply_request_cli_writes_json(tmp_path, capsys):

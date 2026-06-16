@@ -14,17 +14,40 @@ Minimum backend/frontend contract for this fast launch:
 - Refresh detected series through `/projects/{project_id}/series`, including modality, sequence label, support status, and `workflow_eligibility` where available.
 - List selectable workflows through `/workflows`, and show blocked/runnable state from backend contracts rather than frontend guesses.
 - Start processing through `/series/{series_id}/run` only after backend validation accepts the selected workflow and series.
-- Show task state through `/projects/{project_id}/tasks`, `/tasks/{task_id}`, `/tasks/{task_id}/logs`, `/tasks/{task_id}/outputs`, `/tasks/{task_id}/result-summary`, and `/tasks/{task_id}/artifact-manifest`.
+- Show task state through `/projects/{project_id}/tasks`, `/tasks/{task_id}`, redacted `/tasks/{task_id}/logs`, `/tasks/{task_id}/outputs`, `/tasks/{task_id}/result-summary`, and `/tasks/{task_id}/artifact-manifest`.
 - Support dashboard chat with `/chat` and grounded Agent review with `/agent/rag/query`; the model may be configured later, but the UI must clearly handle fallback/rules-based status.
 - Configure browser access with `IMAGE_AGENT_CORS_ORIGINS`; local development may use localhost defaults, but public deployment must not rely on wildcard CORS.
+- Configure `IMAGE_AGENT_PUBLIC_BASE_URL` for production so `/deployment.production_readiness` can prove the public HTTPS API base used by the console and strict remote smoke evidence.
+- Read `/deployment.fast_launch_readiness` before treating the Gemini console as launchable. It must report the rawchat GPT-5.5 Responses target, the deterministic Agent/task boundary, the upload-workflow-result contract, and strict remote acceptance evidence.
 
 Fast-launch boundary rules:
 
 - Agent may recommend or explain workflows, but task creation must still go through deterministic backend APIs and backend validation.
 - RAG may explain official sources, but backend project/task state remains authoritative.
-- Real processing acceptance still belongs on the remote server; local upload and API tests prove contracts, not Docker/remote-script execution readiness.
+- Mock tests prove the control plane: API contracts, schema validation, Agent/task boundaries, workflow registry matching, preflight blocking, task state transitions, log/output registration, result-summary and artifact-manifest contracts, and frontend integration.
+- Real script tests prove the execution plane: deployed-server local Docker/toolchain execution, GPU and license visibility, BIDS inputs, sidecar handling, external tool outputs, traceable logs, and result summaries derived from real outputs.
+- Real processing acceptance belongs on the deployed API server. Local workstation tests prove contracts, not the deployed server's local Docker/FSL/MRtrix/FreeSurfer/container readiness.
 - Container-native QC and result artifact display must rely on workflow outputs and artifact manifests, not locally invented frontend previews.
-- No API keys, patient identifiers, raw source snapshots, backend absolute paths, or sensitive logs may be exposed through chat, RAG status, task logs, artifact manifests, or frontend settings.
+- No API keys, patient identifiers, raw source snapshots, backend absolute paths, raw task log paths, or sensitive logs may be exposed through chat, RAG status, task logs, artifact manifests, or frontend settings.
+
+Fast local product smoke:
+
+```bash
+cd apps/api
+python scripts/smoke_local_main_flow.py --api-base http://127.0.0.1:8000 --output-json ../../docs/deployment/local-main-flow-smoke.json
+```
+
+This smoke creates a temporary project, uploads a minimal generated T1 NIfTI when `--upload-nifti-file` is not supplied, verifies the uploaded series is returned by `/projects/{project_id}/series`, starts `t1_deepprep_mock` through `/series/{series_id}/run`, checks the task list, checks `/agent/model/status`, and requires `/agent/rag/status.grounding_policy`. Use `--min-rag-documents <n>` for launch rehearsal when an empty RAG index should fail. It does not call `/agent/runs` unless `--require-agent-confirmation` is set; add that flag only when the local model gateway is configured and expected to return a workflow confirmation. The smoke output is path-safe and records that it is local-only evidence; it does not prove the deployed server's local containers, real MRI processing, container-native QC artifacts, production CORS, or strict deployment acceptance.
+
+For a stricter local launch rehearsal after docs are present, use:
+
+```bash
+python scripts/smoke_local_main_flow.py --api-base http://127.0.0.1:8000 --workflow-type t1_deepprep_mock --agent-workflow-type t1_deepprep_anat_report --expected-model-provider-profile rawchat --expected-model-wire-api responses --expected-model-name gpt-5.5 --require-model-tool-loop --rebuild-rag --min-rag-documents 60 --require-agent-confirmation --wait-task-completion-timeout-seconds 20 --wait-task-completion-poll-seconds 0.5 --require-task-outputs --require-result-summary --require-artifact-manifest
+```
+
+That stricter command keeps the local processing launch on quick `t1_deepprep_mock` while asking the Agent to prepare a confirmation for the formal fixed workflow `t1_deepprep_anat_report`. It also pins the local development model to rawchat GPT-5.5 Responses with model tool-loop capability, waits for the mock task to complete, and requires safe task outputs, a unified result summary, and a non-empty artifact manifest for frontend display. It is expected to fail when the model gateway is unconfigured or not rawchat GPT-5.5 Responses, the Agent cannot produce a workflow confirmation, the local RAG index cannot be rebuilt to the required document count, task completion/output registration breaks, or the result/artifact contracts are empty. This local mock path is not strict deployment acceptance: strict deployment smoke must use a real registered workflow, and `t1_deepprep_mock` is rejected by the strict smoke and saved-evidence verifier.
+
+Current model gateway finding: the rawchat GPT-5.5 OpenAI-compatible Responses path passed direct SDK, `ModelGateway`, strict local smoke, and browser dashboard checks with `OPENAI_WIRE_API=responses`, so this is the fastest-launch target for local development and remote acceptance. Krill Chat Completions remains a compatibility fallback for providers whose Responses route does not return parseable output. In Chat Completions mode, model-backed text and JSON planning work, but the Responses tool loop is intentionally reported as skipped and workflow launch must continue through deterministic backend confirmation APIs.
 
 ## Frontend Design Freeze Gate
 
@@ -32,36 +55,54 @@ Frontend page design may start only after all rows are marked with fresh evidenc
 
 | Area | Required evidence | Blocking failure |
 | --- | --- | --- |
-| Agent architecture | OpenAI SDK Responses-style gateway path is the primary model boundary, tool calls use structured function-tool contracts, and API tests cover planner/responder/tool-dispatch behavior. | Any direct model-call path bypasses `ModelGateway`, tool calls are not structured, or durable run/thread state cannot be queried. |
+| Agent architecture | OpenAI SDK Responses-style or Chat Completions-compatible gateway path is the primary model boundary, tool calls use structured function-tool contracts when the wire API supports them, Chat Completions planning is explicitly traced as no tool loop, and API tests cover planner/responder/tool-dispatch behavior. | Any direct model-call path bypasses `ModelGateway`, Chat Completions pretends to dispatch tools, tool calls are not structured on Responses-capable gateways, or durable run/thread state cannot be queried. |
 | Run traceability | Durable run/thread state records safe lifecycle events, selected skill, model gateway access, retrieved sources, tool invocations, and safe metadata. | Agent work cannot be audited by `agent_run_id`, or read APIs expose prompts, secrets, local paths, or raw user content. |
 | Result contracts | `/result-contract`, `/tasks/{task_id}/result-summary`, and `/tasks/{task_id}/artifact-manifest` document and serve stable result fields with safe `relative_path`, `download_url`, `content_type`, `size_bytes`, `preview_kind`, and provenance. | Frontend consumers must infer artifact cards from arbitrary text, local absolute paths leak, or legacy summaries can break current readers. |
 | Workflow launchability | Project series, series detail, and ingest inventory expose `workflow_eligibility` with `policy_version=workflow_eligibility_v1`, `production_task_created=false`, runnable/blocked workflow lists, and clear reasons. | The agent or frontend has to guess whether T1, BOLD, DWI, or QSI workflows are runnable. |
 | Official-source RAG | RAG uses curated official-source RAG summaries backed by `docs/rag/vendor/raw-sources/manifest.json`; raw-source manifest rows prove downloaded source URLs, hashes, source types, and raw files, but raw snapshots are not indexed as answer text. | RAG answers cite raw snapshots as answer sources, missing source ids, stale vendor pointers, or unsupported container behavior. |
-| RAG answer boundaries | RAG answers state boundaries, expected outputs, non-diagnostic limits, original curated sources, and when remote verification is required. | Answers imply local execution, diagnosis, unsupported workflow behavior, or acceptance without remote evidence. |
+| RAG answer boundaries | RAG answers state boundaries, expected outputs, non-diagnostic limits, original curated sources, and when deployed-server verification is required. | Answers imply workstation execution, diagnosis, unsupported workflow behavior, or acceptance without deployment evidence. |
 | Workflow QC artifacts | Result images and reports rely on Docker/container-native QC artifacts such as fMRIPrep HTML, XCP-D HTML, DeepPrep QC, FreeSurfer snapshots, MRIQC outputs, QSIPrep/QSIRecon reports, or other container outputs. | Local code pretends to regenerate official QC, or derived scientific reports replace native QC evidence. |
 | Derived report artifacts | Scientific report HTML/PNG artifacts are allowed only as generated presentation assets from result summaries, with `native_artifact=false` and `provenance.replaces_native_qc=false`. | Report-layer figures are treated as container-native QC or accepted without separate native QC evidence. |
 | Skills | Image Agent skills remain skill-creator-style: clear trigger rules, operating rules, reference loading, output shape, eval hints, and routing between image-agent and neuroimaging workflow skills. | Skills have stale model/provider wording, missing references, unclear routing, or no eval/backlog coverage. |
-| Remote production proof | Strict remote acceptance runs on the remote server after deployment with real project/upload/task ids and configured model gateway. The saved JSON passes `apps/api/scripts/verify_remote_smoke_acceptance.py --max-age-hours 24`. | Only local tests pass, remote model is unconfigured, real evidence ids are missing, the JSON is stale, or the offline verifier fails. |
+| Deployment production proof | Strict deployment acceptance runs on the deployed API server after deployment with real project/upload/task ids, local Docker/toolchain execution, and configured model gateway. The saved JSON passes `apps/api/scripts/verify_remote_smoke_acceptance.py --max-age-hours 24`; the script name is historical. | Only workstation tests pass, the deployed model gateway is unconfigured, local containers/tools on the deployed server are unproven, real evidence ids are missing, the JSON is stale, or the offline verifier fails. |
 
-## Remote Acceptance Minimum
+## Deployment Acceptance Minimum
 
-The remote server is the authority for install, testing, running, and production acceptance. Local tests can prove code and contract intent, but they cannot prove deployment readiness.
+The deployed API server is the authority for install, testing, running, and production acceptance. Local workstation tests can prove code and contract intent, but they cannot prove deployment readiness. All workflow scripts and Docker commands run against that server's local filesystem, local Docker daemon, local GPU visibility, local FSL/MRtrix/FreeSurfer installation, and local container image cache.
 
 The strict remote acceptance package must include:
 
 - Deployed package identity or commit, recorded as a privacy-safe `deployment_id`.
 - `/health` returning `app=image_agent` and a privacy-safe `version` that matches the expected deployed package/version when the strict smoke gate supplies `--expected-health-version`.
-- `/agent/model/status` with the OpenAI SDK gateway configured.
+- `/agent/model/status` with the OpenAI-compatible SDK gateway configured, a safe `provider_profile` such as `rawchat`, `openai`, `krill`, `deepseek`, or `glm`, a `capabilities` matrix, and `wire_api` matching the strict smoke gate's `--expected-model-wire-api` value. For the current rawchat GPT-5.5 fast-launch target this is `responses`.
 - `model_smoke_status=passed` from a live `/agent/runs` smoke.
+- `agent_workflow_confirmation_status=passed` showing the Agent can prepare `status=confirmation_required` for the selected workflow while `production_task_created=false`.
 - RAG document/chunk thresholds, semantic index, clean raw-source policy, complete curated provenance, safe vendor coverage catalog, and vendor pointer integrity.
 - Real evidence ids with `remote_evidence_ids_status=passed`.
+- Deterministic launch of a real registered workflow from the uploaded series; debug-only mock workflows such as `t1_deepprep_mock` are rejected by strict deployment acceptance.
 - Launchability matrix evidence from `/agent/rag/query` citation/source fields.
 - `project_contract_status=passed`, `upload_inventory_contract_status=passed`, and `task_artifact_manifest_status=passed`.
 - `container_native_qc_status=passed`, served container-native QC artifact URLs, accepted curated `official_source_ids`, and enough native QC images.
 - `scientific_report_artifacts_status=passed`, served report HTML/PNG URLs, and derived-presentation provenance that does not replace native QC.
-- Offline verifier output from `python scripts/verify_remote_smoke_acceptance.py <remote-smoke-acceptance.json> --max-age-hours 24` with `status=passed`, including `deployment_identity_status=passed`, a `deployment_identity.deployment_id` matching `smoke_gate.deployment_id`, and a privacy-safe `deployment_identity.health_version` matching `smoke_gate.expected_health_version` when supplied.
+- Offline verifier output from `python scripts/verify_remote_smoke_acceptance.py <remote-smoke-acceptance.json> --max-age-hours 24` with `status=passed`, including `deployment_identity_status=passed`, a `deployment_identity.deployment_id` matching `smoke_gate.deployment_id`, a privacy-safe `deployment_identity.health_version` matching `smoke_gate.expected_health_version` when supplied, `model_status.wire_api` matching `smoke_gate.expected_model_wire_api`, `model_status.provider_profile` matching `smoke_gate.expected_model_provider_profile`, and `model_status.capabilities.model_tool_loop=true` when `smoke_gate.require_model_tool_loop=true`.
 
 `skipped_missing_model_config` is not production acceptance. Health, RAG, or local pytest success without a configured remote model gateway is not enough to release the frontend gate.
+
+`/deployment.fast_launch_readiness` is the operator-facing summary for this gate. It is `ready=true` only when:
+
+- `checks.model_gateway_target.status=passed` for `provider_profile=rawchat`, `wire_api=responses`, `model=gpt-5.5`, and `model_tool_loop=true`.
+- `checks.agent_task_boundary.status=passed`, with chat limited to read/explain/recommend and actual workflow launch still routed through `/series/{series_id}/run` or the server-side resume confirmation path.
+- `checks.upload_workflow_result_contract.status=passed`, listing upload, series, workflow launch, output, result-summary, and artifact-manifest contracts.
+- `checks.strict_remote_acceptance.status=passed`, backed by a privacy-safe `IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_ID` from a strict remote smoke JSON verified inside the freshness window.
+
+Generate the remote acceptance environment values from the already-passed verifier instead of hand-writing them:
+
+```bash
+python scripts/verify_remote_smoke_acceptance.py <remote-smoke-acceptance.json> --max-age-hours 24 --emit-fast-launch-env
+```
+
+This prints only `IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_STATUS=passed` and a privacy-safe `IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_ID` derived from the strict smoke `deployment_id`. This field is a summary of launch readiness, not a replacement for the saved remote smoke JSON or the offline verifier. A local rawchat pass keeps development moving, but formal release still needs the remote evidence id.
+The release gate command plan and stale-task apply request both require this export step after strict JSON verification, so the fast-launch UI state is derived from the same evidence package rather than a hand-written acceptance label.
 
 ## BMAD-Inspired Operating Model
 
@@ -229,5 +270,33 @@ The same overlay was then refreshed with local commit `cd9f4a3a`, including
 the stale-task approval refresh path; the remote command-plan verifier reported
 `checked.approval_refresh_required_when=approval_json_missing_or_older_than_24h`
 with `status=passed`, and the focused remote test slice reported `5 passed`.
-Once those stale task records are resolved through this approved flow, normal
-restarts should no longer require overriding the active-task drain gate.
+As of 2026-06-16, that 2026-06-14 approval and the generated
+`/tmp/image_agent_stale_tasks_83_84_apply_request_20260614T080202Z.json` are
+outside the 24 hour freshness window. The current
+`docs/deployment/remote-release-gate-command-plan.json` therefore has
+`status=approval_refresh_required`; its verifier reports
+`checked.approval_json_status=refresh_required`, preserves the expired path only
+as `previous_approval_json`, and uses `<fresh_reviewed_approval_json>` in the
+verify/apply commands. The previous approval JSON must not be used for apply.
+Before any remote mutation, the operator must run the documented
+`stale_task_approval_refresh`, review the refreshed dry-run output and
+`approval_fingerprint`, then run `build_release_gate_command_plan.py` to
+materialize an `operator_authorization_required` plan from the reviewed path
+instead of editing `<fresh_reviewed_approval_json>` by hand. If that builder
+reads a copied local approval file, `--approval-json-command-path` must still be
+the server-side `/tmp/image_agent_*.json` path embedded into the apply commands;
+local workstation paths are rejected from the command plan. After refresh, the
+same verifier accepts only a plan whose
+`approval_json_state.status=fresh_reviewed` and
+`approval_json_state.approval_expires_at_utc` is still in the future; expired
+reviewed approval JSON must return the plan to the refresh path. Once those
+stale task records are resolved through this approved flow, normal restarts
+should no longer require overriding the active-task drain gate.
+The strict remote smoke step now also requires `--require-uploaded-series` with
+`--upload-nifti-file <remote_nifti_file>`: the smoke runner must upload that
+file through `/projects/{project_id}/upload`, validate the returned
+`workflow_eligibility`, record `uploaded_series_status=passed`, and use the
+returned series id for `/series/{series_id}/run`. Supplying an already-known
+`--launch-series-id <uploaded_series_id>` is no longer sufficient evidence for
+the fastest-launch main chain, because it proves workflow launch but not the
+actual upload-to-series path.

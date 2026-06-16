@@ -22,6 +22,29 @@ Response: project object.
 `POST /projects/{project_id}/upload` multipart field `file`.
 Response: `{ "file": {...}, "series": {...} }`.
 
+The public `file` object includes safe fields such as `id`, `project_id`,
+`original_name`, `file_type`, `size`, `sha256`, and `created_at`. It does not
+include backend `storage_path`; workflow execution reads stored paths from the
+database, not from public API responses.
+
+`POST /projects/{project_id}/upload-dwi` multipart fields `nifti`, `bval`,
+`bvec`, and optional `json_sidecar`. Response:
+`{ "files": [...], "series": {...} }`; each public file object follows the same
+no-`storage_path` contract.
+
+`POST /projects/{project_id}/upload-dicom` multipart field `archive` (zip).
+Response: `{ "file": {...}, "series": {...} }`; public DICOM series metadata
+omits backend extraction paths such as `dicom_dir`.
+
+Upload-session ingest:
+`POST /projects/{project_id}/datasets/{upload_session_id}/ingest` multipart
+field `archive`, followed by
+`GET /projects/{project_id}/datasets/{upload_session_id}/inventory` for status
+polling. Public inventory responses use safe relative fields such as
+`bids_dataset_root: "bids/rawdata"` and per-series `bids_path`; they omit
+backend extraction/conversion paths such as DICOM failure `source`, sidecar
+absolute paths, and storage paths.
+
 `GET /projects/{project_id}/series`
 Response: list of series objects.
 
@@ -29,16 +52,31 @@ Response: list of series objects.
 Response: one series object.
 
 Series fields: `id, project_id, file_id, modality, format, confidence, metadata, status, created_at`.
+Public series metadata omits backend path fields such as `dicom_dir`,
+`storage_path`, and `sidecars` after workflow eligibility is computed.
 
 ## Tasks
 
 `POST /series/{series_id}/run`
 Request: `{ "workflow_type": "t1_deepprep_mock" }`
-Response: task object.
+Response: frontend-safe task object.
 
-`GET /tasks/{task_id}` returns task.
-`GET /tasks/{task_id}/logs` returns `{ "task_id": 1, "text": "..." }`.
-`GET /tasks/{task_id}/outputs` returns output list.
+`GET /projects/{project_id}/tasks` returns frontend-safe task objects for the project.
+`GET /tasks/{task_id}` returns a frontend-safe task object.
+Task responses include stable task fields such as `id`, `project_id`,
+`series_id`, `workflow_type`, `status`, `progress`, `error_message`,
+`qsiprep_task_id`, `created_at`, `started_at`, and `finished_at`. They do not
+include backend runner paths such as `log_path`.
+
+`GET /tasks/{task_id}/logs` returns redacted task logs:
+`{ "task_id": 1, "text": "...", "remote_logs": [...] }`. The response omits
+raw log paths and redacts secrets, patient-like identifiers, and backend host
+paths.
+
+`GET /tasks/{task_id}/outputs` returns a legacy safe artifact list. Public
+items expose `relative_path`, `download_url`, `content_type`, and `size_bytes`
+when available, and omit backend `path` and `preview_path`. Prefer
+`/tasks/{task_id}/artifact-manifest` for frontend preview/download panels.
 
 Task states: `queued`, `running`, `completed`, `failed`, `cancelled`.
 

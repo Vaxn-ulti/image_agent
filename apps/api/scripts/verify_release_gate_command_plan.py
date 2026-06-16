@@ -3,14 +3,17 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shlex
 from collections.abc import Sequence
+from datetime import datetime, timezone
 from pathlib import Path
 
 
 PLAN_ID = "remote_release_gate_after_stale_task_approval_v1"
-API_KEY_SHAPED_RE = re.compile(r"sk-[A-Za-z0-9_-]{10,}")
+API_KEY_SHAPED_RE = re.compile(r"(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]{10,}")
 REMOTE_ENV_LOAD_SNIPPET = "set -a; . /home/yyf/project/image_agent/.env; set +a;"
-CURRENT_APPROVAL_JSON = "/tmp/image_agent_stale_tasks_83_84_dry_run_20260614T080202Z.json"
+FRESH_APPROVAL_JSON = "<fresh_reviewed_approval_json>"
+EXPIRED_APPROVAL_JSON = "/tmp/image_agent_stale_tasks_83_84_dry_run_20260614T080202Z.json"
 
 EXPECTED_STEP_IDS = [
     "verify_fresh_stale_task_approval",
@@ -21,6 +24,7 @@ EXPECTED_STEP_IDS = [
     "restart_api_normally",
     "run_strict_remote_smoke_acceptance",
     "verify_strict_remote_smoke_acceptance_json",
+    "emit_fast_launch_acceptance_env_after_strict_verify",
 ]
 
 REQUIRED_PRIVACY_AND_SAFETY_INVARIANTS = [
@@ -46,6 +50,39 @@ def load_plan(path: str | Path) -> dict:
 
 def _require_command_contains(command: str, needle: str, *, step_id: str) -> None:
     _require(needle in command, f"{step_id}.command must include {needle}")
+
+
+def _token_after(command: str, token: str, *, step_id: str) -> str:
+    try:
+        parts = shlex.split(command)
+    except ValueError as exc:
+        raise SystemExit(f"{step_id}.command could not be parsed") from exc
+    try:
+        index = parts.index(token)
+    except ValueError as exc:
+        raise SystemExit(f"{step_id}.command must include {token}") from exc
+    _require(index + 1 < len(parts) and parts[index + 1], f"{step_id}.command must include a value after {token}")
+    return parts[index + 1]
+
+
+def _parse_utc_timestamp(value: object, *, key: str) -> datetime:
+    _require(isinstance(value, str) and value, f"{key} must be an ISO-8601 timestamp")
+    normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise SystemExit(f"{key} must be an ISO-8601 timestamp") from exc
+    _require(parsed.tzinfo is not None and parsed.utcoffset() is not None, f"{key} must be timezone-aware")
+    return parsed.astimezone(timezone.utc)
+
+
+def _resolve_now_utc(value: str | datetime | None) -> datetime:
+    if isinstance(value, datetime):
+        _require(value.tzinfo is not None and value.utcoffset() is not None, "now_utc must be timezone-aware")
+        return value.astimezone(timezone.utc)
+    if isinstance(value, str):
+        return _parse_utc_timestamp(value, key="now_utc")
+    return datetime.now(timezone.utc)
 
 
 def _verify_step_shape(step: object, *, expected_id: str, index: int) -> dict:
@@ -116,28 +153,122 @@ def _verify_approval_refresh(plan: dict) -> dict:
         refresh.get("next_steps_after_refresh")
         == [
             "operator reviews refreshed dry-run JSON and approval_fingerprint",
-            "set approval_json to the refreshed dry-run JSON path",
-            "rerun verify_fresh_stale_task_approval before apply",
+            "run build_release_gate_command_plan.py to materialize an operator_authorization_required plan",
+            "verify the materialized plan with verify_release_gate_command_plan.py before apply",
         ],
         "stale_task_approval_refresh.next_steps_after_refresh mismatch",
     )
+    materialize_command = refresh.get("materialize_plan_command")
+    _require(
+        isinstance(materialize_command, str) and materialize_command.strip(),
+        "stale_task_approval_refresh.materialize_plan_command must be non-empty",
+    )
+    _require("\n" not in materialize_command, "stale_task_approval_refresh.materialize_plan_command must be single-line")
+    _require(
+        API_KEY_SHAPED_RE.search(materialize_command) is None and "OPENAI_API_KEY" not in materialize_command,
+        "stale_task_approval_refresh.materialize_plan_command must not expose secrets",
+    )
+    _require(
+        "IMAGE_AGENT_ALLOW_RESTART_WITH_ACTIVE_TASKS=1" not in materialize_command,
+        "stale_task_approval_refresh.materialize_plan_command must not use active-task restart override",
+    )
+    for required in (
+        "scripts/build_release_gate_command_plan.py docs/deployment/remote-release-gate-command-plan.json",
+        "/tmp/image_agent_stale_tasks_83_84_dry_run_<timestamp>.json",
+        "--task-id 83 --task-id 84",
+        "--max-age-hours 24",
+        "--output-json /tmp/image_agent_remote_release_gate_plan_<timestamp>.json",
+    ):
+        _require(required in materialize_command, f"stale_task_approval_refresh.materialize_plan_command must include {required}")
     return refresh
 
 
-def verify_plan(plan: dict) -> dict:
+def _verify_approval_json_state(plan: dict, *, now_utc: str | datetime | None) -> dict:
+    status = plan.get("status")
+    approval_json = plan.get("approval_json")
+    approval_json_state = plan.get("approval_json_state")
+    _require(isinstance(approval_json_state, dict), "approval_json_state must describe the approval JSON state")
+
+    if status == "approval_refresh_required":
+        _require(
+            approval_json == FRESH_APPROVAL_JSON,
+            "approval_json must be a fresh reviewed approval placeholder when refresh is required",
+        )
+        _require(
+            approval_json_state.get("status") == "refresh_required",
+            "approval_json_state.status must be refresh_required",
+        )
+        _require(
+            approval_json_state.get("previous_approval_json") == EXPIRED_APPROVAL_JSON,
+            "approval_json_state.previous_approval_json must preserve the expired evidence path",
+        )
+        _require(
+            approval_json_state.get("next_required_step") == "stale_task_approval_refresh",
+            "approval_json_state.next_required_step must point at stale_task_approval_refresh",
+        )
+        _require(
+            isinstance(approval_json_state.get("reason"), str) and approval_json_state["reason"],
+            "approval_json_state.reason must be non-empty",
+        )
+        return {
+            "approval_json": FRESH_APPROVAL_JSON,
+            "approval_json_status": "refresh_required",
+            "approval_expires_at_utc": None,
+        }
+
+    if status == "operator_authorization_required":
+        _require(
+            isinstance(approval_json, str)
+            and approval_json
+            and approval_json != FRESH_APPROVAL_JSON
+            and approval_json != EXPIRED_APPROVAL_JSON
+            and "<" not in approval_json
+            and ">" not in approval_json,
+            "approval_json must be a fresh reviewed approval JSON path before operator authorization",
+        )
+        _require(
+            approval_json_state.get("status") == "fresh_reviewed",
+            "approval_json_state.status must be fresh_reviewed",
+        )
+        _require(
+            approval_json_state.get("previous_approval_json") == EXPIRED_APPROVAL_JSON,
+            "approval_json_state.previous_approval_json must preserve the expired evidence path",
+        )
+        _require(
+            approval_json_state.get("next_required_step") == "apply_approved_stale_task_resolution",
+            "approval_json_state.next_required_step must point at apply_approved_stale_task_resolution",
+        )
+        generated_at = _parse_utc_timestamp(
+            approval_json_state.get("verified_approval_generated_at_utc"),
+            key="approval_json_state.verified_approval_generated_at_utc",
+        )
+        expires_at = _parse_utc_timestamp(
+            approval_json_state.get("approval_expires_at_utc"),
+            key="approval_json_state.approval_expires_at_utc",
+        )
+        now = _resolve_now_utc(now_utc)
+        _require(generated_at <= now, "approval_json_state.verified_approval_generated_at_utc must not be in the future")
+        _require(expires_at > now, "approval_json_state.approval_expires_at_utc is older than now_utc")
+        return {
+            "approval_json": approval_json,
+            "approval_json_status": "fresh_reviewed",
+            "approval_expires_at_utc": expires_at.isoformat(),
+        }
+
+    raise SystemExit("status must be approval_refresh_required or operator_authorization_required")
+
+
+def verify_plan(plan: dict, *, now_utc: str | datetime | None = None) -> dict:
     _require(plan.get("plan_id") == PLAN_ID, f"plan_id must be {PLAN_ID}")
     _require(plan.get("schema_version") == 1, "schema_version must be 1")
-    _require(plan.get("status") == "operator_authorization_required", "status must require operator authorization")
     _require(plan.get("remote_host") == "yyf@10.2.32.14", "remote_host must identify the accepted remote server")
     _require(plan.get("remote_project_root") == "/home/yyf/project/image_agent", "remote_project_root mismatch")
     _require(
         plan.get("release_overlay") == "/home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132",
         "release_overlay must point at the prepared remote verifier overlay",
     )
-    _require(
-        plan.get("approval_json") == CURRENT_APPROVAL_JSON,
-        "approval_json must point at the reviewed fresh dry-run evidence",
-    )
+    approval_state = _verify_approval_json_state(plan, now_utc=now_utc)
+    approval_json = approval_state["approval_json"]
     _require(plan.get("target_task_ids") == [83, 84], "target_task_ids must be [83, 84]")
     _require(plan.get("freshness_hours") == 24, "freshness_hours must be 24")
     _require(
@@ -176,12 +307,12 @@ def verify_plan(plan: dict) -> dict:
 
     _require_command_contains(
         commands_by_step["verify_fresh_stale_task_approval"],
-        f"verify_stale_task_approval.py {CURRENT_APPROVAL_JSON} --task-id 83 --task-id 84 --max-age-hours 24",
+        f"verify_stale_task_approval.py {approval_json} --task-id 83 --task-id 84 --max-age-hours 24",
         step_id="verify_fresh_stale_task_approval",
     )
     _require_command_contains(
         commands_by_step["apply_approved_stale_task_resolution"],
-        f"reconcile_stale_tasks.py --apply --max-age-hours 24 --task-id 83 --task-id 84 --approval-json {CURRENT_APPROVAL_JSON}",
+        f"reconcile_stale_tasks.py --apply --max-age-hours 24 --task-id 83 --task-id 84 --approval-json {approval_json}",
         step_id="apply_approved_stale_task_resolution",
     )
     _require_command_contains(
@@ -225,11 +356,28 @@ def verify_plan(plan: dict) -> dict:
     )
     for required_flag in (
         "--require-model",
+        "--expected-model-wire-api responses",
+        "--expected-model-provider-profile rawchat",
+        "--require-model-tool-loop",
+        "--require-project-agent-context",
+        "--require-agent-workflow-confirmation",
         "--require-deployment-identity",
+        "--require-production-readiness",
+        "--deployment-id <accepted_release_or_commit>",
         "--expected-health-version <expected_health_version>",
+        "--min-documents 60",
+        "--min-chunks 200",
         "--require-raw-source-policy",
         "--require-vendor-pointer-integrity",
         "--require-real-evidence-ids",
+        "--require-completed-upload",
+        "--require-uploaded-series",
+        "--upload-nifti-file <remote_nifti_file>",
+        "--require-completed-task",
+        "--require-launched-task",
+        "--launch-workflow-type <real_registered_workflow_type>",
+        "--wait-task-completion-timeout-seconds 21600",
+        "--wait-task-completion-poll-seconds 30",
         "--require-launchability-matrix",
         "--require-container-native-qc",
         "--min-native-qc-images 1",
@@ -237,7 +385,6 @@ def verify_plan(plan: dict) -> dict:
         "--min-scientific-report-images 1",
         "--project-id <project_id>",
         "--upload-session-id <upload_session_id>",
-        "--task-id <completed_task_id>",
         "--output-json",
     ):
         _require_command_contains(
@@ -245,6 +392,10 @@ def verify_plan(plan: dict) -> dict:
             required_flag,
             step_id="run_strict_remote_smoke_acceptance",
         )
+    _require(
+        "--launch-series-id <uploaded_series_id>" not in commands_by_step["run_strict_remote_smoke_acceptance"],
+        "run_strict_remote_smoke_acceptance must use the uploaded series returned by --require-uploaded-series",
+    )
     _require_command_contains(
         commands_by_step["verify_strict_remote_smoke_acceptance_json"],
         "verify_remote_smoke_acceptance.py",
@@ -255,6 +406,34 @@ def verify_plan(plan: dict) -> dict:
         "--max-age-hours 24",
         step_id="verify_strict_remote_smoke_acceptance_json",
     )
+    strict_smoke_json = _token_after(
+        commands_by_step["run_strict_remote_smoke_acceptance"],
+        "--output-json",
+        step_id="run_strict_remote_smoke_acceptance",
+    )
+    _require(
+        strict_smoke_json in shlex.split(commands_by_step["verify_strict_remote_smoke_acceptance_json"]),
+        "strict smoke verifier command must verify the smoke output JSON",
+    )
+    _require_command_contains(
+        commands_by_step["emit_fast_launch_acceptance_env_after_strict_verify"],
+        "verify_remote_smoke_acceptance.py",
+        step_id="emit_fast_launch_acceptance_env_after_strict_verify",
+    )
+    _require_command_contains(
+        commands_by_step["emit_fast_launch_acceptance_env_after_strict_verify"],
+        "--max-age-hours 24",
+        step_id="emit_fast_launch_acceptance_env_after_strict_verify",
+    )
+    _require_command_contains(
+        commands_by_step["emit_fast_launch_acceptance_env_after_strict_verify"],
+        "--emit-fast-launch-env",
+        step_id="emit_fast_launch_acceptance_env_after_strict_verify",
+    )
+    _require(
+        strict_smoke_json in shlex.split(commands_by_step["emit_fast_launch_acceptance_env_after_strict_verify"]),
+        "fast-launch env export command must verify the smoke output JSON",
+    )
 
     mutating_steps = [step["id"] for step in verified_steps if step["mutates_remote_state"]]
     operator_steps = [step["id"] for step in verified_steps if step["requires_operator_authorization"]]
@@ -263,8 +442,9 @@ def verify_plan(plan: dict) -> dict:
         "only stale-task apply may require operator authorization in this plan",
     )
     _require(
-        mutating_steps == ["apply_approved_stale_task_resolution", "restart_api_normally"],
-        "only stale-task apply and normal restart may mutate remote state",
+        mutating_steps
+        == ["apply_approved_stale_task_resolution", "restart_api_normally", "run_strict_remote_smoke_acceptance"],
+        "only stale-task apply, normal restart, and strict deterministic smoke launch may mutate remote state",
     )
 
     serialized = json.dumps(plan, sort_keys=True)
@@ -281,6 +461,9 @@ def verify_plan(plan: dict) -> dict:
             "step_count": len(verified_steps),
             "target_task_ids": plan["target_task_ids"],
             "freshness_hours": plan["freshness_hours"],
+            "approval_json": approval_json,
+            "approval_json_status": approval_state["approval_json_status"],
+            "approval_expires_at_utc": approval_state["approval_expires_at_utc"],
             "approval_request_required_fields": plan["approval_request_requirements"]["must_include_fields"],
             "operator_authorization_required_steps": operator_steps,
             "mutating_steps": mutating_steps,
@@ -293,9 +476,10 @@ def verify_plan(plan: dict) -> dict:
 def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Verify the remote release gate command plan JSON.")
     parser.add_argument("plan_json", help="Path to docs/deployment/remote-release-gate-command-plan.json")
+    parser.add_argument("--now-utc", default=None, help="Testing hook: ISO-8601 UTC timestamp used for approval expiry checks.")
     args = parser.parse_args(argv)
     plan = load_plan(args.plan_json)
-    report = verify_plan(plan)
+    report = verify_plan(plan, now_utc=args.now_utc)
     report["source_json"] = str(Path(args.plan_json))
     print(json.dumps(report, indent=2, sort_keys=True))
 

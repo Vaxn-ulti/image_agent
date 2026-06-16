@@ -28,8 +28,8 @@ SUDO_PASSWORD = os.environ.get("IMAGE_AGENT_SUDO_PASSWORD", "")
 FS_LICENSE = Path(os.environ.get("IMAGE_AGENT_FS_LICENSE", "/home/yyf/codex/license.txt"))
 DOCKER_IMAGES = {
     "deepprep": "pbfslab/deepprep:25.1.0",
-    "qsiprep": "pennlinc/qsiprep:latest",
-    "qsirecon": "pennlinc/qsirecon:latest",
+    "qsiprep": "pennlinc/qsiprep:1.0.2",
+    "qsirecon": "pennlinc/qsirecon:26.0.0",
 }
 QSIRECON_PROFILE = os.environ.get("IMAGE_AGENT_QSIRECON_PROFILE", "dki").strip().lower() or "dki"
 QSIRECON_PROFILE_RECON_SPECS = {

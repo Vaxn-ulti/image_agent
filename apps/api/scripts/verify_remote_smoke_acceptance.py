@@ -22,6 +22,7 @@ CONTAINER_NATIVE_QC_OFFICIAL_SOURCE_IDS = frozenset(
         "docs/rag/vendor/xcp_d_official_outputs.md",
     }
 )
+DEBUG_ONLY_WORKFLOWS = frozenset({"t1_deepprep_mock"})
 
 
 def _require(condition: bool, message: str) -> None:
@@ -77,6 +78,22 @@ def _require_privacy_safe_symbol(payload: dict, key: str) -> None:
     )
 
 
+def _verify_no_debug_only_workflows(payload: dict) -> None:
+    for section_name in (
+        "task_status",
+        "launched_task",
+        "agent_workflow_confirmation",
+        "task_workflow_selection",
+        "task_result_summary",
+    ):
+        section = payload.get(section_name)
+        if not isinstance(section, dict):
+            continue
+        workflow_type = section.get("workflow_type")
+        if workflow_type in DEBUG_ONLY_WORKFLOWS:
+            raise SystemExit(f"strict deployment acceptance cannot use debug-only workflow {workflow_type}")
+
+
 def _is_privacy_safe_symbol(value: object) -> bool:
     return (
         isinstance(value, str)
@@ -86,7 +103,7 @@ def _is_privacy_safe_symbol(value: object) -> bool:
     )
 
 
-def _verify_model_status(payload: dict) -> None:
+def _verify_model_status(payload: dict, gate: dict) -> None:
     status = payload.get("model_status")
     _require(isinstance(status, dict), "model_status must be present")
     _require(status.get("configured") is True, "model_status.configured must be true")
@@ -100,10 +117,32 @@ def _verify_model_status(payload: dict) -> None:
         parsed = urlsplit(base_url)
         _require(not parsed.username and not parsed.password, "model_status.base_url must not contain credentials")
         _require(parsed.scheme in {"http", "https"}, "model_status.base_url must be http or https")
-    for key in ("provider", "model", "review_model", "wire_api", "reasoning_effort"):
+    for key in ("provider", "provider_profile", "model", "review_model", "wire_api", "reasoning_effort"):
         value = status.get(key)
         if value is not None:
             _require(_is_privacy_safe_symbol(value), f"model_status.{key} must be privacy-safe")
+    expected_wire_api = gate.get("expected_model_wire_api")
+    _require(
+        status.get("wire_api") == expected_wire_api,
+        "model_status.wire_api must match smoke_gate.expected_model_wire_api",
+    )
+    expected_provider_profile = gate.get("expected_model_provider_profile")
+    _require(
+        status.get("provider_profile") == expected_provider_profile,
+        "model_status.provider_profile must match smoke_gate.expected_model_provider_profile",
+    )
+    capabilities = status.get("capabilities")
+    _require(isinstance(capabilities, dict), "model_status.capabilities must be an object")
+    allowed_capability_keys = {"text", "structured_json", "model_tool_loop"}
+    for key, value in capabilities.items():
+        key_text = str(key)
+        _require(key_text in allowed_capability_keys, f"model_status.capabilities must not expose {key_text}")
+        _require(isinstance(value, bool), f"model_status.capabilities.{key_text} must be boolean")
+    if gate.get("require_model_tool_loop") is True:
+        _require(
+            capabilities.get("model_tool_loop") is True,
+            "model_status.capabilities.model_tool_loop must be true",
+        )
     deployment = status.get("deployment")
     if deployment is not None:
         _require(isinstance(deployment, dict), "model_status.deployment must be an object")
@@ -112,6 +151,26 @@ def _verify_model_status(payload: dict) -> None:
             key_text = str(key)
             _require(key_text in allowed_deployment_keys, f"model_status.deployment must not expose {key_text}")
             _require(_is_privacy_safe_symbol(value), f"model_status.deployment.{key_text} must be privacy-safe")
+    gateway_diagnostics = status.get("gateway_diagnostics")
+    if gateway_diagnostics is not None:
+        _require(isinstance(gateway_diagnostics, dict), "model_status.gateway_diagnostics must be an object")
+        allowed_gateway_diagnostic_keys = {
+            "sdk_method",
+            "request_shape",
+            "structured_output",
+            "model_tool_loop",
+            "workflow_task_creation",
+        }
+        for key, value in gateway_diagnostics.items():
+            key_text = str(key)
+            _require(
+                key_text in allowed_gateway_diagnostic_keys,
+                f"model_status.gateway_diagnostics must not expose {key_text}",
+            )
+            _require(
+                _is_privacy_safe_symbol(value),
+                f"model_status.gateway_diagnostics.{key_text} must be privacy-safe",
+            )
 
 
 def _parse_utc_timestamp(value: object, *, key: str) -> datetime:
@@ -150,24 +209,30 @@ def _verify_gate_settings(payload: dict) -> dict:
     gate = payload.get("smoke_gate") if isinstance(payload.get("smoke_gate"), dict) else {}
     for key in (
         "require_model",
+        "require_model_tool_loop",
         "require_deployment_identity",
         "require_production_readiness",
         "require_completed_task",
+        "require_launched_task",
         "require_project_agent_context",
+        "require_agent_workflow_confirmation",
         "require_raw_source_policy",
         "require_vendor_pointer_integrity",
         "require_real_evidence_ids",
         "require_completed_upload",
+        "require_uploaded_series",
         "require_launchability_matrix",
         "require_container_native_qc",
         "require_scientific_report_artifacts",
     ):
         _require(gate.get(key) is True, f"smoke_gate.{key} must be true")
-    for key in ("project_id", "upload_session_id", "task_id"):
+    for key in ("project_id", "upload_session_id", "uploaded_series_id", "task_id"):
         _require_positive_id(gate, key, prefix="smoke_gate")
     expected_health_version = gate.get("expected_health_version")
     if expected_health_version is not None:
         _require_privacy_safe_symbol(gate, "expected_health_version")
+    _require_privacy_safe_symbol(gate, "expected_model_wire_api")
+    _require_privacy_safe_symbol(gate, "expected_model_provider_profile")
     _require_positive_int_metric(gate, "min_documents")
     _require_positive_int_metric(gate, "min_chunks")
     _require_positive_int_metric(gate, "min_native_qc_images")
@@ -197,6 +262,60 @@ def _verify_task_status(payload: dict, gate: dict) -> None:
     _require(task_status.get("status") == "completed", "task_status.status must be completed")
     _require_positive_id(task_status, "series_id", prefix="task_status")
     _require_privacy_safe_symbol(task_status, "workflow_type")
+
+
+def _verify_launched_task(payload: dict, gate: dict) -> None:
+    _require_status(payload, "launched_task_status")
+    task_status = payload.get("task_status")
+    launched_task = payload.get("launched_task")
+    _require(isinstance(task_status, dict), "task_status must be present")
+    _require(isinstance(launched_task, dict), "launched_task must be present")
+    _require_positive_id(launched_task, "task_id", prefix="launched_task")
+    _require_positive_id(launched_task, "project_id", prefix="launched_task")
+    _require_positive_id(launched_task, "series_id", prefix="launched_task")
+    _require(
+        launched_task.get("task_id") == gate.get("task_id"),
+        "launched_task.task_id must match smoke_gate.task_id",
+    )
+    _require(
+        launched_task.get("project_id") == gate.get("project_id"),
+        "launched_task.project_id must match smoke_gate.project_id",
+    )
+    _require(
+        launched_task.get("series_id") == task_status.get("series_id"),
+        "launched_task.series_id must match task_status.series_id",
+    )
+    _require(
+        launched_task.get("workflow_type") == task_status.get("workflow_type"),
+        "launched_task.workflow_type must match task_status.workflow_type",
+    )
+    _require_privacy_safe_symbol(launched_task, "workflow_type")
+    _require_privacy_safe_symbol(launched_task, "initial_status")
+
+
+def _verify_uploaded_series(payload: dict, gate: dict) -> None:
+    _require_status(payload, "uploaded_series_status")
+    task_status = payload.get("task_status")
+    uploaded_series = payload.get("uploaded_series")
+    _require(isinstance(task_status, dict), "task_status must be present")
+    _require(isinstance(uploaded_series, dict), "uploaded_series must be present")
+    _require_positive_id(uploaded_series, "project_id", prefix="uploaded_series")
+    _require_positive_id(uploaded_series, "series_id", prefix="uploaded_series")
+    _require(
+        uploaded_series.get("project_id") == gate.get("project_id"),
+        "uploaded_series.project_id must match smoke_gate.project_id",
+    )
+    _require(
+        uploaded_series.get("series_id") == task_status.get("series_id"),
+        "uploaded_series.series_id must match task_status.series_id",
+    )
+    _require(
+        uploaded_series.get("series_id") == gate.get("uploaded_series_id"),
+        "uploaded_series.series_id must match smoke_gate.uploaded_series_id",
+    )
+    _require_privacy_safe_symbol(uploaded_series, "modality")
+    if uploaded_series.get("sequence_label") is not None:
+        _require_privacy_safe_symbol(uploaded_series, "sequence_label")
 
 
 def _verify_task_workflow_selection(payload: dict) -> None:
@@ -303,6 +422,16 @@ def _verify_task_result_summary(payload: dict, gate: dict) -> None:
 def _verify_upload_completion(payload: dict) -> None:
     _require_status(payload, "upload_inventory_completion_status")
     _require(payload.get("upload_inventory_status") == "completed", "upload_inventory_status must be completed")
+    task_status = payload.get("task_status")
+    _require(isinstance(task_status, dict), "task_status must be present")
+    series_id = task_status.get("series_id")
+    series_ids = payload.get("upload_inventory_series_ids")
+    _require(
+        isinstance(series_ids, list)
+        and all(isinstance(item, int) and not isinstance(item, bool) and item > 0 for item in series_ids)
+        and series_id in series_ids,
+        "upload_inventory_series_ids must include task_status.series_id",
+    )
 
 
 def _verify_agent_project_context(payload: dict, gate: dict) -> None:
@@ -313,6 +442,63 @@ def _verify_agent_project_context(payload: dict, gate: dict) -> None:
         and not isinstance(project_id, bool)
         and project_id == gate.get("project_id"),
         "agent_run_project_id must match smoke_gate.project_id",
+    )
+
+
+def _verify_agent_workflow_confirmation(payload: dict, gate: dict) -> None:
+    _require_status(payload, "agent_workflow_confirmation_status")
+    confirmation = payload.get("agent_workflow_confirmation")
+    _require(isinstance(confirmation, dict), "agent_workflow_confirmation must be present")
+    _require_privacy_safe_symbol(confirmation, "agent_run_id")
+    _require_privacy_safe_symbol(confirmation, "intent")
+    _require_privacy_safe_symbol(confirmation, "selected_skill")
+    _require(
+        confirmation.get("status") == "confirmation_required",
+        "agent_workflow_confirmation.status must be confirmation_required",
+    )
+    _require(
+        confirmation.get("intent") == "run_workflow",
+        "agent_workflow_confirmation.intent must be run_workflow",
+    )
+    _require(
+        confirmation.get("selected_skill") == "image-agent-workflow-runner",
+        "agent_workflow_confirmation.selected_skill must be image-agent-workflow-runner",
+    )
+    _require(
+        confirmation.get("production_task_created") is False,
+        "agent_workflow_confirmation.production_task_created must be false",
+    )
+    _require(
+        confirmation.get("project_id") == gate.get("project_id"),
+        "agent_workflow_confirmation.project_id must match smoke_gate.project_id",
+    )
+    _require(
+        confirmation.get("series_id") == gate.get("uploaded_series_id"),
+        "agent_workflow_confirmation.series_id must match smoke_gate.uploaded_series_id",
+    )
+    task_status = payload.get("task_status") if isinstance(payload.get("task_status"), dict) else {}
+    _require(
+        confirmation.get("series_id") == task_status.get("series_id"),
+        "agent_workflow_confirmation.series_id must match task_status.series_id",
+    )
+    _require(
+        confirmation.get("workflow_type") == task_status.get("workflow_type"),
+        "agent_workflow_confirmation.workflow_type must match task_status.workflow_type",
+    )
+
+
+def _verify_agent_model_gateway(payload: dict) -> None:
+    _require_status(payload, "agent_model_gateway_status")
+    _require_privacy_safe_symbol(payload, "agent_model_gateway_access")
+    safe_metadata = payload.get("agent_safe_metadata")
+    _require(isinstance(safe_metadata, dict), "agent_safe_metadata must be an object")
+    _require(
+        safe_metadata.get("fallback_reason") != "model_gateway_unconfigured",
+        "agent_safe_metadata must not report model_gateway_unconfigured",
+    )
+    _require(
+        payload.get("selected_skill") != "backend-status-fallback",
+        "selected_skill must not be backend-status-fallback",
     )
 
 
@@ -805,15 +991,18 @@ def verify_acceptance_payload(
         now_utc=now_utc,
     )
     gate = _verify_gate_settings(payload)
+    _verify_no_debug_only_workflows(payload)
     _require(isinstance(payload.get("health"), dict) and payload["health"].get("app") == "image_agent", "health.app must be image_agent")
     _verify_deployment_identity(payload, gate)
     _verify_production_readiness(payload)
-    _verify_model_status(payload)
+    _verify_model_status(payload, gate)
     _require_status(payload, "model_smoke_status")
     _require(payload.get("agent_run_status") == "answered", "agent_run_status must be answered")
     for key in ("agent_run_id", "intent", "selected_skill"):
         _require_privacy_safe_symbol(payload, key)
+    _verify_agent_model_gateway(payload)
     _verify_agent_project_context(payload, gate)
+    _verify_agent_workflow_confirmation(payload, gate)
     _require_int_metric(payload, "rag_document_count")
     _require_int_metric(payload, "rag_chunk_count")
     _require(payload["rag_document_count"] >= gate["min_documents"], "rag_document_count below smoke gate minimum")
@@ -824,6 +1013,8 @@ def verify_acceptance_payload(
     _verify_vendor_coverage_catalog(payload)
     _verify_real_ids(payload, gate)
     _verify_task_status(payload, gate)
+    _verify_uploaded_series(payload, gate)
+    _verify_launched_task(payload, gate)
     _verify_task_workflow_selection(payload)
     _verify_task_result_summary(payload, gate)
     _verify_launchability(payload)
@@ -842,11 +1033,20 @@ def verify_acceptance_payload(
         "summary": "status=passed",
         "checked": {
             "model_smoke_status": payload["model_smoke_status"],
+            "expected_model_wire_api": gate["expected_model_wire_api"],
+            "model_wire_api": payload["model_status"].get("wire_api"),
+            "expected_model_provider_profile": gate["expected_model_provider_profile"],
+            "model_provider_profile": payload["model_status"].get("provider_profile"),
+            "model_tool_loop": payload["model_status"].get("capabilities", {}).get("model_tool_loop"),
+            "agent_model_gateway_status": payload["agent_model_gateway_status"],
             "agent_project_context_status": payload["agent_project_context_status"],
+            "agent_workflow_confirmation_status": payload["agent_workflow_confirmation_status"],
             "deployment_identity_status": payload["deployment_identity_status"],
             "production_readiness_status": payload["production_readiness_status"],
             "remote_evidence_ids_status": payload["remote_evidence_ids_status"],
+            "uploaded_series_status": payload["uploaded_series_status"],
             "task_status_status": payload["task_status_status"],
+            "launched_task_status": payload["launched_task_status"],
             "task_workflow_selection_status": payload["task_workflow_selection_status"],
             "task_result_summary_status": payload["task_result_summary_status"],
             "rag_vendor_pointer_integrity_status": payload["rag_vendor_pointer_integrity_status"],
@@ -864,6 +1064,17 @@ def verify_acceptance_payload(
     }
 
 
+def fast_launch_env_lines(report: dict, payload: dict) -> list[str]:
+    _require(isinstance(report, dict) and report.get("status") == "passed", "acceptance report must be passed")
+    gate = payload.get("smoke_gate") if isinstance(payload.get("smoke_gate"), dict) else {}
+    deployment_id = gate.get("deployment_id")
+    _require(_is_privacy_safe_symbol(deployment_id), "smoke_gate.deployment_id must be privacy-safe")
+    return [
+        "IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_STATUS=passed",
+        f"IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_ID={deployment_id}",
+    ]
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Verify a saved strict remote smoke acceptance JSON artifact.")
     parser.add_argument("acceptance_json", help="Path to the JSON file written by smoke_remote_agent.py --output-json.")
@@ -878,11 +1089,19 @@ def main(argv: Sequence[str] | None = None) -> None:
         default=None,
         help="Testing hook: ISO-8601 UTC timestamp used as the current time for --max-age-hours.",
     )
+    parser.add_argument(
+        "--emit-fast-launch-env",
+        action="store_true",
+        help="Print only safe IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_* environment lines after verification passes.",
+    )
     args = parser.parse_args(argv)
     source_path = Path(args.acceptance_json)
     payload = json.loads(source_path.read_text(encoding="utf-8"))
     now_utc = _parse_utc_timestamp(args.now_utc, key="now_utc") if args.now_utc else None
     report = verify_acceptance_payload(payload, max_age_hours=args.max_age_hours, now_utc=now_utc)
+    if args.emit_fast_launch_env:
+        print("\n".join(fast_launch_env_lines(report, payload)))
+        return
     report["source_json"] = str(source_path)
     print(json.dumps(report, indent=2, ensure_ascii=False))
 

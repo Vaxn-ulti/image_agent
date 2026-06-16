@@ -7,7 +7,7 @@ import {
   Search,
   Settings2
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { PageHeader } from '../components/ui/PageHeader';
@@ -16,6 +16,7 @@ import { queryKeys } from '../lib/query';
 
 export function ProjectsPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { data: projects = [], error, isLoading } = useQuery({
     queryFn: api.listProjects,
     queryKey: queryKeys.projects
@@ -23,7 +24,10 @@ export function ProjectsPage() {
 
   const createProject = useMutation({
     mutationFn: api.createProject,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.projects }),
+    onSuccess: (project) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects });
+      navigate(`/projects/${project.id}/dashboard`);
+    },
   });
 
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {

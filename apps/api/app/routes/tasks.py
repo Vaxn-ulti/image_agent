@@ -12,7 +12,7 @@ def list_project_tasks(project_id: int):
 
 @router.get("/tasks/{task_id}")
 def get_task(task_id: int):
-    return task_service.get_task(task_id)
+    return task_service.get_public_task(task_id)
 
 
 @router.get("/tasks/{task_id}/logs")

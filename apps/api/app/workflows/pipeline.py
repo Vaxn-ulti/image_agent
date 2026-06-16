@@ -52,12 +52,12 @@ DWI_QSIRECON_MEM_MB = int(os.environ.get("IMAGE_AGENT_DWI_QSIRECON_MEM_MB", "240
 IMAGES = {
     "t1_deepprep": "pbfslab/deepprep:25.1.0",
     "bold_deepprep": "pbfslab/deepprep:25.1.0",
-    "dwi_qsiprep": "pennlinc/qsiprep:latest",
-    "dwi_qsirecon": "pennlinc/qsirecon:latest",
-    "dwi_qsi_full": "pennlinc/qsiprep:latest",
+    "dwi_qsiprep": "pennlinc/qsiprep:1.0.2",
+    "dwi_qsirecon": "pennlinc/qsirecon:26.0.0",
+    "dwi_qsi_full": "pennlinc/qsiprep:1.0.2",
     "dwi_fast_gpu_dti": dwi_fast_dti.IMAGE,
-    "bold_fmriprep": "nipreps/fmriprep:latest",
-    "bold_fmriprep_xcpd_report": "nipreps/fmriprep:latest",
+    "bold_fmriprep": "nipreps/fmriprep:25.2.5",
+    "bold_fmriprep_xcpd_report": "nipreps/fmriprep:25.2.5",
     "bold_fmriprep_xcpd_report_xcpd": "pennlinc/xcp_d:26.0.2",
 }
 
@@ -837,6 +837,30 @@ def _dicom_commands(series, dirs):
     return [["dcm2niix", "-z", "y", "-o", str(dirs["output"] / "nifti"), str(_dicom_dir(series))]]
 
 
+def _runtime_manifest(workflow_type: str, workflow: str, commands: list[list], image: str | None) -> dict:
+    images = {
+        key: value
+        for key, value in IMAGES.items()
+        if key == workflow or key.startswith(f"{workflow}_") or (workflow == "dwi_qsi_full" and key in {"dwi_qsiprep", "dwi_qsirecon"})
+    }
+    if image:
+        images.setdefault(workflow, image)
+    return {
+        "workflow_type": workflow_type,
+        "runtime_workflow": workflow,
+        "execution_scope": {
+            "workflow_tool_execution": "deployment_server_local",
+            "docker_runtime_host": "api_server",
+            "external_worker_server_required": False,
+        },
+        "version_lock": {
+            "images": images,
+            "floating_tags_allowed": False,
+        },
+        "commands": commands,
+    }
+
+
 def _run_local_command(cmd, log_path):
     _append(log_path, "RUN " + " ".join(str(x) for x in cmd))
     proc = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=None)
@@ -998,6 +1022,8 @@ def run_pipeline_task(task_id: int, qsiprep_task_id: int | None = None) -> None:
             bold_metric_inputs = _resolve_bold_metric_inputs(task, series, log_path)
             bold_metric_inputs = _prepare_bold_metric_inputs(bold_metric_inputs, dirs, log_path)
         cmds = _dicom_commands(series, dirs) if workflow == "dicom_convert" else _commands(workflow, dirs, qsiprep_output=qsiprep_output, task=task, metric_inputs=bold_metric_inputs)
+        runtime_manifest = _runtime_manifest(workflow_type=workflow_type, workflow=workflow, commands=cmds, image=image)
+        _append(log_path, "RUNTIME_MANIFEST " + json.dumps(runtime_manifest, ensure_ascii=False))
         if validate:
             ok, inspect = (
                 (True, "local dcm2niix workflow")
@@ -1034,7 +1060,7 @@ def run_pipeline_task(task_id: int, qsiprep_task_id: int | None = None) -> None:
                 _write_dwi_fast_validate(task_id, workflow_type, dirs, log_path)
             for cmd in cmds:
                 _append(log_path, "COMMAND " + " ".join(str(x) for x in cmd))
-            output_metadata = {"image": image, "image_available": ok, "commands": cmds, "inspect_tail": inspect}
+            output_metadata = {"image": image, "image_available": ok, "commands": cmds, "inspect_tail": inspect, "runtime_manifest": runtime_manifest}
             if workflow in ("dwi_qsirecon", "dwi_qsi_full"):
                 output_metadata["qsirecon_profile"] = _qsirecon_profile_settings()
             if workflow == "dwi_fast_gpu_dti":

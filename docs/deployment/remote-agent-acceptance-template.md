@@ -86,7 +86,11 @@ source .venv/bin/activate
 python scripts/smoke_remote_agent.py \
   --api-base http://127.0.0.1:8000 \
   --require-model \
+  --expected-model-wire-api responses \
+  --expected-model-provider-profile rawchat \
+  --require-model-tool-loop \
   --require-project-agent-context \
+  --require-agent-workflow-confirmation \
   --require-deployment-identity \
   --require-production-readiness \
   --deployment-id <accepted-release-or-commit> \
@@ -97,7 +101,13 @@ python scripts/smoke_remote_agent.py \
   --require-vendor-pointer-integrity \
   --require-real-evidence-ids \
   --require-completed-upload \
+  --require-uploaded-series \
+  --upload-nifti-file <remote-nifti-file> \
   --require-completed-task \
+  --require-launched-task \
+  --launch-workflow-type <real-registered-workflow-type> \
+  --wait-task-completion-timeout-seconds 21600 \
+  --wait-task-completion-poll-seconds 30 \
   --require-launchability-matrix \
   --require-container-native-qc \
   --min-native-qc-images 1 \
@@ -105,13 +115,15 @@ python scripts/smoke_remote_agent.py \
   --min-scientific-report-images 1 \
   --project-id <project-with-series> \
   --upload-session-id <completed-upload-session-with-inventory> \
-  --task-id <completed-task-with-result-artifacts> \
   --output-json "../../docs/deployment/remote-smoke-acceptance-$(date -u +%Y%m%dT%H%M%SZ).json"
 ```
 
 Attach the strict smoke acceptance JSON and verify it contains:
 
 - `model_smoke_status=passed`
+- `smoke_gate.expected_model_wire_api=responses` and `model_status.wire_api=responses`
+- `smoke_gate.expected_model_provider_profile=rawchat` and `model_status.provider_profile=rawchat`
+- `smoke_gate.require_model_tool_loop=true` and `model_status.capabilities.model_tool_loop=true`
 - `model_status.configured=true`, with only safe model gateway summary fields. It must not contain API keys, tokens, secrets, passwords, authorization headers, a `base_url` with embedded credentials, or nested deployment command details. `model_status.deployment`, when present, may only describe safe backend runtime mode and model gateway access.
 - `deployment_identity_status=passed`
 - `deployment_identity.deployment_id` matches `smoke_gate.deployment_id` and is a short release id or commit, not a full remote path
@@ -121,11 +133,22 @@ Attach the strict smoke acceptance JSON and verify it contains:
 - `agent_run_id`
 - `agent_project_context_status=passed`
 - `agent_run_project_id` matches `smoke_gate.project_id`
+- `agent_workflow_confirmation_status=passed`
+- `agent_workflow_confirmation.status=confirmation_required`, `intent=run_workflow`, `selected_skill=image-agent-workflow-runner`, and `production_task_created=false`
+- `agent_workflow_confirmation.project_id`, `series_id`, and `workflow_type` match the strict smoke project, uploaded/launched series, and deterministic backend task workflow
 - `intent`
 - `selected_skill`
 - `remote_evidence_ids_status=passed`
 - `upload_inventory_completion_status=passed`
 - `upload_inventory_status=completed`
+- `uploaded_series_status=passed`
+- `uploaded_series.project_id` matches `smoke_gate.project_id`
+- `uploaded_series.series_id` matches `task_status.series_id`
+- `launched_task_status=passed`
+- `launched_task.task_id` matches `smoke_gate.task_id`
+- `launched_task.project_id` matches `smoke_gate.project_id`
+- `launched_task.series_id` matches `task_status.series_id`
+- `launched_task.workflow_type` matches `task_status.workflow_type`
 - `task_status_status=passed`
 - `task_status.status=completed`, `task_status.task_id` matches `smoke_gate.task_id`, `task_status.project_id` matches `smoke_gate.project_id`, and `task_status` does not expose backend paths such as `log_path`
 - `task_workflow_selection_status=passed`
@@ -205,7 +228,7 @@ Run the offline strict smoke acceptance JSON verifier `apps/api/scripts/verify_r
 python scripts/verify_remote_smoke_acceptance.py "../../docs/deployment/remote-smoke-acceptance-<timestamp>.json" --max-age-hours 24
 ```
 
-Attach the verifier report only when `python scripts/verify_remote_smoke_acceptance.py` prints `status=passed` with `--max-age-hours 24`. This offline strict smoke acceptance JSON verifier does not replace running `smoke_remote_agent.py` on the remote server; it re-checks the saved evidence freshness and the same strict fields, including `deployment_identity_status=passed`, `production_readiness_status=passed`, `production_readiness.ready=true`, empty `production_readiness.blocking_reasons`, a privacy-safe `deployment_identity.deployment_id` matching `smoke_gate.deployment_id`, a privacy-safe `deployment_identity.health_version` matching `smoke_gate.expected_health_version` when supplied, `model_smoke_status=passed`, `agent_project_context_status=passed`, `agent_run_project_id` matching `smoke_gate.project_id`, `remote_evidence_ids_status=passed`, `upload_inventory_completion_status=passed`, `upload_inventory_status=completed`, `task_status_status=passed`, `task_status.status=completed`, `task_status.task_id` matching `smoke_gate.task_id`, `task_workflow_selection_status=passed`, `task_workflow_selection.matched_runnable_workflow=true`, `task_workflow_selection.series_id` matching `task_status.series_id`, `task_workflow_selection.workflow_type` matching `task_status.workflow_type`, `task_result_summary_status=passed`, `task_result_summary.task_id` matching `smoke_gate.task_id`, `task_result_summary.workflow_type` matching `task_status.workflow_type`, non-empty `task_result_summary.feature_groups`, positive result-summary output counts, positive result-summary downloadable-output counts, safe downloadable-output paths, recomputed downloadable-output URLs, matching `artifact_manifest_relative_paths`/`artifact_manifest_download_urls`, non-empty `task_result_summary.provenance_keys`, `rag_raw_sources.manifest_schema_version`, `rag_raw_sources.source_count`, `rag_raw_sources.vendor_doc_count`, `rag_vendor_pointer_integrity_status=passed`, `require_vendor_pointer_integrity`, `rag_vendor_pointer_integrity_referenced_vendor_docs`, `rag_vendor_coverage_catalog_status=complete`, `vendor_coverage_catalog`, `vendor_coverage_catalog.vendors`, `rag_raw_sources.curated_sources`, `rag_launchability_query_status=passed`, `container_native_qc_status=passed`, `container_native_qc_served_urls`, `container_native_qc_artifacts`, `container_native_qc_official_source_ids`, each container-native QC artifact `relative_path` is slash-relative and safe, each container-native QC artifact `download_url` is recomputed from `task_id` and `relative_path`, each container-native QC artifact `content_type` matches `preview_kind`, `scientific_report_artifacts_status=passed`, `scientific_report_served_urls`, and `scientific_report_artifacts`; `vendor_coverage_catalog.vendors` and `rag_raw_sources.curated_sources` must exactly match with no missing or extra vendor docs, each scientific report artifact `download_url` is served with non-empty bytes, and each scientific report artifact `content_type` matches `preview_kind`. The verifier also checks that `vendor_coverage_catalog` must not expose `manifest_path`, `persist_dir`, `raw_snapshots`, `raw_files`, or `sha256`.
+Attach the verifier report only when `python scripts/verify_remote_smoke_acceptance.py` prints `status=passed` with `--max-age-hours 24`. This offline strict smoke acceptance JSON verifier does not replace running `smoke_remote_agent.py` on the remote server; it re-checks the saved evidence freshness and the same strict fields, including `deployment_identity_status=passed`, `production_readiness_status=passed`, `production_readiness.ready=true`, empty `production_readiness.blocking_reasons`, a privacy-safe `deployment_identity.deployment_id` matching `smoke_gate.deployment_id`, a privacy-safe `deployment_identity.health_version` matching `smoke_gate.expected_health_version` when supplied, `model_smoke_status=passed`, `smoke_gate.expected_model_wire_api`, `model_status.wire_api` matching that expected wire API, `smoke_gate.expected_model_provider_profile`, `model_status.provider_profile` matching that expected provider profile, `smoke_gate.require_model_tool_loop=true`, `model_status.capabilities.model_tool_loop=true`, `agent_project_context_status=passed`, `agent_run_project_id` matching `smoke_gate.project_id`, `agent_workflow_confirmation_status=passed`, `agent_workflow_confirmation.status=confirmation_required`, `agent_workflow_confirmation.intent=run_workflow`, `agent_workflow_confirmation.selected_skill=image-agent-workflow-runner`, `agent_workflow_confirmation.production_task_created=false`, matching Agent confirmation project/series/workflow fields, `remote_evidence_ids_status=passed`, `upload_inventory_completion_status=passed`, `upload_inventory_status=completed`, `launched_task_status=passed`, `launched_task.task_id` matching `smoke_gate.task_id`, `launched_task.project_id` matching `smoke_gate.project_id`, `launched_task.series_id` matching `task_status.series_id`, `launched_task.workflow_type` matching `task_status.workflow_type`, `task_status_status=passed`, `task_status.status=completed`, `task_status.task_id` matching `smoke_gate.task_id`, `task_workflow_selection_status=passed`, `task_workflow_selection.matched_runnable_workflow=true`, `task_workflow_selection.series_id` matching `task_status.series_id`, `task_workflow_selection.workflow_type` matching `task_status.workflow_type`, `task_result_summary_status=passed`, `task_result_summary.task_id` matching `smoke_gate.task_id`, `task_result_summary.workflow_type` matching `task_status.workflow_type`, non-empty `task_result_summary.feature_groups`, positive result-summary output counts, positive result-summary downloadable-output counts, safe downloadable-output paths, recomputed downloadable-output URLs, matching `artifact_manifest_relative_paths`/`artifact_manifest_download_urls`, non-empty `task_result_summary.provenance_keys`, `rag_raw_sources.manifest_schema_version`, `rag_raw_sources.source_count`, `rag_raw_sources.vendor_doc_count`, `rag_vendor_pointer_integrity_status=passed`, `require_vendor_pointer_integrity`, `rag_vendor_pointer_integrity_referenced_vendor_docs`, `rag_vendor_coverage_catalog_status=complete`, `vendor_coverage_catalog`, `vendor_coverage_catalog.vendors`, `rag_raw_sources.curated_sources`, `rag_launchability_query_status=passed`, `container_native_qc_status=passed`, `container_native_qc_served_urls`, `container_native_qc_artifacts`, `container_native_qc_official_source_ids`, each container-native QC artifact `relative_path` is slash-relative and safe, each container-native QC artifact `download_url` is recomputed from `task_id` and `relative_path`, each container-native QC artifact `content_type` matches `preview_kind`, `scientific_report_artifacts_status=passed`, `scientific_report_served_urls`, and `scientific_report_artifacts`; `vendor_coverage_catalog.vendors` and `rag_raw_sources.curated_sources` must exactly match with no missing or extra vendor docs, each scientific report artifact `download_url` is served with non-empty bytes, and each scientific report artifact `content_type` matches `preview_kind`. The verifier also checks that `vendor_coverage_catalog` must not expose `manifest_path`, `persist_dir`, `raw_snapshots`, `raw_files`, or `sha256`.
 
 ## Production Acceptance Decision
 
@@ -218,18 +241,21 @@ Accepted only if all of the following are true:
 - strict smoke acceptance JSON reports a privacy-safe `deployment_identity.health_version` matching the supplied `--expected-health-version`;
 - strict smoke acceptance JSON reports `production_readiness_status=passed`, `production_readiness.ready=true`, and no readiness blocking reasons;
 - strict smoke acceptance JSON reports `model_smoke_status=passed`;
+- strict smoke acceptance JSON reports `smoke_gate.expected_model_wire_api=responses`, `model_status.wire_api=responses`, `smoke_gate.expected_model_provider_profile=rawchat`, `model_status.provider_profile=rawchat`, `smoke_gate.require_model_tool_loop=true`, and `model_status.capabilities.model_tool_loop=true`;
 - strict smoke acceptance JSON reports `model_status.configured=true` without secret-bearing keys, credentialed URLs, or nested deployment command details;
 - strict smoke acceptance JSON includes `agent_run_id`, `intent`, and `selected_skill`;
 - strict smoke acceptance JSON reports `agent_project_context_status=passed` and `agent_run_project_id` matching `smoke_gate.project_id`;
+- strict smoke acceptance JSON reports `agent_workflow_confirmation_status=passed`, `status=confirmation_required`, `intent=run_workflow`, `selected_skill=image-agent-workflow-runner`, and `production_task_created=false` for the same project, series, and workflow;
 - strict smoke acceptance JSON reports `remote_evidence_ids_status=passed` with real `project_id`, `upload_session_id`, and `task_id`;
 - strict smoke acceptance JSON reports `upload_inventory_completion_status=passed` and `upload_inventory_status=completed`;
+- strict smoke acceptance JSON reports `launched_task_status=passed` and proves the deterministic `/series/{series_id}/run` response matches the completed task id, project id, series id, and workflow type;
 - strict smoke acceptance JSON reports `task_status_status=passed` and `task_status.status=completed` for the same real `task_id`;
 - strict smoke acceptance JSON reports `task_workflow_selection_status=passed` and proves the completed task workflow was listed in the same series `workflow_eligibility.runnable_workflows`;
 - strict smoke acceptance JSON reports `rag_vendor_pointer_integrity_status=passed`, `rag_vendor_pointer_integrity_pointer_count` greater than zero, `rag_vendor_pointer_integrity_issue_count=0`, and non-empty `rag_vendor_pointer_integrity_referenced_vendor_docs`;
 - strict smoke acceptance JSON reports `rag_vendor_coverage_catalog_status=complete`, positive `rag_vendor_coverage_catalog_vendor_doc_count`, and a safe `vendor_coverage_catalog` summary;
 - strict smoke acceptance JSON reports `rag_launchability_matrix_status=passed`, `rag_launchability_matrix_source`, and `rag_launchability_query_status=passed` from `/agent/rag/query` citation/source fields rather than answer text alone;
 - strict smoke acceptance JSON satisfies RAG document/chunk thresholds, raw-source policy, curated provenance policy, and the provenance pointer integrity gate.
-- strict smoke acceptance JSON reports `project_contract_status=passed`, `upload_inventory_contract_status=passed`, `task_artifact_manifest_status=passed`, and `task_result_summary_status=passed` when `--project-id`, `--upload-session-id`, and `--task-id` are supplied; downloadable result-summary outputs must be safe task artifact routes and must be present in the same artifact manifest.
+- strict smoke acceptance JSON reports `project_contract_status=passed`, `upload_inventory_contract_status=passed`, `task_artifact_manifest_status=passed`, and `task_result_summary_status=passed` when `--project-id`, `--upload-session-id`, and the resolved task id are supplied; downloadable result-summary outputs must be safe task artifact routes and must be present in the same artifact manifest.
 - strict smoke acceptance JSON reports `container_native_qc_status=passed`, enough `container_native_qc_image_count`, non-empty `container_native_qc_served_urls`, per-artifact `container_native_qc_artifacts`, and accepted curated `container_native_qc_official_source_ids`.
 - strict smoke acceptance JSON reports `scientific_report_artifacts_status=passed`, enough `scientific_report_image_count`, `scientific_report_relative_paths` for `reports/index.html`, `reports/report_manifest.json`, and PNG assets, non-empty `scientific_report_served_urls`, plus per-artifact `scientific_report_artifacts` derived provenance and matching served content types.
 - offline verifier report from `python scripts/verify_remote_smoke_acceptance.py ... --max-age-hours 24` reports `status=passed` for the same saved JSON.

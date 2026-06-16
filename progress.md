@@ -148,3 +148,81 @@
 - Hardened stale-task evidence timestamp ordering:
   - Added negative tests for missing, naive, and out-of-order `generated_at` values.
   - Stale-task approval evidence now requires timezone-aware `generated_at`; resolution evidence now requires timezone-aware apply/resolution timestamps and rejects resolution timestamps earlier than apply.
+
+## 2026-06-16
+
+- Resumed the fast-launch Image Agent goal after pausing frontend design work.
+- Confirmed the backend architecture has already moved past the original single-file `main.py` concern:
+  - `app/main.py` now delegates to `create_app()`.
+  - FastAPI routes are split under `app/routes/*`.
+  - Upload/task/result/project/agent logic is split under `app/services/*`.
+- Verified the local backend main-chain contracts:
+  - `python -m pytest tests/test_smoke_local_main_flow.py tests/test_api_flow.py tests/test_agent_api.py tests/test_app_factory.py tests/test_main_architecture.py -q`
+  - Result: `143 passed`.
+- Verified model gateway, Agent tool/RAG, workflow registry, result summary, and artifact manifest contract tests:
+  - `python -m pytest tests/test_model_gateway.py tests/test_agent_graph.py tests/test_agent_tool_dispatcher.py tests/test_agent_tools.py tests/test_agent_rag.py tests/test_rag_query.py tests/test_rag_reference_context.py tests/test_result_contract.py tests/test_artifact_manifest_api.py tests/test_workflow_registry.py tests/test_fixed_workflow_api_contract.py -q`
+  - Result: `137 passed`.
+- Verified the remote release gate plan reports the current real blocker correctly:
+  - `python scripts/verify_release_gate_command_plan.py ..\..\docs\deployment\remote-release-gate-command-plan.json`
+  - Result: `status=passed`, with `approval_json_status=refresh_required` and `frontend_gate_status=blocked`.
+- Fixed release-gate test import hygiene so the related tests run without a special `PYTHONPATH=tests` wrapper:
+  - Updated `apps/api/tests/test_build_stale_task_apply_request.py` to import `_approval_payload` from `tests.test_verify_stale_task_approval`.
+  - Updated `apps/api/tests/test_verify_stale_task_apply_request.py` to import helpers from the `tests.*` package.
+  - Verification: `python -m pytest tests/test_build_stale_task_apply_request.py tests/test_verify_stale_task_apply_request.py tests/test_release_gate_command_plan.py tests/test_build_release_gate_command_plan.py tests/test_verify_remote_smoke_acceptance.py -q` returned `218 passed`.
+- Current launch assessment:
+  - Local backend contract chain is healthy for upload -> series -> deterministic workflow launch -> task/result/artifact contracts -> Agent/RAG boundaries.
+  - Formal fast-launch/readiness remains blocked until remote stale-task approval is refreshed, operator-approved stale-task apply is executed, normal restart passes without active-task override, strict remote smoke runs with real upload/workflow evidence, and the fresh strict smoke JSON verifies within 24 hours.
+- Continued local product-chain closure with the Gemini-generated console participating in verification:
+  - Restarted the local API on `http://127.0.0.1:8000` and kept the Vite console on `http://127.0.0.1:5173`.
+  - Ran `python scripts/smoke_local_main_flow.py --api-base http://127.0.0.1:8000 --output-json ../../docs/deployment/local-main-flow-smoke.json`; result: `status=passed`, project `19`, series `19`, task `21`, provider `rawchat`, model `gpt-5.5`, wire API `responses`, RAG document count `73`, deterministic workflow-launch boundary `true`.
+  - Browser-verified `http://127.0.0.1:5173/projects/19/dashboard` with API base `8000`: dashboard loaded without API-disconnected state, showed backend launch blocker for missing strict remote acceptance, listed completed task `RUN-21`, and rendered result artifacts from the backend artifact manifest.
+  - Found and fixed an Agent output safety gap where model free text could expose backend project storage paths such as `data/projects/...`.
+    - Backend now sanitizes Agent response `answer`, `message`, `events`, metadata, retrieved source values, and tool invocation values for host paths and secrets while preserving safe `docs/rag/...` source references.
+    - Frontend API redaction now also catches relative `data/projects/...` paths before UI state sees Agent responses.
+  - Found and fixed a frontend/backend synchronization issue in `DashboardPage`: Results Preview now labels the displayed result with `resultSummary.workflow_type` or `resultTask.workflow_type`, not the currently selected workflow dropdown value.
+  - Browser-verified Agent Copilot against the real local backend/model gateway: "Explain this step" produced a task-aware answer, included the mock/production boundary, and did not leak relative project paths, absolute host paths, or secrets.
+  - Browser-verified frontend-triggered processing: selected `t1_deepprep_mock`, clicked `Run Workflow`, backend created task `22`, the page updated to `RUN-22 Completed`, and Results Preview showed mock workflow artifacts without API or launch errors.
+  - Verification:
+    - `python -m pytest tests/test_agent_api.py tests/test_api_flow.py tests/test_result_contract.py tests/test_artifact_manifest_api.py tests/test_artifact_manifest_contract.py -q` returned `120 passed`.
+    - `npm.cmd test -- DashboardPage.test.tsx api.test.ts resultArtifacts.test.ts` returned `42 passed`.
+    - `npm.cmd run lint` / `tsc -b --noEmit` passed.
+  - Added `.gitignore` rules for local `*-smoke-*` process artifacts so dev-server output, error, and pid files are not uploaded.
+- Corrected the runtime-boundary wording: "remote" now means the deployment server relative to the workstation, not a second workflow worker host.
+  - `/deployment` now exposes `execution_scope` with `workflow_tool_execution=deployment_server_local`, `docker_runtime_host=api_server`, and `external_worker_server_required=false`.
+  - Workflow catalog entries with runtime classes now expose `execution_location=deployment_server_local` and `external_worker_server_required=false`.
+  - Updated deployment/product-readiness docs so strict acceptance is described as deployed-server local Docker/toolchain verification.
+  - Fixed production runtime image defaults so workflow execution paths no longer depend on Docker `:latest` tags:
+    - DeepPrep: `pbfslab/deepprep:25.1.0`
+    - QSIPrep/MRtrix runner image: `pennlinc/qsiprep:1.0.2`
+    - QSIRecon: `pennlinc/qsirecon:26.0.0`
+    - fMRIPrep: `nipreps/fmriprep:25.2.5`
+    - XCP-D: `pennlinc/xcp_d:26.0.2`
+  - Added `_runtime_manifest()` for `run_pipeline_task()` so task logs/validate metadata record deployment-local execution scope, fixed image versions, and command templates.
+  - Verification:
+    - `python -m pytest tests/test_workflow_registry.py tests/test_agent_api.py::test_deployment_status_uses_safe_agent_model_summary tests/test_agent_api.py::test_deployment_status_requires_public_https_api_base_without_path tests/test_api_flow.py::test_pipeline_runtime_images_are_version_pinned tests/test_api_flow.py::test_pipeline_runtime_manifest_records_deployment_local_execution_and_versions tests/test_api_flow.py::test_qsirecon_legacy_snapshot_is_written -q` returned `11 passed`.
+    - `python -m pytest tests/test_skill_and_rag_docs.py::test_remote_script_timeout_and_log_safety_are_documented_for_agent_use tests/test_skill_and_rag_docs.py::test_developer_testing_matrix_requires_deployment_identity_for_strict_smoke -q` returned `2 passed`.
+    - `rg -n ":latest" apps/api/app/workflows apps/api/app/core` returned no matches.
+    - Local API restarted on `http://127.0.0.1:8000`; `/deployment.execution_scope` returns `deployment_server_local` and `external_worker_server_required=false`.
+- Clarified the layered testing boundary without changing the product direction:
+  - `docs/product-readiness.md` and `docs/skills/image-agent-developer/references/testing-matrix.md` now state that mock tests prove the control plane, while real script tests prove the execution plane.
+  - The testing matrix now explicitly says mock outputs must keep real-runner public contracts, but mock tests must not be reported as real workflow acceptance.
+  - Verification: `python -m pytest tests/test_skill_and_rag_docs.py::test_product_readiness_documents_fast_launch_main_flow_and_boundaries tests/test_skill_and_rag_docs.py::test_developer_testing_matrix_documents_control_and_execution_planes tests/test_skill_and_rag_docs.py::test_remote_smoke_acceptance_json_verifier_is_documented -q` returned `3 passed`.
+
+## 2026-06-17
+
+- Started the fast-launch Image Agent mock/control-plane completion goal, with no subagents and git checks limited to work-block cadence.
+- Added and verified frontend/backend control-plane tests for upload, workflow eligibility, Agent confirmation boundaries, and T1 mock result contracts:
+  - `apps/console/src/routes/IngestPage.test.tsx` now covers DICOM upload refreshing series through the DICOM upload contract without calling DWI/NIfTI routes.
+  - `apps/api/tests/test_smoke_local_main_flow.py` now requires safe uploaded-series `workflow_eligibility` evidence when present.
+  - `apps/console/src/routes/DashboardPage.test.tsx` now keeps blocked workflows from calling `api.runSeries` and filters workflow selection to backend-runnable registry entries.
+  - `apps/console/src/lib/workflows.test.ts` now verifies backend `blocked_workflows` reasons win across T1, BOLD, DWI, and DICOM workflow lanes.
+  - `apps/api/tests/test_agent_api.py` now verifies `/agent/runs` confirmation responses do not create tasks before deterministic resume.
+  - `apps/api/tests/test_api_flow.py::test_full_t1_mock_flow` now verifies safe outputs, result-summary, artifact-manifest, logs, and chat state in the full T1 mock flow.
+- Verification so far:
+  - `python -m pytest tests/test_smoke_local_main_flow.py -q` returned `13 passed`.
+  - `python -m pytest tests/test_agent_api.py::test_agent_run_confirmation_does_not_create_task_before_resume -q` returned `1 passed`.
+  - `python -m pytest tests/test_api_flow.py::test_full_t1_mock_flow -q` returned `1 passed`.
+  - `npm.cmd test -- IngestPage.test.tsx` returned `5 passed`.
+  - `npm.cmd test -- DashboardPage.test.tsx` returned `21 passed`.
+  - `npm.cmd test -- AgentPage.test.tsx` returned `8 passed`.
+  - `npm.cmd test -- workflows.test.ts` returned `10 passed`.

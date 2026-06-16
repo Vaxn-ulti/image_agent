@@ -1,21 +1,27 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../lib/api';
 import { mockDwiSummary } from '../mocks/data';
 import { ResultDetailPage } from './ResultDetailPage';
 
 vi.mock('../lib/api', () => ({
   api: {
+    getArtifactManifest: vi.fn(),
     getResultSummary: vi.fn(),
   },
   getApiBase: () => 'http://localhost:8000',
 }));
 
 describe('ResultDetailPage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(api.getArtifactManifest).mockResolvedValue({ artifacts: [], contract_version: 'artifact_manifest_v1', task_id: 0 });
+  });
+
   it('renders result-summary feature groups and artifacts', async () => {
-    vi.mocked(api.getResultSummary).mockResolvedValue(mockDwiSummary);
+    vi.mocked(api.getResultSummary).mockResolvedValue({ ...mockDwiSummary, project_id: 13 });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
     render(
@@ -43,5 +49,111 @@ describe('ResultDetailPage', () => {
     expect(await screen.findByText('DWI tensor map matrix')).toBeInTheDocument();
     expect(await screen.findByText('Atlas regional distribution')).toBeInTheDocument();
     expect(await screen.findByText('Evidence chain')).toBeInTheDocument();
+  });
+
+  it('prefers artifact manifest files for native QC previews and artifact tables', async () => {
+    vi.mocked(api.getResultSummary).mockResolvedValue({ ...mockDwiSummary, project_id: 13 });
+    vi.mocked(api.getArtifactManifest).mockResolvedValue({
+      artifacts: [
+        {
+          content_type: 'image/png',
+          download_url: '/tasks/114/artifacts/qc/native-dwi-qc.png',
+          feature_group: 'scientific_report',
+          native_artifact: true,
+          preview_kind: 'image',
+          relative_path: 'qc/native-dwi-qc.png',
+          size_bytes: 4096,
+        },
+        {
+          content_type: 'application/gzip',
+          download_url: '/tasks/114/artifacts/maps/fa_native.nii.gz',
+          feature_group: 'native_dti_maps',
+          native_artifact: true,
+          relative_path: 'maps/fa_native.nii.gz',
+          size_bytes: 8192,
+          space: 'DWI',
+        },
+      ],
+      contract_version: 'artifact_manifest_v1',
+      task_id: 114,
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/projects/13/results/114']}>
+          <Routes>
+            <Route element={<ResultDetailPage />} path="/projects/:projectId/results/:taskId" />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByRole('img', { name: 'Scientific figure qc/native-dwi-qc.png' })).toHaveAttribute(
+      'src',
+      'http://localhost:8000/tasks/114/artifacts/qc/native-dwi-qc.png',
+    );
+    expect(await screen.findByText('maps/fa_native.nii.gz')).toBeInTheDocument();
+    expect(api.getArtifactManifest).toHaveBeenCalledWith(114);
+    expect(screen.queryByText('reports/dwi_tensor_metrics.png')).not.toBeInTheDocument();
+  });
+
+  it('shows derived report artifact origin when native QC is missing', async () => {
+    vi.mocked(api.getResultSummary).mockResolvedValue({ ...mockDwiSummary, project_id: 13 });
+    vi.mocked(api.getArtifactManifest).mockResolvedValue({
+      artifacts: [
+        {
+          artifact_origin: 'generated_from_result_summary',
+          artifact_role: 'derived_presentation_asset',
+          content_type: 'image/png',
+          download_url: '/tasks/114/artifacts/reports/dwi_tensor_metrics.png',
+          feature_group: 'scientific_report',
+          native_artifact: false,
+          preview_kind: 'image',
+          relative_path: 'reports/dwi_tensor_metrics.png',
+          size_bytes: 4096,
+        },
+      ],
+      contract_version: 'artifact_manifest_v1',
+      task_id: 114,
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/projects/13/results/114']}>
+          <Routes>
+            <Route element={<ResultDetailPage />} path="/projects/:projectId/results/:taskId" />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect((await screen.findAllByText('reports/dwi_tensor_metrics.png')).length).toBeGreaterThanOrEqual(1);
+    expect(await screen.findByText('generated_from_result_summary')).toBeInTheDocument();
+    expect(await screen.findByAltText('Scientific figure reports/dwi_tensor_metrics.png')).toHaveAttribute(
+      'src',
+      'http://localhost:8000/tasks/114/artifacts/reports/dwi_tensor_metrics.png',
+    );
+  });
+
+  it('blocks result rendering when the task summary belongs to another project', async () => {
+    vi.mocked(api.getResultSummary).mockResolvedValue({ ...mockDwiSummary, project_id: 99 });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/projects/13/results/114']}>
+          <Routes>
+            <Route element={<ResultDetailPage />} path="/projects/:projectId/results/:taskId" />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText('Result project mismatch')).toBeInTheDocument();
+    expect(screen.getByText('This result summary belongs to project 99, not project 13.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back to results' })).toHaveAttribute('href', '/projects/13/results');
+    expect(screen.queryByRole('heading', { name: 'Scientific Results Studio' })).not.toBeInTheDocument();
   });
 });

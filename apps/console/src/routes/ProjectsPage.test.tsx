@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { api } from '../lib/api';
 import { mockProject } from '../mocks/data';
@@ -14,12 +14,20 @@ vi.mock('../lib/api', () => ({
   },
 }));
 
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location">{location.pathname}</div>;
+}
+
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
       <MemoryRouter>
-        <ProjectsPage />
+        <Routes>
+          <Route element={<ProjectsPage />} path="/" />
+          <Route element={<LocationProbe />} path="/projects/:projectId/dashboard" />
+        </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -38,5 +46,6 @@ describe('ProjectsPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Create Workspace' }));
 
     await waitFor(() => expect(api.createProject).toHaveBeenCalledWith({ description: '', name: 'New cohort' }));
+    expect(await screen.findByTestId('location')).toHaveTextContent('/projects/14/dashboard');
   });
 });

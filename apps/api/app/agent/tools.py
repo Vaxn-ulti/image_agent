@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Callable
 
@@ -25,6 +26,21 @@ from app.workflows.registry import FIXED_WORKFLOW, get_workflow, list_workflows 
 
 
 RowsFn = Callable[[str, tuple[Any, ...]], list[dict[str, Any]]]
+
+
+def _redact_host_paths(value: str) -> str:
+    text = str(value)
+    text = re.sub(r"[A-Za-z]:[\\/][^\s\"']+", "[redacted-host-path]", text)
+    text = re.sub(r"/(?:home|Users|mnt|data|tmp|var)/[^\s\"']+", "[redacted-host-path]", text)
+    return text
+
+
+def _safe_task_for_agent(task: dict[str, Any]) -> dict[str, Any]:
+    public = dict(task)
+    public.pop("log_path", None)
+    if public.get("error_message"):
+        public["error_message"] = _redact_host_paths(str(public["error_message"]))
+    return public
 
 
 def parse_output(output: dict[str, Any]) -> dict[str, Any]:
@@ -392,7 +408,7 @@ def list_workflows(
     return items
 
 
-def read_task(task_id: int, *, rows_fn: RowsFn) -> dict[str, Any]:
+def _read_task_raw(task_id: int, *, rows_fn: RowsFn) -> dict[str, Any]:
     rows = rows_fn(
         "SELECT id, project_id, series_id, workflow_type, status, progress, error_message, log_path, created_at, started_at, finished_at "
         "FROM tasks WHERE id=?",
@@ -404,8 +420,15 @@ def read_task(task_id: int, *, rows_fn: RowsFn) -> dict[str, Any]:
     return {"status": "ok", "task": task}
 
 
+def read_task(task_id: int, *, rows_fn: RowsFn) -> dict[str, Any]:
+    result = _read_task_raw(task_id, rows_fn=rows_fn)
+    if result["status"] != "ok":
+        return result
+    return {**result, "task": _safe_task_for_agent(result["task"])}
+
+
 def read_task_events(task_id: int, *, rows_fn: RowsFn, projects_root: Path | None = None, tail_chars: int = 12000) -> dict[str, Any]:
-    task_result = read_task(task_id, rows_fn=rows_fn)
+    task_result = _read_task_raw(task_id, rows_fn=rows_fn)
     if task_result["status"] != "ok":
         return {**task_result, "events": [], "remote_logs": []}
     task = task_result["task"]
@@ -423,10 +446,9 @@ def read_task_events(task_id: int, *, rows_fn: RowsFn, projects_root: Path | Non
             remote_logs.append(
                 {
                     "name": log_file.name,
-                    "path": str(log_file),
                     "source_stage": classify_bold_fmriprep_xcpd_artifact_stage(log_file, root / str(task["project_id"]) / "derivatives" / str(task_id) / "output"),
                     "size_bytes": log_file.stat().st_size,
-                    "tail": text[-tail_chars:],
+                    "tail": _redact_host_paths(text[-tail_chars:]),
                 }
             )
     events = [
@@ -443,8 +465,8 @@ def read_task_events(task_id: int, *, rows_fn: RowsFn, projects_root: Path | Non
     ]
     return {
         "status": "ok",
-        "task": task,
-        "main_log": {"path": str(main_log_path), "tail": main_text[-tail_chars:]},
+        "task": _safe_task_for_agent(task),
+        "main_log": {"tail": _redact_host_paths(main_text[-tail_chars:])},
         "remote_logs": remote_logs,
         "events": events,
     }

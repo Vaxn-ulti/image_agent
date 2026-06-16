@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertCircle,
   Bot,
@@ -13,11 +13,12 @@ import {
   User
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { api } from '../lib/api';
 import { queryKeys } from '../lib/query';
-import type { AgentRunResponse, RagStatus } from '../lib/types';
+import { safeEvidenceJson } from '../lib/redaction';
+import type { AgentConfirmation, AgentRunResponse, RagStatus } from '../lib/types';
 
 type Message = {
   role: 'user' | 'agent';
@@ -48,8 +49,19 @@ function formatEngine(engine: string | null | undefined) {
   return words.charAt(0).toUpperCase() + words.slice(1).toLowerCase();
 }
 
+function agentMessageContent(data: AgentRunResponse) {
+  if (data.status === 'task_created' && data.task?.id) {
+    return `Task ${data.task.id} created for ${data.task.workflow_type}.`;
+  }
+  if (data.status === 'confirmation_required' && data.confirmation?.workflow_type) {
+    return data.answer || `Approval required for ${data.confirmation.workflow_type}.`;
+  }
+  return data.answer || data.message || 'Agent run completed.';
+}
+
 export function AgentPage() {
   const projectId = Number(useParams().projectId);
+  const queryClient = useQueryClient();
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -58,17 +70,59 @@ export function AgentPage() {
     queryFn: api.ragStatus,
     queryKey: queryKeys.ragStatus
   });
+  const { data: deployment } = useQuery({
+    queryFn: api.deployment,
+    queryKey: queryKeys.deployment
+  });
+  const projectQuery = useQuery({
+    enabled: Boolean(projectId),
+    queryFn: () => api.listSeries(projectId),
+    queryKey: queryKeys.series(projectId),
+    retry: false,
+  });
 
   const ask = useMutation({
     mutationFn: (message: string) => api.runAgent(projectId, message),
     onSuccess: (data) => {
       const agentMsg: Message = {
         role: 'agent',
-        content: data.answer,
+        content: agentMessageContent(data),
         response: data,
         timestamp: new Date()
       };
       setMessages(prev => [...prev, agentMsg]);
+      if (data.status === 'task_created') {
+        queryClient.invalidateQueries({ queryKey: queryKeys.tasks(projectId) });
+        if (data.task?.id) {
+          queryClient.invalidateQueries({ queryKey: queryKeys.task(data.task.id) });
+        }
+      }
+    },
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : 'Agent run failed.';
+      setMessages(prev => [...prev, { role: 'agent', content: message, timestamp: new Date() }]);
+    }
+  });
+
+  const resume = useMutation({
+    mutationFn: ({ approved, confirmation, threadId }: { approved: boolean; confirmation: AgentConfirmation; threadId: string }) =>
+      api.resumeAgent(threadId, approved, confirmation),
+    onSuccess: (data) => {
+      const agentMsg: Message = {
+        role: 'agent',
+        content: agentMessageContent(data),
+        response: data,
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, agentMsg]);
+      queryClient.invalidateQueries({ queryKey: queryKeys.tasks(projectId) });
+      if (data.status === 'task_created' && data.task?.id) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.task(data.task.id) });
+      }
+    },
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : 'Workflow approval failed.';
+      setMessages(prev => [...prev, { role: 'agent', content: message, timestamp: new Date() }]);
     }
   });
 
@@ -94,6 +148,9 @@ export function AgentPage() {
   }
 
   const lastResponse = [...messages].reverse().find(m => m.response)?.response;
+  const pendingConfirmation = lastResponse?.status === 'confirmation_required' && lastResponse.thread_id && lastResponse.confirmation
+    ? { confirmation: lastResponse.confirmation, threadId: lastResponse.thread_id }
+    : null;
   const semanticIndexReady = Boolean(status?.index?.semantic_index);
   const llamaIndexAvailable = dependencyAvailable(status, 'llama_index');
   const groundingLabel = semanticIndexReady ? 'Grounding Enabled' : 'Grounding Fallback';
@@ -101,6 +158,40 @@ export function AgentPage() {
   const engineLabel = formatEngine(status?.index?.engine);
   const documentCount = status?.index?.document_count ?? 0;
   const chunkCount = status?.index?.chunk_count ?? 0;
+  const modelGatewayConfigured = Boolean(deployment?.agent?.configured);
+  const modelGatewayLabel = modelGatewayConfigured ? 'Configured' : 'Not configured';
+  const modelGatewayDetail = deployment?.agent?.provider
+    ? [deployment.agent.provider, deployment.agent.model].filter(Boolean).join(' / ')
+    : 'Unavailable';
+  const gatewayDiagnostics = deployment?.agent?.gateway_diagnostics;
+  const sdkRoute = gatewayDiagnostics?.sdk_method || 'Not reported';
+  const toolLoop = gatewayDiagnostics?.model_tool_loop || 'Not reported';
+  const projectErrorMessage = projectQuery.error instanceof Error ? projectQuery.error.message : 'Project data could not be loaded.';
+
+  if (projectQuery.isError) {
+    return (
+      <div className="max-w-7xl mx-auto space-y-8 px-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <Bot className="w-6 h-6 text-[#065F46]" /> Agent Review
+          </h1>
+          <p className="text-xs text-gray-500 mt-1">Grounded analysis of project tasks, workflows, and scientific results.</p>
+        </div>
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800">
+          <div className="flex items-center gap-2 text-base font-semibold text-amber-900">
+            <AlertCircle className="w-4 h-4 shrink-0" /> Project data unavailable
+          </div>
+          <p className="mt-2">{projectErrorMessage}</p>
+          <Link
+            className="mt-4 inline-flex items-center gap-2 rounded-md bg-white px-3 py-2 text-xs font-semibold text-amber-800 shadow-sm ring-1 ring-amber-200 hover:bg-amber-100"
+            to="/projects"
+          >
+            Switch project
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto h-[calc(100vh-160px)] flex flex-col gap-6">
@@ -228,6 +319,22 @@ export function AgentPage() {
             </div>
             <div className="space-y-4">
               <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-500">Model Gateway</span>
+                <span className="text-xs font-semibold text-gray-900">{modelGatewayLabel}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-500">Gateway Detail</span>
+                <span className="text-xs font-semibold text-gray-900">{modelGatewayDetail}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-500">SDK Route</span>
+                <span className="text-xs font-semibold text-gray-900">{sdkRoute}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-500">Tool Loop</span>
+                <span className="text-xs font-semibold text-gray-900">{toolLoop}</span>
+              </div>
+              <div className="flex items-center justify-between">
                 <span className="text-xs text-gray-500">Retrieval Model</span>
                 <span className="text-xs font-semibold text-gray-900">{retrievalLabel}</span>
               </div>
@@ -268,10 +375,54 @@ export function AgentPage() {
                     </div>
                   </div>
 
+                  {pendingConfirmation ? (
+                    <div>
+                      <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Approval required</div>
+                      <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                        <div className="grid grid-cols-2 gap-2">
+                          <span className="text-amber-700">Workflow</span>
+                          <span className="truncate font-semibold text-right">{String(pendingConfirmation.confirmation.workflow_type || 'unknown')}</span>
+                          <span className="text-amber-700">Series</span>
+                          <span className="font-semibold text-right">#{String(pendingConfirmation.confirmation.series_id || 'unknown')}</span>
+                        </div>
+                        <div className="rounded-md border border-amber-200 bg-white px-3 py-2">
+                          <div className="font-bold text-amber-900">Task not created yet</div>
+                          <div className="mt-1 text-[11px] text-amber-700">Backend API creates the task after approval.</div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            disabled={resume.isPending}
+                            onClick={() => resume.mutate({
+                              approved: true,
+                              confirmation: pendingConfirmation.confirmation,
+                              threadId: pendingConfirmation.threadId,
+                            })}
+                            className="flex-1 rounded-md bg-[#065F46] px-3 py-2 text-[11px] font-bold text-white shadow-sm hover:bg-[#044E3A] disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Approve workflow
+                          </button>
+                          <button
+                            type="button"
+                            disabled={resume.isPending}
+                            onClick={() => resume.mutate({
+                              approved: false,
+                              confirmation: pendingConfirmation.confirmation,
+                              threadId: pendingConfirmation.threadId,
+                            })}
+                            className="rounded-md border border-amber-200 bg-white px-3 py-2 text-[11px] font-bold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+
                   <div>
                     <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Tool Invocations</div>
                     <pre className="p-3 bg-gray-50 rounded-lg border border-gray-100 text-[10px] font-mono text-gray-500 overflow-auto max-h-40">
-                      {JSON.stringify(lastResponse.tool_invocations || [], null, 2)}
+                      {safeEvidenceJson(lastResponse.tool_invocations || [])}
                     </pre>
                   </div>
 

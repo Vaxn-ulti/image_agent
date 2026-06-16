@@ -284,6 +284,48 @@ def test_smoke_remote_agent_skips_model_run_when_gateway_unconfigured(capsys, mo
     assert all(not call[1].endswith("/agent/runs") for call in calls)
 
 
+def test_smoke_remote_agent_preserves_safe_gateway_diagnostics(monkeypatch, capsys):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        if url.endswith("/health"):
+            return {"status": "ok", "app": "image_agent", "version": "0.2.0"}
+        if url.endswith("/agent/model/status"):
+            return {
+                "configured": False,
+                "provider": "OpenAI",
+                "gateway_diagnostics": {
+                    "sdk_method": "responses.create",
+                    "request_shape": "responses_input",
+                    "structured_output": "responses_text_format",
+                    "model_tool_loop": "enabled",
+                    "workflow_task_creation": "server_side_resume_confirmation_only",
+                    "authorization": "Bearer secret-value",
+                    "unsafe": "https://user:pass@example.test",
+                },
+            }
+        if url.endswith("/agent/rag/status"):
+            return {"index": {"document_count": 72, "chunk_count": 260, "engine": "llama_index"}}
+        if url.endswith("/agent/rag/rebuild"):
+            return {"document_count": 72, "chunk_count": 260, "semantic_index": True}
+        raise AssertionError(f"unexpected request: {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    smoke.main(["--api-base", "http://api.local"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["model_status"]["gateway_diagnostics"] == {
+        "sdk_method": "responses.create",
+        "request_shape": "responses_input",
+        "structured_output": "responses_text_format",
+        "model_tool_loop": "enabled",
+        "workflow_task_creation": "server_side_resume_confirmation_only",
+    }
+    assert "secret-value" not in json.dumps(payload)
+    assert "authorization" not in json.dumps(payload)
+
+
 def test_smoke_remote_agent_checks_health_identity_before_smoke(monkeypatch):
     smoke = _load_smoke_module()
 
@@ -785,6 +827,98 @@ def test_smoke_remote_agent_configured_run_must_succeed(monkeypatch):
     assert "agent run smoke failed" in str(exc.value)
 
 
+def test_smoke_remote_agent_rejects_model_unconfigured_fallback_run(monkeypatch):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        if url.endswith("/health"):
+            return {"status": "ok", "app": "image_agent", "version": "0.2.0"}
+        if url.endswith("/agent/model/status"):
+            return {"configured": True, "provider": "OpenAI"}
+        if url.endswith("/agent/rag/status"):
+            return {
+                "index": {"document_count": 70, "chunk_count": 250, "engine": "llama_index"},
+                "vendor_raw_sources": _complete_vendor_raw_sources(),
+                "vendor_pointer_integrity": _complete_vendor_pointer_integrity(),
+            }
+        if url.endswith("/agent/rag/rebuild"):
+            return {"document_count": 70, "chunk_count": 250, "semantic_index": True}
+        if url.endswith("/agent/runs"):
+            return {
+                "agent_run_id": "agent_run_123",
+                "status": "answered",
+                "intent": "answer_question",
+                "selected_skill": "backend-status-fallback",
+                "safe_metadata": {"fallback_reason": "model_gateway_unconfigured"},
+            }
+        raise AssertionError(f"unexpected request: {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(["--api-base", "http://api.local", "--require-model"])
+
+    assert "agent run smoke failed: model gateway fallback was used" in str(exc.value)
+
+
+def test_smoke_remote_agent_expected_model_wire_api_rejects_mismatch(monkeypatch):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        if url.endswith("/health"):
+            return {"status": "ok", "app": "image_agent", "version": "0.2.0"}
+        if url.endswith("/agent/model/status"):
+            return {"configured": True, "provider": "krill", "model": "gpt-5.5", "wire_api": "responses"}
+        raise AssertionError(f"unexpected request after model wire_api mismatch: {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(
+            [
+                "--api-base",
+                "http://api.local",
+                "--require-model",
+                "--expected-model-wire-api",
+                "chat_completions",
+            ]
+        )
+
+    assert "model wire_api responses did not match --expected-model-wire-api chat_completions" in str(exc.value)
+
+
+def test_smoke_remote_agent_expected_model_provider_profile_rejects_mismatch(monkeypatch):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        if url.endswith("/health"):
+            return {"status": "ok", "app": "image_agent", "version": "0.2.0"}
+        if url.endswith("/agent/model/status"):
+            return {
+                "configured": True,
+                "provider": "deepseek",
+                "provider_profile": "deepseek",
+                "model": "deepseek-chat",
+                "wire_api": "chat_completions",
+            }
+        raise AssertionError(f"unexpected request after model provider_profile mismatch: {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(
+            [
+                "--api-base",
+                "http://api.local",
+                "--require-model",
+                "--expected-model-provider-profile",
+                "rawchat",
+            ]
+        )
+
+    assert "model provider_profile deepseek did not match --expected-model-provider-profile rawchat" in str(exc.value)
+
+
 def test_smoke_remote_agent_strict_gate_reports_successful_run(capsys, monkeypatch):
     smoke = _load_smoke_module()
     calls = []
@@ -796,7 +930,15 @@ def test_smoke_remote_agent_strict_gate_reports_successful_run(capsys, monkeypat
         if url.endswith("/agent/model/status"):
             return {
                 "configured": True,
-                "provider": "OpenAI",
+                "provider": "rawchat",
+                "provider_profile": "rawchat",
+                "model": "gpt-5.5",
+                "wire_api": "responses",
+                "capabilities": {
+                    "text": True,
+                    "structured_json": True,
+                    "model_tool_loop": True,
+                },
                 "base_url": "https://sk-test-secret@example.invalid/v1",
                 "api_key": "sk-test-secret",
                 "deployment": {
@@ -819,6 +961,8 @@ def test_smoke_remote_agent_strict_gate_reports_successful_run(capsys, monkeypat
                 "status": "answered",
                 "intent": "answer_question",
                 "selected_skill": "image-agent-operator",
+                "model_gateway_access": "openai_sdk_gateway",
+                "safe_metadata": {},
             }
         raise AssertionError(f"unexpected request: {url}")
 
@@ -829,6 +973,11 @@ def test_smoke_remote_agent_strict_gate_reports_successful_run(capsys, monkeypat
             "--api-base",
             "http://api.local",
             "--require-model",
+            "--expected-model-wire-api",
+            "responses",
+            "--expected-model-provider-profile",
+            "rawchat",
+            "--require-model-tool-loop",
             "--require-deployment-identity",
             "--deployment-id",
             "codex-f57a2ea-20260611T023456",
@@ -845,7 +994,14 @@ def test_smoke_remote_agent_strict_gate_reports_successful_run(capsys, monkeypat
     assert payload["health"]["app"] == "image_agent"
     assert payload["model_smoke_status"] == "passed"
     assert payload["model_status"]["configured"] is True
-    assert payload["model_status"]["provider"] == "OpenAI"
+    assert payload["model_status"]["provider"] == "rawchat"
+    assert payload["model_status"]["provider_profile"] == "rawchat"
+    assert payload["model_status"]["model"] == "gpt-5.5"
+    assert payload["model_status"]["wire_api"] == "responses"
+    assert payload["model_status"]["capabilities"]["model_tool_loop"] is True
+    assert payload["smoke_gate"]["expected_model_wire_api"] == "responses"
+    assert payload["smoke_gate"]["expected_model_provider_profile"] == "rawchat"
+    assert payload["smoke_gate"]["require_model_tool_loop"] is True
     assert "api_key" not in payload["model_status"]
     assert "sk-test-secret" not in json.dumps(payload["model_status"])
     assert payload["model_status"]["base_url"] == "https://example.invalid/v1"
@@ -856,6 +1012,8 @@ def test_smoke_remote_agent_strict_gate_reports_successful_run(capsys, monkeypat
     assert "reverse_tunnel_command" not in json.dumps(payload["model_status"])
     assert payload["agent_run_id"] == "agent_run_123"
     assert payload["agent_run_status"] == "answered"
+    assert payload["agent_model_gateway_status"] == "passed"
+    assert payload["agent_model_gateway_access"] == "openai_sdk_gateway"
     assert payload["intent"] == "answer_question"
     assert payload["agent_intent"] == "answer_question"
     assert payload["selected_skill"] == "image-agent-operator"
@@ -900,6 +1058,8 @@ def test_smoke_remote_agent_require_project_agent_context_sends_project_id_and_r
                 "status": "answered",
                 "intent": "answer_question",
                 "selected_skill": "image-agent-operator",
+                "model_gateway_access": "openai_sdk_gateway",
+                "safe_metadata": {},
                 "project_id": 7,
             }
         if url.endswith("/projects/7/series"):
@@ -925,6 +1085,101 @@ def test_smoke_remote_agent_require_project_agent_context_sends_project_id_and_r
     assert any(call[1].endswith("/agent/runs") and call[2]["project_id"] == 7 for call in calls)
 
 
+def test_smoke_remote_agent_requires_agent_workflow_confirmation(capsys, monkeypatch):
+    smoke = _load_smoke_module()
+    calls = []
+
+    def fake_request(method, url, payload=None):
+        calls.append((method, url, payload))
+        if url.endswith("/health"):
+            return {"status": "ok", "app": "image_agent", "version": "0.2.0"}
+        if url.endswith("/agent/model/status"):
+            return {"configured": True, "provider": "OpenAI"}
+        if url.endswith("/agent/rag/status"):
+            return {
+                "index": {"document_count": 70, "chunk_count": 250, "engine": "llama_index"},
+                "vendor_raw_sources": _complete_vendor_raw_sources(),
+                "vendor_pointer_integrity": _complete_vendor_pointer_integrity(),
+            }
+        if url.endswith("/agent/rag/rebuild"):
+            return {"document_count": 70, "chunk_count": 250, "semantic_index": True}
+        if url.endswith("/agent/runs") and "Prepare a workflow confirmation" in payload["message"]:
+            return {
+                "agent_run_id": "agent_run_confirm",
+                "status": "confirmation_required",
+                "intent": "run_workflow",
+                "selected_skill": "image-agent-workflow-runner",
+                "project_id": 7,
+                "confirmation": {
+                    "project_id": 7,
+                    "series_id": 1,
+                    "workflow_type": "t1_deepprep_anat_report",
+                },
+                "production_task_created": False,
+            }
+        if url.endswith("/agent/runs"):
+            return {
+                "agent_run_id": "agent_run_789",
+                "status": "answered",
+                "intent": "answer_question",
+                "selected_skill": "image-agent-operator",
+                "model_gateway_access": "openai_sdk_gateway",
+                "safe_metadata": {},
+                "project_id": 7,
+            }
+        if url.endswith("/projects/7/series"):
+            return [{"id": 1, "modality": "T1", "workflow_eligibility": _good_workflow_eligibility()}]
+        raise AssertionError(f"unexpected request: {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    smoke.main(
+        [
+            "--api-base",
+            "http://api.local",
+            "--require-model",
+            "--project-id",
+            "7",
+            "--require-project-agent-context",
+            "--require-agent-workflow-confirmation",
+            "--launch-series-id",
+            "1",
+            "--launch-workflow-type",
+            "t1_deepprep_anat_report",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["smoke_gate"]["require_agent_workflow_confirmation"] is True
+    assert payload["agent_workflow_confirmation_status"] == "passed"
+    assert payload["agent_workflow_confirmation"] == {
+        "agent_run_id": "agent_run_confirm",
+        "status": "confirmation_required",
+        "intent": "run_workflow",
+        "project_id": 7,
+        "series_id": 1,
+        "workflow_type": "t1_deepprep_anat_report",
+        "selected_skill": "image-agent-workflow-runner",
+        "production_task_created": False,
+    }
+    workflow_calls = [
+        call for call in calls if call[1].endswith("/agent/runs") and "Prepare a workflow confirmation" in call[2]["message"]
+    ]
+    assert workflow_calls == [
+        (
+            "POST",
+            "http://api.local/agent/runs",
+            {
+                "project_id": 7,
+                "message": (
+                    "Prepare a workflow confirmation for series 1 using workflow "
+                    "t1_deepprep_anat_report. Do not launch it."
+                ),
+            },
+        )
+    ]
+
+
 def test_smoke_remote_agent_require_project_agent_context_rejects_unscoped_agent_run(monkeypatch):
     smoke = _load_smoke_module()
 
@@ -947,6 +1202,8 @@ def test_smoke_remote_agent_require_project_agent_context_rejects_unscoped_agent
                 "status": "answered",
                 "intent": "answer_question",
                 "selected_skill": "image-agent-operator",
+                "model_gateway_access": "openai_sdk_gateway",
+                "safe_metadata": {},
                 "project_id": None,
             }
         if url.endswith("/projects/7/series"):
@@ -1147,6 +1404,354 @@ def test_smoke_remote_agent_require_completed_task_records_safe_task_status(caps
         "workflow_type": "t1_deepprep_anat_report",
     }
     assert "log_path" not in json.dumps(payload["task_status"])
+
+
+def test_smoke_remote_agent_require_launched_task_requires_launch_inputs():
+    smoke = _load_smoke_module()
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(["--api-base", "http://api.local", "--require-launched-task", "--task-id", "114"])
+
+    assert "--require-launched-task requires --launch-series-id and --launch-workflow-type" in str(exc.value)
+
+
+def test_smoke_remote_agent_require_launched_task_rejects_mock_workflow():
+    smoke = _load_smoke_module()
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(
+            [
+                "--api-base",
+                "http://api.local",
+                "--require-launched-task",
+                "--launch-series-id",
+                "5",
+                "--launch-workflow-type",
+                "t1_deepprep_mock",
+            ]
+        )
+
+    assert "strict deployment acceptance cannot use debug-only workflow t1_deepprep_mock" in str(exc.value)
+
+
+def test_smoke_remote_agent_uploads_nifti_and_uses_uploaded_series_for_launch(tmp_path, capsys, monkeypatch):
+    smoke = _load_smoke_module()
+    upload_file = tmp_path / "sub-01_T1w.nii.gz"
+    upload_file.write_bytes(b"nifti")
+    calls = []
+
+    def fake_upload_nifti(base, project_id, path):
+        calls.append(("UPLOAD", base, project_id, path))
+        return {
+            "series": {
+                "id": 5,
+                "project_id": 7,
+                "modality": "T1",
+                "sequence_label": "T1w",
+                "workflow_eligibility": _good_workflow_eligibility(),
+            }
+        }
+
+    def fake_request(method, url, payload=None):
+        calls.append((method, url, payload))
+        base_response = _good_remote_smoke_response(url)
+        if base_response is not None:
+            return base_response
+        if method == "POST" and url.endswith("/series/5/run"):
+            return {
+                "id": 114,
+                "project_id": 7,
+                "series_id": 5,
+                "workflow_type": "t1_deepprep_anat_report",
+                "status": "queued",
+            }
+        if url.endswith("/projects/7/series"):
+            return [
+                {
+                    "id": 5,
+                    "modality": "T1",
+                    "workflow_eligibility": _good_workflow_eligibility(),
+                }
+            ]
+        if url.endswith("/tasks/114"):
+            return {
+                "id": 114,
+                "project_id": 7,
+                "series_id": 5,
+                "workflow_type": "t1_deepprep_anat_report",
+                "status": "completed",
+            }
+        if url.endswith("/tasks/114/artifact-manifest"):
+            return _artifact_manifest_with_result_summary_output("reports/index.html")
+        if url.endswith("/tasks/114/result-summary"):
+            return _task_result_summary(workflow_type="t1_deepprep_anat_report", modality="T1")
+        raise AssertionError(f"unexpected request: {method} {url}")
+
+    monkeypatch.setattr(smoke, "_upload_nifti", fake_upload_nifti)
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    smoke.main(
+        [
+            "--api-base",
+            "http://api.local",
+            "--project-id",
+            "7",
+            "--require-uploaded-series",
+            "--upload-nifti-file",
+            str(upload_file),
+            "--require-launched-task",
+            "--launch-workflow-type",
+            "t1_deepprep_anat_report",
+            "--require-completed-task",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["smoke_gate"]["require_uploaded_series"] is True
+    assert payload["smoke_gate"]["uploaded_series_id"] == 5
+    assert payload["smoke_gate"]["launch_series_id"] == 5
+    assert payload["uploaded_series_status"] == "passed"
+    assert payload["uploaded_series"] == {
+        "project_id": 7,
+        "series_id": 5,
+        "modality": "T1",
+        "sequence_label": "T1w",
+    }
+    assert ("UPLOAD", "http://api.local", 7, upload_file) in calls
+    assert ("POST", "http://api.local/series/5/run", {"workflow_type": "t1_deepprep_anat_report"}) in calls
+
+
+def test_smoke_remote_agent_rejects_launch_series_id_that_differs_from_uploaded_series(tmp_path, monkeypatch):
+    smoke = _load_smoke_module()
+    upload_file = tmp_path / "sub-01_T1w.nii.gz"
+    upload_file.write_bytes(b"nifti")
+
+    def fake_upload_nifti(base, project_id, path):
+        return {
+            "series": {
+                "id": 5,
+                "project_id": 7,
+                "modality": "T1",
+                "workflow_eligibility": _good_workflow_eligibility(),
+            }
+        }
+
+    def fake_request(method, url, payload=None):
+        base_response = _good_remote_smoke_response(url)
+        if base_response is not None:
+            return base_response
+        if method == "POST" and "/series/" in url:
+            raise AssertionError("smoke must reject mismatched launch-series-id before launching")
+        raise AssertionError(f"unexpected request: {method} {url}")
+
+    monkeypatch.setattr(smoke, "_upload_nifti", fake_upload_nifti)
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(
+            [
+                "--api-base",
+                "http://api.local",
+                "--project-id",
+                "7",
+                "--require-uploaded-series",
+                "--upload-nifti-file",
+                str(upload_file),
+                "--launch-series-id",
+                "99",
+                "--require-launched-task",
+                "--launch-workflow-type",
+                "t1_deepprep_anat_report",
+            ]
+        )
+
+    assert "--launch-series-id must match the series returned by --require-uploaded-series" in str(exc.value)
+
+
+def test_smoke_remote_agent_require_uploaded_series_requires_project_and_file(tmp_path):
+    smoke = _load_smoke_module()
+    upload_file = tmp_path / "sub-01_T1w.nii.gz"
+    upload_file.write_bytes(b"nifti")
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(
+            [
+                "--api-base",
+                "http://api.local",
+                "--require-uploaded-series",
+                "--upload-nifti-file",
+                str(upload_file),
+            ]
+        )
+
+    assert "--require-uploaded-series requires --project-id and --upload-nifti-file" in str(exc.value)
+
+
+def test_smoke_remote_agent_require_launched_task_records_deterministic_run_evidence(capsys, monkeypatch):
+    smoke = _load_smoke_module()
+    calls = []
+
+    def fake_request(method, url, payload=None):
+        calls.append((method, url, payload))
+        base_response = _good_remote_smoke_response(url)
+        if base_response is not None:
+            return base_response
+        if method == "POST" and url.endswith("/series/1/run"):
+            return {
+                "id": 114,
+                "project_id": 7,
+                "series_id": 1,
+                "workflow_type": "t1_deepprep_anat_report",
+                "status": "queued",
+            }
+        if url.endswith("/tasks/114"):
+            return {
+                "id": 114,
+                "project_id": 7,
+                "series_id": 1,
+                "workflow_type": "t1_deepprep_anat_report",
+                "status": "completed",
+            }
+        if url.endswith("/tasks/114/artifact-manifest"):
+            return _artifact_manifest_with_result_summary_output("reports/index.html")
+        if url.endswith("/tasks/114/result-summary"):
+            return _task_result_summary(workflow_type="t1_deepprep_anat_report", modality="T1")
+        raise AssertionError(f"unexpected request: {method} {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    smoke.main(
+        [
+            "--api-base",
+            "http://api.local",
+            "--require-launched-task",
+            "--launch-series-id",
+            "1",
+            "--launch-workflow-type",
+            "t1_deepprep_anat_report",
+            "--task-id",
+            "114",
+            "--require-completed-task",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["smoke_gate"]["require_launched_task"] is True
+    assert payload["launched_task_status"] == "passed"
+    assert payload["launched_task"] == {
+        "task_id": 114,
+        "project_id": 7,
+        "series_id": 1,
+        "workflow_type": "t1_deepprep_anat_report",
+        "initial_status": "queued",
+    }
+    assert ("POST", "http://api.local/series/1/run", {"workflow_type": "t1_deepprep_anat_report"}) in calls
+
+
+def test_smoke_remote_agent_require_launched_task_uses_backend_task_id(capsys, monkeypatch):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        base_response = _good_remote_smoke_response(url)
+        if base_response is not None:
+            return base_response
+        if method == "POST" and url.endswith("/series/1/run"):
+            return {
+                "id": 114,
+                "project_id": 7,
+                "series_id": 1,
+                "workflow_type": "t1_deepprep_anat_report",
+                "status": "queued",
+            }
+        if url.endswith("/tasks/114"):
+            return {
+                "id": 114,
+                "project_id": 7,
+                "series_id": 1,
+                "workflow_type": "t1_deepprep_anat_report",
+                "status": "completed",
+            }
+        if url.endswith("/tasks/114/artifact-manifest"):
+            return _artifact_manifest_with_result_summary_output("reports/index.html")
+        if url.endswith("/tasks/114/result-summary"):
+            return _task_result_summary(workflow_type="t1_deepprep_anat_report", modality="T1")
+        raise AssertionError(f"unexpected request: {method} {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    smoke.main(
+        [
+            "--api-base",
+            "http://api.local",
+            "--require-launched-task",
+            "--launch-series-id",
+            "1",
+            "--launch-workflow-type",
+            "t1_deepprep_anat_report",
+            "--require-completed-task",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["smoke_gate"]["task_id"] == 114
+    assert payload["launched_task"]["task_id"] == 114
+    assert payload["task_status"]["task_id"] == 114
+
+
+def test_smoke_remote_agent_waits_for_launched_task_completion(capsys, monkeypatch):
+    smoke = _load_smoke_module()
+    task_statuses = iter(["running", "completed"])
+    sleeps = []
+
+    def fake_request(method, url, payload=None):
+        base_response = _good_remote_smoke_response(url)
+        if base_response is not None:
+            return base_response
+        if method == "POST" and url.endswith("/series/1/run"):
+            return {
+                "id": 114,
+                "project_id": 7,
+                "series_id": 1,
+                "workflow_type": "t1_deepprep_anat_report",
+                "status": "queued",
+            }
+        if url.endswith("/tasks/114"):
+            return {
+                "id": 114,
+                "project_id": 7,
+                "series_id": 1,
+                "workflow_type": "t1_deepprep_anat_report",
+                "status": next(task_statuses),
+            }
+        if url.endswith("/tasks/114/artifact-manifest"):
+            return _artifact_manifest_with_result_summary_output("reports/index.html")
+        if url.endswith("/tasks/114/result-summary"):
+            return _task_result_summary(workflow_type="t1_deepprep_anat_report", modality="T1")
+        raise AssertionError(f"unexpected request: {method} {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+    monkeypatch.setattr(smoke.time, "sleep", lambda seconds: sleeps.append(seconds))
+
+    smoke.main(
+        [
+            "--api-base",
+            "http://api.local",
+            "--require-launched-task",
+            "--launch-series-id",
+            "1",
+            "--launch-workflow-type",
+            "t1_deepprep_anat_report",
+            "--require-completed-task",
+            "--wait-task-completion-timeout-seconds",
+            "60",
+            "--wait-task-completion-poll-seconds",
+            "5",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["task_status"]["status"] == "completed"
+    assert sleeps == [5]
 
 
 def test_smoke_remote_agent_require_completed_task_records_workflow_selection(capsys, monkeypatch):
@@ -2382,6 +2987,8 @@ def test_smoke_remote_agent_writes_acceptance_json_artifact(capsys, monkeypatch,
                 "status": "answered",
                 "intent": "answer_question",
                 "selected_skill": "image-agent-operator",
+                "model_gateway_access": "openai_sdk_gateway",
+                "safe_metadata": {},
                 "project_id": 7,
             }
         raise AssertionError(f"unexpected request: {url}")
@@ -2415,25 +3022,30 @@ def test_smoke_remote_agent_writes_acceptance_json_artifact(capsys, monkeypatch,
         "api_base": "http://api.local",
         "require_model": True,
         "require_project_agent_context": False,
+        "require_agent_workflow_confirmation": False,
         "require_deployment_identity": True,
         "require_production_readiness": False,
         "deployment_id": "codex-f57a2ea-20260611T023456",
         "min_documents": 60,
         "min_chunks": 200,
-        "require_raw_source_policy": True,
-        "require_vendor_pointer_integrity": True,
-        "require_real_evidence_ids": False,
-        "require_completed_upload": False,
-        "require_completed_task": False,
-        "require_launchability_matrix": False,
-        "require_container_native_qc": False,
-        "min_native_qc_images": 0,
-        "require_scientific_report_artifacts": False,
-        "min_scientific_report_images": 0,
-        "project_id": None,
-        "task_id": None,
-        "upload_session_id": None,
-    }
+            "require_raw_source_policy": True,
+            "require_vendor_pointer_integrity": True,
+            "require_real_evidence_ids": False,
+            "require_completed_upload": False,
+            "require_uploaded_series": False,
+            "require_completed_task": False,
+            "require_launched_task": False,
+            "require_launchability_matrix": False,
+            "require_container_native_qc": False,
+            "min_native_qc_images": 0,
+            "require_scientific_report_artifacts": False,
+            "min_scientific_report_images": 0,
+            "project_id": None,
+            "task_id": None,
+            "upload_session_id": None,
+            "uploaded_series_id": None,
+            "launch_series_id": None,
+        }
     assert artifact_payload["deployment_identity_status"] == "passed"
     assert artifact_payload["deployment_identity"] == {
         "deployment_id": "codex-f57a2ea-20260611T023456",
@@ -2488,12 +3100,28 @@ def test_smoke_remote_agent_rejects_vendor_coverage_catalog_curated_source_drift
             }
         if url.endswith("/agent/rag/rebuild"):
             return {"document_count": 72, "chunk_count": 260, "semantic_index": True}
+        if url.endswith("/agent/runs") and "Prepare a workflow confirmation" in payload["message"]:
+            return {
+                "agent_run_id": "agent_run_confirm",
+                "status": "confirmation_required",
+                "intent": "run_workflow",
+                "selected_skill": "image-agent-workflow-runner",
+                "project_id": 7,
+                "confirmation": {
+                    "project_id": 7,
+                    "series_id": 1,
+                    "workflow_type": "bold_fmriprep_xcpd",
+                },
+                "production_task_created": False,
+            }
         if url.endswith("/agent/runs"):
             return {
                 "agent_run_id": "agent_run_456",
                 "status": "answered",
                 "intent": "answer_question",
                 "selected_skill": "image-agent-operator",
+                "model_gateway_access": "openai_sdk_gateway",
+                "safe_metadata": {},
                 "project_id": 7,
             }
         raise AssertionError(f"unexpected request: {url}")
@@ -2514,9 +3142,11 @@ def test_smoke_remote_agent_rejects_vendor_coverage_catalog_curated_source_drift
     assert "RAG vendor coverage catalog failed: vendors must match curated_sources" in str(exc.value)
 
 
-def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(capsys, monkeypatch):
+def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(capsys, monkeypatch, tmp_path):
     smoke = _load_smoke_module()
     verifier = _load_verifier_module()
+    upload_file = tmp_path / "sub-01_bold.nii.gz"
+    upload_file.write_bytes(b"bold")
 
     native_artifacts = [
         {
@@ -2573,7 +3203,15 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
         if url.endswith("/agent/model/status"):
             return {
                 "configured": True,
-                "provider": "OpenAI",
+                "provider": "rawchat",
+                "provider_profile": "rawchat",
+                "model": "gpt-5.5",
+                "wire_api": "responses",
+                "capabilities": {
+                    "text": True,
+                    "structured_json": True,
+                    "model_tool_loop": True,
+                },
                 "deployment": {
                     "backend_runtime_mode": "remote",
                     "model_gateway_access": "ssh_reverse_tunnel",
@@ -2600,12 +3238,28 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
                 "answer": "workflow_eligibility remains authoritative for launchability.",
                 "citations": [{"path": "docs/rag/workflows/workflow_launchability_matrix.md"}],
             }
+        if url.endswith("/agent/runs") and "Prepare a workflow confirmation" in payload["message"]:
+            return {
+                "agent_run_id": "agent_run_confirm",
+                "status": "confirmation_required",
+                "intent": "run_workflow",
+                "selected_skill": "image-agent-workflow-runner",
+                "project_id": 7,
+                "confirmation": {
+                    "project_id": 7,
+                    "series_id": 1,
+                    "workflow_type": "bold_fmriprep_xcpd",
+                },
+                "production_task_created": False,
+            }
         if url.endswith("/agent/runs"):
             return {
                 "agent_run_id": "agent_run_456",
                 "status": "answered",
                 "intent": "answer_question",
                 "selected_skill": "image-agent-operator",
+                "model_gateway_access": "openai_sdk_gateway",
+                "safe_metadata": {},
                 "project_id": 7,
             }
         if url.endswith("/projects/7/series"):
@@ -2637,6 +3291,15 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
                     ],
                 },
             }
+        if method == "POST" and url.endswith("/series/1/run"):
+            assert payload == {"workflow_type": "bold_fmriprep_xcpd"}
+            return {
+                "id": 114,
+                "project_id": 7,
+                "series_id": 1,
+                "workflow_type": "bold_fmriprep_xcpd",
+                "status": "queued",
+            }
         if url.endswith("/tasks/114"):
             return {
                 "id": 114,
@@ -2657,6 +3320,23 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
             return _task_result_summary(workflow_type="bold_fmriprep_xcpd", modality="BOLD")
         raise AssertionError(f"unexpected request: {url}")
 
+    def fake_upload_nifti(base, project_id, path):
+        assert base == "http://api.local"
+        assert project_id == 7
+        assert path == upload_file
+        return {
+            "series": {
+                "id": 1,
+                "project_id": 7,
+                "modality": "BOLD",
+                "sequence_label": "BOLD",
+                "workflow_eligibility": {
+                    **_good_workflow_eligibility(),
+                    "runnable_workflows": [{"workflow_type": "bold_fmriprep_xcpd"}],
+                },
+            }
+        }
+
     def fake_request_bytes(url):
         if url.endswith("/fmriprep/sub-01.html") or url.endswith("/reports/index.html"):
             return b"<html>report</html>", "text/html"
@@ -2668,13 +3348,20 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
 
     monkeypatch.setattr(smoke, "_request", fake_request)
     monkeypatch.setattr(smoke, "_request_bytes", fake_request_bytes)
+    monkeypatch.setattr(smoke, "_upload_nifti", fake_upload_nifti)
 
     smoke.main(
-        [
-            "--api-base",
-            "http://api.local",
-            "--require-model",
-            "--require-project-agent-context",
+                [
+                    "--api-base",
+                    "http://api.local",
+                    "--require-model",
+                    "--expected-model-wire-api",
+                    "responses",
+                    "--expected-model-provider-profile",
+                    "rawchat",
+                    "--require-model-tool-loop",
+                    "--require-project-agent-context",
+            "--require-agent-workflow-confirmation",
             "--require-deployment-identity",
             "--require-production-readiness",
             "--deployment-id",
@@ -2687,7 +3374,15 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
             "--require-vendor-pointer-integrity",
             "--require-real-evidence-ids",
             "--require-completed-upload",
+            "--require-uploaded-series",
+            "--upload-nifti-file",
+            str(upload_file),
             "--require-completed-task",
+            "--require-launched-task",
+            "--launch-series-id",
+            "1",
+            "--launch-workflow-type",
+            "bold_fmriprep_xcpd",
             "--require-launchability-matrix",
             "--require-container-native-qc",
             "--min-native-qc-images",
@@ -2708,6 +3403,8 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
     report = verifier.verify_acceptance_payload(payload)
 
     assert report["status"] == "passed"
+    assert report["checked"]["launched_task_status"] == "passed"
+    assert report["checked"]["agent_workflow_confirmation_status"] == "passed"
     assert report["checked"]["container_native_qc_status"] == "passed"
     assert report["checked"]["scientific_report_artifacts_status"] == "passed"
 
@@ -2916,6 +3613,7 @@ def test_smoke_remote_agent_validates_dataset_inventory_workflow_eligibility(cap
     assert payload["upload_inventory_contract_status"] == "passed"
     assert payload["upload_inventory_status"] == "completed"
     assert payload["upload_inventory_series_with_workflow_eligibility"] == 1
+    assert payload["upload_inventory_series_ids"] == [5]
     assert payload["upload_inventory_modalities"] == ["T1"]
     assert any(call[1].endswith("/projects/7/datasets/22/inventory") for call in calls)
 

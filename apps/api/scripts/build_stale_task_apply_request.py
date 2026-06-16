@@ -121,17 +121,33 @@ def build_apply_request(
     strict_smoke = _api_command(
         (
             "scripts/smoke_remote_agent.py --api-base http://127.0.0.1:8000 "
-            "--require-model --require-deployment-identity --deployment-id <accepted_release_or_commit> "
+            "--require-model --expected-model-wire-api responses "
+            "--expected-model-provider-profile rawchat --require-model-tool-loop "
+            "--require-project-agent-context --require-agent-workflow-confirmation "
+            "--require-deployment-identity --require-production-readiness "
+            "--deployment-id <accepted_release_or_commit> "
+            "--expected-health-version <expected_health_version> "
             "--min-documents 60 --min-chunks 200 --require-raw-source-policy "
             "--require-vendor-pointer-integrity --require-real-evidence-ids "
+            "--require-completed-upload --require-uploaded-series "
+            "--upload-nifti-file <remote_nifti_file> "
+            "--require-completed-task --require-launched-task "
+            "--launch-workflow-type <real_registered_workflow_type> "
+            "--wait-task-completion-timeout-seconds 21600 --wait-task-completion-poll-seconds 30 "
             "--require-launchability-matrix --require-container-native-qc --min-native-qc-images 1 "
             "--require-scientific-report-artifacts --min-scientific-report-images 1 "
             "--project-id <project_id> --upload-session-id <upload_session_id> "
-            f"--task-id <completed_task_id> --output-json {strict_smoke_json}"
+            f"--output-json {strict_smoke_json}"
         )
     )
     strict_smoke_verify = _api_command(
         f"scripts/verify_remote_smoke_acceptance.py {strict_smoke_json} --max-age-hours {max_age_hours:g}"
+    )
+    strict_smoke_env_export = _api_command(
+        (
+            f"scripts/verify_remote_smoke_acceptance.py {strict_smoke_json} "
+            f"--max-age-hours {max_age_hours:g} --emit-fast-launch-env"
+        )
     )
 
     return {
@@ -178,7 +194,7 @@ def build_apply_request(
             },
             {
                 "id": "run_strict_remote_smoke_acceptance",
-                "mutates_remote_state": False,
+                "mutates_remote_state": True,
                 "command": strict_smoke,
                 "expected_output_json": strict_smoke_json,
             },
@@ -187,6 +203,12 @@ def build_apply_request(
                 "mutates_remote_state": False,
                 "command": strict_smoke_verify,
                 "expected_success": "status=passed",
+            },
+            {
+                "id": "emit_fast_launch_acceptance_env_after_strict_verify",
+                "mutates_remote_state": False,
+                "command": strict_smoke_env_export,
+                "expected_success": "IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_STATUS=passed",
             },
         ],
         "safety_invariants": [

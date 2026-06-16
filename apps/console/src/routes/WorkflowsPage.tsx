@@ -9,29 +9,44 @@ import {
   Play,
   Zap
 } from 'lucide-react';
-import { useParams } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { PageHeader } from '../components/ui/PageHeader';
 import { api } from '../lib/api';
 import { queryKeys } from '../lib/query';
+import type { Task } from '../lib/types';
 import { getWorkflowEligibility, groupWorkflows, normalizeWorkflowList, selectQsiprepTaskId } from '../lib/workflows';
 
 export function WorkflowsPage() {
   const projectId = Number(useParams().projectId);
   const queryClient = useQueryClient();
+  const [lastStartedTask, setLastStartedTask] = useState<Task | null>(null);
+  const [launchError, setLaunchError] = useState('');
   const { data: workflowPayload } = useQuery({ queryFn: api.listWorkflows, queryKey: queryKeys.workflows });
-  const { data: series = [] } = useQuery({ enabled: Boolean(projectId), queryFn: () => api.listSeries(projectId), queryKey: queryKeys.series(projectId) });
-  const { data: tasks = [] } = useQuery({ enabled: Boolean(projectId), queryFn: () => api.listProjectTasks(projectId), queryKey: queryKeys.tasks(projectId) });
+  const seriesQuery = useQuery({ enabled: Boolean(projectId), queryFn: () => api.listSeries(projectId), queryKey: queryKeys.series(projectId), retry: false });
+  const tasksQuery = useQuery({ enabled: Boolean(projectId), queryFn: () => api.listProjectTasks(projectId), queryKey: queryKeys.tasks(projectId), retry: false });
+  const series = seriesQuery.data || [];
+  const tasks = tasksQuery.data || [];
 
   const runWorkflow = useMutation({
     mutationFn: ({ qsiprepTaskId, seriesId, workflowType }: { qsiprepTaskId?: number | null; seriesId: number; workflowType: string }) =>
       qsiprepTaskId == null ? api.runSeries(seriesId, workflowType) : api.runSeries(seriesId, workflowType, qsiprepTaskId),
-    onSuccess: () => {
+    onSuccess: (task) => {
+      setLaunchError('');
+      setLastStartedTask(task);
       queryClient.invalidateQueries({ queryKey: queryKeys.tasks(projectId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.task(task.id) });
+    },
+    onError: (error) => {
+      setLastStartedTask(null);
+      setLaunchError(error instanceof Error ? error.message : 'Workflow launch failed.');
     },
   });
 
   const grouped = groupWorkflows(normalizeWorkflowList(workflowPayload));
+  const projectDataError = seriesQuery.error || tasksQuery.error;
+  const projectDataErrorMessage = projectDataError instanceof Error ? projectDataError.message : 'Project data could not be loaded.';
 
   const getIcon = (group: string) => {
     switch (group) {
@@ -42,6 +57,31 @@ export function WorkflowsPage() {
     }
   };
 
+  if (seriesQuery.isError || tasksQuery.isError) {
+    return (
+      <div className="max-w-6xl mx-auto space-y-8">
+        <PageHeader
+          description="Run backend-supported workflows only when prerequisites are satisfied."
+          eyebrow="Execution"
+          title="Workflows"
+        />
+
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800">
+          <div className="flex items-center gap-2 text-base font-semibold text-amber-900">
+            <Info className="w-4 h-4 shrink-0" /> Project data unavailable
+          </div>
+          <p className="mt-2">{projectDataErrorMessage}</p>
+          <Link
+            className="mt-4 inline-flex items-center gap-2 rounded-md bg-white px-3 py-2 text-xs font-semibold text-amber-800 shadow-sm ring-1 ring-amber-200 hover:bg-amber-100"
+            to="/projects"
+          >
+            Switch project
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-6xl mx-auto space-y-8">
       <PageHeader
@@ -49,6 +89,32 @@ export function WorkflowsPage() {
         eyebrow="Execution"
         title="Workflows"
       />
+
+      {launchError ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <div className="flex items-center gap-2 font-semibold text-red-800">
+            <Info className="h-4 w-4 shrink-0" /> Workflow launch failed
+          </div>
+          <p className="mt-1 text-xs leading-5">{launchError}</p>
+        </div>
+      ) : null}
+
+      {lastStartedTask ? (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+          <div className="flex items-center gap-2 font-semibold text-emerald-900">
+            <CheckCircle2 className="h-4 w-4 shrink-0" /> Task #{lastStartedTask.id} started
+          </div>
+          <p className="mt-1 text-xs leading-5 text-emerald-700">
+            The backend created a deterministic {lastStartedTask.workflow_type} task. Track queue, runtime, logs, and completion from the task page.
+          </p>
+          <Link
+            className="mt-3 inline-flex items-center gap-2 rounded-md bg-white px-3 py-2 text-xs font-semibold text-emerald-800 shadow-sm ring-1 ring-emerald-200 hover:bg-emerald-100"
+            to={`/projects/${projectId}/tasks`}
+          >
+            View task progress <ChevronRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+      ) : null}
 
       <div className="space-y-12">
         {Object.entries(grouped).map(([group, workflows]) => workflows.length > 0 && (

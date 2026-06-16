@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
+import re
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -45,6 +46,13 @@ SAFE_NESTED_AGENT_FIELDS = {
         "action_lane",
     },
 }
+HOST_PATH_PLACEHOLDER = "[redacted-host-path]"
+SECRET_PLACEHOLDER = "[redacted-secret]"
+_WINDOWS_HOST_PATH_RE = re.compile(r"[A-Za-z]:[\\/][^\s`\"')\]}]+")
+_UNIX_HOST_PATH_RE = re.compile(r"/(?:home|Users|mnt|data|tmp|var|srv)/[^\s`\"')\]}]+")
+_RELATIVE_PROJECT_PATH_RE = re.compile(r"(^|[\s`\"'(\[{])data[\\/]+projects[\\/]+[^\s`\"')\]}]+")
+_SECRET_RE = re.compile(r"sk-[A-Za-z0-9._-]+")
+_ENV_SECRET_RE = re.compile(r"((?:OPENAI|DEEPSEEK|IMAGE_AGENT_SUDO)_?[A-Z_]*\s*[:=]\s*)[^\s\"',}]+", re.IGNORECASE)
 
 
 class AgentRunStatus(str, Enum):
@@ -271,7 +279,7 @@ def build_agent_run_response_payload(
                 "finished_at": ledger.get("finished_at"),
             }
         )
-    return {key: value for key, value in payload.items() if value is not None}
+    return {key: _sanitize_public_value(value) for key, value in payload.items() if value is not None}
 
 
 def agent_api_error_detail(code: str, message: str, *, agent_run_id: str | None = None) -> dict[str, Any]:
@@ -330,6 +338,33 @@ def _optional_safe_nested_dict(kind: str, value: Any) -> dict[str, Any] | None:
     return safe or None
 
 
+def _sanitize_public_value(value: Any) -> Any:
+    if isinstance(value, str):
+        return _redact_public_text(value)
+    if isinstance(value, list):
+        return [_sanitize_public_value(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            key: _sanitize_public_value(item)
+            for key, item in value.items()
+            if isinstance(key, str) and not _is_sensitive_public_key(key)
+        }
+    return value
+
+
+def _redact_public_text(value: str) -> str:
+    text = _WINDOWS_HOST_PATH_RE.sub(HOST_PATH_PLACEHOLDER, value)
+    text = _UNIX_HOST_PATH_RE.sub(HOST_PATH_PLACEHOLDER, text)
+    text = _RELATIVE_PROJECT_PATH_RE.sub(lambda match: f"{match.group(1)}{HOST_PATH_PLACEHOLDER}", text)
+    text = _SECRET_RE.sub(SECRET_PLACEHOLDER, text)
+    return _ENV_SECRET_RE.sub(lambda match: f"{match.group(1)}{SECRET_PLACEHOLDER}", text)
+
+
+def _is_sensitive_public_key(key: str) -> bool:
+    normalized = key.lower()
+    return normalized in {"openai_key", "api_key", "secret", "token", "password"}
+
+
 def _is_safe_nested_scalar(value: Any) -> bool:
     if value is None or isinstance(value, (bool, int, float)):
         return True
@@ -347,6 +382,8 @@ def _is_safe_nested_string(value: Any) -> bool:
     if normalized.startswith("/") or ".." in normalized.split("/"):
         return False
     if len(normalized) >= 3 and normalized[1:3] == ":/":
+        return False
+    if normalized.startswith("data/projects/") or "/data/projects/" in normalized:
         return False
     return True
 

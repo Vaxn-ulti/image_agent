@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import mimetypes
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote, urlsplit, urlunsplit
+from uuid import uuid4
 
 
 LAUNCHABILITY_MATRIX_SOURCE = "docs/rag/workflows/workflow_launchability_matrix.md"
@@ -24,6 +27,7 @@ CONTAINER_NATIVE_QC_OFFICIAL_SOURCE_IDS = frozenset(
         "docs/rag/vendor/xcp_d_official_outputs.md",
     }
 )
+DEBUG_ONLY_WORKFLOWS = frozenset({"t1_deepprep_mock"})
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SOURCE_MARKER_KEYS = frozenset(
     {
@@ -69,6 +73,41 @@ def _request_bytes(url: str) -> tuple[bytes, str]:
         raise SystemExit(f"GET {url} failed: HTTP {exc.code} {body}") from exc
 
 
+def _request_multipart_file(url: str, *, field_name: str, path: Path, content_type: str | None = None) -> dict:
+    if not path.is_file():
+        raise SystemExit(f"upload file does not exist: {path}")
+    boundary = f"imageagent{uuid4().hex}"
+    filename = path.name
+    effective_content_type = content_type or mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    file_bytes = path.read_bytes()
+    header = (
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="{field_name}"; filename="{filename}"\r\n'
+        f"Content-Type: {effective_content_type}\r\n\r\n"
+    ).encode("utf-8")
+    footer = f"\r\n--{boundary}--\r\n".encode("utf-8")
+    body = header + file_bytes + footer
+    req = urllib.request.Request(
+        url,
+        data=body,
+        headers={
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+            "Content-Length": str(len(body)),
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=300) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        response_body = exc.read().decode("utf-8", errors="replace")
+        raise SystemExit(f"POST {url} failed: HTTP {exc.code} {response_body}") from exc
+
+
+def _upload_nifti(base: str, project_id: int, path: Path) -> dict:
+    return _request_multipart_file(f"{base}/projects/{project_id}/upload", field_name="file", path=path)
+
+
 def _require(condition: bool, message: str) -> None:
     if not condition:
         raise SystemExit(message)
@@ -85,7 +124,7 @@ def _is_privacy_safe_symbol(value: object) -> bool:
 
 def _safe_model_status(status: dict) -> dict:
     safe: dict = {"configured": bool(status.get("configured"))}
-    for key in ("provider", "model", "review_model", "wire_api", "reasoning_effort"):
+    for key in ("provider", "provider_profile", "model", "review_model", "wire_api", "reasoning_effort"):
         value = status.get(key)
         if isinstance(value, str) and _is_privacy_safe_symbol(value):
             safe[key] = value
@@ -103,6 +142,14 @@ def _safe_model_status(status: dict) -> dict:
     for key in ("context_window", "auto_compact_token_limit"):
         if isinstance(status.get(key), int) and not isinstance(status.get(key), bool):
             safe[key] = status[key]
+    capabilities = status.get("capabilities")
+    if isinstance(capabilities, dict):
+        safe_capabilities = {}
+        for key in ("text", "structured_json", "model_tool_loop"):
+            if isinstance(capabilities.get(key), bool):
+                safe_capabilities[key] = capabilities[key]
+        if safe_capabilities:
+            safe["capabilities"] = safe_capabilities
     deployment = status.get("deployment")
     if isinstance(deployment, dict):
         safe_deployment = {}
@@ -112,6 +159,19 @@ def _safe_model_status(status: dict) -> dict:
                 safe_deployment[key] = value
         if safe_deployment:
             safe["deployment"] = safe_deployment
+    gateway_diagnostics = status.get("gateway_diagnostics")
+    if isinstance(gateway_diagnostics, dict):
+        safe_gateway_diagnostics = {}
+        for key, value in gateway_diagnostics.items():
+            if (
+                isinstance(key, str)
+                and isinstance(value, str)
+                and _is_privacy_safe_symbol(key)
+                and _is_privacy_safe_symbol(value)
+            ):
+                safe_gateway_diagnostics[key] = value
+        if safe_gateway_diagnostics:
+            safe["gateway_diagnostics"] = safe_gateway_diagnostics
     return safe
 
 
@@ -348,6 +408,38 @@ def _validate_agent_run(run: dict) -> None:
     _require(run.get("status") == "answered", f"agent run smoke failed: status={run.get('status')}")
     _require(bool(run.get("intent") or run.get("agent_intent")), "agent run smoke failed: missing intent")
     _require(bool(run.get("selected_skill")), "agent run smoke failed: missing selected_skill")
+    safe_metadata = run.get("safe_metadata") if isinstance(run.get("safe_metadata"), dict) else {}
+    _require(
+        safe_metadata.get("fallback_reason") != "model_gateway_unconfigured",
+        "agent run smoke failed: model gateway fallback was used",
+    )
+    _require(
+        run.get("selected_skill") != "backend-status-fallback",
+        "agent run smoke failed: model gateway fallback was used",
+    )
+    _require(
+        _is_privacy_safe_symbol(run.get("model_gateway_access")),
+        "agent run smoke failed: missing model_gateway_access",
+    )
+
+
+def _safe_agent_metadata(run: dict | None) -> dict:
+    if not run or not isinstance(run.get("safe_metadata"), dict):
+        return {}
+    safe: dict = {}
+    for key, value in run["safe_metadata"].items():
+        if (
+            isinstance(key, str)
+            and _is_privacy_safe_symbol(key)
+            and (
+                value is None
+                or isinstance(value, bool)
+                or (isinstance(value, int) and not isinstance(value, bool))
+                or (isinstance(value, str) and _is_privacy_safe_symbol(value))
+            )
+        ):
+            safe[key] = value
+    return safe
 
 
 def _validate_agent_project_context(run: dict, project_id: int) -> None:
@@ -355,6 +447,57 @@ def _validate_agent_project_context(run: dict, project_id: int) -> None:
         _int_metric(run.get("project_id")) == project_id,
         "agent run project context failed: project_id mismatch",
     )
+
+
+def _validate_agent_workflow_confirmation(
+    run: dict,
+    *,
+    project_id: int,
+    series_id: int,
+    workflow_type: str,
+) -> dict:
+    _require(bool(run.get("agent_run_id")), "agent workflow confirmation failed: missing agent_run_id")
+    _require(
+        run.get("status") == "confirmation_required",
+        f"agent workflow confirmation failed: status={run.get('status')}",
+    )
+    _require(
+        (run.get("intent") or run.get("agent_intent")) == "run_workflow",
+        "agent workflow confirmation failed: intent mismatch",
+    )
+    _require(
+        run.get("selected_skill") == "image-agent-workflow-runner",
+        "agent workflow confirmation failed: selected_skill mismatch",
+    )
+    confirmation = run.get("confirmation") if isinstance(run.get("confirmation"), dict) else {}
+    confirmed_project_id = _int_metric(confirmation.get("project_id"), run.get("project_id"))
+    confirmed_series_id = _int_metric(confirmation.get("series_id"), run.get("series_id"))
+    confirmed_workflow_type = confirmation.get("workflow_type") or run.get("workflow_type")
+    _require(confirmed_project_id == project_id, "agent workflow confirmation failed: project_id mismatch")
+    _require(confirmed_series_id == series_id, "agent workflow confirmation failed: series_id mismatch")
+    _require(
+        confirmed_workflow_type == workflow_type and _is_privacy_safe_symbol(confirmed_workflow_type),
+        "agent workflow confirmation failed: workflow_type mismatch",
+    )
+    production_task_created = run.get("production_task_created")
+    if production_task_created is None and isinstance(run.get("safe_metadata"), dict):
+        production_task_created = run["safe_metadata"].get("production_task_created")
+    if production_task_created is None and confirmation:
+        production_task_created = confirmation.get("production_task_created")
+    _require(
+        production_task_created is False,
+        "agent workflow confirmation failed: production_task_created must be false",
+    )
+    return {
+        "agent_run_id": run["agent_run_id"],
+        "status": "confirmation_required",
+        "intent": "run_workflow",
+        "project_id": confirmed_project_id,
+        "series_id": confirmed_series_id,
+        "workflow_type": confirmed_workflow_type,
+        "selected_skill": run.get("selected_skill"),
+        "production_task_created": False,
+    }
 
 
 def _validate_completed_task(task: dict, task_id: int, project_id: int | None) -> dict:
@@ -377,6 +520,72 @@ def _validate_completed_task(task: dict, task_id: int, project_id: int | None) -
         "task_id": task_id,
         "workflow_type": safe_workflow_type,
     }
+
+
+def _wait_for_completed_task(base: str, task_id: int, *, timeout_seconds: int, poll_seconds: int) -> dict:
+    deadline = time.monotonic() + timeout_seconds
+    last_task = None
+    while True:
+        task = _request("GET", f"{base}/tasks/{task_id}")
+        last_task = task
+        if task.get("status") == "completed":
+            return task
+        if task.get("status") in {"failed", "cancelled"}:
+            raise SystemExit(f"task completion wait failed: task {task_id} status={task.get('status')}")
+        if time.monotonic() >= deadline:
+            raise SystemExit(f"task completion wait timed out: task {task_id} status={task.get('status')}")
+        time.sleep(max(poll_seconds, 1))
+
+
+def _validate_launched_task(task: dict, *, task_id: int, series_id: int, workflow_type: str, project_id: int | None) -> dict:
+    launched_task_id = _int_metric(task.get("id"), task.get("task_id"))
+    _require(launched_task_id == task_id, "launched task check failed: task_id mismatch")
+    launched_series_id = _int_metric(task.get("series_id"))
+    _require(launched_series_id == series_id, "launched task check failed: series_id mismatch")
+    launched_workflow_type = task.get("workflow_type")
+    _require(
+        launched_workflow_type == workflow_type and _is_privacy_safe_symbol(launched_workflow_type),
+        "launched task check failed: workflow_type mismatch",
+    )
+    launched_project_id = _int_metric(task.get("project_id"))
+    if project_id is not None:
+        _require(launched_project_id == project_id, "launched task check failed: project_id mismatch")
+    initial_status = task.get("status")
+    _require(
+        isinstance(initial_status, str) and _is_privacy_safe_symbol(initial_status),
+        "launched task check failed: initial status invalid",
+    )
+    return {
+        "task_id": launched_task_id,
+        "project_id": launched_project_id,
+        "series_id": launched_series_id,
+        "workflow_type": launched_workflow_type,
+        "initial_status": initial_status,
+    }
+
+
+def _validate_uploaded_series(upload_response: dict, *, project_id: int) -> dict:
+    series = upload_response.get("series") if isinstance(upload_response, dict) else None
+    _require(isinstance(series, dict), "uploaded series check failed: series missing")
+    series_id = _int_metric(series.get("id"), series.get("series_id"))
+    _require(series_id > 0, "uploaded series check failed: series_id missing")
+    uploaded_project_id = _int_metric(series.get("project_id"))
+    _require(uploaded_project_id == project_id, "uploaded series check failed: project_id mismatch")
+    modality = series.get("modality")
+    _require(
+        isinstance(modality, str) and _is_privacy_safe_symbol(modality),
+        "uploaded series check failed: modality invalid",
+    )
+    _validate_workflow_eligibility(series.get("workflow_eligibility"), "uploaded series check failed")
+    safe = {
+        "project_id": uploaded_project_id,
+        "series_id": series_id,
+        "modality": modality,
+    }
+    sequence_label = series.get("sequence_label")
+    if isinstance(sequence_label, str) and _is_privacy_safe_symbol(sequence_label):
+        safe["sequence_label"] = sequence_label
+    return safe
 
 
 def _validate_project_series_contract(series: list[dict]) -> dict:
@@ -453,16 +662,24 @@ def _validate_upload_inventory_contract(response: dict, upload_session_id: int) 
     series = inventory.get("series")
     _require(isinstance(series, list), "upload inventory contract failed: series missing")
     _require(bool(series), "upload inventory contract failed: no series found")
+    series_ids = []
     for item in series:
         _validate_workflow_eligibility(
             item.get("workflow_eligibility"),
             "upload inventory contract failed",
         )
+        try:
+            series_id = int(item.get("series_id") or item.get("id") or 0)
+        except (TypeError, ValueError):
+            series_id = 0
+        _require(series_id > 0, "upload inventory contract failed: series id missing")
+        series_ids.append(series_id)
     return {
         "status": "passed",
         "upload_session_id": upload_session_id,
         "inventory_status": inventory.get("inventory_status") or response.get("status"),
         "series_count": len(series),
+        "series_ids": sorted(series_ids),
         "series_with_workflow_eligibility": len(series),
         "modalities": sorted({str(item.get("modality")) for item in series if item.get("modality")}),
     }
@@ -933,9 +1150,27 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--message", default="Summarize the current Image Agent runtime status.")
     parser.add_argument("--require-model", action="store_true", help="Fail if the OpenAI model gateway is not configured.")
     parser.add_argument(
+        "--expected-model-wire-api",
+        help="Optional privacy-safe /agent/model/status wire_api value expected from the deployed API.",
+    )
+    parser.add_argument(
+        "--expected-model-provider-profile",
+        help="Optional privacy-safe /agent/model/status provider_profile expected from the deployed API.",
+    )
+    parser.add_argument(
+        "--require-model-tool-loop",
+        action="store_true",
+        help="Fail unless /agent/model/status.capabilities.model_tool_loop is true.",
+    )
+    parser.add_argument(
         "--require-project-agent-context",
         action="store_true",
         help="Fail unless the live /agent/runs smoke is scoped to --project-id.",
+    )
+    parser.add_argument(
+        "--require-agent-workflow-confirmation",
+        action="store_true",
+        help="Fail unless /agent/runs can prepare a workflow confirmation without creating a production task.",
     )
     parser.add_argument(
         "--require-deployment-identity",
@@ -978,9 +1213,44 @@ def main(argv: Sequence[str] | None = None) -> None:
         help="Fail unless --upload-session-id inventory reports completed upload ingestion.",
     )
     parser.add_argument(
+        "--require-uploaded-series",
+        action="store_true",
+        help="Fail unless smoke uploads --upload-nifti-file through /projects/{project_id}/upload and records the returned series.",
+    )
+    parser.add_argument(
+        "--upload-nifti-file",
+        help="Local NIfTI file path on the remote smoke runner to upload via /projects/{project_id}/upload.",
+    )
+    parser.add_argument(
         "--require-completed-task",
         action="store_true",
         help="Fail unless --task-id resolves to a completed task with safe task status metadata.",
+    )
+    parser.add_argument(
+        "--require-launched-task",
+        action="store_true",
+        help="Fail unless smoke launches a workflow through /series/{series_id}/run and the returned task matches --task-id.",
+    )
+    parser.add_argument(
+        "--launch-series-id",
+        type=int,
+        help="Series id to pass to /series/{series_id}/run when --require-launched-task is enabled.",
+    )
+    parser.add_argument(
+        "--launch-workflow-type",
+        help="Workflow type to pass to /series/{series_id}/run when --require-launched-task is enabled.",
+    )
+    parser.add_argument(
+        "--wait-task-completion-timeout-seconds",
+        type=int,
+        default=0,
+        help="After launch, poll /tasks/{task_id} until completed for this many seconds. Default: no wait.",
+    )
+    parser.add_argument(
+        "--wait-task-completion-poll-seconds",
+        type=int,
+        default=30,
+        help="Polling interval for --wait-task-completion-timeout-seconds.",
     )
     parser.add_argument(
         "--require-launchability-matrix",
@@ -1033,29 +1303,56 @@ def main(argv: Sequence[str] | None = None) -> None:
     args = parser.parse_args(argv)
     if args.upload_session_id is not None and args.project_id is None:
         raise SystemExit("--upload-session-id requires --project-id")
+    if args.require_uploaded_series and (args.project_id is None or not args.upload_nifti_file):
+        raise SystemExit("--require-uploaded-series requires --project-id and --upload-nifti-file")
     if args.require_project_agent_context and args.project_id is None:
         raise SystemExit("--require-project-agent-context requires --project-id")
+    if args.require_agent_workflow_confirmation and args.project_id is None:
+        raise SystemExit("--require-agent-workflow-confirmation requires --project-id")
+    if args.require_agent_workflow_confirmation and not args.launch_workflow_type:
+        raise SystemExit("--require-agent-workflow-confirmation requires --launch-workflow-type")
     if args.require_completed_upload and (args.project_id is None or args.upload_session_id is None):
         raise SystemExit("--require-completed-upload requires --project-id and --upload-session-id")
     if args.require_real_evidence_ids and (
-        args.project_id is None or args.upload_session_id is None or args.task_id is None
+        args.project_id is None or args.upload_session_id is None or (args.task_id is None and not args.require_launched_task)
     ):
-        raise SystemExit("--require-real-evidence-ids requires --project-id, --upload-session-id, and --task-id")
+        raise SystemExit(
+            "--require-real-evidence-ids requires --project-id, --upload-session-id, and --task-id "
+            "unless --require-launched-task will supply the backend task id"
+        )
     if args.require_deployment_identity and not args.deployment_id:
         raise SystemExit("--require-deployment-identity requires --deployment-id")
     if args.deployment_id is not None and not _is_privacy_safe_symbol(args.deployment_id):
         raise SystemExit("--deployment-id must be a privacy-safe release id or commit")
     if args.expected_health_version is not None and not _is_privacy_safe_symbol(args.expected_health_version):
         raise SystemExit("--expected-health-version must be a privacy-safe version")
-    if args.require_container_native_qc and args.task_id is None:
+    if args.expected_model_wire_api is not None and not _is_privacy_safe_symbol(args.expected_model_wire_api):
+        raise SystemExit("--expected-model-wire-api must be privacy-safe")
+    if args.expected_model_provider_profile is not None and not _is_privacy_safe_symbol(args.expected_model_provider_profile):
+        raise SystemExit("--expected-model-provider-profile must be privacy-safe")
+    if args.require_container_native_qc and args.task_id is None and not args.require_launched_task:
         raise SystemExit("--require-container-native-qc requires --task-id")
-    if args.require_completed_task and args.task_id is None:
+    if args.require_completed_task and args.task_id is None and not args.require_launched_task:
         raise SystemExit("--require-completed-task requires --task-id")
-    if args.min_native_qc_images > 0 and args.task_id is None:
+    if args.require_launched_task and (
+        (args.launch_series_id is None and not args.require_uploaded_series) or not args.launch_workflow_type
+    ):
+        raise SystemExit("--require-launched-task requires --launch-series-id and --launch-workflow-type")
+    if args.launch_series_id is not None and args.launch_series_id <= 0:
+        raise SystemExit("--launch-series-id must be a positive integer")
+    if args.launch_workflow_type is not None and not _is_privacy_safe_symbol(args.launch_workflow_type):
+        raise SystemExit("--launch-workflow-type must be privacy-safe")
+    if args.require_launched_task and args.launch_workflow_type in DEBUG_ONLY_WORKFLOWS:
+        raise SystemExit(f"strict deployment acceptance cannot use debug-only workflow {args.launch_workflow_type}")
+    if args.wait_task_completion_timeout_seconds < 0:
+        raise SystemExit("--wait-task-completion-timeout-seconds must be non-negative")
+    if args.wait_task_completion_poll_seconds <= 0:
+        raise SystemExit("--wait-task-completion-poll-seconds must be a positive integer")
+    if args.min_native_qc_images > 0 and args.task_id is None and not args.require_launched_task:
         raise SystemExit("--min-native-qc-images requires --task-id")
-    if args.require_scientific_report_artifacts and args.task_id is None:
+    if args.require_scientific_report_artifacts and args.task_id is None and not args.require_launched_task:
         raise SystemExit("--require-scientific-report-artifacts requires --task-id")
-    if args.min_scientific_report_images > 0 and args.task_id is None:
+    if args.min_scientific_report_images > 0 and args.task_id is None and not args.require_launched_task:
         raise SystemExit("--min-scientific-report-images requires --task-id")
 
     base = args.api_base.rstrip("/")
@@ -1087,6 +1384,24 @@ def main(argv: Sequence[str] | None = None) -> None:
         }
     status = _request("GET", f"{base}/agent/model/status")
     safe_model_status = _safe_model_status(status)
+    if args.expected_model_wire_api is not None:
+        actual_wire_api = safe_model_status.get("wire_api")
+        _require(
+            actual_wire_api == args.expected_model_wire_api,
+            f"model wire_api {actual_wire_api or 'missing'} did not match --expected-model-wire-api {args.expected_model_wire_api}",
+        )
+    if args.expected_model_provider_profile is not None:
+        actual_profile = safe_model_status.get("provider_profile")
+        _require(
+            actual_profile == args.expected_model_provider_profile,
+            f"model provider_profile {actual_profile or 'missing'} did not match --expected-model-provider-profile {args.expected_model_provider_profile}",
+        )
+    if args.require_model_tool_loop:
+        capabilities = safe_model_status.get("capabilities") if isinstance(safe_model_status.get("capabilities"), dict) else {}
+        _require(
+            capabilities.get("model_tool_loop") is True,
+            "model capabilities.model_tool_loop must be true when --require-model-tool-loop is set",
+        )
     rag_before = _request("GET", f"{base}/agent/rag/status")
     rag = _request("POST", f"{base}/agent/rag/rebuild")
     rag_after = _request("GET", f"{base}/agent/rag/status")
@@ -1127,6 +1442,50 @@ def main(argv: Sequence[str] | None = None) -> None:
     completed_task = None
     task_workflow_selection = None
     upload_inventory_contract = None
+    launched_task = None
+    uploaded_series = None
+    agent_workflow_confirmation = None
+    if args.require_uploaded_series:
+        uploaded_series = _validate_uploaded_series(
+            _upload_nifti(base, args.project_id, Path(args.upload_nifti_file)),
+            project_id=args.project_id,
+        )
+        if args.launch_series_id is not None and args.launch_series_id != uploaded_series["series_id"]:
+            raise SystemExit("--launch-series-id must match the series returned by --require-uploaded-series")
+        if args.launch_series_id is None:
+            args.launch_series_id = uploaded_series["series_id"]
+    if args.require_agent_workflow_confirmation:
+        _require(
+            args.launch_series_id is not None,
+            "--require-agent-workflow-confirmation requires --launch-series-id or --require-uploaded-series",
+        )
+        workflow_message = (
+            f"Prepare a workflow confirmation for series {args.launch_series_id} using workflow "
+            f"{args.launch_workflow_type}. Do not launch it."
+        )
+        agent_workflow_confirmation = _validate_agent_workflow_confirmation(
+            _request("POST", f"{base}/agent/runs", {"project_id": args.project_id, "message": workflow_message}),
+            project_id=args.project_id,
+            series_id=args.launch_series_id,
+            workflow_type=args.launch_workflow_type,
+        )
+    if args.require_launched_task:
+        launched_task_response = _request(
+            "POST",
+            f"{base}/series/{args.launch_series_id}/run",
+            {"workflow_type": args.launch_workflow_type},
+        )
+        launched_task_id = _int_metric(launched_task_response.get("id"), launched_task_response.get("task_id"))
+        _require(launched_task_id is not None and launched_task_id > 0, "launched task check failed: task_id missing")
+        if args.task_id is None:
+            args.task_id = launched_task_id
+        launched_task = _validate_launched_task(
+            launched_task_response,
+            task_id=args.task_id,
+            series_id=args.launch_series_id,
+            workflow_type=args.launch_workflow_type,
+            project_id=args.project_id,
+        )
     if args.project_id is not None:
         project_series = _request("GET", f"{base}/projects/{args.project_id}/series")
         project_contract = _validate_project_series_contract(
@@ -1141,8 +1500,18 @@ def main(argv: Sequence[str] | None = None) -> None:
                 _validate_completed_upload_inventory(upload_inventory_contract)
     if args.task_id is not None:
         if args.require_completed_task:
+            completed_task_response = (
+                _wait_for_completed_task(
+                    base,
+                    args.task_id,
+                    timeout_seconds=args.wait_task_completion_timeout_seconds,
+                    poll_seconds=args.wait_task_completion_poll_seconds,
+                )
+                if args.wait_task_completion_timeout_seconds > 0
+                else _request("GET", f"{base}/tasks/{args.task_id}")
+            )
             completed_task = _validate_completed_task(
-                _request("GET", f"{base}/tasks/{args.task_id}"),
+                completed_task_response,
                 args.task_id,
                 args.project_id,
             )
@@ -1178,6 +1547,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         "api_base": base,
         "require_model": bool(args.require_model),
         "require_project_agent_context": bool(args.require_project_agent_context),
+        "require_agent_workflow_confirmation": bool(args.require_agent_workflow_confirmation),
         "require_deployment_identity": bool(args.require_deployment_identity),
         "require_production_readiness": bool(args.require_production_readiness),
         "deployment_id": args.deployment_id,
@@ -1187,7 +1557,9 @@ def main(argv: Sequence[str] | None = None) -> None:
         "require_vendor_pointer_integrity": bool(args.require_vendor_pointer_integrity),
         "require_real_evidence_ids": bool(args.require_real_evidence_ids),
         "require_completed_upload": bool(args.require_completed_upload),
+        "require_uploaded_series": bool(args.require_uploaded_series),
         "require_completed_task": bool(args.require_completed_task),
+        "require_launched_task": bool(args.require_launched_task),
         "require_launchability_matrix": bool(args.require_launchability_matrix),
         "require_container_native_qc": bool(args.require_container_native_qc),
         "min_native_qc_images": max(args.min_native_qc_images, 0),
@@ -1196,9 +1568,17 @@ def main(argv: Sequence[str] | None = None) -> None:
         "project_id": args.project_id,
         "task_id": args.task_id,
         "upload_session_id": args.upload_session_id,
+        "uploaded_series_id": uploaded_series.get("series_id") if uploaded_series else None,
+        "launch_series_id": args.launch_series_id,
     }
     if args.expected_health_version is not None:
         smoke_gate["expected_health_version"] = args.expected_health_version
+    if args.expected_model_wire_api is not None:
+        smoke_gate["expected_model_wire_api"] = args.expected_model_wire_api
+    if args.expected_model_provider_profile is not None:
+        smoke_gate["expected_model_provider_profile"] = args.expected_model_provider_profile
+    if args.require_model_tool_loop:
+        smoke_gate["require_model_tool_loop"] = True
 
     payload = {
         "generated_at_utc": _generated_at_utc(),
@@ -1237,8 +1617,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         "rag_after": rag_after.get("index"),
         "agent_run_status": run.get("status") if run else "skipped",
         "agent_run_id": run.get("agent_run_id") if run else None,
+        "agent_model_gateway_status": "passed" if run else "skipped",
+        "agent_model_gateway_access": run.get("model_gateway_access") if run else None,
+        "agent_safe_metadata": _safe_agent_metadata(run),
         "agent_project_context_status": "passed" if args.require_project_agent_context else "skipped",
         "agent_run_project_id": run.get("project_id") if run else None,
+        "agent_workflow_confirmation_status": "passed" if agent_workflow_confirmation else "skipped",
+        "agent_workflow_confirmation": agent_workflow_confirmation,
         "intent": (run.get("intent") or run.get("agent_intent")) if run else None,
         "agent_intent": (run.get("agent_intent") or run.get("intent")) if run else None,
         "selected_skill": run.get("selected_skill") if run else None,
@@ -1252,6 +1637,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         else None,
         "task_status_status": "passed" if args.require_completed_task else "skipped",
         "task_status": completed_task,
+        "launched_task_status": "passed" if launched_task else "skipped",
+        "launched_task": launched_task,
         "task_workflow_selection_status": "passed" if task_workflow_selection else "skipped",
         "task_workflow_selection": task_workflow_selection,
         "rag_launchability_matrix_status": launchability_matrix.get("status") if launchability_matrix else "skipped",
@@ -1268,8 +1655,11 @@ def main(argv: Sequence[str] | None = None) -> None:
         "upload_inventory_session_id": upload_inventory_contract.get("upload_session_id") if upload_inventory_contract else None,
         "upload_inventory_status": upload_inventory_contract.get("inventory_status") if upload_inventory_contract else None,
         "upload_inventory_series_count": upload_inventory_contract.get("series_count") if upload_inventory_contract else 0,
+        "upload_inventory_series_ids": upload_inventory_contract.get("series_ids") if upload_inventory_contract else [],
         "upload_inventory_series_with_workflow_eligibility": upload_inventory_contract.get("series_with_workflow_eligibility") if upload_inventory_contract else 0,
         "upload_inventory_modalities": upload_inventory_contract.get("modalities") if upload_inventory_contract else [],
+        "uploaded_series_status": "passed" if uploaded_series else "skipped",
+        "uploaded_series": uploaded_series,
         "task_artifact_manifest_status": task_artifact_manifest.get("status") if task_artifact_manifest else "skipped",
         "task_result_summary_status": "passed" if task_result_summary else "skipped",
         "task_result_summary": task_result_summary,

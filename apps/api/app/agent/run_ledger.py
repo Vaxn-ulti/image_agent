@@ -273,6 +273,9 @@ def _safe_result_metadata(result: dict[str, Any]) -> dict[str, Any]:
     if confirmation:
         metadata["confirmation_fingerprint"] = confirmation_fingerprint(confirmation)
     safe_metadata = result.get("safe_metadata") if isinstance(result.get("safe_metadata"), dict) else {}
+    fallback_reason = _safe_symbol_value(safe_metadata.get("fallback_reason"))
+    if fallback_reason:
+        metadata["fallback_reason"] = fallback_reason
     normalized_from = _safe_symbol_value(safe_metadata.get("contract_status_normalized_from"))
     if normalized_from:
         metadata["contract_status_normalized_from"] = normalized_from
@@ -375,6 +378,9 @@ def _sanitize_safe_metadata(value: dict[str, Any]) -> dict[str, Any]:
         safe["rag_mode"] = rag_mode
     if isinstance(value.get("production_task_created"), bool):
         safe["production_task_created"] = value["production_task_created"]
+    fallback_reason = _safe_symbol_value(value.get("fallback_reason"))
+    if fallback_reason:
+        safe["fallback_reason"] = fallback_reason
     fingerprint = _str_or_none(value.get("confirmation_fingerprint"))
     if fingerprint and re.fullmatch(r"[a-f0-9]{64}", fingerprint):
         safe["confirmation_fingerprint"] = fingerprint

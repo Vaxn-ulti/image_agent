@@ -1,5 +1,5 @@
 import { flattenOutputs, getReportArtifacts, groupArtifactsByFeature, isPreviewableFigure } from '../../lib/resultArtifacts';
-import type { ResultSummary } from '../../lib/types';
+import type { ArtifactManifest, OutputItem, ResultSummary } from '../../lib/types';
 import { ArtifactTable } from './ArtifactTable';
 import { BoldResultView } from './BoldResultView';
 import { DwiResultView } from './DwiResultView';
@@ -10,14 +10,35 @@ import { T1ResultView } from './T1ResultView';
 
 type ResultStudioLayoutProps = {
   apiBase: string;
+  artifactManifest?: ArtifactManifest;
   summary: ResultSummary;
 };
 
-export function ResultStudioLayout({ apiBase, summary }: ResultStudioLayoutProps) {
-  const artifacts = flattenOutputs(summary.outputs, new Set(['reports', 'figures']));
-  const reportArtifacts = getReportArtifacts(summary.outputs);
+function isReportArtifact(artifact: OutputItem) {
+  const featureGroup = (artifact.feature_group || '').toLowerCase();
+  const outputType = (artifact.output_type || '').toLowerCase();
+  const role = (artifact.artifact_role || '').toLowerCase();
+  const contentType = (artifact.content_type || '').toLowerCase();
+  return (
+    featureGroup.includes('report') ||
+    featureGroup.includes('qc') ||
+    outputType.includes('report') ||
+    role.includes('report') ||
+    artifact.preview_kind === 'html' ||
+    artifact.preview_kind === 'image' ||
+    contentType === 'text/html' ||
+    contentType.startsWith('image/')
+  );
+}
+
+export function ResultStudioLayout({ apiBase, artifactManifest, summary }: ResultStudioLayoutProps) {
+  const manifestArtifacts = artifactManifest?.artifacts || [];
+  const usesManifest = manifestArtifacts.length > 0;
+  const allArtifacts = usesManifest ? manifestArtifacts : flattenOutputs(summary.outputs);
+  const reportArtifacts = usesManifest ? allArtifacts.filter(isReportArtifact) : getReportArtifacts(summary.outputs);
+  const artifacts = usesManifest ? allArtifacts.filter((artifact) => !isReportArtifact(artifact)) : flattenOutputs(summary.outputs, new Set(['reports', 'figures']));
   const reportFigures = reportArtifacts.filter(isPreviewableFigure);
-  const artifactGroups = groupArtifactsByFeature(flattenOutputs(summary.outputs));
+  const artifactGroups = groupArtifactsByFeature(allArtifacts);
   const modality = summary.modality.toUpperCase();
 
   return (

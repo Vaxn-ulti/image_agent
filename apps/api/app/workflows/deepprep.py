@@ -13,6 +13,12 @@ def _append(log_path: Path, text: str) -> None:
         f.write(f"[{now_iso()}] {text}\n")
 
 
+def _task_project_root(project_id: int, log_path: Path) -> Path:
+    if log_path.parent.name == "logs":
+        return log_path.parent.parent
+    return PROJECTS_ROOT / str(project_id)
+
+
 def run_mock_deepprep(task_id: int) -> None:
     with connect() as conn:
         task = conn.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
@@ -20,7 +26,8 @@ def run_mock_deepprep(task_id: int) -> None:
             return
         project_id = task["project_id"]
         log_path = Path(task["log_path"])
-        out_dir = PROJECTS_ROOT / str(project_id) / "derivatives" / str(task_id)
+        derivative_dir = _task_project_root(project_id, log_path) / "derivatives" / str(task_id)
+        out_dir = derivative_dir / "output"
         conn.execute("UPDATE tasks SET status='running', progress=10, started_at=? WHERE id=?", (now_iso(), task_id))
     try:
         _append(log_path, "Mock DeepPrep started")
@@ -41,9 +48,13 @@ def run_mock_deepprep(task_id: int) -> None:
         summary_path = write_t1_result_summary(out_dir, task_id=task_id, workflow_type="t1_deepprep_mock")
         with connect() as conn:
             for output_type, path in outputs.items():
+                metadata = {
+                    "relative_path": path.relative_to(out_dir).as_posix(),
+                    "content_type": "text/html" if path.suffix == ".html" else "application/json" if path.suffix == ".json" else "text/plain",
+                }
                 conn.execute(
                     "INSERT INTO outputs(task_id, output_type, path, preview_path, metadata_json, created_at) VALUES(?,?,?,?,?,?)",
-                    (task_id, output_type, str(path), None, "{}", now_iso()),
+                    (task_id, output_type, str(path), None, json.dumps(metadata), now_iso()),
                 )
             conn.execute(
                 "INSERT INTO outputs(task_id, output_type, path, preview_path, metadata_json, created_at) VALUES(?,?,?,?,?,?)",

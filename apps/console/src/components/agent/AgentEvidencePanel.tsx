@@ -1,4 +1,5 @@
 import type { RagResponse } from '../../lib/types';
+import { safeEvidenceJson } from '../../lib/redaction';
 import { Panel, PanelBody, PanelHeader, PanelTitle } from '../ui/Panel';
 
 export function AgentEvidencePanel({ response }: { response: RagResponse }) {
@@ -35,7 +36,7 @@ function EvidenceJson({ title, value }: { title: string; value: unknown }) {
   return (
     <div>
       <h3 className="text-xs font-semibold uppercase tracking-normal text-muted">{title}</h3>
-      <pre className="scientific-scrollbar mt-2 max-h-72 overflow-auto rounded-md bg-background p-3 font-mono text-xs leading-5">{JSON.stringify(value, null, 2)}</pre>
+      <pre className="scientific-scrollbar mt-2 max-h-72 overflow-auto rounded-md bg-background p-3 font-mono text-xs leading-5">{safeEvidenceJson(value)}</pre>
     </div>
   );
 }

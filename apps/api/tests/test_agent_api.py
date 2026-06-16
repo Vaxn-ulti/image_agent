@@ -2,10 +2,80 @@ from fastapi.testclient import TestClient
 import hashlib
 import json
 
+import pytest
+
+
+MODEL_ENV_KEYS = [
+    "IMAGE_AGENT_MODEL_PROVIDER",
+    "IMAGE_AGENT_MODEL_API_KEY",
+    "IMAGE_AGENT_MODEL_BASE_URL",
+    "IMAGE_AGENT_MODEL_NAME",
+    "IMAGE_AGENT_MODEL_REVIEW_NAME",
+    "IMAGE_AGENT_MODEL_WIRE_API",
+    "MODEL_PROVIDER",
+    "OPENAI_API_KEY",
+    "OPENAI_BASE_URL",
+    "OPENAI_MODEL",
+    "OPENAI_REVIEW_MODEL",
+    "OPENAI_WIRE_API",
+    "RAWCHAT_API_KEY",
+    "RAWCHAT_BASE_URL",
+    "RAWCHAT_MODEL",
+    "RAWCHAT_WIRE_API",
+    "KRILL_API_KEY",
+    "KRILL_BASE_URL",
+    "KRILL_MODEL",
+    "KRILL_WIRE_API",
+    "DEEPSEEK_API_KEY",
+    "DEEPSEEK_BASE_URL",
+    "DEEPSEEK_MODEL",
+    "DEEPSEEK_WIRE_API",
+    "GLM_API_KEY",
+    "GLM_BASE_URL",
+    "GLM_MODEL",
+    "GLM_WIRE_API",
+    "ZHIPU_API_KEY",
+    "ZHIPU_BASE_URL",
+    "ZHIPU_MODEL",
+    "OPENAI_REASONING_EFFORT",
+    "MODEL_REASONING_EFFORT",
+    "OPENAI_DISABLE_RESPONSE_STORAGE",
+    "DISABLE_RESPONSE_STORAGE",
+    "OPENAI_CONTEXT_WINDOW",
+    "MODEL_CONTEXT_WINDOW",
+    "OPENAI_AUTO_COMPACT_TOKEN_LIMIT",
+    "MODEL_AUTO_COMPACT_TOKEN_LIMIT",
+    "OPENAI_DISABLE_METADATA",
+    "OPENAI_RESPONSES_DISABLE_METADATA",
+    "BACKEND_RUNTIME_MODE",
+    "IMAGE_AGENT_MODEL_TUNNEL_PORT",
+]
+
+
+@pytest.fixture(autouse=True)
+def isolate_agent_model_env(monkeypatch):
+    for key in MODEL_ENV_KEYS:
+        monkeypatch.delenv(key, raising=False)
+
+
+def _insert_project(database, project_id: int, name: str | None = None) -> None:
+    with database.connect() as conn:
+        conn.execute(
+            "INSERT INTO projects(id, name, description, created_at) VALUES(?,?,?,?)",
+            (project_id, name or f"P-{project_id}", "", database.now_iso()),
+        )
+
 
 def test_agent_model_status_uses_model_gateway(monkeypatch):
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_PROVIDER", "OpenAI")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_API_KEY", "secret-value")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_BASE_URL", "http://127.0.0.1:18080")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_NAME", "gpt-5.5")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_REVIEW_NAME", "gpt-5.5")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_WIRE_API", "responses")
     monkeypatch.setenv("OPENAI_API_KEY", "secret-value")
     monkeypatch.setenv("OPENAI_BASE_URL", "http://127.0.0.1:18080")
+    monkeypatch.setenv("OPENAI_WIRE_API", "responses")
     monkeypatch.setenv("BACKEND_RUNTIME_MODE", "remote")
     monkeypatch.setenv("IMAGE_AGENT_MODEL_TUNNEL_PORT", "18080")
     from app.main import app
@@ -15,10 +85,23 @@ def test_agent_model_status_uses_model_gateway(monkeypatch):
     assert result.status_code == 200
     body = result.json()
     assert body["provider"] == "OpenAI"
+    assert body["provider_profile"] == "openai"
     assert body["configured"] is True
+    assert body["capabilities"] == {
+        "text": True,
+        "structured_json": True,
+        "model_tool_loop": True,
+    }
     assert body["deployment"] == {
         "backend_runtime_mode": "remote",
         "model_gateway_access": "ssh_reverse_tunnel",
+    }
+    assert body["gateway_diagnostics"] == {
+        "sdk_method": "responses.create",
+        "request_shape": "responses_input",
+        "structured_output": "responses_text_format",
+        "model_tool_loop": "enabled",
+        "workflow_task_creation": "server_side_resume_confirmation_only",
     }
     assert "api_key" not in body
     assert "reverse_tunnel_command" not in json.dumps(body)
@@ -27,8 +110,9 @@ def test_agent_model_status_uses_model_gateway(monkeypatch):
 
 
 def test_deployment_status_uses_safe_agent_model_summary(monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", "secret-value")
-    monkeypatch.setenv("OPENAI_BASE_URL", "http://127.0.0.1:18080")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_API_KEY", "secret-value")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_BASE_URL", "http://127.0.0.1:18080")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_PROVIDER", "openai")
     monkeypatch.setenv("BACKEND_RUNTIME_MODE", "remote")
     monkeypatch.setenv("IMAGE_AGENT_MODEL_TUNNEL_PORT", "18080")
     from app.main import app
@@ -42,6 +126,13 @@ def test_deployment_status_uses_safe_agent_model_summary(monkeypatch):
         "backend_runtime_mode": "remote",
         "model_gateway_access": "ssh_reverse_tunnel",
     }
+    assert body["execution_scope"] == {
+        "development_origin": "workstation",
+        "deployment_target": "api_server",
+        "workflow_tool_execution": "deployment_server_local",
+        "docker_runtime_host": "api_server",
+        "external_worker_server_required": False,
+    }
     assert "reverse_tunnel_command" not in body_json
     assert "ssh -N -R" not in body_json
     assert "secret-value" not in body_json
@@ -50,6 +141,7 @@ def test_deployment_status_uses_safe_agent_model_summary(monkeypatch):
 def test_deployment_status_reports_production_readiness_blockers(monkeypatch):
     monkeypatch.setenv("IMAGE_AGENT_ENV", "production")
     monkeypatch.setenv("IMAGE_AGENT_CORS_ORIGINS", "https://console.example.com")
+    monkeypatch.setenv("IMAGE_AGENT_PUBLIC_BASE_URL", "https://api.example.com")
     monkeypatch.setenv("BACKEND_RUNTIME_MODE", "remote")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     from app.main import app
@@ -66,6 +158,113 @@ def test_deployment_status_reports_production_readiness_blockers(monkeypatch):
     }
 
 
+def test_deployment_status_requires_public_api_base_for_production_readiness(monkeypatch):
+    monkeypatch.setenv("IMAGE_AGENT_ENV", "production")
+    monkeypatch.setenv("IMAGE_AGENT_CORS_ORIGINS", "https://console.example.com")
+    monkeypatch.setenv("BACKEND_RUNTIME_MODE", "remote")
+    monkeypatch.setenv("OPENAI_API_KEY", "secret-value")
+    monkeypatch.delenv("IMAGE_AGENT_PUBLIC_BASE_URL", raising=False)
+    from app.main import app
+
+    result = TestClient(app).get("/deployment")
+
+    assert result.status_code == 200
+    readiness = result.json()["production_readiness"]
+    assert readiness["required"] is True
+    assert readiness["ready"] is False
+    assert readiness["status"] == "blocked"
+    assert "IMAGE_AGENT_PUBLIC_BASE_URL must be set for production deployment." in readiness["blocking_reasons"]
+
+
+def test_deployment_status_requires_public_https_api_base_without_path(monkeypatch):
+    monkeypatch.setenv("IMAGE_AGENT_ENV", "production")
+    monkeypatch.setenv("IMAGE_AGENT_CORS_ORIGINS", "https://console.example.com")
+    monkeypatch.setenv("BACKEND_RUNTIME_MODE", "remote")
+    monkeypatch.setenv("OPENAI_API_KEY", "secret-value")
+    from app.main import app
+
+    invalid_bases = [
+        "http://api.example.com",
+        "https://localhost:8000",
+        "https://127.0.0.1:8000",
+        "https://0.0.0.0:8000",
+        "https://[::1]:8000",
+        "https://api.example.com/v1",
+        "https://api.example.com?debug=true",
+        "https://api.example.com#fragment",
+    ]
+
+    for base_url in invalid_bases:
+        monkeypatch.setenv("IMAGE_AGENT_PUBLIC_BASE_URL", base_url)
+        result = TestClient(app).get("/deployment")
+        readiness = result.json()["production_readiness"]
+        assert readiness["required"] is True
+        assert readiness["ready"] is False
+        assert readiness["status"] == "blocked"
+        assert "IMAGE_AGENT_PUBLIC_BASE_URL must be a public HTTPS API origin without path, query, or fragment." in readiness["blocking_reasons"]
+
+
+def test_deployment_fast_launch_readiness_requires_rawchat_responses_and_remote_evidence(monkeypatch):
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_PROVIDER", "rawchat")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_API_KEY", "secret-value")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_BASE_URL", "https://rawchat.cn/codex")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_NAME", "gpt-5.5")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_WIRE_API", "responses")
+    monkeypatch.delenv("IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_STATUS", raising=False)
+    monkeypatch.delenv("IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_ID", raising=False)
+    from app.main import app
+
+    result = TestClient(app).get("/deployment")
+
+    assert result.status_code == 200
+    readiness = result.json()["fast_launch_readiness"]
+    assert readiness["ready"] is False
+    assert readiness["status"] == "blocked"
+    assert readiness["checks"]["model_gateway_target"] == {
+        "status": "passed",
+        "expected_provider_profile": "rawchat",
+        "actual_provider_profile": "rawchat",
+        "expected_wire_api": "responses",
+        "actual_wire_api": "responses",
+        "expected_model": "gpt-5.5",
+        "actual_model": "gpt-5.5",
+        "model_tool_loop": True,
+    }
+    assert readiness["checks"]["agent_task_boundary"]["status"] == "passed"
+    assert readiness["checks"]["strict_remote_acceptance"]["status"] == "missing"
+    assert (
+        "Strict remote acceptance evidence has not been verified for the upload-agent-workflow-result chain."
+        in readiness["blocking_reasons"]
+    )
+    body_json = json.dumps(readiness)
+    assert "secret-value" not in body_json
+    assert "api_key" not in body_json
+
+
+def test_deployment_fast_launch_readiness_accepts_privacy_safe_remote_acceptance_id(monkeypatch):
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_PROVIDER", "rawchat")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_API_KEY", "secret-value")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_BASE_URL", "https://rawchat.cn/codex")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_NAME", "gpt-5.5")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_WIRE_API", "responses")
+    monkeypatch.setenv("IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_STATUS", "passed")
+    monkeypatch.setenv("IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_ID", "remote-smoke-20260616T120000Z")
+    from app.main import app
+
+    result = TestClient(app).get("/deployment")
+
+    assert result.status_code == 200
+    readiness = result.json()["fast_launch_readiness"]
+    assert readiness["ready"] is True
+    assert readiness["status"] == "ready"
+    assert readiness["blocking_reasons"] == []
+    assert readiness["checks"]["strict_remote_acceptance"] == {
+        "status": "passed",
+        "evidence_id": "remote-smoke-20260616T120000Z",
+        "required_evidence": "strict remote smoke JSON verified within freshness window",
+    }
+
+
 def test_agent_run_returns_answer_and_persists_privacy_safe_ledger(tmp_path, monkeypatch):
     from app.core import config
     from app.db import database
@@ -75,6 +274,7 @@ def test_agent_run_returns_answer_and_persists_privacy_safe_ledger(tmp_path, mon
     monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
     monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
     database.init_db()
+    _insert_project(database, 7)
 
     class FakeRunner:
         def run(self, *, message, project_context):
@@ -133,6 +333,106 @@ def test_agent_run_returns_answer_and_persists_privacy_safe_ledger(tmp_path, mon
     assert event_types == ["agent_run_created", "agent_run_started", "agent_run_completed"]
 
 
+def test_agent_run_confirmation_does_not_create_task_before_resume(tmp_path, monkeypatch):
+    from app.core import config
+    from app.db import database
+    from app import main
+    from app.main import app
+
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
+    database.init_db()
+    _insert_project(database, 7)
+
+    class FakeRunner:
+        def run(self, *, message, project_context):
+            return {
+                "status": "confirmation_required",
+                "answer": "Confirm before launching the workflow.",
+                "intent": "run_workflow",
+                "selected_skill": "image-agent-workflow-runner",
+                "thread_id": "thread-confirm-1",
+                "production_task_created": False,
+                "confirmation": {
+                    "type": "workflow_execution",
+                    "project_id": 7,
+                    "series_id": 11,
+                    "workflow_type": "t1_deepprep_anat_report",
+                    "action_lane": "fixed_workflow",
+                },
+            }
+
+    monkeypatch.setattr(main, "AgentRunner", lambda: FakeRunner())
+    monkeypatch.setattr(
+        main,
+        "read_project_context",
+        lambda project_id, *, rows_fn, workflows: {"project_id": project_id, "workflows": workflows},
+    )
+
+    result = TestClient(app).post("/agent/runs", json={"project_id": 7, "message": "run T1 workflow"})
+
+    assert result.status_code == 200
+    body = result.json()
+    assert body["contract_version"] == "agent_run.v1"
+    assert body["status"] == "confirmation_required"
+    assert body["production_task_created"] is False
+    assert body["confirmation"]["workflow_type"] == "t1_deepprep_anat_report"
+
+    with database.connect() as conn:
+        task_count = conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
+        row = conn.execute("SELECT * FROM agent_runs WHERE agent_run_id=?", (body["agent_run_id"],)).fetchone()
+
+    assert task_count == 0
+    assert row["request_type"] == "run"
+    assert row["status"] == "confirmation_required"
+    assert row["task_id"] is None
+
+
+def test_agent_run_falls_back_to_read_only_backend_answer_when_model_unconfigured(tmp_path, monkeypatch):
+    from app.core import config
+    from app.db import database
+    from app import main
+    from app.main import app
+
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(main, "REPO_ROOT", tmp_path)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    database.init_db()
+    _insert_project(database, 7)
+    with database.connect() as conn:
+        conn.execute(
+            "INSERT INTO files(id, project_id, original_name, storage_path, file_type, size, sha256, created_at) VALUES(?,?,?,?,?,?,?,?)",
+            (3, 7, "sub-01_T1w.nii.gz", str(tmp_path / "sub-01_T1w.nii.gz"), "nifti", 12, "abc123", database.now_iso()),
+        )
+        conn.execute(
+            "INSERT INTO imaging_series(id, project_id, file_id, sequence_label, supported_for_processing, unsupported_reason, modality, format, confidence, metadata_json, status, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            (5, 7, 3, "sub-01_T1w", 1, None, "T1", "NIFTI", 0.99, "{}", "ready", database.now_iso()),
+        )
+        conn.execute(
+            "INSERT INTO tasks(id, project_id, series_id, workflow_type, status, progress, log_path, created_at) VALUES(?,?,?,?,?,?,?,?)",
+            (41, 7, 5, "t1_deepprep", "running", 35, str(tmp_path / "task-41.log"), database.now_iso()),
+        )
+
+    result = TestClient(app).post("/agent/runs", json={"project_id": 7, "message": "show task status"})
+
+    assert result.status_code == 200
+    body = result.json()
+    assert body["contract_version"] == "agent_run.v1"
+    assert body["status"] == "answered"
+    assert body["intent"] == "status"
+    assert body["selected_skill"] == "backend-status-fallback"
+    assert body["safe_metadata"]["fallback_reason"] == "model_gateway_unconfigured"
+    assert "Model gateway is not configured" in body["answer"]
+    assert "task 41" in body["answer"]
+    assert body["tool_invocations"]
+    with database.connect() as conn:
+        row = conn.execute("SELECT * FROM agent_runs WHERE agent_run_id=?", (body["agent_run_id"],)).fetchone()
+    assert row["status"] == "answered"
+    assert row["selected_skill"] == "backend-status-fallback"
+    assert "model_gateway_unconfigured" in row["safe_metadata_json"]
+
+
 def test_agent_run_response_redacts_nested_backend_paths(tmp_path, monkeypatch):
     from app.core import config
     from app.db import database
@@ -142,6 +442,7 @@ def test_agent_run_response_redacts_nested_backend_paths(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
     monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
     database.init_db()
+    _insert_project(database, 7)
 
     class FakeRunner:
         def run(self, *, message, project_context):
@@ -186,6 +487,59 @@ def test_agent_run_response_redacts_nested_backend_paths(tmp_path, monkeypatch):
     assert "C:/Users/A/private" not in body_json
     assert "D:/project/private-output" not in body_json
     assert "patient Jane Doe" not in body_json
+
+
+def test_agent_run_response_redacts_free_text_backend_paths(tmp_path, monkeypatch):
+    from app.core import config
+    from app.db import database
+    from app import main
+    from app.main import app
+
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
+    database.init_db()
+    _insert_project(database, 7)
+
+    class FakeRunner:
+        def run(self, *, message, project_context):
+            return {
+                "status": "answered",
+                "answer": (
+                    "Review output at data/projects/7/derivatives/118/output/qc_report.html "
+                    "with key sk-test-secret and host path /home/yyf/project/image_agent/data/projects/7/raw/sub-01.nii.gz"
+                ),
+                "message": "See C:/Users/A/private/task.log",
+                "events": [
+                    {
+                        "type": "agent.final",
+                        "message": "Saved under data/projects/7/derivatives/118/output/",
+                        "metadata": {
+                            "log_path": "D:/project/private-output/task.log",
+                            "safe_doc_path": "docs/rag/vendor/fsl.md",
+                        },
+                    }
+                ],
+            }
+
+    monkeypatch.setattr(main, "AgentRunner", lambda: FakeRunner())
+    monkeypatch.setattr(
+        main,
+        "read_project_context",
+        lambda project_id, *, rows_fn, workflows: {"project_id": project_id, "workflows": workflows},
+    )
+
+    result = TestClient(app).post("/agent/runs", json={"project_id": 7, "message": "explain task"})
+
+    assert result.status_code == 200
+    body_json = json.dumps(result.json(), ensure_ascii=False)
+    assert "[redacted-host-path]" in body_json
+    assert "[redacted-secret]" in body_json
+    assert "docs/rag/vendor/fsl.md" in body_json
+    assert "data/projects/7" not in body_json
+    assert "/home/yyf/project/image_agent" not in body_json
+    assert "C:/Users/A/private" not in body_json
+    assert "D:/project/private-output" not in body_json
+    assert "sk-test-secret" not in body_json
 
 
 def test_agent_api_openapi_declares_stable_response_contracts():
@@ -319,6 +673,7 @@ def test_agent_run_contract_normalizes_unknown_runner_status(tmp_path, monkeypat
     monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
     monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
     database.init_db()
+    _insert_project(database, 7)
 
     class FakeRunner:
         def run(self, *, message, project_context):
@@ -521,6 +876,29 @@ def test_agent_run_requires_message():
     }
 
 
+def test_agent_project_scoped_endpoints_reject_missing_project(tmp_path, monkeypatch):
+    from app.core import config
+    from app.db import database
+    from app import main
+    from app.main import app
+
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(main, "REPO_ROOT", tmp_path)
+    database.init_db()
+
+    run = TestClient(app).post("/agent/runs", json={"project_id": 999, "message": "summarize this project"})
+    rag = TestClient(app).post("/agent/rag/query", json={"project_id": 999, "query": "what data is loaded?"})
+    history = TestClient(app).get("/projects/999/agent-runs")
+
+    assert run.status_code == 404
+    assert rag.status_code == 404
+    assert history.status_code == 404
+    assert run.json()["detail"] == "Project not found"
+    assert rag.json()["detail"] == "Project not found"
+    assert history.json()["detail"] == "Project not found"
+
+
 def test_agent_run_failure_ledger_redacts_sensitive_error_text(tmp_path, monkeypatch):
     from app.core import config
     from app.db import database
@@ -530,6 +908,7 @@ def test_agent_run_failure_ledger_redacts_sensitive_error_text(tmp_path, monkeyp
     monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
     monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
     database.init_db()
+    _insert_project(database, 7)
 
     class FakeRunner:
         def run(self, *, message, project_context):
@@ -583,6 +962,7 @@ def test_agent_run_lookup_returns_safe_ledger_trace(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
     monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
     database.init_db()
+    _insert_project(database, 7)
 
     class FakeRunner:
         def run(self, *, message, project_context):
@@ -697,6 +1077,7 @@ def test_agent_run_lookup_redacts_free_text_error_message(tmp_path, monkeypatch)
     monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
     monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
     database.init_db()
+    _insert_project(database, 7)
 
     class FakeRunner:
         def run(self, *, message, project_context):
@@ -727,6 +1108,7 @@ def test_agent_run_lookup_resanitizes_persisted_json_fields(tmp_path, monkeypatc
     monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
     monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
     database.init_db()
+    _insert_project(database, 7)
     now = database.now_iso()
     with database.connect() as conn:
         conn.execute(
@@ -848,6 +1230,7 @@ def test_project_agent_runs_list_resanitizes_persisted_json_fields(tmp_path, mon
     monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
     monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
     database.init_db()
+    _insert_project(database, 7)
     now = database.now_iso()
     with database.connect() as conn:
         conn.execute(
@@ -909,6 +1292,8 @@ def test_project_agent_runs_lists_only_safe_project_history(tmp_path, monkeypatc
     monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
     monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
     database.init_db()
+    _insert_project(database, 7)
+    _insert_project(database, 8)
 
     class FakeRunner:
         def run(self, *, message, project_context):
@@ -971,6 +1356,7 @@ def test_project_agent_runs_empty_history_returns_empty_list(tmp_path, monkeypat
     monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
     monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
     database.init_db()
+    _insert_project(database, 7)
 
     result = TestClient(app).get("/projects/7/agent-runs")
 

@@ -18,7 +18,7 @@ from app.workflows.scientific_reports import build_scientific_report_summary
 
 load_env_file()
 
-MRTRIX_IMAGE = os.environ.get("IMAGE_AGENT_DWI_MRTRIX_IMAGE", "pennlinc/qsiprep:latest")
+MRTRIX_IMAGE = os.environ.get("IMAGE_AGENT_DWI_MRTRIX_IMAGE", "pennlinc/qsiprep:1.0.2")
 IMAGE = MRTRIX_IMAGE
 FSL_DIR = Path(os.environ.get("IMAGE_AGENT_FSL_DIR", "/home/yyf/project/MCI_project/tools/fsl"))
 MAX_RUNTIME_SEC = int(os.environ.get("IMAGE_AGENT_DWI_FAST_DTI_MAX_RUNTIME_SEC", "2100"))

@@ -1,0 +1,67 @@
+{
+  "agent_boundary_status": "model_configured_confirmation_not_required",
+  "agent_workflow_type": "t1_deepprep_mock",
+  "api_base": "http://127.0.0.1:8000",
+  "boundary": {
+    "agent_cannot_bypass_resume_confirmation": true,
+    "local_smoke_only": true,
+    "remote_container_execution_required_for_release": true,
+    "workflow_launch_uses_deterministic_backend_api": true
+  },
+  "generated_at": "2026-06-16T15:38:41.204959+00:00",
+  "health": {
+    "app": "image_agent",
+    "status": "ok",
+    "version": "0.2.0"
+  },
+  "health_status": "passed",
+  "launched_task": {
+    "project_id": 19,
+    "series_id": 19,
+    "status": "queued",
+    "task_id": 21,
+    "workflow_type": "t1_deepprep_mock"
+  },
+  "model_status": {
+    "capabilities": {
+      "model_tool_loop": true,
+      "structured_json": true,
+      "text": true
+    },
+    "configured": true,
+    "gateway_diagnostics": {
+      "model_tool_loop": "enabled",
+      "request_shape": "responses_input",
+      "sdk_method": "responses.create",
+      "structured_output": "responses_text_format",
+      "workflow_task_creation": "server_side_resume_confirmation_only"
+    },
+    "model": "gpt-5.5",
+    "provider": "rawchat",
+    "provider_profile": "rawchat",
+    "reasoning_effort": "high",
+    "review_model": "gpt-5.5",
+    "wire_api": "responses"
+  },
+  "project": {
+    "project_id": 19
+  },
+  "rag_boundary_status": "passed",
+  "rag_status": {
+    "document_count": 73,
+    "grounding_policy_present": true,
+    "min_documents_required": 0
+  },
+  "series_list_status": "passed",
+  "status": "passed",
+  "task_list_status": "passed",
+  "upload_status": "passed",
+  "uploaded_series": {
+    "modality": "T1",
+    "project_id": 19,
+    "sequence_label": "T1w_MPRAGE",
+    "series_id": 19
+  },
+  "workflow_launch_status": "passed",
+  "workflow_type": "t1_deepprep_mock"
+}

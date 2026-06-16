@@ -37,6 +37,18 @@ class ToolCallingFakeGateway(FakeGateway):
         }
 
 
+class ToolSkippedFakeGateway(FakeGateway):
+    def complete_structured_with_tools(self, messages, *, purpose, tool_context, structured_schema=None, max_tool_rounds=2):
+        self.messages.append((purpose, messages, tool_context, structured_schema))
+        return {
+            "decision": self.decision,
+            "tool_trace": [
+                {"status": "skipped", "reason": "chat_completions_wire_api_does_not_run_tool_loop"}
+            ],
+            "tool_messages": [],
+        }
+
+
 class SchemaRequiredGateway:
     def __init__(self, decision):
         self.decision = decision
@@ -202,6 +214,16 @@ def test_agent_runner_uses_openai_tool_dispatch_when_gateway_supports_it():
     assert result["tool_trace"][0]["mode"] == "openai_function_tools_dispatched"
     assert any(item.get("tool") == "list_workflows" for item in result["tool_trace"])
     assert result["decision"]["intent"] == "run_workflow"
+
+
+def test_agent_runner_marks_planner_trace_when_gateway_skips_tool_loop():
+    gateway = ToolSkippedFakeGateway({"intent": "answer_question", "summary": "Explain current state"})
+
+    result = AgentRunner(gateway=gateway).run(message="what happened", project_context={"tasks": []})
+
+    assert result["status"] == "answered"
+    assert result["tool_trace"][0]["mode"] == "openai_structured_without_tool_loop"
+    assert result["tool_trace"][1]["reason"] == "chat_completions_wire_api_does_not_run_tool_loop"
 
 
 def test_agent_runner_answers_when_model_selects_question_intent():

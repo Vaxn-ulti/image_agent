@@ -24,4 +24,28 @@ describe('AgentEvidencePanel', () => {
     expect(screen.getByText('Backend context')).toBeInTheDocument();
     expect(screen.getByText('Citations')).toBeInTheDocument();
   });
+
+  it('redacts backend paths and secrets in evidence JSON blocks', () => {
+    render(
+      <AgentEvidencePanel
+        response={{
+          answer: 'Task 114 completed.',
+          backend_context: {
+            log_path: 'C:/Users/A/private/task.log',
+            raw_path: '/home/yyf/project/image_agent/data/projects/13/raw/sub-01.nii.gz',
+          },
+          citations: [{ title: 'DWI docs', path: 'docs/dwi.md' }],
+          intent: 'inspect_result',
+          rag_mode: 'langgraph',
+          tool_invocations: [{ result: { openai_key: 'sk-test-secret' }, status: 'ok', tool: 'result-summary' }],
+        }}
+      />,
+    );
+
+    expect(document.body.textContent).toContain('[redacted-host-path]');
+    expect(document.body.textContent).toContain('[redacted-secret]');
+    expect(document.body.textContent).not.toContain('C:/Users/A/private/task.log');
+    expect(document.body.textContent).not.toContain('/home/yyf/project/image_agent/data/projects/13/raw/sub-01.nii.gz');
+    expect(document.body.textContent).not.toContain('sk-test-secret');
+  });
 });

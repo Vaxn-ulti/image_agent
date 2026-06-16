@@ -15,9 +15,10 @@ describe('workflow helpers', () => {
   it('normalizes backend workflow registry objects to API-runnable workflow types', () => {
     const workflows = normalizeWorkflowList({
       workflows: [
-        { type: 't1_deepprep_anat_report', requires_confirmation: true, runtime_workflow_type: 't1_deepprep' },
+        { type: 't1_deepprep_anat_report', lane: 'fixed_workflow', requires_confirmation: true, runtime_workflow_type: 't1_deepprep' },
         { type: 'toolchain_proposal', requires_confirmation: false, runtime_workflow_type: null },
-        { type: 't1_deepprep_mock', api_runnable: true, requires_confirmation: true, runtime_workflow_type: 't1_deepprep_mock' },
+        { type: 'dwi_qsiprep', lane: 'toolchain_incubation', requires_confirmation: true, runtime_workflow_type: 'dwi_qsiprep' },
+        { type: 't1_deepprep_mock', api_runnable: true, lane: 'toolchain_incubation', requires_confirmation: true, runtime_workflow_type: 't1_deepprep_mock' },
       ],
     });
 
@@ -53,6 +54,33 @@ describe('workflow helpers', () => {
 
     expect(result.runnable).toBe(false);
     expect(result.reason).toBe('Remote DeepPrep runtime is not configured.');
+  });
+
+  it.each([
+    ['t1_deepprep_anat_report', mockSeries[0], 'Backend blocked T1 runtime.'],
+    ['bold_fmriprep_xcpd_report', mockSeries[1], 'Backend blocked BOLD runtime.'],
+    ['dwi_fast_gpu_dti', mockSeries[2], 'Backend blocked DWI runtime.'],
+    ['dicom_convert', mockSeries[3], 'Backend blocked DICOM conversion.'],
+  ])('uses backend blocked_workflows reason for %s', (workflowType, series, reason) => {
+    const blockedByBackend = {
+      ...series,
+      workflow_eligibility: {
+        blocked_workflows: [
+          {
+            blocking_reasons: [reason],
+            workflow_type: workflowType,
+          },
+        ],
+        policy_version: 'workflow_eligibility_v1',
+        primary_recommendation: null,
+        production_task_created: false,
+        runnable_workflows: [],
+      },
+    };
+
+    const result = getWorkflowEligibility(blockedByBackend, workflowType, []);
+
+    expect(result).toEqual({ reason, runnable: false });
   });
 
   it('allows BOLD downstream workflow after completed preprocessing', () => {

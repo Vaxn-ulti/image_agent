@@ -22,6 +22,16 @@ export function SettingsPage() {
   const [apiBaseInput, setApiBaseInput] = useState(getApiBase());
   const productionReadiness = deployment?.production_readiness;
   const readinessBlocked = productionReadiness?.ready === false;
+  const fastLaunchReadiness = deployment?.fast_launch_readiness;
+  const launchBlocked = fastLaunchReadiness?.ready === false;
+  const modelTarget = fastLaunchReadiness?.checks?.model_gateway_target;
+  const modelTargetLabel = [
+    modelTarget?.actual_provider_profile,
+    modelTarget?.actual_model,
+    modelTarget?.actual_wire_api,
+  ].filter(Boolean).join(' / ') || 'Not reported';
+  const agentBoundaryPassed = fastLaunchReadiness?.checks?.agent_task_boundary?.status === 'passed';
+  const remoteAcceptance = fastLaunchReadiness?.checks?.strict_remote_acceptance;
   const apiDisconnected = deploymentError || runtimeError;
 
   function handleSave() {
@@ -79,6 +89,20 @@ export function SettingsPage() {
 
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                <Globe className="w-3.5 h-3.5" /> Public API Base
+              </label>
+              <div className="p-3 bg-white border border-gray-200 rounded-xl flex items-center justify-between gap-3">
+                <span className={`min-w-0 truncate font-mono text-xs ${
+                  deploymentError || !deployment?.api_base_hint ? 'text-amber-700' : 'text-gray-700'
+                }`}>
+                  {deployment?.api_base_hint || 'Not reported'}
+                </span>
+              </div>
+              <p className="text-[10px] text-gray-400 italic">Backend-declared public HTTPS endpoint for production callbacks and browser clients.</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
                 <Zap className="w-3.5 h-3.5" /> Backend Runtime Mode
               </label>
               <div className="p-3 bg-white border border-gray-200 rounded-xl flex items-center justify-between">
@@ -112,6 +136,63 @@ export function SettingsPage() {
                   {readinessBlocked ? (
                     <div className="space-y-1">
                       {(productionReadiness.blocking_reasons || []).map((reason) => (
+                        <div key={reason} className="text-xs font-medium text-amber-700">{reason}</div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
+            {fastLaunchReadiness ? (
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5" /> Fast Launch Readiness
+                </label>
+                <div className={`p-3 border rounded-xl space-y-3 ${
+                  launchBlocked ? 'bg-amber-50 border-amber-100' : 'bg-green-50 border-green-100'
+                }`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className={`text-sm font-bold ${launchBlocked ? 'text-amber-800' : 'text-green-700'}`}>
+                      {launchBlocked ? 'Launch blocked' : 'Launch ready'}
+                    </span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${
+                      launchBlocked ? 'bg-white text-amber-700 border border-amber-200' : 'bg-white text-green-700 border border-green-200'
+                    }`}>
+                      Main chain
+                    </span>
+                  </div>
+                  <div className="grid gap-2 text-xs sm:grid-cols-2">
+                    <div className="rounded-lg border border-white/80 bg-white/70 p-2">
+                      <div className="font-bold text-gray-800">Model target</div>
+                      <div className="mt-1 font-mono text-[11px] text-gray-600">{modelTargetLabel}</div>
+                    </div>
+                    <div className="rounded-lg border border-white/80 bg-white/70 p-2">
+                      <div className="font-bold text-gray-800">Agent boundary</div>
+                      <div className={`mt-1 text-[11px] font-semibold ${agentBoundaryPassed ? 'text-green-700' : 'text-amber-700'}`}>
+                        {agentBoundaryPassed ? 'Agent boundary protected' : 'Agent boundary needs review'}
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-white/80 bg-white/70 p-2">
+                      <div className="font-bold text-gray-800">Remote acceptance</div>
+                      <div className={`mt-1 text-[11px] font-semibold ${
+                        remoteAcceptance?.status === 'passed' ? 'text-green-700' : 'text-amber-700'
+                      }`}>
+                        {remoteAcceptance?.status === 'passed'
+                          ? `Strict remote acceptance ${remoteAcceptance.evidence_id || 'passed'}`
+                          : 'Strict remote acceptance missing'}
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-white/80 bg-white/70 p-2">
+                      <div className="font-bold text-gray-800">Result contract</div>
+                      <div className="mt-1 text-[11px] font-semibold text-gray-600">
+                        Upload, workflow, outputs, summary, manifest
+                      </div>
+                    </div>
+                  </div>
+                  {launchBlocked ? (
+                    <div className="space-y-1">
+                      {(fastLaunchReadiness.blocking_reasons || []).map((reason) => (
                         <div key={reason} className="text-xs font-medium text-amber-700">{reason}</div>
                       ))}
                     </div>

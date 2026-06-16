@@ -244,9 +244,15 @@ class AgentRunner:
                 tool_context={"project_context": project_context, "rag_root": self.rag_root},
             )
             decision = planned.get("decision", {})
+            planned_tool_trace = planned.get("tool_trace", [])
+            planner_mode = (
+                "openai_structured_without_tool_loop"
+                if planned_tool_trace and planned_tool_trace[0].get("status") == "skipped"
+                else "openai_function_tools_dispatched"
+            )
             tool_trace = [
-                {"stage": "planner", "mode": "openai_function_tools_dispatched"},
-                *planned.get("tool_trace", []),
+                {"stage": "planner", "mode": planner_mode},
+                *planned_tool_trace,
             ]
         else:
             decision = self.gateway.complete_structured(

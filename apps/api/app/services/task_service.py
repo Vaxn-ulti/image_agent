@@ -11,6 +11,7 @@ from app.db.queries import fetch_rows
 from app.imaging.dwi_sidecars import dwi_has_required_sidecars
 from app.imaging.series_records import parse_series_row
 from app.services.background import submit_background
+from app.services.project_service import require_project
 from app.services.runtime_overrides import main_patch_attr, main_projects_root
 from app.workflows.deepprep import run_mock_deepprep
 from app.workflows.qsiprep_outputs import qsiprep_output_has_anat
@@ -35,8 +36,15 @@ def _projects_root() -> Path:
     return main_projects_root(_DEFAULT_PROJECTS_ROOT, require_override=True)
 
 
+def public_task(task):
+    item = dict(task)
+    item.pop("log_path", None)
+    return item
+
+
 def list_project_tasks(project_id):
-    return fetch_rows("SELECT * FROM tasks WHERE project_id=? ORDER BY id DESC", (project_id,))
+    require_project(project_id)
+    return [public_task(task) for task in fetch_rows("SELECT * FROM tasks WHERE project_id=? ORDER BY id DESC", (project_id,))]
 
 
 def get_series(series_id):
@@ -141,7 +149,7 @@ def create_series_task(series_id, req):
 
 
 def run_series(series_id, req):
-    return create_series_task(series_id, req)
+    return public_task(create_series_task(series_id, req))
 
 
 def get_task(task_id):
@@ -149,3 +157,7 @@ def get_task(task_id):
     if not found:
         raise HTTPException(404, "Task not found")
     return found[0]
+
+
+def get_public_task(task_id):
+    return public_task(get_task(task_id))

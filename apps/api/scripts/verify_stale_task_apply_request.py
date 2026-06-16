@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shlex
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -15,9 +16,10 @@ EXPECTED_FOLLOWUP_STEP_IDS = [
     "restart_api_normally",
     "run_strict_remote_smoke_acceptance",
     "verify_strict_remote_smoke_acceptance_json_after_normal_restart",
+    "emit_fast_launch_acceptance_env_after_strict_verify",
 ]
 REMOTE_ENV_LOAD_SNIPPET = "set -a; . /home/yyf/project/image_agent/.env; set +a;"
-API_KEY_SHAPED_RE = re.compile(r"sk-[A-Za-z0-9_-]{10,}")
+API_KEY_SHAPED_RE = re.compile(r"(?<![A-Za-z0-9_-])sk-[A-Za-z0-9_-]{20,}")
 
 
 def _require(condition: bool, message: str) -> None:
@@ -67,6 +69,19 @@ def _step_by_id(steps: list[dict], step_id: str) -> dict:
         if step.get("id") == step_id:
             return step
     raise SystemExit(f"missing follow-up step {step_id}")
+
+
+def _token_after(command: str, token: str, *, key: str) -> str:
+    try:
+        parts = shlex.split(command)
+    except ValueError as exc:
+        raise SystemExit(f"{key} command could not be parsed") from exc
+    try:
+        index = parts.index(token)
+    except ValueError as exc:
+        raise SystemExit(f"{key} command must include {token}") from exc
+    _require(index + 1 < len(parts) and parts[index + 1], f"{key} command must include a value after {token}")
+    return parts[index + 1]
 
 
 def verify_apply_request(
@@ -143,17 +158,78 @@ def verify_apply_request(
     _require("restart_preflight:ok" == _step_by_id(steps, "restart_api_preflight_only").get("expected_success"), "preflight expected success mismatch")
     _require("bash tools/restart_remote_image_agent_api.sh" in commands["restart_api_normally"], "normal restart command missing")
     _require("IMAGE_AGENT_RESTART_PREFLIGHT_ONLY=1" not in commands["restart_api_normally"], "normal restart must not be preflight-only")
+    strict_smoke_step = _step_by_id(steps, "run_strict_remote_smoke_acceptance")
+    strict_smoke_command = commands["run_strict_remote_smoke_acceptance"]
+    strict_smoke_verify_command = commands["verify_strict_remote_smoke_acceptance_json_after_normal_restart"]
+    strict_smoke_env_export_command = commands["emit_fast_launch_acceptance_env_after_strict_verify"]
     for required in (
         "smoke_remote_agent.py",
         "--require-model",
+        "--expected-model-wire-api responses",
+        "--expected-model-provider-profile rawchat",
+        "--require-model-tool-loop",
+        "--require-project-agent-context",
+        "--require-agent-workflow-confirmation",
+        "--require-deployment-identity",
+        "--require-production-readiness",
+        "--deployment-id <accepted_release_or_commit>",
+        "--expected-health-version <expected_health_version>",
+        "--min-documents 60",
+        "--min-chunks 200",
+        "--require-raw-source-policy",
+        "--require-vendor-pointer-integrity",
         "--require-real-evidence-ids",
+        "--require-completed-upload",
+        "--require-uploaded-series",
+        "--upload-nifti-file <remote_nifti_file>",
+        "--require-completed-task",
+        "--require-launched-task",
+        "--launch-workflow-type <real_registered_workflow_type>",
+        "--wait-task-completion-timeout-seconds 21600",
+        "--wait-task-completion-poll-seconds 30",
+        "--require-launchability-matrix",
         "--require-container-native-qc",
+        "--min-native-qc-images 1",
         "--require-scientific-report-artifacts",
+        "--min-scientific-report-images 1",
+        "--project-id <project_id>",
+        "--upload-session-id <upload_session_id>",
         "--output-json",
     ):
-        _require(required in commands["run_strict_remote_smoke_acceptance"], f"strict smoke command must include {required}")
-    _require("verify_remote_smoke_acceptance.py" in commands["verify_strict_remote_smoke_acceptance_json_after_normal_restart"], "strict smoke verifier command missing")
-    _require("--max-age-hours 24" in commands["verify_strict_remote_smoke_acceptance_json_after_normal_restart"], "strict smoke verifier must require freshness")
+        _require(required in strict_smoke_command, f"strict smoke command must include {required}")
+    _require(
+        "<completed_task_id>" not in strict_smoke_command,
+        "strict smoke command must launch and resolve the task id instead of using <completed_task_id>",
+    )
+    _require(
+        "--launch-series-id <uploaded_series_id>" not in strict_smoke_command,
+        "strict smoke command must use the uploaded series returned by --require-uploaded-series",
+    )
+    _require(
+        strict_smoke_step.get("mutates_remote_state") is True,
+        "strict smoke step must be marked as mutating remote state",
+    )
+    strict_smoke_json = _token_after(strict_smoke_command, "--output-json", key="run_strict_remote_smoke_acceptance")
+    _require(
+        strict_smoke_step.get("expected_output_json") == strict_smoke_json,
+        "strict smoke expected_output_json must match --output-json",
+    )
+    _require("verify_remote_smoke_acceptance.py" in strict_smoke_verify_command, "strict smoke verifier command missing")
+    _require("--max-age-hours 24" in strict_smoke_verify_command, "strict smoke verifier must require freshness")
+    _require(
+        strict_smoke_json in shlex.split(strict_smoke_verify_command),
+        "strict smoke verifier command must verify the smoke output JSON",
+    )
+    _require(
+        "verify_remote_smoke_acceptance.py" in strict_smoke_env_export_command,
+        "fast-launch env export command missing strict smoke verifier",
+    )
+    _require("--max-age-hours 24" in strict_smoke_env_export_command, "fast-launch env export must require freshness")
+    _require("--emit-fast-launch-env" in strict_smoke_env_export_command, "fast-launch env export command missing")
+    _require(
+        strict_smoke_json in shlex.split(strict_smoke_env_export_command),
+        "fast-launch env export command must verify the smoke output JSON",
+    )
 
     return {
         "status": "passed",

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from fastapi import HTTPException
 
@@ -26,6 +27,7 @@ from app.agent.tools import read_project_context
 from app.core import config
 from app.db.queries import fetch_rows
 from app.schemas import RunRequest
+from app.services.project_service import require_project
 from app.services import task_service
 from app.services.runtime_overrides import main_patch_attr, main_projects_root
 from app.workflows.registry import list_workflows as registry_list_workflows
@@ -60,8 +62,38 @@ def _production_mode() -> bool:
     return os.environ.get("IMAGE_AGENT_ENV", "").strip().lower() in {"prod", "production"}
 
 
+def _execution_scope() -> dict:
+    return {
+        "development_origin": "workstation",
+        "deployment_target": "api_server",
+        "workflow_tool_execution": "deployment_server_local",
+        "docker_runtime_host": "api_server",
+        "external_worker_server_required": False,
+    }
+
+
+def _public_api_base_ready() -> bool:
+    return _public_api_base_blocker() is None
+
+
+def _public_api_base_blocker() -> str | None:
+    base_url = os.environ.get("IMAGE_AGENT_PUBLIC_BASE_URL", "").strip()
+    if not base_url:
+        return "IMAGE_AGENT_PUBLIC_BASE_URL must be set for production deployment."
+    parsed = urlsplit(base_url)
+    host = (parsed.hostname or "").lower()
+    if (
+        parsed.scheme != "https"
+        or not host
+        or host in {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
+        or bool(parsed.path or parsed.query or parsed.fragment)
+    ):
+        return "IMAGE_AGENT_PUBLIC_BASE_URL must be a public HTTPS API origin without path, query, or fragment."
+    return None
+
+
 def _production_readiness(*, mode: str, agent: dict) -> dict:
-    from app.app_factory import production_cors_has_public_origin
+    from app.app_factory import production_cors_has_insecure_public_origin, production_cors_has_public_origin
 
     required = _production_mode()
     blocking_reasons: list[str] = []
@@ -69,13 +101,153 @@ def _production_readiness(*, mode: str, agent: dict) -> dict:
         blocking_reasons.append("Backend runtime mode is not remote.")
     if required and agent.get("configured") is not True:
         blocking_reasons.append("Agent model gateway is not configured.")
+    if required and production_cors_has_insecure_public_origin():
+        blocking_reasons.append("Production CORS origins must use HTTPS for public console origins.")
     if required and not production_cors_has_public_origin():
         blocking_reasons.append("Production CORS origins must include a non-localhost console origin.")
+    public_api_base_blocker = _public_api_base_blocker() if required else None
+    if public_api_base_blocker:
+        blocking_reasons.append(public_api_base_blocker)
     return {
         "blocking_reasons": blocking_reasons,
         "ready": not blocking_reasons,
         "required": required,
         "status": "ready" if not blocking_reasons else "blocked",
+    }
+
+
+def _env_flag(name: str) -> str:
+    return os.environ.get(name, "").strip().lower()
+
+
+def _remote_acceptance_evidence() -> dict:
+    status = _env_flag("IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_STATUS")
+    evidence_id = os.environ.get("IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_ID", "").strip()
+    if status == "passed" and _privacy_safe_symbol(evidence_id):
+        return {
+            "status": "passed",
+            "evidence_id": evidence_id,
+            "required_evidence": "strict remote smoke JSON verified within freshness window",
+        }
+    if status == "passed":
+        return {
+            "status": "blocked",
+            "required_evidence": "strict remote smoke JSON verified within freshness window",
+            "reason": "Strict remote acceptance evidence id is missing or not privacy-safe.",
+        }
+    return {
+        "status": "missing",
+        "required_evidence": "strict remote smoke JSON verified within freshness window",
+    }
+
+
+def _fast_launch_readiness(*, agent: dict) -> dict:
+    capabilities = agent.get("capabilities") if isinstance(agent.get("capabilities"), dict) else {}
+    provider_profile = agent.get("provider_profile")
+    wire_api = agent.get("wire_api")
+    model = agent.get("model")
+    model_tool_loop = capabilities.get("model_tool_loop") is True
+
+    model_target = {
+        "status": "passed"
+        if (
+            agent.get("configured") is True
+            and provider_profile == "rawchat"
+            and wire_api == "responses"
+            and model == "gpt-5.5"
+            and model_tool_loop
+        )
+        else "blocked",
+        "expected_provider_profile": "rawchat",
+        "actual_provider_profile": provider_profile,
+        "expected_wire_api": "responses",
+        "actual_wire_api": wire_api,
+        "expected_model": "gpt-5.5",
+        "actual_model": model,
+        "model_tool_loop": model_tool_loop,
+    }
+    agent_boundary = {
+        "status": "passed",
+        "task_creation": "server_side_resume_confirmation_only",
+        "chat_authority": "read_explain_recommend",
+        "deterministic_launch_endpoint": "/series/{series_id}/run",
+    }
+    upload_workflow_contract = {
+        "status": "passed",
+        "upload_endpoint": "/projects/{project_id}/upload",
+        "series_endpoint": "/projects/{project_id}/series",
+        "workflow_launch_endpoint": "/series/{series_id}/run",
+        "result_endpoints": [
+            "/tasks/{task_id}/outputs",
+            "/tasks/{task_id}/result-summary",
+            "/tasks/{task_id}/artifact-manifest",
+        ],
+    }
+    remote_acceptance = _remote_acceptance_evidence()
+    checks = {
+        "model_gateway_target": model_target,
+        "agent_task_boundary": agent_boundary,
+        "upload_workflow_result_contract": upload_workflow_contract,
+        "strict_remote_acceptance": remote_acceptance,
+    }
+    blocking_reasons: list[str] = []
+    if model_target["status"] != "passed":
+        blocking_reasons.append("Model gateway is not pinned to rawchat GPT-5.5 Responses with model tool loop.")
+    if remote_acceptance["status"] != "passed":
+        blocking_reasons.append("Strict remote acceptance evidence has not been verified for the upload-agent-workflow-result chain.")
+    return {
+        "ready": not blocking_reasons,
+        "status": "ready" if not blocking_reasons else "blocked",
+        "blocking_reasons": blocking_reasons,
+        "checks": checks,
+    }
+
+
+def _agent_model_configured() -> bool:
+    return public_model_status().get("configured") is True
+
+
+def _read_only_agent_fallback(message: str, *, project_id: int | None, project_context: dict) -> dict:
+    backend_context = {
+        "project_id": project_id,
+        "tasks": project_context.get("tasks") or [],
+        "outputs": [],
+    }
+    rag_builder = main_patch_attr("build_rag_response", build_rag_response)
+    rag_response = rag_builder(message, root=_repo_root(), backend_context=backend_context)
+    answer = (
+        "Model gateway is not configured; using read-only backend/RAG fallback. "
+        + str(rag_response.get("answer") or "No backend records or local documents matched the query.")
+    )
+    citations = [
+        item
+        for item in rag_response.get("citations", [])
+        if isinstance(item, dict)
+    ]
+    return {
+        "status": "answered",
+        "intent": rag_response.get("intent") or "general",
+        "selected_skill": "backend-status-fallback",
+        "answer": answer,
+        "retrieved_context": {
+            "mode": rag_response.get("mode") or "fallback",
+            "results": citations,
+        },
+        "tool_invocations": rag_response.get("tool_invocations", []),
+        "tool_trace": [
+            {
+                "stage": "model_gateway",
+                "status": "skipped",
+                "mode": "model_gateway_unconfigured",
+            }
+        ],
+        "safe_metadata": {"fallback_reason": "model_gateway_unconfigured"},
+        "events": [
+            {
+                "type": "agent.model_gateway_unconfigured_fallback",
+                "message": "Answered with read-only backend/RAG fallback.",
+            }
+        ],
     }
 
 
@@ -98,9 +270,11 @@ def deployment():
     return {
         "backend_runtime_mode": mode,
         "api_base_hint": os.environ.get("IMAGE_AGENT_PUBLIC_BASE_URL", ""),
+        "execution_scope": _execution_scope(),
         "agent": agent,
         "legacy_chat_provider": legacy_chat_provider_status(),
         "production_readiness": _production_readiness(mode=mode, agent=agent),
+        "fast_launch_readiness": _fast_launch_readiness(agent=agent),
     }
 
 
@@ -123,10 +297,23 @@ def agent_run(req):
             422,
             agent_api_error_detail("message_required", "message is required"),
         )
+    if req.project_id is not None:
+        require_project(req.project_id)
     agent_run_id = start_agent_run(request_type="run", project_id=req.project_id, message=message)
     project_context_reader = main_patch_attr("read_project_context", read_project_context)
     runner_factory = main_patch_attr("AgentRunner", AgentRunner)
     project_context = project_context_reader(req.project_id, rows_fn=fetch_rows, workflows=main_patch_attr("WORKFLOWS", WORKFLOWS))
+    if runner_factory is AgentRunner and not _agent_model_configured():
+        result = normalize_agent_run_result(_read_only_agent_fallback(message, project_id=req.project_id, project_context=project_context))
+        result["agent_run_id"] = agent_run_id
+        finish_agent_run(agent_run_id, result=result)
+        ledger = load_agent_run(agent_run_id) or {}
+        return build_agent_run_response_payload(
+            result,
+            ledger=ledger,
+            request_type="run",
+            project_id=req.project_id,
+        )
     try:
         result = normalize_agent_run_result(dict(runner_factory().run(message=message, project_context=project_context)))
         result["agent_run_id"] = agent_run_id
@@ -214,6 +401,8 @@ def agent_resume(thread_id, req):
 
 
 def agent_rag_query(req):
+    if req.project_id is not None:
+        require_project(req.project_id)
     backend_context = build_rag_backend_context(req.project_id)
     builder = main_patch_attr("build_rag_response", build_rag_response)
     return builder(req.query, root=_repo_root(), backend_context=backend_context)
@@ -234,6 +423,7 @@ def admin_containers():
 
 
 def list_project_agent_run_history(project_id):
+    require_project(project_id)
     return build_project_agent_run_history_response(project_id, list_project_agent_runs(project_id))
 
 

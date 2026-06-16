@@ -26,6 +26,7 @@ export function ArtifactTable({ apiBase, artifacts, taskId, title = 'Artifacts' 
               <TableHeaderCell>Group</TableHeaderCell>
               <TableHeaderCell>Space</TableHeaderCell>
               <TableHeaderCell>Type</TableHeaderCell>
+              <TableHeaderCell>Origin</TableHeaderCell>
               <TableHeaderCell>Size</TableHeaderCell>
               <TableHeaderCell>Open</TableHeaderCell>
             </tr>
@@ -40,6 +41,7 @@ export function ArtifactTable({ apiBase, artifacts, taskId, title = 'Artifacts' 
                   <TableCell>{artifact.feature_group || '-'}</TableCell>
                   <TableCell>{artifact.space || '-'}</TableCell>
                   <TableCell>{artifact.content_type || artifact.output_type || '-'}</TableCell>
+                  <TableCell>{artifact.artifact_origin || '-'}</TableCell>
                   <TableCell>{artifact.size_bytes ? `${artifact.size_bytes} B` : '-'}</TableCell>
                   <TableCell>
                     <a className="inline-flex items-center gap-1 font-semibold text-accent hover:underline" href={url} rel="noreferrer" target="_blank">

@@ -38,7 +38,18 @@ FUNCTION_TOOLS: list[dict[str, Any]] = [
         "parameters": {
             "type": "object",
             "required": ["query"],
-            "properties": {"query": {"type": "string"}, "filters": {"type": "object"}, "limit": {"type": "integer"}},
+            "properties": {
+                "query": {"type": "string"},
+                "filters": {
+                    "type": ["object", "null"],
+                    "properties": {
+                        "workflow_type": {"type": ["string", "null"]},
+                        "source_type": {"type": ["string", "null"]},
+                        "official_grounding": {"type": ["string", "null"]},
+                    },
+                },
+                "limit": {"type": "integer"},
+            },
         },
     },
     {
@@ -72,7 +83,19 @@ FUNCTION_TOOLS: list[dict[str, Any]] = [
         "parameters": {
             "type": "object",
             "required": ["confirmation"],
-            "properties": {"confirmation": {"type": "object"}},
+            "properties": {
+                "confirmation": {
+                    "type": "object",
+                    "properties": {
+                        "approved": {"type": "boolean"},
+                        "action_lane": {"type": ["string", "null"]},
+                        "project_id": {"type": ["integer", "null"]},
+                        "series_id": {"type": "integer"},
+                        "workflow_type": {"type": "string"},
+                        "qsiprep_task_id": {"type": ["integer", "null"]},
+                    },
+                }
+            },
         },
     },
     {
@@ -101,12 +124,7 @@ FUNCTION_TOOLS: list[dict[str, Any]] = [
                 "input_modality": {"type": ["string", "null"]},
                 "primitives": {
                     "type": "array",
-                    "items": {
-                        "oneOf": [
-                            {"type": "string"},
-                            {"type": "object"},
-                        ]
-                    },
+                    "items": {"type": "string"},
                 },
                 "script_text": {"type": ["string", "null"]},
                 "script_paths": {"type": "array", "items": {"type": "string"}},
@@ -116,7 +134,23 @@ FUNCTION_TOOLS: list[dict[str, Any]] = [
     {
         "name": "sandbox_validate_toolchain",
         "description": "Validate an incubating toolchain in sandbox terms; never creates production tasks.",
-        "parameters": {"type": "object", "required": ["proposal"], "properties": {"proposal": {"type": "object"}}},
+        "parameters": {
+            "type": "object",
+            "required": ["proposal"],
+            "properties": {
+                "proposal": {
+                    "type": "object",
+                    "properties": {
+                        "proposal_id": {"type": ["string", "null"]},
+                        "objective": {"type": ["string", "null"]},
+                        "lane": {"type": ["string", "null"]},
+                        "input_modality": {"type": ["string", "null"]},
+                        "primitives": {"type": ["array", "null"], "items": {"type": "string"}},
+                        "sandbox_dataset": {"type": ["string", "null"]},
+                    },
+                }
+            },
+        },
     },
     {
         "name": "promote_toolchain_to_workflow",
@@ -124,7 +158,18 @@ FUNCTION_TOOLS: list[dict[str, Any]] = [
         "parameters": {
             "type": "object",
             "required": ["proposal", "approved"],
-            "properties": {"proposal": {"type": "object"}, "approved": {"type": "boolean"}},
+            "properties": {
+                "proposal": {
+                    "type": "object",
+                    "properties": {
+                        "proposal_id": {"type": ["string", "null"]},
+                        "objective": {"type": ["string", "null"]},
+                        "lane": {"type": ["string", "null"]},
+                        "validation_status": {"type": ["string", "null"]},
+                    },
+                },
+                "approved": {"type": "boolean"},
+            },
         },
     },
 ]
@@ -175,6 +220,8 @@ def _mark_object_schemas_strict(schema: Any) -> None:
     schema_type = schema.get("type")
     if schema_type == "object" or (isinstance(schema_type, list) and "object" in schema_type):
         schema["additionalProperties"] = False
+        properties = schema.get("properties")
+        schema["required"] = list(properties.keys()) if isinstance(properties, dict) else []
     for value in (schema.get("properties") or {}).values():
         _mark_object_schemas_strict(value)
     _mark_object_schemas_strict(schema.get("items"))

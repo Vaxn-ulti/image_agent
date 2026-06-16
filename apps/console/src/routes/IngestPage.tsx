@@ -10,8 +10,8 @@ import {
   RefreshCw,
   UploadCloud,
 } from 'lucide-react';
-import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { DataTable, TableCell, TableHead, TableHeaderCell, TableRow } from '../components/ui/DataTable';
 import { PageHeader } from '../components/ui/PageHeader';
@@ -25,12 +25,17 @@ export function IngestPage() {
   const [error, setError] = useState('');
   const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
   const [dwiFiles, setDwiFiles] = useState<Partial<DwiUploadFiles>>({});
+  const refreshedCompletedSessionRef = useRef<number | null>(null);
 
-  const { data: series = [] } = useQuery({
+  const seriesQuery = useQuery({
     enabled: Boolean(projectId),
     queryFn: () => api.listSeries(projectId),
     queryKey: queryKeys.series(projectId),
   });
+  const series = seriesQuery.data || [];
+  const projectDataErrorMessage = seriesQuery.error instanceof Error
+    ? seriesQuery.error.message
+    : 'Could not load project series.';
 
   // Polling for inventory status if a session is active
   const { data: inventoryData } = useQuery({
@@ -51,6 +56,14 @@ export function IngestPage() {
       queryClient.invalidateQueries({ queryKey: ['inventory', projectId, activeSessionId] });
     }
   };
+
+  useEffect(() => {
+    if (!activeSessionId || inventory?.inventory_status !== 'completed') return;
+    if (refreshedCompletedSessionRef.current === activeSessionId) return;
+    refreshedCompletedSessionRef.current = activeSessionId;
+    queryClient.invalidateQueries({ queryKey: queryKeys.series(projectId) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.tasks(projectId) });
+  }, [activeSessionId, inventory?.inventory_status, projectId, queryClient]);
 
   const uploadNifti = useMutation({
     mutationFn: (file: File) => api.uploadNifti(projectId, file),
@@ -76,6 +89,7 @@ export function IngestPage() {
     try {
       const session = await api.createUploadSession(projectId, { label: file.name, source_type: 'folder_or_archive' });
       setActiveSessionId(session.id);
+      refreshedCompletedSessionRef.current = null;
       // We set syncFastPath to false to demonstrate async polling
       await api.ingestDataset(projectId, session.id, file, false);
       refreshData();
@@ -94,6 +108,38 @@ export function IngestPage() {
   }
 
   const isIngesting = inventory?.inventory_status === 'running' || inventory?.inventory_status === 'queued';
+
+  if (seriesQuery.isError) {
+    return (
+      <div className="max-w-6xl mx-auto space-y-6">
+        <PageHeader
+          description="Upload imaging data and verify detected series before running workflows."
+          eyebrow="Data & QC"
+          title="Data & QC"
+        />
+
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-5">
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-amber-700">
+              <AlertCircle className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 space-y-3">
+              <div>
+                <h2 className="text-base font-semibold text-amber-950">Project data unavailable</h2>
+                <p className="mt-1 text-sm leading-6 text-amber-900">{projectDataErrorMessage}</p>
+              </div>
+              <Link
+                to="/projects"
+                className="inline-flex items-center rounded-md bg-amber-900 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-800"
+              >
+                Switch project
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">

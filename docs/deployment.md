@@ -1,6 +1,9 @@
 # Deployment
 
-Development runs API and frontend separately on the remote server.
+Development can be edited on the workstation, but deployment testing runs API,
+frontend, Docker containers, and workflow tools on the deployed API server. In
+this project, "remote" means "the deployment server relative to the workstation";
+workflow scripts must not depend on a second remote worker host.
 
 API:
 
@@ -17,9 +20,11 @@ For production, set an explicit frontend allowlist before starting the API:
 ```bash
 export IMAGE_AGENT_ENV=production
 export IMAGE_AGENT_CORS_ORIGINS=https://<console-hostname>
+export IMAGE_AGENT_PUBLIC_BASE_URL=https://<api-hostname>
 ```
 
 The API refuses production startup if `IMAGE_AGENT_CORS_ORIGINS` is missing or contains `*`. Leave `IMAGE_AGENT_ENV` unset for local development defaults.
+In production, `/deployment.production_readiness` also remains blocked until `IMAGE_AGENT_PUBLIC_BASE_URL` is set to the public HTTPS API origin used by the console and deployment-server smoke evidence.
 
 Frontend:
 

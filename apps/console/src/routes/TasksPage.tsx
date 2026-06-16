@@ -22,6 +22,39 @@ export function TasksPage() {
     queryKey: queryKeys.tasks(projectId),
     refetchInterval: (query) => (hasActiveTasks(query.state.data) ? 1500 : false),
   });
+  const projectDataErrorMessage = error instanceof Error ? error.message : 'Could not load tasks';
+
+  if (error) {
+    return (
+      <div className="max-w-6xl mx-auto space-y-6">
+        <PageHeader
+          description="Monitor queued, running, completed, failed, and cancelled backend work."
+          eyebrow="Processing"
+          title="Task Monitor"
+        />
+
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-5">
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-amber-700">
+              <AlertCircle className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 space-y-3">
+              <div>
+                <h2 className="text-base font-semibold text-amber-950">Project data unavailable</h2>
+                <p className="mt-1 text-sm leading-6 text-amber-900">{projectDataErrorMessage}</p>
+              </div>
+              <Link
+                to="/projects"
+                className="inline-flex items-center rounded-md bg-amber-900 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-800"
+              >
+                Switch project
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
@@ -30,13 +63,6 @@ export function TasksPage() {
         eyebrow="Processing"
         title="Task Monitor"
       />
-
-      {error ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 shrink-0" />
-          {error instanceof Error ? error.message : 'Could not load tasks'}
-        </div>
-      ) : null}
 
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col transition-all hover:shadow-md">
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between font-semibold text-gray-800 text-sm">

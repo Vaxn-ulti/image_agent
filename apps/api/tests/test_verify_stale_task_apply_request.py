@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from test_build_stale_task_apply_request import load_module as load_builder
-from test_verify_stale_task_approval import _approval_payload
+from tests.test_build_stale_task_apply_request import load_module as load_builder
+from tests.test_verify_stale_task_approval import _approval_payload
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -57,6 +57,7 @@ def test_verify_stale_task_apply_request_accepts_complete_request(tmp_path):
         "restart_api_normally",
         "run_strict_remote_smoke_acceptance",
         "verify_strict_remote_smoke_acceptance_json_after_normal_restart",
+        "emit_fast_launch_acceptance_env_after_strict_verify",
     ]
 
 
@@ -88,6 +89,144 @@ def test_verify_stale_task_apply_request_rejects_after_freshness_boundary(tmp_pa
         )
 
     assert "verified approval generated_at_utc is older than max_age_hours" in str(exc.value)
+
+
+def test_verify_stale_task_apply_request_requires_full_main_flow_strict_smoke(tmp_path):
+    verifier = load_verifier()
+    request = _request_payload(tmp_path)
+    for step in request["required_followup_steps"]:
+        if step["id"] == "run_strict_remote_smoke_acceptance":
+            step["command"] = step["command"].replace(" --require-agent-workflow-confirmation", "")
+            break
+
+    with pytest.raises(SystemExit) as exc:
+        verifier.verify_apply_request(
+            request,
+            expected_task_ids=[83, 84],
+            max_age_hours=24,
+            now_utc="2026-06-12T05:30:00Z",
+        )
+
+    assert "strict smoke command must include --require-agent-workflow-confirmation" in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    "required_flag",
+    [
+        "--require-deployment-identity",
+        "--require-agent-workflow-confirmation",
+        "--expected-model-wire-api responses",
+        "--expected-model-provider-profile rawchat",
+        "--require-model-tool-loop",
+        "--deployment-id <accepted_release_or_commit>",
+        "--min-documents 60",
+        "--min-chunks 200",
+        "--require-raw-source-policy",
+        "--require-vendor-pointer-integrity",
+        "--require-uploaded-series",
+        "--upload-nifti-file <remote_nifti_file>",
+        "--require-launchability-matrix",
+        "--min-native-qc-images 1",
+        "--min-scientific-report-images 1",
+        "--project-id <project_id>",
+        "--upload-session-id <upload_session_id>",
+    ],
+)
+def test_verify_stale_task_apply_request_requires_complete_readiness_smoke_flags(tmp_path, required_flag):
+    verifier = load_verifier()
+    request = _request_payload(tmp_path)
+    for step in request["required_followup_steps"]:
+        if step["id"] == "run_strict_remote_smoke_acceptance":
+            step["command"] = step["command"].replace(f" {required_flag}", "")
+            break
+
+    with pytest.raises(SystemExit) as exc:
+        verifier.verify_apply_request(
+            request,
+            expected_task_ids=[83, 84],
+            max_age_hours=24,
+            now_utc="2026-06-12T05:30:00Z",
+        )
+
+    assert f"strict smoke command must include {required_flag}" in str(exc.value)
+
+
+def test_verify_stale_task_apply_request_requires_strict_smoke_marked_mutating(tmp_path):
+    verifier = load_verifier()
+    request = _request_payload(tmp_path)
+    for step in request["required_followup_steps"]:
+        if step["id"] == "run_strict_remote_smoke_acceptance":
+            step["mutates_remote_state"] = False
+            break
+
+    with pytest.raises(SystemExit) as exc:
+        verifier.verify_apply_request(
+            request,
+            expected_task_ids=[83, 84],
+            max_age_hours=24,
+            now_utc="2026-06-12T05:30:00Z",
+        )
+
+    assert "strict smoke step must be marked as mutating remote state" in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (
+            lambda request: next(
+                step for step in request["required_followup_steps"] if step["id"] == "run_strict_remote_smoke_acceptance"
+            ).update({"expected_output_json": "/tmp/other-smoke.json"}),
+            "strict smoke expected_output_json must match --output-json",
+        ),
+        (
+            lambda request: next(
+                step
+                for step in request["required_followup_steps"]
+                if step["id"] == "verify_strict_remote_smoke_acceptance_json_after_normal_restart"
+            ).update(
+                {
+                    "command": next(
+                        step
+                        for step in request["required_followup_steps"]
+                        if step["id"] == "verify_strict_remote_smoke_acceptance_json_after_normal_restart"
+                    )["command"].replace("/tmp/image_agent_remote_smoke_acceptance_20260612T050000Z.json", "/tmp/other-smoke.json")
+                }
+            ),
+            "strict smoke verifier command must verify the smoke output JSON",
+        ),
+        (
+            lambda request: next(
+                step
+                for step in request["required_followup_steps"]
+                if step["id"] == "emit_fast_launch_acceptance_env_after_strict_verify"
+            ).update(
+                {
+                    "command": next(
+                        step
+                        for step in request["required_followup_steps"]
+                        if step["id"] == "emit_fast_launch_acceptance_env_after_strict_verify"
+                    )["command"].replace("/tmp/image_agent_remote_smoke_acceptance_20260612T050000Z.json", "/tmp/other-smoke.json")
+                }
+            ),
+            "fast-launch env export command must verify the smoke output JSON",
+        ),
+    ],
+)
+def test_verify_stale_task_apply_request_requires_single_strict_smoke_json_path(tmp_path, mutate, message):
+    verifier = load_verifier()
+    request = _request_payload(tmp_path)
+    mutate(request)
+
+    with pytest.raises(SystemExit) as exc:
+        verifier.verify_apply_request(
+            request,
+            expected_task_ids=[83, 84],
+            max_age_hours=24,
+            now_utc="2026-06-12T05:30:00Z",
+        )
+
+    assert message in str(exc.value)
 
 
 @pytest.mark.parametrize(

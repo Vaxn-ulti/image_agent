@@ -218,7 +218,8 @@ def test_task_logs_endpoint_includes_remote_wrapper_logs(tmp_path, monkeypatch):
     stages = {item["name"]: item["source_stage"] for item in payload["remote_logs"]}
     assert stages["fmriprep.log"] == "fmriprep"
     assert stages["xcpd_fmriprep.log"] == "xcpd"
-    assert str(remote_log_dir / "fmriprep.log") in payload["log_paths"]
+    assert "log_paths" not in payload
+    assert all("path" not in item for item in payload["remote_logs"])
 
 
 def test_pipeline_command_outputs_get_metadata_file_path(tmp_path, monkeypatch):

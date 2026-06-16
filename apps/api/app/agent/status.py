@@ -22,6 +22,7 @@ def public_model_status() -> dict[str, Any]:
         if key
         in {
             "provider",
+            "provider_profile",
             "configured",
             "base_url",
             "model",
@@ -32,6 +33,8 @@ def public_model_status() -> dict[str, Any]:
             "metadata_enabled",
             "context_window",
             "auto_compact_token_limit",
+            "capabilities",
+            "gateway_diagnostics",
         }
     }
     deployment = status.get("deployment") if isinstance(status.get("deployment"), dict) else {}

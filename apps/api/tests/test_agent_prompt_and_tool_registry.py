@@ -60,6 +60,12 @@ def test_openai_function_tool_specs_are_strict_responses_schemas():
         assert parameters["additionalProperties"] is False, spec["name"]
         for path, schema in _object_schemas(parameters):
             assert schema["additionalProperties"] is False, f"{spec['name']}:{path}"
+            assert "required" in schema, f"{spec['name']}:{path}"
+            assert sorted(schema.get("required", [])) == sorted(schema.get("properties", {}).keys()), f"{spec['name']}:{path}"
+        for path, schema in _schemas(parameters):
+            assert "oneOf" not in schema, f"{spec['name']}:{path}"
+            assert "anyOf" not in schema, f"{spec['name']}:{path}"
+            assert "allOf" not in schema, f"{spec['name']}:{path}"
 
 
 def test_preflight_workflow_tool_schema_exposes_registered_workflow_enum():
@@ -85,3 +91,17 @@ def _object_schemas(schema, path="$"):
         yield from _object_schemas(items, f"{path}.items")
     for index, value in enumerate(schema.get("oneOf", []) or []):
         yield from _object_schemas(value, f"{path}.oneOf[{index}]")
+
+
+def _schemas(schema, path="$"):
+    if not isinstance(schema, dict):
+        return
+    yield path, schema
+    for key, value in schema.get("properties", {}).items():
+        yield from _schemas(value, f"{path}.properties.{key}")
+    items = schema.get("items")
+    if isinstance(items, dict):
+        yield from _schemas(items, f"{path}.items")
+    for keyword in ("oneOf", "anyOf", "allOf"):
+        for index, value in enumerate(schema.get(keyword, []) or []):
+            yield from _schemas(value, f"{path}.{keyword}[{index}]")

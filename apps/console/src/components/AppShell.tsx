@@ -32,6 +32,33 @@ export function AppShell() {
   const { data: deployment, isError: deploymentError } = useQuery({ queryFn: api.deployment, queryKey: queryKeys.deployment });
   const { data: runtime } = useQuery({ queryFn: api.runtimeContainers, queryKey: queryKeys.runtime, retry: false });
   const apiConnected = Boolean(deployment) && !deploymentError;
+  const productionReadiness = deployment?.production_readiness;
+  const productionBlocked = Boolean(productionReadiness?.required && productionReadiness.ready === false);
+  const productionBlockingReason = productionReadiness?.blocking_reasons?.[0];
+  const fastLaunchReadiness = deployment?.fast_launch_readiness;
+  const launchBlocked = fastLaunchReadiness?.ready === false;
+  const launchBlockingReason = fastLaunchReadiness?.blocking_reasons?.[0];
+  const apiBadgeTone = !apiConnected
+    ? 'bg-red-50 text-red-700 border-red-100'
+    : launchBlocked
+      ? 'bg-amber-50 text-amber-700 border-amber-100'
+    : productionBlocked
+      ? 'bg-amber-50 text-amber-700 border-amber-100'
+      : 'bg-green-50 text-green-700 border-green-100';
+  const apiBadgeDot = !apiConnected
+    ? 'bg-red-500'
+    : launchBlocked
+      ? 'bg-amber-500'
+    : productionBlocked
+      ? 'bg-amber-500'
+      : 'bg-green-500';
+  const apiBadgeText = !apiConnected
+    ? 'API disconnected'
+    : launchBlocked
+      ? 'Launch blocked'
+      : productionBlocked
+        ? 'Production blocked'
+        : 'API connected';
 
   return (
     <div className="flex h-screen bg-[#F8FAFC] text-[#1E293B] font-sans antialiased overflow-hidden">
@@ -101,6 +128,32 @@ export function AppShell() {
                 <span className="text-gray-500">Agent</span>
                 <span className="font-medium text-gray-700">{deployment?.agent?.configured ? 'Enabled' : 'Fallback'}</span>
               </div>
+              {productionReadiness?.required ? (
+                <div className="space-y-1 border-t border-[#E2E8F0] pt-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500">Production</span>
+                    <span className={`font-medium ${productionBlocked ? 'text-amber-700' : 'text-green-700'}`}>
+                      {productionBlocked ? 'Blocked' : 'Ready'}
+                    </span>
+                  </div>
+                  {productionBlocked && productionBlockingReason ? (
+                    <div className="text-[11px] leading-4 text-amber-700">{productionBlockingReason}</div>
+                  ) : null}
+                </div>
+              ) : null}
+              {fastLaunchReadiness ? (
+                <div className="space-y-1 border-t border-[#E2E8F0] pt-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500">Main chain</span>
+                    <span className={`font-medium ${launchBlocked ? 'text-amber-700' : 'text-green-700'}`}>
+                      {launchBlocked ? 'Blocked' : 'Ready'}
+                    </span>
+                  </div>
+                  {launchBlocked && launchBlockingReason ? (
+                    <div className="text-[11px] leading-4 text-amber-700">{launchBlockingReason}</div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -117,11 +170,9 @@ export function AppShell() {
         {/* Top Header */}
         <header className="flex items-center justify-between p-6 h-16 border-b border-[#E2E8F0] bg-white">
           <div className="flex items-center gap-2 text-xs font-semibold">
-            <span className={`flex items-center gap-1.5 px-2 py-1 rounded-full border ${
-              apiConnected ? 'bg-green-50 text-green-700 border-green-100' : 'bg-red-50 text-red-700 border-red-100'
-            }`}>
-              <div className={`w-1.5 h-1.5 rounded-full ${apiConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-              {apiConnected ? 'API connected' : 'API disconnected'}
+            <span className={`flex items-center gap-1.5 px-2 py-1 rounded-full border ${apiBadgeTone}`}>
+              <div className={`w-1.5 h-1.5 rounded-full ${apiBadgeDot}`}></div>
+              {apiBadgeText}
             </span>
           </div>
           <div className="flex items-center gap-3">

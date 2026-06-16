@@ -1211,7 +1211,7 @@ def test_remote_smoke_acceptance_json_verifier_is_documented():
         "offline strict smoke acceptance JSON verifier",
         "`python scripts/verify_remote_smoke_acceptance.py`",
         "`status=passed`",
-        "does not replace running `smoke_remote_agent.py` on the remote server",
+        "does not replace running `smoke_remote_agent.py` on the deployed API server",
         "`model_smoke_status=passed`",
         "`remote_evidence_ids_status=passed`",
         "`rag_vendor_pointer_integrity_status=passed`",
@@ -1862,7 +1862,7 @@ def test_product_readiness_gate_blocks_frontend_until_agent_contracts_are_verifi
     for phrase in (
         "Frontend Design Freeze Gate",
         "Do not start frontend page design",
-        "OpenAI SDK Responses-style",
+        "OpenAI SDK Responses-style or Chat Completions-compatible",
         "durable run/thread state",
         "official-source RAG",
         "raw-source manifest",
@@ -1893,11 +1893,20 @@ def test_product_readiness_gate_blocks_frontend_until_agent_contracts_are_verifi
         "preflight-only command still fails at the drain gate",
         "remote-release-gate-command-plan.json",
         "verify_release_gate_command_plan.py",
+        "build_release_gate_command_plan.py",
         "build_stale_task_apply_request.py",
         "verify_stale_task_apply_request.py",
         "stale_task_apply_approval",
         "approval_expires_at_utc",
         "2026-06-15T08:02:02.843606+00:00",
+        "approval_refresh_required",
+        "checked.approval_json_status=refresh_required",
+        "fresh_reviewed",
+        "operator_authorization_required",
+        "approval_json_state.approval_expires_at_utc",
+        "previous_approval_json",
+        "must not be used for apply",
+        "<fresh_reviewed_approval_json>",
         "/tmp/image_agent_stale_tasks_83_84_apply_request_20260614T080202Z.json",
         "restart_api_normally",
         "run_strict_remote_smoke_acceptance",
@@ -1933,6 +1942,22 @@ def test_product_readiness_documents_fast_launch_main_flow_and_boundaries():
         "IMAGE_AGENT_CORS_ORIGINS",
         "Agent may recommend or explain workflows, but task creation must still go through deterministic backend APIs",
         "RAG may explain official sources, but backend project/task state remains authoritative",
-        "Real processing acceptance still belongs on the remote server",
+        "Mock tests prove the control plane",
+        "Real script tests prove the execution plane",
+        "Real processing acceptance belongs on the deployed API server",
     ):
         assert phrase in gate
+
+
+def test_developer_testing_matrix_documents_control_and_execution_planes():
+    matrix = (REPO_ROOT / "docs" / "skills" / "image-agent-developer" / "references" / "testing-matrix.md").read_text(
+        encoding="utf-8"
+    )
+
+    for phrase in (
+        "Mock tests prove the control plane",
+        "Real script tests prove the execution plane",
+        "mock tests must not be reported as real workflow acceptance",
+        "Real scripts are deployment acceptance evidence only when they run against actual data and registered outputs",
+    ):
+        assert phrase in matrix

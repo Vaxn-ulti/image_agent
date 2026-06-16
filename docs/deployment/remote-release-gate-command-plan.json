@@ -1,11 +1,17 @@
 {
   "plan_id": "remote_release_gate_after_stale_task_approval_v1",
   "schema_version": 1,
-  "status": "operator_authorization_required",
+  "status": "approval_refresh_required",
   "remote_host": "yyf@10.2.32.14",
   "remote_project_root": "/home/yyf/project/image_agent",
   "release_overlay": "/home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132",
-  "approval_json": "/tmp/image_agent_stale_tasks_83_84_dry_run_20260614T080202Z.json",
+  "approval_json": "<fresh_reviewed_approval_json>",
+  "approval_json_state": {
+    "status": "refresh_required",
+    "reason": "The previously verified approval JSON expired after its 24 hour freshness window and must not be used for apply.",
+    "previous_approval_json": "/tmp/image_agent_stale_tasks_83_84_dry_run_20260614T080202Z.json",
+    "next_required_step": "stale_task_approval_refresh"
+  },
   "target_task_ids": [
     83,
     84
@@ -33,37 +39,38 @@
     "required_when": "approval_json_missing_or_older_than_24h",
     "command": "cd /home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132/apps/api && set -a; . /home/yyf/project/image_agent/.env; set +a; PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/reconcile_stale_tasks.py --max-age-hours 24 --check-containers --task-id 83 --task-id 84 > /tmp/image_agent_stale_tasks_83_84_dry_run_<timestamp>.json",
     "output_json_pattern": "/tmp/image_agent_stale_tasks_83_84_dry_run_<timestamp>.json",
+    "materialize_plan_command": "cd /home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132/apps/api && PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/build_release_gate_command_plan.py docs/deployment/remote-release-gate-command-plan.json /tmp/image_agent_stale_tasks_83_84_dry_run_<timestamp>.json --task-id 83 --task-id 84 --max-age-hours 24 --output-json /tmp/image_agent_remote_release_gate_plan_<timestamp>.json",
     "must_be_operator_reviewed_before_apply": true,
     "mutates_remote_state": false,
     "next_steps_after_refresh": [
       "operator reviews refreshed dry-run JSON and approval_fingerprint",
-      "set approval_json to the refreshed dry-run JSON path",
-      "rerun verify_fresh_stale_task_approval before apply"
+      "run build_release_gate_command_plan.py to materialize an operator_authorization_required plan",
+      "verify the materialized plan with verify_release_gate_command_plan.py before apply"
     ]
   },
   "steps": [
     {
       "id": "verify_fresh_stale_task_approval",
       "purpose": "Verify the reviewed dry-run JSON for tasks 83 and 84 is fresh and still carries the reviewed approval_fingerprint before any mutation.",
-      "command": "cd /home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132/apps/api && PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/verify_stale_task_approval.py /tmp/image_agent_stale_tasks_83_84_dry_run_20260614T080202Z.json --task-id 83 --task-id 84 --max-age-hours 24",
+      "command": "cd /home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132/apps/api && PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/verify_stale_task_approval.py <fresh_reviewed_approval_json> --task-id 83 --task-id 84 --max-age-hours 24",
       "requires_operator_authorization": false,
       "mutates_remote_state": false,
       "expected_success": [
         "status=passed",
         "checked.generated_at_utc is within 24 hours",
-        "checked.approval_fingerprint matches the reviewed dry-run payload"
+        "checked.approval_fingerprint matches the refreshed reviewed dry-run payload"
       ]
     },
     {
       "id": "apply_approved_stale_task_resolution",
       "purpose": "After explicit operator authorization, mark only stale active task rows 83 and 84 as failed using the reviewed approval JSON.",
-      "command": "cd /home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132/apps/api && set -a; . /home/yyf/project/image_agent/.env; set +a; PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/reconcile_stale_tasks.py --apply --max-age-hours 24 --task-id 83 --task-id 84 --approval-json /tmp/image_agent_stale_tasks_83_84_dry_run_20260614T080202Z.json --reason \"operator confirmed no matching running Image Agent container\" > /tmp/image_agent_stale_tasks_83_84_apply_<timestamp>.json",
+      "command": "cd /home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132/apps/api && set -a; . /home/yyf/project/image_agent/.env; set +a; PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/reconcile_stale_tasks.py --apply --max-age-hours 24 --task-id 83 --task-id 84 --approval-json <fresh_reviewed_approval_json> --reason \"operator confirmed no matching running Image Agent container\" > /tmp/image_agent_stale_tasks_83_84_apply_<timestamp>.json",
       "requires_operator_authorization": true,
       "mutates_remote_state": true,
       "expected_success": [
         "mode=apply",
         "updated_task_ids contains exactly 83 and 84",
-        "approval_fingerprint matches /tmp/image_agent_stale_tasks_83_84_dry_run_20260614T080202Z.json",
+        "approval_fingerprint matches <fresh_reviewed_approval_json>",
         "running_container_task_ids is empty"
       ]
     },
@@ -120,17 +127,23 @@
     },
     {
       "id": "run_strict_remote_smoke_acceptance",
-      "purpose": "Run strict remote acceptance with model, project-scoped Agent chat, production readiness, real evidence ids, completed upload ingestion, completed task status, launchability, native QC, and scientific report artifact gates.",
-      "command": "cd /home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132/apps/api && /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/smoke_remote_agent.py --api-base http://127.0.0.1:8000 --require-model --require-project-agent-context --require-deployment-identity --require-production-readiness --deployment-id <accepted_release_or_commit> --expected-health-version <expected_health_version> --min-documents 60 --min-chunks 200 --require-raw-source-policy --require-vendor-pointer-integrity --require-real-evidence-ids --require-completed-upload --require-completed-task --require-launchability-matrix --require-container-native-qc --min-native-qc-images 1 --require-scientific-report-artifacts --min-scientific-report-images 1 --project-id <project_id> --upload-session-id <upload_session_id> --task-id <completed_task_id> --output-json /tmp/image_agent_remote_smoke_acceptance_<timestamp>.json",
+      "purpose": "Run strict remote acceptance with model, project-scoped Agent chat, Agent workflow confirmation, production readiness, real evidence ids, completed upload ingestion, actual NIfTI upload, deterministic launch of a real registered workflow from the uploaded series, completed task status, launchability, native QC, and scientific report artifact gates. Debug-only mock workflows such as t1_deepprep_mock are not valid strict deployment acceptance.",
+      "command": "cd /home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132/apps/api && /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/smoke_remote_agent.py --api-base http://127.0.0.1:8000 --require-model --expected-model-wire-api responses --expected-model-provider-profile rawchat --require-model-tool-loop --require-project-agent-context --require-agent-workflow-confirmation --require-deployment-identity --require-production-readiness --deployment-id <accepted_release_or_commit> --expected-health-version <expected_health_version> --min-documents 60 --min-chunks 200 --require-raw-source-policy --require-vendor-pointer-integrity --require-real-evidence-ids --require-completed-upload --require-uploaded-series --upload-nifti-file <remote_nifti_file> --require-completed-task --require-launched-task --launch-workflow-type <real_registered_workflow_type> --wait-task-completion-timeout-seconds 21600 --wait-task-completion-poll-seconds 30 --require-launchability-matrix --require-container-native-qc --min-native-qc-images 1 --require-scientific-report-artifacts --min-scientific-report-images 1 --project-id <project_id> --upload-session-id <upload_session_id> --output-json /tmp/image_agent_remote_smoke_acceptance_<timestamp>.json",
       "requires_operator_authorization": false,
-      "mutates_remote_state": false,
+      "mutates_remote_state": true,
       "expected_success": [
         "model_smoke_status=passed",
+        "model_status.wire_api=responses",
+        "model_status.provider_profile=rawchat",
+        "model_status.capabilities.model_tool_loop=true",
         "agent_project_context_status=passed",
+        "agent_workflow_confirmation_status=passed",
         "deployment_identity_status=passed",
         "production_readiness_status=passed",
         "remote_evidence_ids_status=passed",
         "upload_inventory_completion_status=passed",
+        "uploaded_series_status=passed",
+        "launched_task_status=passed",
         "task_status_status=passed",
         "task_workflow_selection_status=passed",
         "container_native_qc_status=passed",
@@ -148,13 +161,30 @@
         "status=passed",
         "checked.generated_at_utc is within 24 hours",
         "checked.model_smoke_status=passed",
+        "checked.model_wire_api=responses",
+        "checked.model_provider_profile=rawchat",
+        "checked.model_tool_loop=true",
         "checked.agent_project_context_status=passed",
+        "checked.agent_workflow_confirmation_status=passed",
         "checked.production_readiness_status=passed",
         "checked.upload_inventory_completion_status=passed",
+        "checked.uploaded_series_status=passed",
+        "checked.launched_task_status=passed",
         "checked.task_status_status=passed",
         "checked.task_workflow_selection_status=passed",
         "checked.container_native_qc_status=passed",
         "checked.scientific_report_artifacts_status=passed"
+      ]
+    },
+    {
+      "id": "emit_fast_launch_acceptance_env_after_strict_verify",
+      "purpose": "Emit only the privacy-safe fast-launch readiness environment lines from the same verified strict smoke JSON.",
+      "command": "cd /home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132/apps/api && /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/verify_remote_smoke_acceptance.py /tmp/image_agent_remote_smoke_acceptance_<timestamp>.json --max-age-hours 24 --emit-fast-launch-env",
+      "requires_operator_authorization": false,
+      "mutates_remote_state": false,
+      "expected_success": [
+        "IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_STATUS=passed",
+        "IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_ID=<accepted_release_or_commit>"
       ]
     }
   ]

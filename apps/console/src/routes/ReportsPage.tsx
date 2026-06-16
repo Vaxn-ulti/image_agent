@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import {
+  AlertCircle,
   BookOpen,
   ChevronRight,
   Download,
@@ -16,15 +17,48 @@ import { queryKeys } from '../lib/query';
 
 export function ReportsPage() {
   const projectId = Number(useParams().projectId);
-  const { data: tasks = [] } = useQuery({
+  const { data: tasks = [], error } = useQuery({
     enabled: Boolean(projectId),
     queryFn: () => api.listProjectTasks(projectId),
     queryKey: queryKeys.tasks(projectId)
   });
+  const projectDataErrorMessage = error instanceof Error ? error.message : 'Could not load reports';
 
   const reportTasks = tasks.filter((task) =>
     task.status === 'completed' || task.status === 'completed_with_partial_failures'
   ).sort((a, b) => (b.finished_at || '').localeCompare(a.finished_at || '') || b.id - a.id);
+
+  if (error) {
+    return (
+      <div className="max-w-6xl mx-auto space-y-6">
+        <PageHeader
+          description="Curated scientific report entry points for publication review, artifact inspection, and downloadable evidence."
+          eyebrow="Research Outputs"
+          title="Scientific Reports"
+        />
+
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-5">
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-amber-700">
+              <AlertCircle className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 space-y-3">
+              <div>
+                <h2 className="text-base font-semibold text-amber-950">Project data unavailable</h2>
+                <p className="mt-1 text-sm leading-6 text-amber-900">{projectDataErrorMessage}</p>
+              </div>
+              <Link
+                to="/projects"
+                className="inline-flex items-center rounded-md bg-amber-900 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-800"
+              >
+                Switch project
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">

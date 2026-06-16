@@ -219,9 +219,9 @@ def test_read_task_and_events_include_remote_wrapper_logs(tmp_path, monkeypatch)
     projects_root = tmp_path / "projects"
     main_log = tmp_path / "task.log"
     remote_log_dir = projects_root / "7" / "derivatives" / "118" / "output" / "logs"
-    main_log.write_text("main progress\n", encoding="utf-8")
+    main_log.write_text("main progress at /home/yyf/project/image_agent/private\n", encoding="utf-8")
     remote_log_dir.mkdir(parents=True)
-    (remote_log_dir / "fmriprep.log").write_text("fmriprep live log\n", encoding="utf-8")
+    (remote_log_dir / "fmriprep.log").write_text("fmriprep live log at C:/Users/A/private\n", encoding="utf-8")
     (remote_log_dir / "xcpd_fmriprep.log").write_text("xcp-d live log\n", encoding="utf-8")
 
     def fake_rows(sql, params=()):
@@ -248,9 +248,17 @@ def test_read_task_and_events_include_remote_wrapper_logs(tmp_path, monkeypatch)
 
     assert task["status"] == "ok"
     assert task["task"]["workflow_type"] == "bold_fmriprep_xcpd_report"
+    assert "log_path" not in task["task"]
+    assert str(main_log) not in json.dumps(task)
     assert "main progress" in events["main_log"]["tail"]
+    assert "path" not in events["main_log"]
+    assert "log_path" not in events["task"]
+    assert "/home/yyf/project/image_agent" not in json.dumps(events)
+    assert "C:/Users/A/private" not in json.dumps(events)
+    assert "[redacted-host-path]" in events["main_log"]["tail"]
     assert events["remote_logs"][0]["name"] == "fmriprep.log"
     assert "fmriprep live log" in events["remote_logs"][0]["tail"]
+    assert "path" not in events["remote_logs"][0]
     stages = {item["name"]: item["source_stage"] for item in events["remote_logs"]}
     assert stages["fmriprep.log"] == "fmriprep"
     assert stages["xcpd_fmriprep.log"] == "xcpd"

@@ -60,7 +60,7 @@ WORKFLOW_REGISTRY: list[dict[str, Any]] = [
             "FreeSurfer license",
             "fMRIPrep and XCP-D remote scripts",
         ],
-        "expected_outputs": ["preflight command record", "remote wrapper readiness checks"],
+        "expected_outputs": ["preflight command record", "deployment-local wrapper readiness checks"],
     },
     {
         "type": "toolchain_proposal",
@@ -357,6 +357,9 @@ WORKFLOW_REGISTRY: list[dict[str, Any]] = [
 def _clone(workflow: dict[str, Any]) -> dict[str, Any]:
     item = deepcopy(workflow)
     item.setdefault("type", item.get("workflow_type"))
+    if item.get("runtime_class"):
+        item.setdefault("execution_location", "deployment_server_local")
+        item.setdefault("external_worker_server_required", False)
     return item
 
 
