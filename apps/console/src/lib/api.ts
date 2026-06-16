@@ -46,6 +46,15 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+async function requestBlob(path: string, options: RequestInit = {}): Promise<Blob> {
+  const response = await fetch(`${getApiBase()}${path}`, options);
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `HTTP ${response.status}`);
+  }
+  return response.blob();
+}
+
 function jsonRequest<T>(path: string, body: unknown): Promise<T> {
   return request<T>(path, {
     body: JSON.stringify(body),
@@ -55,7 +64,7 @@ function jsonRequest<T>(path: string, body: unknown): Promise<T> {
 }
 
 function encodeArtifactPath(relativePath: string) {
-  return relativePath.split('/').map(encodeURIComponent).join('%2F');
+  return relativePath.split('/').map(encodeURIComponent).join('/');
 }
 
 export const api = {
@@ -106,7 +115,7 @@ export const api = {
   getLogs: (taskId: number) => request<{ task_id: number; text: string }>(`/tasks/${taskId}/logs`),
   getOutputs: (taskId: number) => request<unknown[]>(`/tasks/${taskId}/outputs`),
   getResultSummary: (taskId: number) => request<ResultSummary>(`/tasks/${taskId}/result-summary`),
-  getArtifactUrl: (taskId: number, relativePath: string) => request<Blob>(`/tasks/${taskId}/artifacts/${encodeArtifactPath(relativePath)}`),
+  getArtifactUrl: (taskId: number, relativePath: string) => requestBlob(`/tasks/${taskId}/artifacts/${encodeArtifactPath(relativePath)}`),
   ragStatus: () => request<RagStatus>('/agent/rag/status'),
   ragQuery: (projectId: number | null, query: string) => jsonRequest<RagResponse>('/agent/rag/query', { project_id: projectId, query }),
   runAgent: (projectId: number | null, message: string) =>

@@ -47,15 +47,18 @@ describe('api client', () => {
     expect(form.get('json_sidecar')).toBeInstanceOf(File);
   });
 
-  it('requests result summaries and artifacts with backend paths', async () => {
+  it('requests result summaries and artifacts with backend route paths', async () => {
     fetchMock
       .mockResolvedValueOnce(new Response(JSON.stringify({ task_id: 4 }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ artifact: true }), { status: 200 }));
+      .mockResolvedValueOnce(new Response('FA', { headers: { 'Content-Type': 'application/octet-stream' }, status: 200 }));
     await api.getResultSummary(4);
-    await api.getArtifactUrl(4, 'maps/fa.nii.gz');
+    const artifact = await api.getArtifactUrl(4, 'maps/fa.nii.gz');
 
     expect(fetchMock.mock.calls[0][0]).toContain('/tasks/4/result-summary');
-    expect(fetchMock.mock.calls[1][0]).toContain('/tasks/4/artifacts/maps%2Ffa.nii.gz');
+    expect(fetchMock.mock.calls[1][0]).toContain('/tasks/4/artifacts/maps/fa.nii.gz');
+    expect(artifact).toBeInstanceOf(Blob);
+    expect(artifact.size).toBe(2);
+    expect(artifact.type).toBe('application/octet-stream');
   });
 
   it('runs project-scoped Agent chat through the Agent run endpoint', async () => {
