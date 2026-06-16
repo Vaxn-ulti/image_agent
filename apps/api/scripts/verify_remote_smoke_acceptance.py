@@ -248,6 +248,49 @@ def _verify_task_result_summary(payload: dict, gate: dict) -> None:
     )
     _require_positive_int_metric_with_prefix(summary, "output_group_count", prefix="task_result_summary")
     _require_positive_int_metric_with_prefix(summary, "output_item_count", prefix="task_result_summary")
+    downloadable_output_count = _require_positive_int_metric_with_prefix(
+        summary,
+        "downloadable_output_count",
+        prefix="task_result_summary",
+    )
+    downloadable_output_paths = summary.get("downloadable_output_paths")
+    downloadable_output_urls = summary.get("downloadable_output_urls")
+    _require(
+        isinstance(downloadable_output_paths, list)
+        and len(downloadable_output_paths) == downloadable_output_count,
+        "task_result_summary.downloadable_output_paths must match downloadable_output_count",
+    )
+    _require(
+        isinstance(downloadable_output_urls, list)
+        and len(downloadable_output_urls) == downloadable_output_count,
+        "task_result_summary.downloadable_output_urls must match downloadable_output_count",
+    )
+    artifact_manifest_relative_paths = payload.get("artifact_manifest_relative_paths")
+    artifact_manifest_download_urls = payload.get("artifact_manifest_download_urls")
+    _require(
+        isinstance(artifact_manifest_relative_paths, list)
+        and artifact_manifest_relative_paths,
+        "artifact_manifest_relative_paths must be non-empty",
+    )
+    _require(
+        isinstance(artifact_manifest_download_urls, list)
+        and artifact_manifest_download_urls,
+        "artifact_manifest_download_urls must be non-empty",
+    )
+    for relative_path, download_url in zip(downloadable_output_paths, downloadable_output_urls, strict=True):
+        _require(
+            isinstance(relative_path, str) and not _is_unsafe_relative_path(relative_path),
+            "task_result_summary.downloadable_output_paths entries must be safe relative paths",
+        )
+        expected_download_url = f"/tasks/{gate['task_id']}/artifacts/{quote(relative_path)}"
+        _require(
+            download_url == expected_download_url,
+            "task_result_summary.downloadable_output_urls entries must match task artifact routes",
+        )
+        _require(
+            relative_path in artifact_manifest_relative_paths and download_url in artifact_manifest_download_urls,
+            "task_result_summary downloadable outputs must be present in artifact_manifest",
+        )
     provenance_keys = summary.get("provenance_keys")
     _require(
         isinstance(provenance_keys, list)

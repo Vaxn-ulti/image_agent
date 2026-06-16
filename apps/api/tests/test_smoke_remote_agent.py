@@ -198,11 +198,39 @@ def _scientific_report_manifest(*, artifacts=None, result_summary_available=True
     }
 
 
+def _artifact_manifest_with_result_summary_output(
+    relative_path="reports/index.html",
+    *,
+    preview_kind="html",
+    content_type="text/html",
+):
+    return {
+        "contract_version": "artifact_manifest_v1",
+        "task_id": 114,
+        "workflow_type": "dwi_fast_gpu_dti",
+        "modality": "DWI",
+        "result_summary": {"available": True, "contract_version": "1.0"},
+        "artifacts": [
+            {
+                "relative_path": relative_path,
+                "download_url": f"/tasks/114/artifacts/{quote(relative_path)}",
+                "preview_kind": preview_kind,
+                "content_type": content_type,
+                "size_bytes": 12,
+                "exists": True,
+            }
+        ],
+        "omitted_artifacts": [],
+    }
+
+
 def _task_result_summary(
     *,
     task_id=114,
     workflow_type="dwi_fast_gpu_dti",
     modality="DWI",
+    output_path="reports/index.html",
+    output_content_type="text/html",
     outputs=None,
 ):
     return {
@@ -217,9 +245,9 @@ def _task_result_summary(
         else {
             "dti_metrics": [
                 {
-                    "relative_path": "reports/dti_metrics.json",
-                    "download_url": "/tasks/114/artifacts/reports/dti_metrics.json",
-                    "content_type": "application/json",
+                    "relative_path": output_path,
+                    "download_url": f"/tasks/114/artifacts/{quote(output_path)}",
+                    "content_type": output_content_type,
                 }
             ]
         },
@@ -1096,7 +1124,12 @@ def test_smoke_remote_agent_require_completed_task_records_safe_task_status(caps
                 "omitted_artifacts": [],
             }
         if url.endswith("/tasks/114/result-summary"):
-            return _task_result_summary(workflow_type="t1_deepprep_anat_report", modality="T1")
+            return _task_result_summary(
+                workflow_type="t1_deepprep_anat_report",
+                modality="T1",
+                output_path="reports/index.html",
+                output_content_type="text/html",
+            )
         raise AssertionError(f"unexpected request: {url}")
 
     monkeypatch.setattr(smoke, "_request", fake_request)
@@ -1160,7 +1193,12 @@ def test_smoke_remote_agent_require_completed_task_records_workflow_selection(ca
                 "omitted_artifacts": [],
             }
         if url.endswith("/tasks/114/result-summary"):
-            return _task_result_summary(workflow_type="t1_deepprep_anat_report", modality="T1")
+            return _task_result_summary(
+                workflow_type="t1_deepprep_anat_report",
+                modality="T1",
+                output_path="reports/index.html",
+                output_content_type="text/html",
+            )
         raise AssertionError(f"unexpected request: {url}")
 
     monkeypatch.setattr(smoke, "_request", fake_request)
@@ -1230,7 +1268,12 @@ def test_smoke_remote_agent_require_completed_task_rejects_task_not_in_runnable_
                 "omitted_artifacts": [],
             }
         if url.endswith("/tasks/114/result-summary"):
-            return _task_result_summary(workflow_type="t1_deepprep_anat_report", modality="T1")
+            return _task_result_summary(
+                workflow_type="t1_deepprep_anat_report",
+                modality="T1",
+                output_path="xcpd/sub-01/figures/carpetplot.png",
+                output_content_type="image/png",
+            )
         raise AssertionError(f"unexpected request: {url}")
 
     monkeypatch.setattr(smoke, "_request", fake_request)
@@ -2098,7 +2141,12 @@ def test_smoke_remote_agent_require_container_native_qc_rejects_artifact_route_e
                 "omitted_artifacts": [],
             }
         if url.endswith("/tasks/114/result-summary"):
-            return _task_result_summary(workflow_type="t1_deepprep_anat_report", modality="T1")
+            return _task_result_summary(
+                workflow_type="t1_deepprep_anat_report",
+                modality="T1",
+                output_path="xcpd/sub-01/figures/carpetplot.png",
+                output_content_type="image/png",
+            )
         raise AssertionError(f"unexpected request: {url}")
 
     monkeypatch.setattr(smoke, "_request", fake_request)
@@ -2145,7 +2193,12 @@ def test_smoke_remote_agent_require_container_native_qc_rejects_served_content_t
                 "omitted_artifacts": [],
             }
         if url.endswith("/tasks/114/result-summary"):
-            return _task_result_summary(workflow_type="t1_deepprep_anat_report", modality="T1")
+            return _task_result_summary(
+                workflow_type="t1_deepprep_anat_report",
+                modality="T1",
+                output_path="xcpd/sub-01/figures/carpetplot.png",
+                output_content_type="image/png",
+            )
         raise AssertionError(f"unexpected request: {url}")
 
     monkeypatch.setattr(smoke, "_request", fake_request)
@@ -2696,26 +2749,16 @@ def test_smoke_remote_agent_validates_project_series_and_task_artifact_contracts
                 }
             ]
         if url.endswith("/tasks/114/artifact-manifest"):
-            return {
-                "contract_version": "artifact_manifest_v1",
-                "task_id": 114,
-                "workflow_type": "dwi_fast_gpu_dti",
-                "modality": "DWI",
-                "result_summary": {"available": True, "contract_version": "1.0"},
-                "artifacts": [
-                    {
-                        "relative_path": "reports/index.html",
-                        "download_url": "/tasks/114/artifacts/reports/index.html",
-                        "preview_kind": "html",
-                        "content_type": "text/html",
-                        "size_bytes": 12,
-                        "exists": True,
-                    }
-                ],
-                "omitted_artifacts": [],
-            }
+            return _artifact_manifest_with_result_summary_output(
+                "reports/dti_metrics.json",
+                preview_kind="json",
+                content_type="application/json",
+            )
         if url.endswith("/tasks/114/result-summary"):
-            return _task_result_summary()
+            return _task_result_summary(
+                output_path="reports/dti_metrics.json",
+                output_content_type="application/json",
+            )
         raise AssertionError(f"unexpected request: {url}")
 
     monkeypatch.setattr(smoke, "_request", fake_request)
@@ -2743,13 +2786,37 @@ def test_smoke_remote_agent_validates_project_series_and_task_artifact_contracts
         "feature_groups": ["dti_metrics"],
         "output_group_count": 1,
         "output_item_count": 1,
+        "downloadable_output_count": 1,
+        "downloadable_output_paths": ["reports/dti_metrics.json"],
+        "downloadable_output_urls": ["/tasks/114/artifacts/reports/dti_metrics.json"],
         "provenance_keys": ["generated_from"],
     }
     assert payload["series_with_workflow_eligibility"] == 1
-    assert payload["artifact_manifest_preview_kinds"] == ["html"]
+    assert payload["artifact_manifest_preview_kinds"] == ["json"]
     assert any(call[1].endswith("/projects/7/series") for call in calls)
     assert any(call[1].endswith("/tasks/114/artifact-manifest") for call in calls)
     assert any(call[1].endswith("/tasks/114/result-summary") for call in calls)
+
+
+def test_smoke_remote_agent_rejects_result_summary_output_missing_from_artifact_manifest(monkeypatch):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        base_response = _good_remote_smoke_response(url)
+        if base_response is not None:
+            return base_response
+        if url.endswith("/tasks/114/artifact-manifest"):
+            return _artifact_manifest_with_result_summary_output("reports/other.json")
+        if url.endswith("/tasks/114/result-summary"):
+            return _task_result_summary()
+        raise AssertionError(f"unexpected request: {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(["--api-base", "http://api.local", "--task-id", "114"])
+
+    assert "task result summary output missing from artifact manifest" in str(exc.value)
 
 
 def test_smoke_remote_agent_rejects_empty_task_artifact_manifest(monkeypatch):

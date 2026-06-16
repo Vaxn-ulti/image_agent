@@ -520,6 +520,8 @@ def _validate_task_artifact_manifest(
     _require(isinstance(artifacts, list), "task artifact manifest artifacts missing")
     _require(bool(artifacts), "task artifact manifest has no artifacts")
     preview_kinds = []
+    artifact_relative_paths = []
+    artifact_download_urls = []
     native_qc_artifacts = []
     scientific_report_artifacts = []
     scientific_report_candidates = []
@@ -538,6 +540,8 @@ def _validate_task_artifact_manifest(
         _require(int(artifact.get("size_bytes") or 0) > 0, "task artifact manifest size_bytes missing")
         _require(preview_kind in {"html", "image", "table", "json", "download"}, "task artifact manifest preview_kind invalid")
         preview_kinds.append(preview_kind)
+        artifact_relative_paths.append(relative_path)
+        artifact_download_urls.append(download_url)
         if _is_native_qc_artifact(artifact):
             _validate_native_qc_provenance(artifact)
             source_ids = _native_qc_official_source_ids(artifact)
@@ -640,6 +644,8 @@ def _validate_task_artifact_manifest(
         "task_id": task_id,
         "artifact_count": len(artifacts),
         "preview_kinds": sorted(set(preview_kinds)),
+        "artifact_relative_paths": artifact_relative_paths,
+        "artifact_download_urls": artifact_download_urls,
         "container_native_qc_status": "passed" if require_native_qc_artifact or min_native_qc_images else "skipped",
         "container_native_qc_artifact_count": len(native_qc_artifacts),
         "container_native_qc_image_count": native_qc_image_count,
@@ -674,7 +680,26 @@ def _count_result_summary_output_items(outputs: dict) -> int:
     return count
 
 
-def _validate_task_result_summary(summary: dict, task_id: int, completed_task: dict | None = None) -> dict:
+def _iter_result_summary_output_items(outputs: dict):
+    for group in outputs.values():
+        if isinstance(group, list):
+            for item in group:
+                if isinstance(item, dict):
+                    yield item
+        elif isinstance(group, dict):
+            for nested in group.values():
+                if isinstance(nested, list):
+                    for item in nested:
+                        if isinstance(item, dict):
+                            yield item
+
+
+def _validate_task_result_summary(
+    summary: dict,
+    task_id: int,
+    completed_task: dict | None = None,
+    artifact_manifest: dict | None = None,
+) -> dict:
     _require(isinstance(summary, dict), "task result summary must be an object")
     _require(isinstance(summary.get("contract_version"), str) and summary["contract_version"], "task result summary contract_version missing")
     _require(int(summary.get("task_id") or 0) == task_id, "task result summary task_id mismatch")
@@ -698,6 +723,35 @@ def _validate_task_result_summary(summary: dict, task_id: int, completed_task: d
     _require(isinstance(outputs, dict) and outputs, "task result summary outputs missing")
     output_item_count = _count_result_summary_output_items(outputs)
     _require(output_item_count > 0, "task result summary output_item_count missing")
+    downloadable_outputs = []
+    artifact_manifest_paths = set(artifact_manifest.get("artifact_relative_paths", [])) if artifact_manifest else set()
+    artifact_manifest_urls = set(artifact_manifest.get("artifact_download_urls", [])) if artifact_manifest else set()
+    for item in _iter_result_summary_output_items(outputs):
+        relative_path = item.get("relative_path")
+        download_url = item.get("download_url")
+        content_type = item.get("content_type")
+        if relative_path is None and download_url is None:
+            continue
+        _require(isinstance(relative_path, str) and relative_path, "task result summary output relative_path missing")
+        _require(not _is_unsafe_path(relative_path), "task result summary output relative_path is unsafe")
+        _require(
+            download_url == f"/tasks/{task_id}/artifacts/{quote(relative_path)}",
+            "task result summary output download_url mismatch",
+        )
+        _require(isinstance(content_type, str) and bool(content_type), "task result summary output content_type missing")
+        if artifact_manifest is not None:
+            _require(
+                relative_path in artifact_manifest_paths and download_url in artifact_manifest_urls,
+                "task result summary output missing from artifact manifest",
+            )
+        downloadable_outputs.append(
+            {
+                "relative_path": relative_path,
+                "download_url": download_url,
+                "content_type": content_type,
+            }
+        )
+    _require(downloadable_outputs, "task result summary downloadable outputs missing")
     provenance = summary.get("provenance")
     _require(isinstance(provenance, dict) and provenance, "task result summary provenance missing")
     _validate_no_artifact_path_leakage(
@@ -717,6 +771,9 @@ def _validate_task_result_summary(summary: dict, task_id: int, completed_task: d
         "feature_groups": feature_groups,
         "output_group_count": len(outputs),
         "output_item_count": output_item_count,
+        "downloadable_output_count": len(downloadable_outputs),
+        "downloadable_output_paths": [item["relative_path"] for item in downloadable_outputs],
+        "downloadable_output_urls": [item["download_url"] for item in downloadable_outputs],
         "provenance_keys": sorted(str(key) for key in provenance),
     }
 
@@ -1105,6 +1162,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             _request("GET", f"{base}/tasks/{args.task_id}/result-summary"),
             args.task_id,
             completed_task,
+            task_artifact_manifest,
         )
         if args.require_container_native_qc or args.min_native_qc_images > 0:
             task_artifact_manifest["container_native_qc_served_urls"] = _validate_container_native_qc_routes(
@@ -1218,6 +1276,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         "artifact_manifest_task_id": task_artifact_manifest.get("task_id") if task_artifact_manifest else None,
         "artifact_manifest_artifact_count": task_artifact_manifest.get("artifact_count") if task_artifact_manifest else 0,
         "artifact_manifest_preview_kinds": task_artifact_manifest.get("preview_kinds") if task_artifact_manifest else [],
+        "artifact_manifest_relative_paths": task_artifact_manifest.get("artifact_relative_paths") if task_artifact_manifest else [],
+        "artifact_manifest_download_urls": task_artifact_manifest.get("artifact_download_urls") if task_artifact_manifest else [],
         "artifact_manifest_result_summary_available": task_artifact_manifest.get("result_summary_available") if task_artifact_manifest else None,
         "container_native_qc_status": task_artifact_manifest.get("container_native_qc_status") if task_artifact_manifest else "skipped",
         "container_native_qc_artifact_count": task_artifact_manifest.get("container_native_qc_artifact_count") if task_artifact_manifest else 0,
