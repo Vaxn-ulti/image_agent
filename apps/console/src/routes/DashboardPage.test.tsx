@@ -297,6 +297,59 @@ describe('DashboardPage', () => {
     expect(screen.getByText('Workflow: t1_deepprep_anat_report')).toBeInTheDocument();
   });
 
+  it('links a completed launched task to its result page', async () => {
+    const recommendedSeries = {
+      ...mockSeries[0],
+      workflow_eligibility: {
+        blocked_workflows: [],
+        policy_version: 'workflow_eligibility_v1',
+        primary_recommendation: { workflow_type: 't1_deepprep_anat_report' },
+        production_task_created: false,
+        runnable_workflows: [{ workflow_type: 't1_deepprep_anat_report' }],
+      },
+    };
+    vi.mocked(api.getResultSummary).mockResolvedValue(mockT1Summary);
+    vi.mocked(api.listWorkflows).mockResolvedValue({ workflows: ['t1_deepprep', 't1_deepprep_anat_report'] });
+    vi.mocked(api.listProjectTasks).mockResolvedValue([]);
+    vi.mocked(api.listSeries).mockResolvedValue([recommendedSeries]);
+    vi.mocked(api.getTask).mockResolvedValue({
+      id: 131,
+      progress: 100,
+      project_id: 13,
+      series_id: 22,
+      status: 'completed',
+      workflow_type: 't1_deepprep_anat_report',
+    });
+    vi.mocked(api.runSeries).mockResolvedValue({
+      id: 131,
+      progress: 0,
+      project_id: 13,
+      series_id: 22,
+      status: 'queued',
+      workflow_type: 't1_deepprep_anat_report',
+    });
+    vi.mocked(api.runAgent).mockResolvedValue({ answer: 'Use backend recommendation.' });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/projects/13/dashboard']}>
+          <Routes>
+            <Route element={<DashboardPage />} path="/projects/:projectId/dashboard" />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText(/Pipeline: t1_deepprep_anat_report/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Start recommended pipeline' }));
+
+    expect(await screen.findByText('Task #131 completed')).toBeInTheDocument();
+    expect(screen.getByText('Progress: 100%')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'View task results' })).toHaveAttribute('href', '/projects/13/results/131');
+  });
+
   it('passes the completed QSIPrep task id when the dashboard launches recommended QSIRecon', async () => {
     const recommendedDwi = {
       ...mockSeries[2],

@@ -404,6 +404,14 @@ export function DashboardPage() {
                     <div className="font-semibold">Task #{displayedStartedTask.id} {displayedStartedTask.status}</div>
                     <div className="mt-1 text-[11px] text-blue-700/80">Progress: {displayedStartedTask.progress}%</div>
                     <div className="mt-1 text-[11px] text-blue-700/80">Workflow: {displayedStartedTask.workflow_type}</div>
+                    {completedTask(displayedStartedTask) ? (
+                      <Link
+                        className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-blue-800 hover:underline"
+                        to={`/projects/${projectId}/results/${displayedStartedTask.id}`}
+                      >
+                        View task results <ExternalLink className="h-3 w-3" />
+                      </Link>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
