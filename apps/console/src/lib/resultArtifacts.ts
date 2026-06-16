@@ -42,9 +42,14 @@ export function displayArtifactName(artifact: OutputItem, fallback = 'artifact')
   return relativePath.split('/').filter(Boolean).pop() || relativePath;
 }
 
+function encodeArtifactRoutePath(relativePath: string) {
+  return relativePath.split('/').map(encodeURIComponent).join('/');
+}
+
 export function artifactUrl(taskId: number, artifact: OutputItem, apiBase: string) {
   if (artifact.download_url?.startsWith('http')) return artifact.download_url;
-  return `${apiBase}${artifact.download_url || `/tasks/${taskId}/artifacts/${artifact.relative_path || artifact.path || ''}`}`;
+  if (artifact.download_url) return `${apiBase}${artifact.download_url}`;
+  return `${apiBase}/tasks/${taskId}/artifacts/${encodeArtifactRoutePath(artifact.relative_path || artifact.path || '')}`;
 }
 
 export function groupArtifactsByFeature(artifacts: OutputItem[]) {

@@ -60,4 +60,17 @@ describe('result artifact helpers', () => {
     expect(artifact).toBeDefined();
     expect(artifactUrl(114, artifact!, 'http://localhost:8000')).toBe('http://localhost:8000/tasks/114/artifacts/maps/fa.nii.gz');
   });
+
+  it('encodes fallback artifact URL segments while preserving backend route slashes', () => {
+    expect(
+      artifactUrl(
+        114,
+        {
+          content_type: 'text/html',
+          relative_path: 'reports/qc figure 1.html',
+        },
+        'http://localhost:8000',
+      ),
+    ).toBe('http://localhost:8000/tasks/114/artifacts/reports/qc%20figure%201.html');
+  });
 });
