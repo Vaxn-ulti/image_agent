@@ -127,8 +127,8 @@
     },
     {
       "id": "run_strict_remote_smoke_acceptance",
-      "purpose": "Run strict remote acceptance with model, project-scoped Agent chat, Agent workflow confirmation, production readiness, real evidence ids, completed upload ingestion, actual NIfTI upload, deterministic launch of a real registered workflow from the uploaded series, completed task status, launchability, native QC, and scientific report artifact gates. Debug-only mock workflows such as t1_deepprep_mock are not valid strict deployment acceptance.",
-      "command": "cd /home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132/apps/api && /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/smoke_remote_agent.py --api-base http://127.0.0.1:8000 --require-model --expected-model-wire-api responses --expected-model-provider-profile rawchat --require-model-tool-loop --require-project-agent-context --require-agent-workflow-confirmation --require-deployment-identity --require-production-readiness --deployment-id <accepted_release_or_commit> --expected-health-version <expected_health_version> --min-documents 60 --min-chunks 200 --require-raw-source-policy --require-vendor-pointer-integrity --require-real-evidence-ids --require-completed-upload --require-uploaded-series --upload-nifti-file <remote_nifti_file> --require-completed-task --require-launched-task --launch-workflow-type <real_registered_workflow_type> --wait-task-completion-timeout-seconds 21600 --wait-task-completion-poll-seconds 30 --require-launchability-matrix --require-container-native-qc --min-native-qc-images 1 --require-scientific-report-artifacts --min-scientific-report-images 1 --project-id <project_id> --upload-session-id <upload_session_id> --output-json /tmp/image_agent_remote_smoke_acceptance_<timestamp>.json",
+      "purpose": "Run strict remote acceptance with model, project-scoped Agent chat, Agent workflow confirmation plus resume task creation, production readiness, real evidence ids, completed upload ingestion, actual NIfTI upload, launch of a real registered workflow from the uploaded series, completed task status, launchability, native QC, and scientific report artifact gates. Debug-only mock workflows such as t1_deepprep_mock are not valid strict deployment acceptance.",
+      "command": "cd /home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132/apps/api && /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/smoke_remote_agent.py --api-base http://127.0.0.1:8000 --require-model --expected-model-wire-api responses --expected-model-provider-profile rawchat --require-model-tool-loop --require-project-agent-context --require-agent-workflow-confirmation --require-agent-workflow-resume --require-deployment-identity --require-production-readiness --deployment-id <accepted_release_or_commit> --expected-health-version <expected_health_version> --min-documents 60 --min-chunks 200 --require-raw-source-policy --require-vendor-pointer-integrity --require-real-evidence-ids --require-completed-upload --require-uploaded-series --upload-nifti-file <remote_nifti_file> --require-completed-task --require-launched-task --launch-workflow-type <real_registered_workflow_type> --wait-task-completion-timeout-seconds 21600 --wait-task-completion-poll-seconds 30 --require-launchability-matrix --require-container-native-qc --min-native-qc-images 1 --require-scientific-report-artifacts --min-scientific-report-images 1 --project-id <project_id> --upload-session-id <upload_session_id> --output-json /tmp/image_agent_remote_smoke_acceptance_<timestamp>.json",
       "requires_operator_authorization": false,
       "mutates_remote_state": true,
       "expected_success": [
@@ -138,6 +138,7 @@
         "model_status.capabilities.model_tool_loop=true",
         "agent_project_context_status=passed",
         "agent_workflow_confirmation_status=passed",
+        "agent_workflow_resume_status=passed",
         "deployment_identity_status=passed",
         "production_readiness_status=passed",
         "remote_evidence_ids_status=passed",
@@ -166,6 +167,7 @@
         "checked.model_tool_loop=true",
         "checked.agent_project_context_status=passed",
         "checked.agent_workflow_confirmation_status=passed",
+        "checked.agent_workflow_resume_status=passed",
         "checked.production_readiness_status=passed",
         "checked.upload_inventory_completion_status=passed",
         "checked.uploaded_series_status=passed",

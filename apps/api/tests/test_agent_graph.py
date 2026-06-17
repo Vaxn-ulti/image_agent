@@ -1,6 +1,9 @@
 import json
+import sys
+import types
 
 from app.agent.graph import AgentRunner
+from app.workflows.registry import INCUBATION_LANE
 from app.agent.incubation import IncubationLedger
 from app.agent.thread_store import AgentThreadStore
 
@@ -555,3 +558,329 @@ def test_agent_runner_incubation_decomposes_container_script_text(tmp_path):
     assert "fMRIPrep HTML report" in result["proposed_toolchain"]["composition_plan"]["expected_outputs"]
     assert result["proposed_toolchain"]["promotion_gate"]["production_task_created"] is False
     assert result["proposed_toolchain"]["production_task_created"] is False
+
+
+def test_langgraph_agent_runner_fixed_workflow_returns_confirmation_without_task_creation(tmp_path):
+    from app.agent.langgraph_runner import LangGraphAgentRunner
+
+    gateway = FakeGateway(
+        {
+            "intent": "run_workflow",
+            "action_lane": "fixed_workflow",
+            "series_id": 11,
+            "workflow_type": "t1_deepprep_anat_report",
+            "summary": "Run T1 DeepPrep segmentation",
+        }
+    )
+    context = {
+        "project_id": 7,
+        "series": [{"id": 11, "modality": "T1", "supported_for_processing": 1}],
+        "workflows": [
+            {
+                "type": "t1_deepprep_anat_report",
+                "label": "T1 DeepPrep",
+                "modality": "T1",
+                "lane": "fixed_workflow",
+                "agent_selectable": True,
+            }
+        ],
+    }
+
+    result = LangGraphAgentRunner(
+        gateway=gateway,
+        incubation_ledger=IncubationLedger(tmp_path / "ledger"),
+        rag_root=tmp_path,
+        thread_store=AgentThreadStore(tmp_path / "threads"),
+    ).run(message="run T1 segmentation", project_context=context)
+
+    assert result["status"] == "confirmation_required"
+    assert result["action_lane"] == "fixed_workflow"
+    assert result["production_task_created"] is False
+    assert result["confirmation"]["workflow_type"] == "t1_deepprep_anat_report"
+    assert result["safe_metadata"]["agent_engine"] == "langgraph"
+    assert result["safe_metadata"]["lane"] == "fixed_workflow"
+    assert result["safe_metadata"]["graph_runtime"] in {"langgraph", "deterministic_fallback"}
+    assert result["graph_state"]["workflow_match"]["status"] == "exact_fixed_match"
+    assert result["graph_state"]["preflight"]["ok"] is True
+
+
+def test_langgraph_agent_runner_uses_compiled_stategraph_when_runtime_available(tmp_path, monkeypatch):
+    class FakeCompiledGraph:
+        def __init__(self, graph):
+            self.graph = graph
+
+        def invoke(self, state):
+            node_name = self.graph.entry
+            while node_name != "__end__":
+                state.update(self.graph.nodes[node_name](state))
+                if node_name in self.graph.conditional_edges:
+                    route_fn, mapping = self.graph.conditional_edges[node_name]
+                    node_name = mapping[route_fn(state)]
+                else:
+                    node_name = self.graph.edges[node_name]
+            return state
+
+    class FakeStateGraph:
+        def __init__(self, state_type):
+            self.state_type = state_type
+            self.nodes = {}
+            self.edges = {}
+            self.conditional_edges = {}
+            self.entry = None
+
+        def add_node(self, name, node):
+            self.nodes[name] = node
+
+        def set_entry_point(self, name):
+            self.entry = name
+
+        def add_edge(self, source, target):
+            self.edges[source] = target
+
+        def add_conditional_edges(self, source, route_fn, mapping):
+            self.conditional_edges[source] = (route_fn, mapping)
+
+        def compile(self):
+            return FakeCompiledGraph(self)
+
+    fake_langgraph = types.ModuleType("langgraph")
+    fake_graph = types.ModuleType("langgraph.graph")
+    fake_graph.END = "__end__"
+    fake_graph.StateGraph = FakeStateGraph
+    monkeypatch.setitem(sys.modules, "langgraph", fake_langgraph)
+    monkeypatch.setitem(sys.modules, "langgraph.graph", fake_graph)
+
+    from app.agent.langgraph_runner import LangGraphAgentRunner
+
+    result = LangGraphAgentRunner(
+        gateway=FakeGateway({"intent": "answer_question", "summary": "Explain status"}),
+        rag_root=tmp_path,
+    ).run(message="status?", project_context={"project_id": 7, "tasks": [], "workflows": []})
+
+    assert result["status"] == "answered"
+    assert result["answer"] == "final answer"
+    assert result["safe_metadata"]["graph_runtime"] == "langgraph"
+    assert result["graph_state"]["lane"] == "read_only"
+
+
+def test_langgraph_agent_runner_unknown_workflow_returns_structured_incubation_proposal(tmp_path):
+    from app.agent.langgraph_runner import LangGraphAgentRunner
+
+    gateway = FakeGateway(
+        {
+            "intent": "run_workflow",
+            "action_lane": INCUBATION_LANE,
+            "summary": "DWI tractography and connectome matrix",
+            "modality": "DWI",
+            "toolchain": ["qsiprep preprocessing", "qsirecon reconstruction", "connectivity matrix"],
+        }
+    )
+
+    result = LangGraphAgentRunner(
+        gateway=gateway,
+        incubation_ledger=IncubationLedger(tmp_path / "ledger"),
+        rag_root=tmp_path,
+    ).run(
+        message="explore DWI tractography connectome",
+        project_context={"project_id": 7, "series": [{"id": 24, "modality": "DWI"}], "workflows": []},
+    )
+
+    proposal = result["proposed_toolchain"]
+    assert result["status"] == "toolchain_proposed"
+    assert result["action_lane"] == INCUBATION_LANE
+    assert result["production_task_created"] is False
+    assert proposal["contract_version"] == "toolchain_proposal.v1"
+    assert proposal["lane"] == INCUBATION_LANE
+    assert proposal["production_task_created"] is False
+    assert proposal["promotion_status"] == "blocked_by_gaps"
+    assert proposal["input_contract"]["modality"] == "DWI"
+    assert proposal["output_contract"]["result_summary_schema"]
+    assert proposal["runner_contract"]["command_template_status"] == "draft_only"
+    assert proposal["mock_control_plane_plan"]
+    assert proposal["real_acceptance_plan"]
+    assert "No fixed workflow registry entry exists." in proposal["blocking_gaps"]
+    assert result["safe_metadata"]["agent_engine"] == "langgraph"
+    assert result["graph_state"]["lane"] == INCUBATION_LANE
+
+
+def test_langgraph_agent_runner_matches_fixed_workflow_from_capability_metadata_when_planner_omits_type(tmp_path):
+    from app.agent.langgraph_runner import LangGraphAgentRunner
+    from app.workflows.registry import list_workflows
+
+    gateway = FakeGateway(
+        {
+            "intent": "run_workflow",
+            "action_lane": "fixed_workflow",
+            "summary": "Run BOLD preprocessing, XCP-D derived metrics, QC, and report outputs",
+            "series_id": 11,
+        }
+    )
+    context = {
+        "project_id": 7,
+        "series": [{"id": 11, "modality": "BOLD", "supported_for_processing": 1}],
+        "workflows": list_workflows(),
+    }
+
+    result = LangGraphAgentRunner(
+        gateway=gateway,
+        incubation_ledger=IncubationLedger(tmp_path / "ledger"),
+        rag_root=tmp_path,
+        thread_store=AgentThreadStore(tmp_path / "threads"),
+    ).run(message="run bold preprocessing metrics qc report", project_context=context)
+
+    assert result["status"] == "confirmation_required"
+    assert result["safe_metadata"]["lane"] == "fixed_workflow"
+    assert result["confirmation"]["workflow_type"] == "bold_fmriprep_xcpd_report"
+    assert result["graph_state"]["workflow_match"]["status"] == "capability_fixed_match"
+    assert result["production_task_created"] is False
+
+
+def test_langgraph_agent_runner_failed_task_uses_observe_repair_lane_without_retry(tmp_path):
+    from app.agent.langgraph_runner import LangGraphAgentRunner
+
+    gateway = FakeGateway({"intent": "answer_question", "summary": "Explain failed task"})
+    context = {
+        "project_id": 7,
+        "tasks": [
+            {
+                "id": 61,
+                "project_id": 7,
+                "series_id": 24,
+                "workflow_type": "dwi_fast_gpu_dti",
+                "status": "failed",
+                "progress": 20,
+                "error_message": "GPU runtime unavailable",
+            }
+        ],
+    }
+
+    result = LangGraphAgentRunner(gateway=gateway, rag_root=tmp_path).run(
+        message="why did task 61 fail and should I retry?",
+        project_context=context,
+    )
+
+    assert result["status"] == "answered"
+    assert result["production_task_created"] is False
+    assert result["safe_metadata"]["lane"] == "observe_repair"
+    assert result["task_observation"]["task_id"] == 61
+    assert result["repair_plan"]["auto_retry_allowed"] is False
+    assert "human confirmation" in " ".join(result["repair_plan"]["next_steps"])
+    assert result["graph_state"]["lane"] == "observe_repair"
+
+
+def test_langgraph_agent_runner_resume_marks_fixed_workflow_graph_gate(tmp_path):
+    from app.agent.langgraph_runner import LangGraphAgentRunner
+
+    store = AgentThreadStore(tmp_path / "threads")
+    confirmation = {
+        "type": "workflow_execution",
+        "project_id": 7,
+        "series_id": 11,
+        "workflow_type": "t1_deepprep_anat_report",
+        "action_lane": "fixed_workflow",
+    }
+    thread = store.create_pending_confirmation(
+        confirmation=confirmation,
+        decision={"intent": "run_workflow"},
+        selected_skill="image-agent-workflow-runner",
+        retrieved_context={},
+    )
+    created = []
+
+    result = LangGraphAgentRunner(thread_store=store).resume(
+        thread_id=thread["thread_id"],
+        approved=True,
+        confirmation=confirmation,
+        create_task_fn=lambda series_id, workflow_type, qsiprep_task_id=None: created.append(
+            {"id": 99, "series_id": series_id, "workflow_type": workflow_type, "status": "queued"}
+        )
+        or created[-1],
+    )
+
+    assert result["status"] == "task_created"
+    assert result["production_task_created"] is True
+    assert result["safe_metadata"]["agent_engine"] == "langgraph"
+    assert result["safe_metadata"]["lane"] == "fixed_workflow"
+    assert result["graph_state"]["confirmation_gate"] == "fingerprint_verified"
+    assert result["graph_state"]["production_task_created"] is True
+    assert created == [{"id": 99, "series_id": 11, "workflow_type": "t1_deepprep", "status": "queued"}]
+
+
+def test_langgraph_agent_runner_resume_uses_preflight_runtime_workflow_type(tmp_path):
+    from app.agent.langgraph_runner import LangGraphAgentRunner
+
+    store = AgentThreadStore(tmp_path / "threads")
+    confirmation = {
+        "type": "workflow_execution",
+        "project_id": 7,
+        "series_id": 11,
+        "workflow_type": "bold_fmriprep_xcpd_report",
+        "action_lane": "fixed_workflow",
+        "preflight": {
+            "ok": True,
+            "workflow_type": "bold_fmriprep_xcpd_report",
+            "runtime_workflow_type": "bold_fmriprep_xcpd_report_validate",
+        },
+    }
+    thread = store.create_pending_confirmation(
+        confirmation=confirmation,
+        decision={"intent": "run_workflow"},
+        selected_skill="image-agent-workflow-runner",
+        retrieved_context={},
+    )
+    created = []
+
+    result = LangGraphAgentRunner(thread_store=store).resume(
+        thread_id=thread["thread_id"],
+        approved=True,
+        confirmation=confirmation,
+        create_task_fn=lambda series_id, workflow_type, qsiprep_task_id=None: created.append(
+            {"id": 101, "series_id": series_id, "workflow_type": workflow_type, "status": "queued"}
+        )
+        or created[-1],
+    )
+
+    assert result["status"] == "task_created"
+    assert result["production_task_created"] is True
+    assert created == [
+        {"id": 101, "series_id": 11, "workflow_type": "bold_fmriprep_xcpd_report_validate", "status": "queued"}
+    ]
+
+
+def test_langgraph_agent_runner_resume_blocks_incubation_with_graph_gate_metadata(tmp_path):
+    from app.agent.langgraph_runner import LangGraphAgentRunner
+
+    store = AgentThreadStore(tmp_path / "threads")
+    confirmation = {
+        "type": "workflow_execution",
+        "project_id": 7,
+        "series_id": 24,
+        "workflow_type": "unknown_connectome",
+        "action_lane": INCUBATION_LANE,
+    }
+    thread = store.create_pending_confirmation(
+        confirmation=confirmation,
+        decision={"intent": "run_workflow", "action_lane": INCUBATION_LANE},
+        selected_skill="image-agent-workflow-runner",
+        retrieved_context={},
+    )
+    called = False
+
+    def create_task_fn(series_id, workflow_type, qsiprep_task_id=None):
+        nonlocal called
+        called = True
+        return {"id": 100, "series_id": series_id, "workflow_type": workflow_type}
+
+    result = LangGraphAgentRunner(thread_store=store).resume(
+        thread_id=thread["thread_id"],
+        approved=True,
+        confirmation=confirmation,
+        create_task_fn=create_task_fn,
+    )
+
+    assert result["status"] == "blocked"
+    assert result["production_task_created"] is False
+    assert result["safe_metadata"]["agent_engine"] == "langgraph"
+    assert result["safe_metadata"]["lane"] == INCUBATION_LANE
+    assert result["graph_state"]["confirmation_gate"] == "incubation_blocked"
+    assert called is False

@@ -18,6 +18,7 @@ vi.mock('../lib/api', () => ({
     getTask: vi.fn(),
     runSeries: vi.fn(),
     runAgent: vi.fn(),
+    resumeAgent: vi.fn(),
     uploadDicom: vi.fn(),
     uploadDwi: vi.fn(),
     uploadNifti: vi.fn(),
@@ -700,6 +701,57 @@ describe('DashboardPage', () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.task(144) });
   });
 
+  it('approves an Agent workflow confirmation from the floating dashboard drawer', async () => {
+    const confirmation = {
+      action_lane: 'fixed_workflow',
+      project_id: 13,
+      series_id: 22,
+      type: 'workflow_execution',
+      workflow_type: 't1_deepprep_anat_report',
+    };
+    vi.mocked(api.getResultSummary).mockResolvedValue(mockT1Summary);
+    vi.mocked(api.listWorkflows).mockResolvedValue({ workflows: ['t1_deepprep_anat_report'] });
+    vi.mocked(api.listProjectTasks).mockResolvedValue(mockTasks);
+    vi.mocked(api.listSeries).mockResolvedValue(mockSeries);
+    vi.mocked(api.runAgent).mockResolvedValue({
+      answer: 'Approval required for t1_deepprep_anat_report.',
+      confirmation,
+      status: 'confirmation_required',
+      thread_id: 'agent_thread_1',
+    });
+    vi.mocked(api.resumeAgent).mockResolvedValue({
+      answer: 'Task 155 created for t1_deepprep.',
+      status: 'task_created',
+      task: { id: 155, progress: 0, project_id: 13, series_id: 22, status: 'queued', workflow_type: 't1_deepprep' },
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/projects/13/dashboard']}>
+          <Routes>
+            <Route element={<DashboardPage />} path="/projects/:projectId/dashboard" />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(await screen.findByLabelText('Open Agent Copilot'));
+    await userEvent.click(await screen.findByRole('button', { name: 'Explain this step' }));
+
+    expect(await screen.findByText('Approval required for t1_deepprep_anat_report.')).toBeInTheDocument();
+    expect(screen.getByText('Task not created yet')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Approve workflow' }));
+
+    expect(api.resumeAgent).toHaveBeenCalledWith('agent_thread_1', true, confirmation);
+    expect(await screen.findByText('Task 155 created for t1_deepprep.')).toBeInTheDocument();
+    expect(screen.queryByText('Task not created yet')).not.toBeInTheDocument();
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.tasks(13) });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.task(155) });
+  });
+
   it('passes the completed QSIPrep task id when the dashboard launches recommended QSIRecon', async () => {
     const recommendedDwi = {
       ...mockSeries[2],
@@ -795,6 +847,38 @@ describe('DashboardPage', () => {
     // Test original run behavior
     await userEvent.click(screen.getByRole('button', { name: 'Run Workflow' }));
     expect(api.runSeries).toHaveBeenCalledWith(22, 't1_deepprep');
+  });
+
+  it('uses workflow catalog display names while preserving workflow ids for launch', async () => {
+    vi.mocked(api.listWorkflows).mockResolvedValue({
+      workflows: [
+        {
+          capability_summary: 'Runs full BOLD preprocessing, XCP-D derived metrics, QC, and report outputs.',
+          display_name: 'BOLD fMRIPrep + XCP-D processing, metrics, QC, and report',
+          lane: 'fixed_workflow',
+          requires_confirmation: true,
+          runtime_workflow_type: 'bold_fmriprep_xcpd_report',
+          type: 'bold_fmriprep_xcpd_report',
+        },
+      ],
+    });
+    vi.mocked(api.listSeries).mockResolvedValue([{ ...mockSeries[1], modality: 'BOLD' }]);
+    vi.mocked(api.listProjectTasks).mockResolvedValue([]);
+
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/projects/13/dashboard']}>
+          <Routes>
+            <Route element={<DashboardPage />} path="/projects/:projectId/dashboard" />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    const option = await screen.findByRole('option', { name: /BOLD fMRIPrep \+ XCP-D processing, metrics, QC, and report/ });
+    expect(option).toHaveValue('bold_fmriprep_xcpd_report');
   });
 
   it('renders Agent Copilot as a floating drawer that can collapse and expand', async () => {

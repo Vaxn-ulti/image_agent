@@ -364,7 +364,7 @@ def preflight_workflow(context: dict[str, Any], *, series_id: int, workflow_type
             checks.append({"name": "modality_match", "status": "fail"})
         else:
             checks.append({"name": "modality_match", "status": "pass"})
-        if workflow.get("runtime_backend") == "remote_script_wrapper" and context.get("project_root"):
+        if workflow.get("runtime_backend") in {"deployment_local_script_wrapper", "remote_script_wrapper"} and context.get("project_root"):
             project_root = Path(str(context["project_root"]))
             remote_preflight = preflight_bold_fmriprep_xcpd_remote(
                 bids_dir=project_root / "derivatives" / "__pending__" / "bids",
@@ -376,7 +376,7 @@ def preflight_workflow(context: dict[str, Any], *, series_id: int, workflow_type
             for check in public_preflight["checks"]:
                 checks.append(
                     {
-                        "name": f"remote_{check['name']}",
+                        "name": f"deployment_local_{check['name']}",
                         "status": check["status"],
                         "path_label": check.get("path_label"),
                     }
@@ -519,13 +519,23 @@ def create_workflow_task(
     series_id = confirmation.get("series_id")
     if series_id is None:
         return {"status": "blocked", "message": "series_id is required to create a workflow task."}
-    runtime_workflow_type = resolve_runtime_workflow_type(workflow_type)
+    preflight = confirmation.get("preflight") if isinstance(confirmation.get("preflight"), dict) else {}
+    preflight_runtime_type = preflight.get("runtime_workflow_type") if preflight.get("ok") is True else None
+    try:
+        runtime_workflow_type = resolve_runtime_workflow_type(str(preflight_runtime_type or workflow_type))
+    except KeyError:
+        return {
+            "status": "blocked",
+            "message": f"Unknown runtime_workflow_type: {preflight_runtime_type}",
+            "production_task_created": False,
+        }
     task = create_task_fn(int(series_id), runtime_workflow_type, confirmation.get("qsiprep_task_id"))
     return {
         "status": "task_created",
         "workflow_type": workflow_type,
         "runtime_workflow_type": runtime_workflow_type,
         "task": task,
+        "production_task_created": True,
         "events": [{"type": "agent.task_created", "task_id": task.get("id"), "workflow_type": runtime_workflow_type}],
     }
 

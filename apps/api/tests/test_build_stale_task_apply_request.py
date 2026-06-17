@@ -83,6 +83,7 @@ def test_build_stale_task_apply_request_includes_post_apply_gates(tmp_path):
     assert "--require-model-tool-loop" in commands
     assert "--require-project-agent-context" in commands
     assert "--require-agent-workflow-confirmation" in commands
+    assert "--require-agent-workflow-resume" in commands
     assert "--require-production-readiness" in commands
     assert "--expected-health-version <expected_health_version>" in commands
     assert "--require-real-evidence-ids" in commands

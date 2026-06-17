@@ -170,6 +170,7 @@ def verify_apply_request(
         "--require-model-tool-loop",
         "--require-project-agent-context",
         "--require-agent-workflow-confirmation",
+        "--require-agent-workflow-resume",
         "--require-deployment-identity",
         "--require-production-readiness",
         "--deployment-id <accepted_release_or_commit>",

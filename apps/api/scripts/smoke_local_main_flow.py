@@ -263,6 +263,16 @@ def _safe_agent_run(run: dict) -> dict:
     return safe
 
 
+def _safe_agent_resume(run: dict) -> dict:
+    safe = _safe_agent_run(run)
+    safe_metadata = run.get("safe_metadata")
+    if isinstance(safe_metadata, dict):
+        confirmation_gate = safe_metadata.get("confirmation_gate")
+        if isinstance(confirmation_gate, str) and confirmation_gate:
+            safe["confirmation_gate"] = confirmation_gate
+    return safe
+
+
 def _write_payload(payload: dict, output_json: Path | None) -> None:
     text = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True)
     if output_json:
@@ -288,7 +298,7 @@ def _validate_task_list(task_list: object, task_id: int) -> None:
     )
 
 
-def _run_agent_confirmation(base: str, project_id: int, series_id: int, workflow_type: str) -> dict:
+def _prepare_agent_confirmation(base: str, project_id: int, series_id: int, workflow_type: str) -> dict:
     message = (
         f"Prepare a workflow confirmation for project {project_id}, series {series_id}, "
         f"workflow {workflow_type}. Do not create or launch the task."
@@ -307,12 +317,51 @@ def _run_agent_confirmation(base: str, project_id: int, series_id: int, workflow
     _require(confirmation.get("project_id") == project_id, "agent confirmation project_id mismatch")
     _require(confirmation.get("series_id") == series_id, "agent confirmation series_id mismatch")
     _require(confirmation.get("workflow_type") == workflow_type, "agent confirmation workflow_type mismatch")
+    thread_id = run.get("thread_id")
+    _require(isinstance(thread_id, str) and thread_id, "agent confirmation thread_id is missing")
+    return run
+
+
+def _safe_agent_confirmation(run: dict, project_id: int, series_id: int, workflow_type: str) -> dict:
     return {
         "project_id": project_id,
         "series_id": series_id,
         "workflow_type": workflow_type,
         "production_task_created": False,
     }
+
+
+def _run_agent_confirmation(base: str, project_id: int, series_id: int, workflow_type: str) -> dict:
+    _prepare_agent_confirmation(base, project_id, series_id, workflow_type)
+    return _safe_agent_confirmation({}, project_id, series_id, workflow_type)
+
+
+def _resume_agent_confirmation(base: str, confirmation_run: dict) -> dict:
+    thread_id = confirmation_run.get("thread_id")
+    confirmation = confirmation_run.get("confirmation")
+    _require(isinstance(thread_id, str) and thread_id, "agent resume thread_id is missing")
+    _require(isinstance(confirmation, dict), "agent resume confirmation is missing")
+    run = _request(
+        "POST",
+        f"{base}/agent/runs/{thread_id}/resume",
+        {"approved": True, "confirmation": confirmation},
+    )
+    _require(isinstance(run, dict), "agent resume response must be an object")
+    if run.get("status") != "task_created":
+        raise SystemExitWithPayload("agent resume did not return task_created", {"agent_resume": _safe_agent_run(run)})
+    _require(run.get("production_task_created") is True, "agent resume did not create a production task")
+    safe_metadata = run.get("safe_metadata")
+    _require(isinstance(safe_metadata, dict), "agent resume safe_metadata is missing")
+    _require(safe_metadata.get("confirmation_gate") == "fingerprint_verified", "agent resume confirmation_gate mismatch")
+    task = run.get("task")
+    _require(isinstance(task, dict), "agent resume task is missing")
+    _require(task.get("project_id") == confirmation.get("project_id"), "agent resume task project_id mismatch")
+    _require(task.get("series_id") == confirmation.get("series_id"), "agent resume task series_id mismatch")
+    _require(task.get("workflow_type") == confirmation.get("workflow_type"), "agent resume task workflow_type mismatch")
+    task_id = task.get("id")
+    if "task_id" in run:
+        _require(run.get("task_id") == task_id, "agent resume task_id mismatch")
+    return run
 
 
 def _wait_for_task_completion(base: str, task_id: int, *, timeout_seconds: float, poll_seconds: float) -> dict:
@@ -347,6 +396,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--agent-workflow-type")
     parser.add_argument("--upload-nifti-file", type=Path)
     parser.add_argument("--require-agent-confirmation", action="store_true")
+    parser.add_argument("--require-agent-resume", action="store_true")
     parser.add_argument("--rebuild-rag", action="store_true")
     parser.add_argument("--min-rag-documents", type=int, default=0)
     parser.add_argument("--wait-task-completion-timeout-seconds", type=float, default=0)
@@ -389,6 +439,8 @@ def _validate_model_expectations(model_status: dict, args: argparse.Namespace) -
 
 def main(argv: Sequence[str] | None = None) -> None:
     args = _parse_args(argv)
+    if args.require_agent_resume and not args.require_agent_confirmation:
+        raise SystemExit("--require-agent-resume requires --require-agent-confirmation")
     base = args.api_base.rstrip("/")
     workflow_type = args.workflow_type
     agent_workflow_type = args.agent_workflow_type or workflow_type
@@ -435,15 +487,48 @@ def main(argv: Sequence[str] | None = None) -> None:
         _require(listed_series.get("project_id") in {None, project_id}, "listed series project_id mismatch")
         payload["series_list_status"] = "passed"
 
-        task = _request("POST", f"{base}/series/{series_id}/run", {"workflow_type": workflow_type})
-        _require(isinstance(task, dict), "workflow launch response must be an object")
-        launched_task = _safe_task(task)
-        _require(launched_task["project_id"] == project_id, "launched task project_id mismatch")
-        _require(launched_task["series_id"] == series_id, "launched task series_id mismatch")
-        _require(launched_task["workflow_type"] == workflow_type, "launched task workflow_type mismatch")
-        payload["workflow_launch_status"] = "passed"
-        payload["launched_task"] = launched_task
+        launched_task: dict | None = None
+        if not args.require_agent_resume:
+            task = _request("POST", f"{base}/series/{series_id}/run", {"workflow_type": workflow_type})
+            _require(isinstance(task, dict), "workflow launch response must be an object")
+            launched_task = _safe_task(task)
+            _require(launched_task["project_id"] == project_id, "launched task project_id mismatch")
+            _require(launched_task["series_id"] == series_id, "launched task series_id mismatch")
+            _require(launched_task["workflow_type"] == workflow_type, "launched task workflow_type mismatch")
+            payload["workflow_launch_status"] = "passed"
+            payload["launched_task"] = launched_task
 
+        model_status = _request("GET", f"{base}/agent/model/status")
+        _require(isinstance(model_status, dict), "model status response must be an object")
+        payload["model_status"] = _safe_model_status(model_status)
+        _validate_model_expectations(model_status, args)
+        if args.require_agent_confirmation and model_status.get("configured") is True:
+            confirmation_run = _prepare_agent_confirmation(base, project_id, series_id, agent_workflow_type)
+            payload["agent_workflow_confirmation"] = _safe_agent_confirmation(
+                confirmation_run,
+                project_id,
+                series_id,
+                agent_workflow_type,
+            )
+            if args.require_agent_resume:
+                resume_run = _resume_agent_confirmation(base, confirmation_run)
+                payload["agent_workflow_resume_status"] = "passed"
+                payload["agent_workflow_resume"] = _safe_agent_resume(resume_run)
+                launched_task = _safe_task(resume_run["task"])
+                _require(launched_task["project_id"] == project_id, "agent-resumed task project_id mismatch")
+                _require(launched_task["series_id"] == series_id, "agent-resumed task series_id mismatch")
+                _require(launched_task["workflow_type"] == agent_workflow_type, "agent-resumed task workflow_type mismatch")
+                payload["workflow_launch_status"] = "passed_via_agent_resume"
+                payload["launched_task"] = launched_task
+            payload["agent_boundary_status"] = "passed"
+        elif args.require_agent_confirmation:
+            raise SystemExit("agent confirmation required but model gateway is not configured")
+        elif model_status.get("configured") is True:
+            payload["agent_boundary_status"] = "model_configured_confirmation_not_required"
+        else:
+            payload["agent_boundary_status"] = "skipped_missing_model_config"
+
+        _require(launched_task is not None, "workflow launch did not produce a task")
         _validate_task_list(_request("GET", f"{base}/projects/{project_id}/tasks"), launched_task["task_id"])
         payload["task_list_status"] = "passed"
 
@@ -466,7 +551,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             _require(isinstance(result_summary, dict), "result-summary response must be an object")
             _require(result_summary.get("task_id") == launched_task["task_id"], "result-summary task_id mismatch")
             _require(result_summary.get("project_id") == project_id, "result-summary project_id mismatch")
-            _require(result_summary.get("workflow_type") == workflow_type, "result-summary workflow_type mismatch")
+            _require(result_summary.get("workflow_type") == launched_task["workflow_type"], "result-summary workflow_type mismatch")
             payload["result_summary_status"] = "passed"
             payload["result_summary"] = _safe_result_summary(result_summary)
         if args.require_artifact_manifest:
@@ -480,20 +565,6 @@ def main(argv: Sequence[str] | None = None) -> None:
             _require(isinstance(artifacts, list) and len(artifacts) > 0, "artifact manifest has no artifacts")
             payload["artifact_manifest_status"] = "passed"
             payload["artifact_manifest"] = _safe_artifact_manifest(manifest)
-
-        model_status = _request("GET", f"{base}/agent/model/status")
-        _require(isinstance(model_status, dict), "model status response must be an object")
-        payload["model_status"] = _safe_model_status(model_status)
-        _validate_model_expectations(model_status, args)
-        if args.require_agent_confirmation and model_status.get("configured") is True:
-            payload["agent_workflow_confirmation"] = _run_agent_confirmation(base, project_id, series_id, agent_workflow_type)
-            payload["agent_boundary_status"] = "passed"
-        elif args.require_agent_confirmation:
-            raise SystemExit("agent confirmation required but model gateway is not configured")
-        elif model_status.get("configured") is True:
-            payload["agent_boundary_status"] = "model_configured_confirmation_not_required"
-        else:
-            payload["agent_boundary_status"] = "skipped_missing_model_config"
 
         if args.rebuild_rag:
             rag_rebuild = _request("POST", f"{base}/agent/rag/rebuild")

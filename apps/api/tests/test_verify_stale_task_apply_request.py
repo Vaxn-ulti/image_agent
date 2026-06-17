@@ -115,6 +115,7 @@ def test_verify_stale_task_apply_request_requires_full_main_flow_strict_smoke(tm
     [
         "--require-deployment-identity",
         "--require-agent-workflow-confirmation",
+        "--require-agent-workflow-resume",
         "--expected-model-wire-api responses",
         "--expected-model-provider-profile rawchat",
         "--require-model-tool-loop",

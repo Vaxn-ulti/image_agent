@@ -361,6 +361,7 @@ def verify_plan(plan: dict, *, now_utc: str | datetime | None = None) -> dict:
         "--require-model-tool-loop",
         "--require-project-agent-context",
         "--require-agent-workflow-confirmation",
+        "--require-agent-workflow-resume",
         "--require-deployment-identity",
         "--require-production-readiness",
         "--deployment-id <accepted_release_or_commit>",

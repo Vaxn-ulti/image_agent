@@ -69,7 +69,7 @@ def test_qsirecon_legacy_snapshot_is_written(tmp_path):
     assert payload["profile"] == "dki"
     assert payload["recon_spec"] == "dipy_dki"
     assert "--notrack" in payload["extra_flags"]
-    assert payload["image"] == "pennlinc/qsirecon:latest"
+    assert payload["image"] == "pennlinc/qsirecon:26.0.0"
     assert payload["input_type"] == "qsiprep"
     assert payload["command_template"][0:4] == ["docker", "run", "--rm", "--gpus"]
     assert "dipy_dki" in payload["command_template"]

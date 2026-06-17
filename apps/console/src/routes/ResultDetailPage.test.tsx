@@ -103,9 +103,11 @@ describe('ResultDetailPage', () => {
     vi.mocked(api.getArtifactManifest).mockResolvedValue({
       artifacts: [
         {
+          artifact_category: 'derived_scientific_report',
           artifact_origin: 'generated_from_result_summary',
           artifact_role: 'derived_presentation_asset',
           content_type: 'image/png',
+          derived_scientific_report: true,
           download_url: '/tasks/114/artifacts/reports/dwi_tensor_metrics.png',
           feature_group: 'scientific_report',
           native_artifact: false,
@@ -130,6 +132,10 @@ describe('ResultDetailPage', () => {
     );
 
     expect((await screen.findAllByText('reports/dwi_tensor_metrics.png')).length).toBeGreaterThanOrEqual(1);
+    expect(await screen.findByText('No container-native QC artifacts registered')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Derived report files are available, but they do not replace native container QC evidence.'),
+    ).toBeInTheDocument();
     expect(await screen.findByText('generated_from_result_summary')).toBeInTheDocument();
     expect(await screen.findByAltText('Scientific figure reports/dwi_tensor_metrics.png')).toHaveAttribute(
       'src',

@@ -180,6 +180,36 @@ def test_skill_creator_style_skills_have_references_and_parseable_evals():
     assert {"normal_path", "missing_info", "risk_conflict"} <= categories
 
 
+def test_developer_contract_documents_workflow_display_metadata_boundary():
+    contract = (
+        REPO_ROOT
+        / "docs"
+        / "skills"
+        / "image-agent-developer"
+        / "references"
+        / "contracts.md"
+    ).read_text(encoding="utf-8")
+
+    for phrase in (
+        "`workflow_type` remains the stable machine id",
+        "`display_name`",
+        "`capability_summary`",
+        "`workflow_family`",
+        "`workflow_role`",
+        "`pipeline_stages`",
+        "`primary_outputs`",
+        "`qc_outputs`",
+        "`report_outputs`",
+        "`limitations`",
+        "`is_report_only`",
+        "confirmation fingerprint",
+        "task_service.create_series_task()",
+        "frontends, Agent, and RAG",
+        "must not reinterpret a complete processing workflow as report-only",
+    ):
+        assert phrase in contract
+
+
 def test_rag_corpus_contains_required_sections_and_vendor_metadata():
     rag_root = REPO_ROOT / "docs" / "rag"
 
@@ -842,6 +872,34 @@ def test_qsi_container_contracts_are_documented_for_agent_use():
     ):
         assert phrase in combined
     assert "custom JSON spec" not in combined
+
+
+def test_developer_skill_documents_locked_container_versions_for_execution_acceptance():
+    reference_root = REPO_ROOT / "docs" / "skills" / "image-agent-developer" / "references"
+    testing_matrix = (reference_root / "testing-matrix.md").read_text(encoding="utf-8")
+    contracts = (reference_root / "contracts.md").read_text(encoding="utf-8")
+    gpu_strategy = (reference_root / "gpu-workflow-strategy.md").read_text(encoding="utf-8")
+    examples = (reference_root / "examples-evals.md").read_text(encoding="utf-8")
+    maintenance = (reference_root / "skill-maintenance.md").read_text(encoding="utf-8")
+    combined = "\n".join([testing_matrix, contracts, gpu_strategy, examples, maintenance])
+
+    for phrase in (
+        "pennlinc/qsiprep:1.0.2",
+        "pennlinc/qsirecon:26.0.0",
+        "nipreps/fmriprep:25.2.5",
+        "pennlinc/xcp_d:26.0.2",
+        "IMAGE_AGENT_TASK_FMRIPREP_IMAGE",
+        "IMAGE_AGENT_TASK_XCPD_IMAGE",
+        "strict acceptance rejects `:latest`",
+    ):
+        assert phrase in combined
+    for phrase in (
+        "pennlinc/qsiprep:latest",
+        "pennlinc/qsirecon:latest",
+        "nipreps/fmriprep:latest",
+        "pennlinc/xcp_d:latest",
+    ):
+        assert phrase not in combined
 
 
 def test_mriqc_dpabi_official_container_boundaries_are_documented_for_agent_use():
@@ -1937,6 +1995,12 @@ def test_product_readiness_documents_fast_launch_main_flow_and_boundaries():
         "/projects/{project_id}/series",
         "/workflows",
         "/series/{series_id}/run",
+        "smoke_local_main_flow.py",
+        "--require-agent-confirmation",
+        "--require-agent-resume",
+        "`/agent/runs/{thread_id}/resume`",
+        "`agent_workflow_resume_status=passed`",
+        "`confirmation_gate=fingerprint_verified`",
         "/chat",
         "/agent/rag/query",
         "IMAGE_AGENT_CORS_ORIGINS",
@@ -1957,6 +2021,10 @@ def test_developer_testing_matrix_documents_control_and_execution_planes():
     for phrase in (
         "Mock tests prove the control plane",
         "Real script tests prove the execution plane",
+        "local-only control-plane evidence",
+        "does not prove the deployed server's local Docker/toolchain execution",
+        "--require-agent-resume",
+        "`agent_workflow_resume_status=passed`",
         "mock tests must not be reported as real workflow acceptance",
         "Real scripts are deployment acceptance evidence only when they run against actual data and registered outputs",
     ):

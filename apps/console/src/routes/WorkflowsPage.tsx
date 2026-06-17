@@ -16,7 +16,7 @@ import { PageHeader } from '../components/ui/PageHeader';
 import { api } from '../lib/api';
 import { queryKeys } from '../lib/query';
 import type { Task } from '../lib/types';
-import { getWorkflowEligibility, groupWorkflows, normalizeWorkflowList, selectQsiprepTaskId } from '../lib/workflows';
+import { getWorkflowEligibility, groupWorkflows, normalizeWorkflowCatalog, selectQsiprepTaskId } from '../lib/workflows';
 
 export function WorkflowsPage() {
   const projectId = Number(useParams().projectId);
@@ -44,7 +44,8 @@ export function WorkflowsPage() {
     },
   });
 
-  const grouped = groupWorkflows(normalizeWorkflowList(workflowPayload));
+  const workflowCatalog = normalizeWorkflowCatalog(workflowPayload);
+  const grouped = groupWorkflows(workflowCatalog.workflows);
   const projectDataError = seriesQuery.error || tasksQuery.error;
   const projectDataErrorMessage = projectDataError instanceof Error ? projectDataError.message : 'Project data could not be loaded.';
 
@@ -127,11 +128,34 @@ export function WorkflowsPage() {
             </div>
 
             <div className="grid gap-6">
-              {workflows.map((workflow) => (
+              {workflows.map((workflow) => {
+                const catalogItem = workflowCatalog.items[workflow];
+                const displayName = catalogItem?.display_name || workflow;
+                const outputs = [
+                  ...(catalogItem?.primary_outputs || []),
+                  ...(catalogItem?.qc_outputs || []),
+                  ...(catalogItem?.report_outputs || []),
+                ].slice(0, 4);
+                return (
                 <div key={workflow} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden transition-all hover:shadow-md">
                   <div className="px-5 py-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-gray-800">{workflow}</span>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-bold text-gray-800">{displayName}</span>
+                        <span className="rounded border border-gray-200 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-gray-500">{workflow}</span>
+                      </div>
+                      {catalogItem?.capability_summary ? (
+                        <p className="mt-1 max-w-3xl text-xs leading-5 text-gray-500">{catalogItem.capability_summary}</p>
+                      ) : null}
+                      {outputs.length > 0 ? (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {outputs.map((output) => (
+                            <span key={output} className="rounded-full border border-emerald-100 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-800">
+                              {output}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
                       <span className="px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-400 text-[10px] font-bold uppercase">
                         Standard Pipeline
                       </span>
@@ -202,7 +226,8 @@ export function WorkflowsPage() {
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         ))}

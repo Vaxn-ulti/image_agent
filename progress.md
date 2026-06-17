@@ -226,3 +226,23 @@
   - `npm.cmd test -- DashboardPage.test.tsx` returned `21 passed`.
   - `npm.cmd test -- AgentPage.test.tsx` returned `8 passed`.
   - `npm.cmd test -- workflows.test.ts` returned `10 passed`.
+- Continued the updated workflow metadata and main-chain closure goal:
+  - Added a LangGraph resume regression test proving approved fixed workflow confirmations use the preflight/registry `runtime_workflow_type` when calling `create_task_fn`, while preserving the stable confirmation `workflow_type`.
+  - Updated `create_workflow_task()` so the task creation path remains registry-gated and now honors `confirmation.preflight.runtime_workflow_type` before calling `task_service.create_series_task()`.
+  - Added registry coverage requiring every fixed workflow to expose structured display/capability metadata: `display_name`, `capability_summary`, `workflow_family`, `workflow_role`, `pipeline_stages`, `primary_outputs`, `qc_outputs`, `report_outputs`, `limitations`, and `is_report_only`.
+  - Added conservative default capability metadata in `app/workflows/registry.py` for fixed validation/legacy workflows without renaming any stable `workflow_type`.
+  - Added a frontend result-detail contract for missing container-native QC: derived scientific report artifacts render, but the UI states that they do not replace native container QC evidence.
+  - Updated console `OutputItem` types for artifact-manifest classification fields.
+  - Updated Image Agent developer contracts to document that frontends, Agent, and RAG use display metadata, while task launch, confirmation fingerprint, DB rows, and runner dispatch continue using stable machine ids.
+- RED/GREEN notes:
+  - Initial incorrect Vitest command `--runInBand` failed because Vitest does not support that Jest flag; reran with project syntax.
+  - `test_langgraph_agent_runner_resume_uses_preflight_runtime_workflow_type` first failed because resume created `bold_fmriprep_xcpd_report` instead of the preflight runtime workflow type.
+  - `ResultDetailPage` native-QC boundary test first failed because the UI did not show the missing native QC warning.
+  - Workflow metadata doc/registry tests first failed on missing metadata and missing contract wording, then passed after the targeted changes.
+- Verification:
+  - `python -m pytest tests/test_workflow_registry.py -q` returned `10 passed`.
+  - `python -m pytest tests/test_skill_and_rag_docs.py::test_developer_contract_documents_workflow_display_metadata_boundary tests/test_workflow_registry.py tests/test_agent_graph.py::test_langgraph_agent_runner_resume_uses_preflight_runtime_workflow_type -q` returned `12 passed`.
+  - `python -m pytest tests/test_agent_graph.py::test_langgraph_agent_runner_resume_uses_preflight_runtime_workflow_type tests/test_agent_graph.py::test_langgraph_agent_runner_fixed_workflow_returns_confirmation_without_task_creation tests/test_agent_graph.py::test_langgraph_agent_runner_unknown_workflow_returns_structured_incubation_proposal -q` returned `3 passed`.
+  - `npm.cmd test -- workflows.test.ts WorkflowsPage.test.tsx ResultDetailPage.test.tsx` returned `20 passed`.
+  - `python apps/api/scripts/audit_skill_maintenance.py --json` returned `status=passed` with no findings.
+  - `git status --short --branch` was checked; the worktree remains large/WIP with pre-existing modified files and new `apps/api/app/agent/langgraph_runner.py` plus `docs/work-log-2026-06-17.md`.

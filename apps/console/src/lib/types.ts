@@ -53,6 +53,17 @@ export type WorkflowCatalogItem = {
   requires_confirmation?: boolean;
   runtime_workflow_type?: string | null;
   api_runnable?: boolean;
+  agent_selection_aliases?: string[];
+  capability_summary?: string;
+  display_name?: string;
+  is_report_only?: boolean;
+  limitations?: string[];
+  pipeline_stages?: Array<{ name?: string; purpose?: string }>;
+  primary_outputs?: string[];
+  qc_outputs?: string[];
+  report_outputs?: string[];
+  workflow_family?: string;
+  workflow_role?: string;
 };
 
 export type WorkflowCatalogResponse = {
@@ -170,9 +181,13 @@ export type OutputItem = {
   feature_group?: string;
   space?: string;
   source_stage?: string;
+  artifact_category?: string;
   artifact_role?: string;
   artifact_origin?: string;
   native_artifact?: boolean;
+  container_native_qc?: boolean;
+  derived_scientific_report?: boolean;
+  frontend_preview_asset?: boolean;
   provenance?: Record<string, unknown>;
 };
 

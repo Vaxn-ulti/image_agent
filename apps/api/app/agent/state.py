@@ -27,3 +27,33 @@ class AgentState(TypedDict, total=False):
 
 
 AGENT_STATE_FIELDS = list(AgentState.__annotations__.keys())
+
+
+class ImageAgentState(TypedDict, total=False):
+    thread_id: str
+    project_id: int | None
+    message: str
+    intent: str
+    lane: str | None
+    project_context: dict[str, Any]
+    workflow_registry: list[dict[str, Any]]
+    deployment_status: dict[str, Any]
+    retrieved_context: dict[str, Any]
+    selected_skill: str | None
+    workflow_match: dict[str, Any] | None
+    preflight: dict[str, Any] | None
+    confirmation: dict[str, Any] | None
+    confirmation_fingerprint: str | None
+    approved: bool | None
+    proposal: dict[str, Any] | None
+    promotion_review: dict[str, Any] | None
+    task: dict[str, Any] | None
+    task_observation: dict[str, Any] | None
+    result_summary: dict[str, Any] | None
+    repair_plan: dict[str, Any] | None
+    answer: str | None
+    events: list[dict[str, Any]]
+    production_task_created: bool
+
+
+IMAGE_AGENT_STATE_FIELDS = list(ImageAgentState.__annotations__.keys())

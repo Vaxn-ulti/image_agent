@@ -55,6 +55,22 @@ If task and ingest lifecycle vocabularies diverge, document that distinction.
 
 ## Workflow Types
 
+`workflow_type` remains the stable machine id. Do not rename existing
+workflow ids just to make them more readable. The frontend launch payload,
+confirmation fingerprint, task_service.create_series_task(), pipeline runner
+dispatch, database task rows, output metadata, logs, and acceptance evidence
+must continue to use the stable `workflow_type` or resolved
+`runtime_workflow_type`.
+
+Human-facing workflow naming belongs in structured registry metadata, not in
+the machine id. Every fixed workflow exposed by the registry should provide
+`display_name`, `capability_summary`, `workflow_family`, `workflow_role`,
+`pipeline_stages`, `primary_outputs`, `qc_outputs`, `report_outputs`,
+`limitations`, and `is_report_only`. These fields are for frontends, Agent, and RAG
+to explain what the workflow does and what evidence it should produce.
+They must not reinterpret a complete processing workflow as report-only merely
+because the stable id contains a `report` suffix.
+
 Fixed production workflows:
 
 - `t1_deepprep`
@@ -187,7 +203,7 @@ Metadata precedence:
 - BOLD downstream metrics require completed BOLD DeepPrep outputs for the same series.
 - Fast GPU DTI requires DWI NIfTI plus `.bval`, `.bvec`, and a JSON sidecar containing `PhaseEncodingDirection` and `TotalReadoutTime`; it is the production DWI workflow.
 - Legacy BIDS-ingested DWI records may lack newer `has_json` / `json_file_id` metadata. They may be accepted only when real `.json`, `.bval`, and `.bvec` sidecars are present in `metadata.sidecars` or BIDS/NIFTI_BIDS placement, and the JSON contains `PhaseEncodingDirection` plus `TotalReadoutTime`. Ordinary `/upload-dwi` records without JSON must still be rejected.
-- Production `dwi_fast_gpu_dti` must use host FSL from `/home/yyf/project/MCI_project/tools/fsl` for GPU `eddy_cuda` and FSL registration utilities. It uses `pennlinc/qsiprep:latest` only as an MRtrix toolbox image for commands such as `dwi2mask`, `mrconvert`, `dwi2tensor`, `tensor2metric`, `mrstats`, and `mrcalc`.
+- Production `dwi_fast_gpu_dti` must use host FSL from `/home/yyf/project/MCI_project/tools/fsl` for GPU `eddy_cuda` and FSL registration utilities. It uses the locked `pennlinc/qsiprep:1.0.2` image only as an MRtrix toolbox image for commands such as `dwi2mask`, `mrconvert`, `dwi2tensor`, `tensor2metric`, `mrstats`, and `mrcalc`.
 - Production `dwi_fast_gpu_dti` must not execute full `qsiprep /data /out participant` or full QSIRecon. The expected max runtime target is `2100` seconds / 35 minutes.
 - QSIPrep requires DWI NIfTI plus `.bval` and `.bvec`.
 - QSIRecon requires a completed QSIPrep task output and a valid `--recon-spec`.

@@ -17,6 +17,7 @@ from app.agent.contracts import (
 )
 from app.agent.deepseek import provider_status as legacy_chat_provider_status
 from app.agent.graph import AgentRunner
+from app.agent.langgraph_runner import build_langgraph_runner_factory
 from app.agent.rag_orchestration import build_rag_response
 from app.agent.report_verification import verify_scientific_reports
 from app.agent.run_ledger import finish_agent_run, list_project_agent_runs, load_agent_run, start_agent_run
@@ -207,6 +208,16 @@ def _agent_model_configured() -> bool:
     return public_model_status().get("configured") is True
 
 
+def _agent_runner_factory():
+    patched = main_patch_attr("AgentRunner", AgentRunner)
+    if patched is not AgentRunner:
+        return patched
+    engine = os.environ.get("IMAGE_AGENT_AGENT_ENGINE", "current").strip().lower()
+    if engine == "langgraph":
+        return build_langgraph_runner_factory(main_patch_attr)
+    return AgentRunner
+
+
 def _read_only_agent_fallback(message: str, *, project_id: int | None, project_context: dict) -> dict:
     backend_context = {
         "project_id": project_id,
@@ -301,7 +312,7 @@ def agent_run(req):
         require_project(req.project_id)
     agent_run_id = start_agent_run(request_type="run", project_id=req.project_id, message=message)
     project_context_reader = main_patch_attr("read_project_context", read_project_context)
-    runner_factory = main_patch_attr("AgentRunner", AgentRunner)
+    runner_factory = _agent_runner_factory()
     project_context = project_context_reader(req.project_id, rows_fn=fetch_rows, workflows=main_patch_attr("WORKFLOWS", WORKFLOWS))
     if runner_factory is AgentRunner and not _agent_model_configured():
         result = normalize_agent_run_result(_read_only_agent_fallback(message, project_id=req.project_id, project_context=project_context))
@@ -369,7 +380,7 @@ def agent_resume(thread_id, req):
         approved=req.approved,
         confirmation=confirmation,
     )
-    runner_factory = main_patch_attr("AgentRunner", AgentRunner)
+    runner_factory = _agent_runner_factory()
     try:
         result = normalize_agent_run_result(dict(runner_factory().resume(
             thread_id=thread_id,

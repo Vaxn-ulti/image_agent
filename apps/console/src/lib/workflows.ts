@@ -8,6 +8,11 @@ export type WorkflowEligibility = {
   reason?: string;
 };
 
+export type WorkflowCatalog = {
+  items: Record<string, WorkflowCatalogItem>;
+  workflows: string[];
+};
+
 function workflowName(item: string | WorkflowCatalogItem): string | null {
   if (typeof item === 'string') return item;
   if (!item || typeof item !== 'object') return null;
@@ -16,10 +21,27 @@ function workflowName(item: string | WorkflowCatalogItem): string | null {
   return item.type || item.workflow_type || item.runtime_workflow_type || null;
 }
 
+export function normalizeWorkflowCatalog(payload: Array<string | WorkflowCatalogItem> | { workflows: Array<string | WorkflowCatalogItem> } | undefined): WorkflowCatalog {
+  if (!payload) return { items: {}, workflows: [] };
+  const entries = Array.isArray(payload) ? payload : payload.workflows || [];
+  return entries.reduce<WorkflowCatalog>(
+    (catalog, item) => {
+      const name = workflowName(item);
+      if (!name) return catalog;
+      catalog.workflows.push(name);
+      if (typeof item === 'string') {
+        catalog.items[name] = { type: name };
+      } else {
+        catalog.items[name] = { ...item, type: item.type || item.workflow_type || name };
+      }
+      return catalog;
+    },
+    { items: {}, workflows: [] },
+  );
+}
+
 export function normalizeWorkflowList(payload: Array<string | WorkflowCatalogItem> | { workflows: Array<string | WorkflowCatalogItem> } | undefined): string[] {
-  if (!payload) return [];
-  const workflows = Array.isArray(payload) ? payload : payload.workflows || [];
-  return workflows.map(workflowName).filter((workflow): workflow is string => Boolean(workflow));
+  return normalizeWorkflowCatalog(payload).workflows;
 }
 
 export function workflowGroup(workflowType: string): WorkflowGroup {

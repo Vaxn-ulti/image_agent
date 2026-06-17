@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { mockSeries, mockTasks } from '../mocks/data';
-import { getWorkflowEligibility, groupWorkflows, normalizeWorkflowList, selectQsiprepTaskId } from './workflows';
+import { getWorkflowEligibility, groupWorkflows, normalizeWorkflowCatalog, normalizeWorkflowList, selectQsiprepTaskId } from './workflows';
 
 describe('workflow helpers', () => {
   it('groups backend workflow names by modality', () => {
@@ -23,6 +23,30 @@ describe('workflow helpers', () => {
     });
 
     expect(workflows).toEqual(['t1_deepprep_anat_report', 't1_deepprep_mock']);
+  });
+
+  it('preserves workflow catalog metadata for display and agent-safe capability wording', () => {
+    const catalog = normalizeWorkflowCatalog({
+      workflows: [
+        {
+          capability_summary: 'Runs full BOLD preprocessing, XCP-D derived metrics, QC, and report outputs.',
+          display_name: 'BOLD fMRIPrep + XCP-D processing, metrics, QC, and report',
+          is_report_only: false,
+          lane: 'fixed_workflow',
+          primary_outputs: ['preprocessed BOLD derivatives', 'ALFF/fALFF/ReHo and connectivity metrics'],
+          qc_outputs: ['container-native fMRIPrep and XCP-D QC artifacts'],
+          report_outputs: ['HTML scientific report'],
+          requires_confirmation: true,
+          runtime_workflow_type: 'bold_fmriprep_xcpd_report',
+          type: 'bold_fmriprep_xcpd_report',
+        },
+      ],
+    });
+
+    expect(catalog.workflows).toEqual(['bold_fmriprep_xcpd_report']);
+    expect(catalog.items.bold_fmriprep_xcpd_report?.display_name).toBe('BOLD fMRIPrep + XCP-D processing, metrics, QC, and report');
+    expect(catalog.items.bold_fmriprep_xcpd_report?.is_report_only).toBe(false);
+    expect(catalog.items.bold_fmriprep_xcpd_report?.capability_summary).toContain('derived metrics');
   });
 
   it('requires JSON eddy metadata for DWI fast GPU DTI', () => {

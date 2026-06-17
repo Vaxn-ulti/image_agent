@@ -47,6 +47,33 @@ describe('WorkflowsPage', () => {
     expect(await screen.findByText(/JSON sidecar/)).toBeInTheDocument();
   });
 
+  it('shows structured workflow capability metadata instead of only the workflow id', async () => {
+    vi.mocked(api.listSeries).mockResolvedValue([{ ...mockSeries[1], modality: 'BOLD' }]);
+    vi.mocked(api.listProjectTasks).mockResolvedValue([]);
+    vi.mocked(api.listWorkflows).mockResolvedValue({
+      workflows: [
+        {
+          capability_summary: 'Runs full BOLD preprocessing, XCP-D derived metrics, container-native QC, and report outputs.',
+          display_name: 'BOLD fMRIPrep + XCP-D processing, metrics, QC, and report',
+          lane: 'fixed_workflow',
+          primary_outputs: ['preprocessed BOLD derivatives', 'ALFF/fALFF/ReHo and connectivity metrics'],
+          qc_outputs: ['container-native fMRIPrep and XCP-D QC artifacts'],
+          report_outputs: ['HTML scientific report'],
+          requires_confirmation: true,
+          runtime_workflow_type: 'bold_fmriprep_xcpd_report',
+          type: 'bold_fmriprep_xcpd_report',
+        },
+      ],
+    });
+
+    renderPage();
+
+    expect(await screen.findByText('BOLD fMRIPrep + XCP-D processing, metrics, QC, and report')).toBeInTheDocument();
+    expect(screen.getByText(/full BOLD preprocessing/)).toBeInTheDocument();
+    expect(screen.getByText(/preprocessed BOLD derivatives/)).toBeInTheDocument();
+    expect(screen.getByText(/container-native fMRIPrep and XCP-D QC artifacts/)).toBeInTheDocument();
+  });
+
   it('passes the completed QSIPrep task id and shows the launched task handoff when launching QSIRecon', async () => {
     const user = userEvent.setup();
     vi.mocked(api.listSeries).mockResolvedValue([

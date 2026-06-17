@@ -1,3 +1,4 @@
+import { AlertTriangle } from 'lucide-react';
 import { flattenOutputs, getReportArtifacts, groupArtifactsByFeature, isPreviewableFigure } from '../../lib/resultArtifacts';
 import type { ArtifactManifest, OutputItem, ResultSummary } from '../../lib/types';
 import { ArtifactTable } from './ArtifactTable';
@@ -40,6 +41,13 @@ export function ResultStudioLayout({ apiBase, artifactManifest, summary }: Resul
   const reportFigures = reportArtifacts.filter(isPreviewableFigure);
   const artifactGroups = groupArtifactsByFeature(allArtifacts);
   const modality = summary.modality.toUpperCase();
+  const hasContainerNativeQc = allArtifacts.some(
+    (artifact) => artifact.container_native_qc === true || artifact.artifact_category === 'container_native_qc',
+  );
+  const hasDerivedReportArtifacts = allArtifacts.some(
+    (artifact) => artifact.derived_scientific_report === true || artifact.artifact_category === 'derived_scientific_report',
+  );
+  const showNativeQcBoundary = usesManifest && hasDerivedReportArtifacts && !hasContainerNativeQc;
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
@@ -54,6 +62,19 @@ export function ResultStudioLayout({ apiBase, artifactManifest, summary }: Resul
           {/* Scientific Visualization Area */}
           <div className="space-y-6">
             <ReportFigureGallery apiBase={apiBase} figures={reportFigures} taskId={summary.task_id} />
+            {showNativeQcBoundary ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+                  <div className="min-w-0">
+                    <div className="font-semibold">No container-native QC artifacts registered</div>
+                    <p className="mt-1 text-xs leading-5 text-amber-900">
+                      Derived report files are available, but they do not replace native container QC evidence.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden p-6">
               {modality === 'T1' ? <T1ResultView artifactsByFeature={artifactGroups} summary={summary} /> : null}

@@ -28,7 +28,7 @@ import { api, getApiBase } from '../lib/api';
 import { queryKeys } from '../lib/query';
 import { artifactUrl } from '../lib/resultArtifacts';
 import type { AgentRunResponse, ArtifactManifest, DwiUploadFiles, Inventory, OutputItem, ResultSummary, Series, Task } from '../lib/types';
-import { getWorkflowEligibility, normalizeWorkflowList, selectQsiprepTaskId, workflowGroup } from '../lib/workflows';
+import { getWorkflowEligibility, normalizeWorkflowCatalog, selectQsiprepTaskId, workflowGroup } from '../lib/workflows';
 
 const t1ReferencePreviews = [
   { alt: 'T1w axial MRI preview', src: '/neuro-assets/mri-axial.png', title: 'T1w (Axial)' },
@@ -36,6 +36,13 @@ const t1ReferencePreviews = [
   { alt: 'T1w coronal MRI preview', src: '/neuro-assets/mri-coronal.png', title: 'T1w (Coronal)' },
   { alt: 'Axial tissue segmentation preview', src: '/neuro-assets/mri-segmentation.png', title: 'Segmentation (Axial)' },
 ];
+
+type DashboardAgentMessage = {
+  role: 'user' | 'agent';
+  content: string;
+  meta?: 'initial-greeting';
+  response?: AgentRunResponse;
+};
 
 const segmentationLegend = [
   { label: 'Background', color: 'bg-slate-700' },
@@ -159,7 +166,7 @@ export function DashboardPage() {
   const [skullStripping, setSkullStripping] = useState(true);
   const [biasCorrection, setBiasCorrection] = useState(true);
   const [chatInput, setChatInput] = useState('');
-  const [messages, setMessages] = useState<{ role: 'user' | 'agent'; content: string; meta?: 'initial-greeting' }[]>([]);
+  const [messages, setMessages] = useState<DashboardAgentMessage[]>([]);
   const [agentDrawerOpen, setAgentDrawerOpen] = useState(false);
 
   const { data: workflowPayload } = useQuery({ queryFn: api.listWorkflows, queryKey: queryKeys.workflows });
@@ -197,7 +204,7 @@ export function DashboardPage() {
       }
     },
     onSuccess: (data) => {
-      setMessages((prev) => [...prev, { role: 'agent', content: data.content }]);
+      setMessages((prev) => [...prev, { role: 'agent', content: data.content, response: data.response }]);
       if (data.response?.status === 'task_created') {
         queryClient.invalidateQueries({ queryKey: queryKeys.tasks(projectId) });
         if (data.response.task?.id) {
@@ -216,9 +223,32 @@ export function DashboardPage() {
     },
   });
 
-  const workflowOptions = normalizeWorkflowList(workflowPayload);
+  const resumeAgent = useMutation({
+    mutationFn: ({ approved, confirmation, threadId }: { approved: boolean; confirmation: NonNullable<AgentRunResponse['confirmation']>; threadId: string }) =>
+      api.resumeAgent(threadId, approved, confirmation),
+    onSuccess: (data) => {
+      setMessages((prev) => [...prev, { role: 'agent', content: dashboardAgentMessage(data), response: data }]);
+      queryClient.invalidateQueries({ queryKey: queryKeys.tasks(projectId) });
+      if (data.task?.id) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.task(data.task.id) });
+      }
+    },
+    onError: (err) => {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'agent',
+          content: err instanceof Error ? err.message : 'Workflow approval failed.',
+        },
+      ]);
+    },
+  });
+
+  const workflowCatalog = normalizeWorkflowCatalog(workflowPayload);
+  const workflowOptions = workflowCatalog.workflows;
   const selectedSeries = series.find((item) => item.id === selectedSeriesId) || series[0];
   const effectiveWorkflow = selectedWorkflow || defaultWorkflowForSeries(selectedSeries, workflowOptions);
+  const effectiveWorkflowLabel = workflowCatalog.items[effectiveWorkflow]?.display_name || effectiveWorkflow;
   const latestTask = latestCompletedTask(tasks);
   const displayedStartedTask = latestStartedTask || lastStartedTask;
   const resultTask = displayedStartedTask && completedTask(displayedStartedTask) ? displayedStartedTask : latestTask;
@@ -282,6 +312,11 @@ export function DashboardPage() {
   const uploadInventory = uploadInventoryData?.inventory;
   const uploadInventoryStatus = uploadInventory?.inventory_status;
   const uploadInventoryComplete = uploadInventoryStatus === 'completed';
+  const latestAgentResponse = [...messages].reverse().find((message) => message.response)?.response;
+  const pendingConfirmation =
+    latestAgentResponse?.status === 'confirmation_required' && latestAgentResponse.thread_id && latestAgentResponse.confirmation
+      ? latestAgentResponse
+      : null;
 
   function handleRun() {
     if (!selectedSeries?.id || !effectiveWorkflow) {
@@ -403,7 +438,7 @@ export function DashboardPage() {
             <div>
               <div className="font-semibold text-emerald-900">Recommended plan</div>
               <div className="mt-0.5 text-xs text-emerald-800/80">
-                Pipeline: {effectiveWorkflow || 'Waiting for workflow catalog'}
+                Pipeline: {effectiveWorkflowLabel || 'Waiting for workflow catalog'}
                 {!eligibility.runnable && effectiveWorkflow ? <span className="ml-2 text-amber-700">{eligibility.reason}</span> : null}
               </div>
             </div>
@@ -549,7 +584,7 @@ export function DashboardPage() {
                   >
                     {workflowOptions.map((workflow) => (
                       <option key={workflow} value={workflow}>
-                        {workflow}
+                        {workflowCatalog.items[workflow]?.display_name || workflow}
                       </option>
                     ))}
                     {workflowOptions.length === 0 ? <option value="">No workflows available</option> : null}
@@ -852,6 +887,57 @@ export function DashboardPage() {
               Open full chat
             </Link>
           </div>
+
+          {pendingConfirmation?.thread_id && pendingConfirmation.confirmation ? (
+            <div className="mx-4 mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+              <div className="flex items-center gap-2 font-bold">
+                <Info className="w-3.5 h-3.5 shrink-0" />
+                Approval required
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <span className="text-amber-700">Workflow</span>
+                <span className="truncate text-right font-semibold">
+                  {String(pendingConfirmation.confirmation.workflow_type || 'unknown')}
+                </span>
+                <span className="text-amber-700">Series</span>
+                <span className="text-right font-semibold">
+                  #{String(pendingConfirmation.confirmation.series_id || 'unknown')}
+                </span>
+              </div>
+              <div className="mt-3 rounded-md border border-amber-200 bg-white px-3 py-2">
+                <div className="font-bold text-amber-900">Task not created yet</div>
+                <div className="mt-1 text-[11px] text-amber-700">
+                  Backend API creates the task only after approval.
+                </div>
+              </div>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  disabled={resumeAgent.isPending}
+                  onClick={() => resumeAgent.mutate({
+                    approved: true,
+                    confirmation: pendingConfirmation.confirmation!,
+                    threadId: pendingConfirmation.thread_id!,
+                  })}
+                  className="flex-1 rounded-md bg-[#065F46] px-3 py-2 text-[11px] font-bold text-white shadow-sm hover:bg-[#044E3A] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Approve workflow
+                </button>
+                <button
+                  type="button"
+                  disabled={resumeAgent.isPending}
+                  onClick={() => resumeAgent.mutate({
+                    approved: false,
+                    confirmation: pendingConfirmation.confirmation!,
+                    threadId: pendingConfirmation.thread_id!,
+                  })}
+                  className="rounded-md border border-amber-200 bg-white px-3 py-2 text-[11px] font-bold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           <div className="p-4 border-t border-gray-100 space-y-3 bg-white">
             <Button

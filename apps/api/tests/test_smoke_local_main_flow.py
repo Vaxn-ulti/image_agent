@@ -189,6 +189,116 @@ def test_local_main_flow_smoke_requires_agent_confirmation_when_requested(tmp_pa
     }
 
 
+def test_local_main_flow_smoke_can_create_task_through_agent_resume(tmp_path, monkeypatch):
+    smoke = _load_smoke_module()
+    calls = []
+    output_json = tmp_path / "local-smoke-agent-resume.json"
+    confirmation = {
+        "type": "workflow_run",
+        "project_id": 13,
+        "series_id": 21,
+        "workflow_type": "t1_deepprep_anat_report",
+        "summary": "Prepare a deterministic backend workflow launch.",
+    }
+
+    def fake_upload_nifti(base, project_id, path):
+        return {
+            "series": {
+                "id": 21,
+                "project_id": project_id,
+                "modality": "T1",
+                "sequence_label": "T1w",
+            },
+        }
+
+    def fake_request(method, url, payload=None):
+        calls.append((method, url, payload))
+        if method == "GET" and url.endswith("/health"):
+            return {"status": "ok", "app": "image_agent", "version": "0.2.0"}
+        if method == "POST" and url.endswith("/projects"):
+            return {"id": 13, "name": payload["name"]}
+        if method == "GET" and url.endswith("/projects/13/series"):
+            return [{"id": 21, "project_id": 13, "modality": "T1", "sequence_label": "T1w"}]
+        if method == "POST" and url.endswith("/agent/runs"):
+            return {
+                "status": "confirmation_required",
+                "thread_id": "thread-safe",
+                "confirmation": confirmation,
+                "production_task_created": False,
+            }
+        if method == "POST" and url.endswith("/agent/runs/thread-safe/resume"):
+            assert payload == {"approved": True, "confirmation": confirmation}
+            return {
+                "status": "task_created",
+                "agent_run_id": "agent_run_resume",
+                "thread_id": "thread-safe",
+                "project_id": 13,
+                "series_id": 21,
+                "task_id": 34,
+                "workflow_type": "t1_deepprep_anat_report",
+                "production_task_created": True,
+                "task": {
+                    "id": 34,
+                    "project_id": 13,
+                    "series_id": 21,
+                    "workflow_type": "t1_deepprep_anat_report",
+                    "status": "queued",
+                    "log_path": "C:/Users/A/private/task.log",
+                },
+                "safe_metadata": {"confirmation_gate": "fingerprint_verified"},
+            }
+        if method == "POST" and url.endswith("/series/21/run"):
+            raise AssertionError("agent resume smoke must not also call direct /series/{series_id}/run")
+        if method == "GET" and url.endswith("/projects/13/tasks"):
+            return [{"id": 34, "project_id": 13, "series_id": 21, "workflow_type": "t1_deepprep_anat_report", "status": "queued"}]
+        if method == "GET" and url.endswith("/agent/model/status"):
+            return {"configured": True, "provider": "OpenAI", "model": "gpt-5.5", "wire_api": "responses"}
+        if method == "GET" and url.endswith("/agent/rag/status"):
+            return {"grounding_policy": {"raw_sources_indexed": False}, "index": {"document_count": 72}}
+        raise AssertionError(f"unexpected request: {method} {url}")
+
+    monkeypatch.setattr(smoke, "_upload_nifti", fake_upload_nifti)
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    smoke.main(
+        [
+            "--api-base",
+            "http://api.local",
+            "--require-agent-confirmation",
+            "--require-agent-resume",
+            "--agent-workflow-type",
+            "t1_deepprep_anat_report",
+            "--output-json",
+            str(output_json),
+        ]
+    )
+
+    payload = json.loads(output_json.read_text(encoding="utf-8"))
+    assert payload["agent_boundary_status"] == "passed"
+    assert payload["workflow_launch_status"] == "passed_via_agent_resume"
+    assert payload["agent_workflow_resume_status"] == "passed"
+    assert payload["agent_workflow_resume"] == {
+        "agent_run_id": "agent_run_resume",
+        "thread_id": "thread-safe",
+        "status": "task_created",
+        "project_id": 13,
+        "series_id": 21,
+        "task_id": 34,
+        "workflow_type": "t1_deepprep_anat_report",
+        "production_task_created": True,
+        "confirmation_gate": "fingerprint_verified",
+    }
+    assert payload["launched_task"] == {
+        "project_id": 13,
+        "series_id": 21,
+        "task_id": 34,
+        "workflow_type": "t1_deepprep_anat_report",
+        "status": "queued",
+    }
+    assert ("POST", "http://api.local/agent/runs/thread-safe/resume", {"approved": True, "confirmation": confirmation}) in calls
+    assert "C:/Users/A/private" not in json.dumps(payload)
+
+
 def test_local_main_flow_smoke_records_safe_upload_workflow_eligibility(tmp_path, monkeypatch):
     smoke = _load_smoke_module()
     output_json = tmp_path / "local-smoke-eligibility.json"

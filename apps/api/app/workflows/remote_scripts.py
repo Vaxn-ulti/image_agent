@@ -15,7 +15,10 @@ from app.db.database import now_iso
 
 DEFAULT_FMRIPREP_SCRIPT = "/home/yyf/Project/MMD_project/EVIDENCE/fmriprep_xcpd_comparison_20260602/scripts/run_fmriprep.sh"
 DEFAULT_XCPD_SCRIPT = "/home/yyf/Project/MMD_project/EVIDENCE/fmriprep_xcpd_comparison_20260602/scripts/run_xcpd_fmriprep.sh"
+DEFAULT_FMRIPREP_IMAGE = "nipreps/fmriprep:25.2.5"
+DEFAULT_XCPD_IMAGE = "pennlinc/xcp_d:26.0.2"
 DEFAULT_REMOTE_SCRIPT_TIMEOUT_SEC = 12 * 60 * 60
+DEPLOYMENT_LOCAL_SCRIPT_BACKEND = "deployment_local_script_wrapper"
 SAFE_CHILD_ENV_KEYS = {
     "PATH",
     "HOME",
@@ -46,6 +49,8 @@ BOLD_REMOTE_ENV_KEYS = [
     "IMAGE_AGENT_TASK_TEMPLATEFLOW_DIR",
     "IMAGE_AGENT_TASK_LOG_DIR",
     "IMAGE_AGENT_TASK_FS_LICENSE",
+    "IMAGE_AGENT_TASK_FMRIPREP_IMAGE",
+    "IMAGE_AGENT_TASK_XCPD_IMAGE",
     "IMAGE_AGENT_TEMPLATEFLOW_HOME",
 ]
 
@@ -61,6 +66,8 @@ def bold_remote_script_config() -> dict[str, str]:
     return {
         "fmriprep_script": os.environ.get("IMAGE_AGENT_BOLD_FMRIPREP_SCRIPT", DEFAULT_FMRIPREP_SCRIPT),
         "xcpd_script": os.environ.get("IMAGE_AGENT_BOLD_XCPD_SCRIPT", DEFAULT_XCPD_SCRIPT),
+        "fmriprep_image": os.environ.get("IMAGE_AGENT_BOLD_FMRIPREP_IMAGE", DEFAULT_FMRIPREP_IMAGE),
+        "xcpd_image": os.environ.get("IMAGE_AGENT_BOLD_XCPD_IMAGE", DEFAULT_XCPD_IMAGE),
     }
 
 
@@ -84,6 +91,48 @@ def _check_path(name: str, path: Path, *, executable: bool = False, directory: b
     }
 
 
+def _image_is_version_locked(image: str) -> bool:
+    value = image.strip()
+    if not value:
+        return False
+    if "@sha256:" in value:
+        digest = value.rsplit("@sha256:", 1)[1]
+        return bool(digest) and "latest" not in value.lower()
+    tail = value.rsplit("/", 1)[-1]
+    if ":" not in tail:
+        return False
+    tag = tail.rsplit(":", 1)[-1].strip().lower()
+    return bool(tag) and tag != "latest"
+
+
+def _check_locked_image(name: str, image: str) -> dict[str, Any]:
+    ok = _image_is_version_locked(image)
+    return {
+        "name": name,
+        "status": "pass" if ok else "fail",
+        "image": image,
+        "message": "" if ok else f"{name} must use a fixed tag or digest, not an unpinned/latest image",
+    }
+
+
+def _check_script_version_lock(name: str, script: Path) -> dict[str, Any]:
+    ok = True
+    message = ""
+    try:
+        text = script.read_text(encoding="utf-8", errors="replace") if script.exists() and script.is_file() else ""
+    except OSError:
+        text = ""
+    if re.search(r":latest(?:\s|$|['\"\\])", text):
+        ok = False
+        message = f"{name} must not hard-code :latest container images"
+    return {
+        "name": name,
+        "status": "pass" if ok else "fail",
+        "script": _script_label(script),
+        "message": message,
+    }
+
+
 def preflight_bold_fmriprep_xcpd_remote(
     *,
     bids_dir: Path | str,
@@ -100,6 +149,10 @@ def preflight_bold_fmriprep_xcpd_remote(
         _check_path("fmriprep_script_exists", Path(config["fmriprep_script"]), executable=True),
         _check_path("xcpd_script_exists", Path(config["xcpd_script"]), executable=True),
         _check_path("fs_license_exists", license_path),
+        _check_locked_image("fmriprep_image_locked", config["fmriprep_image"]),
+        _check_locked_image("xcpd_image_locked", config["xcpd_image"]),
+        _check_script_version_lock("fmriprep_script_version_lock", Path(config["fmriprep_script"])),
+        _check_script_version_lock("xcpd_script_version_lock", Path(config["xcpd_script"])),
     ]
     if require_bids:
         checks.append(_check_path("bids_dir_exists", bids_path, directory=True))
@@ -119,7 +172,7 @@ def preflight_bold_fmriprep_xcpd_remote(
     blocking_errors = [check["message"] for check in checks if check["status"] == "fail" and check.get("message")]
     return {
         "ok": not blocking_errors,
-        "runtime_backend": "remote_script_wrapper",
+        "runtime_backend": DEPLOYMENT_LOCAL_SCRIPT_BACKEND,
         "checks": checks,
         "blocking_errors": blocking_errors,
         "config": config,
@@ -211,6 +264,7 @@ def _script_is_runnable_file(script: Path) -> bool:
 def _task_env(*, task_id: int, bids_dir: Path, output_dir: Path, work_dir: Path) -> dict[str, str]:
     env = _safe_child_env()
     license_path = os.environ.get("IMAGE_AGENT_FS_LICENSE", str(FS_LICENSE))
+    config = bold_remote_script_config()
     env.update(
         {
             "IMAGE_AGENT_TASK_ID": str(task_id),
@@ -222,6 +276,8 @@ def _task_env(*, task_id: int, bids_dir: Path, output_dir: Path, work_dir: Path)
             "IMAGE_AGENT_TASK_TEMPLATEFLOW_DIR": str(resolve_templateflow_dir(work_dir)),
             "IMAGE_AGENT_TASK_LOG_DIR": str(output_dir / "logs"),
             "IMAGE_AGENT_TASK_FS_LICENSE": license_path,
+            "IMAGE_AGENT_TASK_FMRIPREP_IMAGE": config["fmriprep_image"],
+            "IMAGE_AGENT_TASK_XCPD_IMAGE": config["xcpd_image"],
             "IMAGE_AGENT_TEMPLATEFLOW_HOME": str(resolve_templateflow_dir(work_dir)),
         }
     )
@@ -231,9 +287,9 @@ def _task_env(*, task_id: int, bids_dir: Path, output_dir: Path, work_dir: Path)
 def _run_script(script: Path, *, env: dict[str, str], log_path: Path | str, step: int, total: int) -> None:
     label = _script_label(script)
     if not _script_is_runnable_file(script):
-        _append(log_path, f"FAIL remote script step {step}/{total}: {label} is not executable")
-        raise RuntimeError(f"remote script is not executable: {label}")
-    _append(log_path, f"START remote script step {step}/{total}: {label}")
+        _append(log_path, f"FAIL deployment-local script step {step}/{total}: {label} is not executable")
+        raise RuntimeError(f"deployment-local script is not executable: {label}")
+    _append(log_path, f"START deployment-local script step {step}/{total}: {label}")
     command = _script_command(script)
     timeout_sec = _remote_script_timeout_sec()
     try:
@@ -249,14 +305,14 @@ def _run_script(script: Path, *, env: dict[str, str], log_path: Path | str, step
         output = getattr(exc, "output", None) or getattr(exc, "stdout", None)
         if output:
             _append(log_path, _redact_log_text(output)[-12000:])
-        _append(log_path, f"TIMEOUT remote script step {step}/{total} after {timeout_sec}s: {label}")
-        raise RuntimeError(f"remote script timed out after {timeout_sec}s: {label}") from exc
+        _append(log_path, f"TIMEOUT deployment-local script step {step}/{total} after {timeout_sec}s: {label}")
+        raise RuntimeError(f"deployment-local script timed out after {timeout_sec}s: {label}") from exc
     if proc.stdout:
         _append(log_path, _redact_log_text(proc.stdout)[-12000:])
     if proc.returncode != 0:
-        _append(log_path, f"FAIL remote script step {step}/{total} rc={proc.returncode}: {label}")
-        raise RuntimeError(f"remote script failed rc={proc.returncode}: {label}")
-    _append(log_path, f"END remote script step {step}/{total}: {label}")
+        _append(log_path, f"FAIL deployment-local script step {step}/{total} rc={proc.returncode}: {label}")
+        raise RuntimeError(f"deployment-local script failed rc={proc.returncode}: {label}")
+    _append(log_path, f"END deployment-local script step {step}/{total}: {label}")
 
 
 def _script_command(script: Path) -> list[str]:
@@ -346,7 +402,7 @@ def run_bold_fmriprep_xcpd_remote(
         _run_script(script, env=env, log_path=log_path, step=index, total=len(scripts))
     return {
         "ok": True,
-        "runtime_backend": "remote_script_wrapper",
+        "runtime_backend": DEPLOYMENT_LOCAL_SCRIPT_BACKEND,
         "scripts": [_script_label(script) for script in scripts],
         "outputs": discover_bold_fmriprep_xcpd_outputs(output_path),
     }

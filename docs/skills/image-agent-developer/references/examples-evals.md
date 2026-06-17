@@ -57,7 +57,7 @@ Expected behavior:
 - Real DWI summaries set `validation_only: false`.
 - T1 placeholder contract summaries remain machine-readable via `extraction_status=placeholder_contract_pending_real_deepprep_parser`.
 - Real T1 summaries parse DeepPrep/Freesurfer `brainvol.stats` and `lh/rh.aparc.stats`, write frontend-ready TSVs, and use `extraction_status=real_deepprep_freesurfer_stats`.
-- The production command path uses the backend lightweight runner, host FSL GPU `eddy_cuda`, and MRtrix toolbox commands from `pennlinc/qsiprep:latest`.
+- The production command path uses the backend lightweight runner, host FSL GPU `eddy_cuda`, and MRtrix toolbox commands from the locked `pennlinc/qsiprep:1.0.2` image.
 - The command path does not contain full `qsiprep /data /out participant` or full QSIRecon execution.
 - Runtime/provenance records the 35 minute target or the measured bottleneck when it misses that target.
 

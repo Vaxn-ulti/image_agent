@@ -388,6 +388,48 @@ def test_agent_run_confirmation_does_not_create_task_before_resume(tmp_path, mon
     assert row["task_id"] is None
 
 
+def test_agent_run_uses_langgraph_runner_when_agent_engine_is_langgraph(tmp_path, monkeypatch):
+    from app.core import config
+    from app.db import database
+    from app import main
+    from app.main import app
+
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setenv("IMAGE_AGENT_AGENT_ENGINE", "langgraph")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_API_KEY", "test-key")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_PROVIDER", "rawchat")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_WIRE_API", "responses")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_NAME", "gpt-5.5")
+
+    class FakeGateway:
+        def complete_structured(self, messages, *, purpose, structured_schema=None):
+            return {"intent": "answer_question", "summary": "Explain status"}
+
+        def complete_text(self, messages, *, purpose):
+            return "langgraph answer"
+
+    monkeypatch.setattr(main, "ModelGateway", lambda: FakeGateway())
+    monkeypatch.setattr(
+        main,
+        "read_project_context",
+        lambda project_id, *, rows_fn, workflows: {"project_id": project_id, "tasks": [], "workflows": workflows},
+    )
+    database.init_db()
+    _insert_project(database, 7)
+
+    result = TestClient(app).post("/agent/runs", json={"project_id": 7, "message": "hi"})
+
+    assert result.status_code == 200
+    body = result.json()
+    assert body["contract_version"] == "agent_run.v1"
+    assert body["status"] == "answered"
+    assert body["answer"] == "langgraph answer"
+    assert body["production_task_created"] is False
+    assert body["safe_metadata"]["agent_engine"] == "langgraph"
+    assert body["safe_metadata"]["lane"] == "read_only"
+
+
 def test_agent_run_falls_back_to_read_only_backend_answer_when_model_unconfigured(tmp_path, monkeypatch):
     from app.core import config
     from app.db import database
@@ -1750,6 +1792,152 @@ def test_agent_resume_approved_confirmation_creates_real_task(tmp_path, monkeypa
     assert row["task_id"] == body["task"]["id"]
     assert row["approved"] == 1
     assert event_types == ["agent_run_created", "agent_run_started", "agent_run_completed"]
+
+
+def test_langgraph_agent_resume_approved_confirmation_creates_real_task_via_task_service(tmp_path, monkeypatch):
+    from app.core import config
+    from app.db import database
+    from app.agent.langgraph_runner import LangGraphAgentRunner
+    from app.agent.thread_store import AgentThreadStore
+    from app import main
+    from app.main import app
+
+    monkeypatch.setattr(config, "DATA_ROOT", tmp_path)
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(config, "PROJECTS_ROOT", tmp_path / "projects")
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(main, "PROJECTS_ROOT", tmp_path / "projects")
+    monkeypatch.setattr(main, "run_pipeline_task", lambda task_id, qsiprep_task_id=None: None)
+    monkeypatch.setenv("IMAGE_AGENT_AGENT_ENGINE", "langgraph")
+    store = AgentThreadStore(tmp_path / "agent_threads")
+    monkeypatch.setattr(main, "AgentRunner", lambda: LangGraphAgentRunner(thread_store=store))
+
+    database.init_db()
+    with database.connect() as conn:
+        conn.execute("INSERT INTO projects(id, name, description, created_at) VALUES(?,?,?,?)", (1, "P", "", database.now_iso()))
+        conn.execute(
+            "INSERT INTO files(id, project_id, original_name, storage_path, file_type, size, sha256, created_at) VALUES(?,?,?,?,?,?,?,?)",
+            (1, 1, "t1.nii.gz", str(tmp_path / "t1.nii.gz"), "NIFTI", 1, "x", database.now_iso()),
+        )
+        conn.execute(
+            "INSERT INTO imaging_series(id, project_id, file_id, sequence_label, supported_for_processing, unsupported_reason, modality, format, confidence, metadata_json, status, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            (11, 1, 1, "T1_MPRAGE", 1, "", "T1", "NIFTI", 0.9, json.dumps({}), "detected", database.now_iso()),
+        )
+
+    confirmation = {
+        "type": "workflow_execution",
+        "project_id": 1,
+        "series_id": 11,
+        "workflow_type": "t1_deepprep_anat_report",
+        "action_lane": "fixed_workflow",
+    }
+    thread = store.create_pending_confirmation(
+        confirmation=confirmation,
+        decision={"intent": "run_workflow"},
+        selected_skill="image-agent-workflow-runner",
+        retrieved_context={},
+    )
+
+    result = TestClient(app).post(
+        f"/agent/runs/{thread['thread_id']}/resume",
+        json={"approved": True, "confirmation": confirmation},
+    )
+
+    assert result.status_code == 200
+    body = result.json()
+    assert body["status"] == "task_created"
+    assert body["production_task_created"] is True
+    assert body["task"]["workflow_type"] == "t1_deepprep"
+    assert body["safe_metadata"]["agent_engine"] == "langgraph"
+    assert body["safe_metadata"]["lane"] == "fixed_workflow"
+    assert body["safe_metadata"]["confirmation_gate"] == "fingerprint_verified"
+
+    with database.connect() as conn:
+        task_count = conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
+        row = conn.execute(
+            "SELECT workflow_type, task_id, approved, safe_metadata_json FROM agent_runs WHERE agent_run_id=?",
+            (body["agent_run_id"],),
+        ).fetchone()
+
+    assert task_count == 1
+    assert row["workflow_type"] == "t1_deepprep"
+    assert row["task_id"] == body["task"]["id"]
+    assert row["approved"] == 1
+    safe_metadata = json.loads(row["safe_metadata_json"])
+    assert safe_metadata["agent_engine"] == "langgraph"
+    assert safe_metadata["confirmation_gate"] == "fingerprint_verified"
+
+
+def test_langgraph_agent_resume_blocks_incubation_without_creating_task(tmp_path, monkeypatch):
+    from app.core import config
+    from app.db import database
+    from app.agent.langgraph_runner import LangGraphAgentRunner
+    from app.agent.thread_store import AgentThreadStore
+    from app import main
+    from app.main import app
+
+    monkeypatch.setattr(config, "DATA_ROOT", tmp_path)
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(config, "PROJECTS_ROOT", tmp_path / "projects")
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(main, "PROJECTS_ROOT", tmp_path / "projects")
+    monkeypatch.setattr(main, "run_pipeline_task", lambda task_id, qsiprep_task_id=None: None)
+    monkeypatch.setenv("IMAGE_AGENT_AGENT_ENGINE", "langgraph")
+    store = AgentThreadStore(tmp_path / "agent_threads")
+    monkeypatch.setattr(main, "AgentRunner", lambda: LangGraphAgentRunner(thread_store=store))
+
+    database.init_db()
+    with database.connect() as conn:
+        conn.execute("INSERT INTO projects(id, name, description, created_at) VALUES(?,?,?,?)", (1, "P", "", database.now_iso()))
+        conn.execute(
+            "INSERT INTO files(id, project_id, original_name, storage_path, file_type, size, sha256, created_at) VALUES(?,?,?,?,?,?,?,?)",
+            (1, 1, "dwi.nii.gz", str(tmp_path / "dwi.nii.gz"), "NIFTI", 1, "x", database.now_iso()),
+        )
+        conn.execute(
+            "INSERT INTO imaging_series(id, project_id, file_id, sequence_label, supported_for_processing, unsupported_reason, modality, format, confidence, metadata_json, status, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            (24, 1, 1, "DWI", 1, "", "DWI", "NIFTI", 0.9, json.dumps({}), "detected", database.now_iso()),
+        )
+
+    confirmation = {
+        "type": "workflow_execution",
+        "project_id": 1,
+        "series_id": 24,
+        "workflow_type": "unknown_connectome",
+        "action_lane": "toolchain_incubation",
+    }
+    thread = store.create_pending_confirmation(
+        confirmation=confirmation,
+        decision={"intent": "run_workflow", "action_lane": "toolchain_incubation"},
+        selected_skill="image-agent-workflow-runner",
+        retrieved_context={},
+    )
+
+    result = TestClient(app).post(
+        f"/agent/runs/{thread['thread_id']}/resume",
+        json={"approved": True, "confirmation": confirmation},
+    )
+
+    assert result.status_code == 200
+    body = result.json()
+    assert body["status"] == "blocked"
+    assert body["production_task_created"] is False
+    assert body["safe_metadata"]["agent_engine"] == "langgraph"
+    assert body["safe_metadata"]["lane"] == "toolchain_incubation"
+    assert body["safe_metadata"]["confirmation_gate"] == "incubation_blocked"
+
+    with database.connect() as conn:
+        task_count = conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
+        row = conn.execute(
+            "SELECT status, task_id, approved, safe_metadata_json FROM agent_runs WHERE agent_run_id=?",
+            (body["agent_run_id"],),
+        ).fetchone()
+
+    assert task_count == 0
+    assert row["status"] == "blocked"
+    assert row["task_id"] is None
+    assert row["approved"] == 1
+    safe_metadata = json.loads(row["safe_metadata_json"])
+    assert safe_metadata["confirmation_gate"] == "incubation_blocked"
 
 
 def test_agent_resume_rejects_confirmation_mismatch(tmp_path, monkeypatch):

@@ -1106,6 +1106,7 @@ def test_smoke_remote_agent_requires_agent_workflow_confirmation(capsys, monkeyp
         if url.endswith("/agent/runs") and "Prepare a workflow confirmation" in payload["message"]:
             return {
                 "agent_run_id": "agent_run_confirm",
+                "thread_id": "agent_thread_confirm",
                 "status": "confirmation_required",
                 "intent": "run_workflow",
                 "selected_skill": "image-agent-workflow-runner",
@@ -1116,6 +1117,24 @@ def test_smoke_remote_agent_requires_agent_workflow_confirmation(capsys, monkeyp
                     "workflow_type": "t1_deepprep_anat_report",
                 },
                 "production_task_created": False,
+            }
+        if url.endswith("/agent/runs/agent_thread_confirm/resume"):
+            return {
+                "agent_run_id": "agent_run_resume",
+                "thread_id": "agent_thread_confirm",
+                "status": "task_created",
+                "intent": "run_workflow",
+                "selected_skill": "image-agent-workflow-runner",
+                "project_id": 7,
+                "production_task_created": True,
+                "safe_metadata": {"confirmation_gate": "fingerprint_verified"},
+                "task": {
+                    "id": 114,
+                    "project_id": 7,
+                    "series_id": 1,
+                    "workflow_type": "bold_fmriprep_xcpd",
+                    "status": "queued",
+                },
             }
         if url.endswith("/agent/runs"):
             return {
@@ -1178,6 +1197,112 @@ def test_smoke_remote_agent_requires_agent_workflow_confirmation(capsys, monkeyp
             },
         )
     ]
+
+
+def test_smoke_remote_agent_requires_agent_workflow_resume(capsys, monkeypatch):
+    smoke = _load_smoke_module()
+    calls = []
+    confirmation = {
+        "project_id": 7,
+        "series_id": 1,
+        "workflow_type": "t1_deepprep_anat_report",
+    }
+
+    def fake_request(method, url, payload=None):
+        calls.append((method, url, payload))
+        if url.endswith("/health"):
+            return {"status": "ok", "app": "image_agent", "version": "0.2.0"}
+        if url.endswith("/agent/model/status"):
+            return {"configured": True, "provider": "OpenAI"}
+        if url.endswith("/agent/rag/status"):
+            return {
+                "index": {"document_count": 70, "chunk_count": 250, "engine": "llama_index"},
+                "vendor_raw_sources": _complete_vendor_raw_sources(),
+                "vendor_pointer_integrity": _complete_vendor_pointer_integrity(),
+            }
+        if url.endswith("/agent/rag/rebuild"):
+            return {"document_count": 70, "chunk_count": 250, "semantic_index": True}
+        if url.endswith("/agent/runs") and "Prepare a workflow confirmation" in payload["message"]:
+            return {
+                "agent_run_id": "agent_run_confirm",
+                "thread_id": "agent_thread_confirm",
+                "status": "confirmation_required",
+                "intent": "run_workflow",
+                "selected_skill": "image-agent-workflow-runner",
+                "project_id": 7,
+                "confirmation": confirmation,
+                "production_task_created": False,
+            }
+        if url.endswith("/agent/runs/agent_thread_confirm/resume"):
+            return {
+                "agent_run_id": "agent_run_resume",
+                "thread_id": "agent_thread_confirm",
+                "status": "task_created",
+                "intent": "run_workflow",
+                "selected_skill": "image-agent-workflow-runner",
+                "project_id": 7,
+                "production_task_created": True,
+                "safe_metadata": {"confirmation_gate": "fingerprint_verified"},
+                "task": {
+                    "id": 114,
+                    "project_id": 7,
+                    "series_id": 1,
+                    "workflow_type": "t1_deepprep_anat_report",
+                    "status": "queued",
+                },
+            }
+        if url.endswith("/agent/runs"):
+            return {
+                "agent_run_id": "agent_run_789",
+                "status": "answered",
+                "intent": "answer_question",
+                "selected_skill": "image-agent-operator",
+                "model_gateway_access": "openai_sdk_gateway",
+                "safe_metadata": {},
+                "project_id": 7,
+            }
+        if url.endswith("/projects/7/series"):
+            return [{"id": 1, "modality": "T1", "workflow_eligibility": _good_workflow_eligibility()}]
+        raise AssertionError(f"unexpected request: {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    smoke.main(
+        [
+            "--api-base",
+            "http://api.local",
+            "--require-model",
+            "--project-id",
+            "7",
+            "--require-agent-workflow-confirmation",
+            "--require-agent-workflow-resume",
+            "--launch-series-id",
+            "1",
+            "--launch-workflow-type",
+            "t1_deepprep_anat_report",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["smoke_gate"]["require_agent_workflow_resume"] is True
+    assert payload["agent_workflow_resume_status"] == "passed"
+    assert payload["agent_workflow_resume"] == {
+        "agent_run_id": "agent_run_resume",
+        "thread_id": "agent_thread_confirm",
+        "status": "task_created",
+        "project_id": 7,
+        "series_id": 1,
+        "workflow_type": "t1_deepprep_anat_report",
+        "task_id": 114,
+        "initial_status": "queued",
+        "production_task_created": True,
+        "confirmation_gate": "fingerprint_verified",
+    }
+    assert (
+        "POST",
+        "http://api.local/agent/runs/agent_thread_confirm/resume",
+        {"approved": True, "confirmation": confirmation},
+    ) in calls
 
 
 def test_smoke_remote_agent_require_project_agent_context_rejects_unscoped_agent_run(monkeypatch):
@@ -3020,10 +3145,11 @@ def test_smoke_remote_agent_writes_acceptance_json_artifact(capsys, monkeypatch,
     assert artifact_payload == stdout_payload
     assert artifact_payload["smoke_gate"] == {
         "api_base": "http://api.local",
-        "require_model": True,
-        "require_project_agent_context": False,
-        "require_agent_workflow_confirmation": False,
-        "require_deployment_identity": True,
+            "require_model": True,
+            "require_project_agent_context": False,
+            "require_agent_workflow_confirmation": False,
+            "require_agent_workflow_resume": False,
+            "require_deployment_identity": True,
         "require_production_readiness": False,
         "deployment_id": "codex-f57a2ea-20260611T023456",
         "min_documents": 60,
@@ -3103,6 +3229,7 @@ def test_smoke_remote_agent_rejects_vendor_coverage_catalog_curated_source_drift
         if url.endswith("/agent/runs") and "Prepare a workflow confirmation" in payload["message"]:
             return {
                 "agent_run_id": "agent_run_confirm",
+                "thread_id": "agent_thread_confirm",
                 "status": "confirmation_required",
                 "intent": "run_workflow",
                 "selected_skill": "image-agent-workflow-runner",
@@ -3113,6 +3240,24 @@ def test_smoke_remote_agent_rejects_vendor_coverage_catalog_curated_source_drift
                     "workflow_type": "bold_fmriprep_xcpd",
                 },
                 "production_task_created": False,
+            }
+        if url.endswith("/agent/runs/agent_thread_confirm/resume"):
+            return {
+                "agent_run_id": "agent_run_resume",
+                "thread_id": "agent_thread_confirm",
+                "status": "task_created",
+                "intent": "run_workflow",
+                "selected_skill": "image-agent-workflow-runner",
+                "project_id": 7,
+                "production_task_created": True,
+                "safe_metadata": {"confirmation_gate": "fingerprint_verified"},
+                "task": {
+                    "id": 114,
+                    "project_id": 7,
+                    "series_id": 1,
+                    "workflow_type": "bold_fmriprep_xcpd",
+                    "status": "queued",
+                },
             }
         if url.endswith("/agent/runs"):
             return {
@@ -3241,6 +3386,7 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
         if url.endswith("/agent/runs") and "Prepare a workflow confirmation" in payload["message"]:
             return {
                 "agent_run_id": "agent_run_confirm",
+                "thread_id": "agent_thread_confirm",
                 "status": "confirmation_required",
                 "intent": "run_workflow",
                 "selected_skill": "image-agent-workflow-runner",
@@ -3251,6 +3397,24 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
                     "workflow_type": "bold_fmriprep_xcpd",
                 },
                 "production_task_created": False,
+            }
+        if url.endswith("/agent/runs/agent_thread_confirm/resume"):
+            return {
+                "agent_run_id": "agent_run_resume",
+                "thread_id": "agent_thread_confirm",
+                "status": "task_created",
+                "intent": "run_workflow",
+                "selected_skill": "image-agent-workflow-runner",
+                "project_id": 7,
+                "production_task_created": True,
+                "safe_metadata": {"confirmation_gate": "fingerprint_verified"},
+                "task": {
+                    "id": 114,
+                    "project_id": 7,
+                    "series_id": 1,
+                    "workflow_type": "bold_fmriprep_xcpd",
+                    "status": "queued",
+                },
             }
         if url.endswith("/agent/runs"):
             return {
@@ -3290,15 +3454,6 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
                         }
                     ],
                 },
-            }
-        if method == "POST" and url.endswith("/series/1/run"):
-            assert payload == {"workflow_type": "bold_fmriprep_xcpd"}
-            return {
-                "id": 114,
-                "project_id": 7,
-                "series_id": 1,
-                "workflow_type": "bold_fmriprep_xcpd",
-                "status": "queued",
             }
         if url.endswith("/tasks/114"):
             return {
@@ -3362,6 +3517,7 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
                     "--require-model-tool-loop",
                     "--require-project-agent-context",
             "--require-agent-workflow-confirmation",
+            "--require-agent-workflow-resume",
             "--require-deployment-identity",
             "--require-production-readiness",
             "--deployment-id",
@@ -3405,6 +3561,7 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
     assert report["status"] == "passed"
     assert report["checked"]["launched_task_status"] == "passed"
     assert report["checked"]["agent_workflow_confirmation_status"] == "passed"
+    assert report["checked"]["agent_workflow_resume_status"] == "passed"
     assert report["checked"]["container_native_qc_status"] == "passed"
     assert report["checked"]["scientific_report_artifacts_status"] == "passed"
 

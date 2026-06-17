@@ -216,6 +216,7 @@ def _verify_gate_settings(payload: dict) -> dict:
         "require_launched_task",
         "require_project_agent_context",
         "require_agent_workflow_confirmation",
+        "require_agent_workflow_resume",
         "require_raw_source_policy",
         "require_vendor_pointer_integrity",
         "require_real_evidence_ids",
@@ -484,6 +485,43 @@ def _verify_agent_workflow_confirmation(payload: dict, gate: dict) -> None:
     _require(
         confirmation.get("workflow_type") == task_status.get("workflow_type"),
         "agent_workflow_confirmation.workflow_type must match task_status.workflow_type",
+    )
+
+
+def _verify_agent_workflow_resume(payload: dict, gate: dict) -> None:
+    _require_status(payload, "agent_workflow_resume_status")
+    resume = payload.get("agent_workflow_resume")
+    _require(isinstance(resume, dict), "agent_workflow_resume must be present")
+    _require_privacy_safe_symbol(resume, "agent_run_id")
+    _require_privacy_safe_symbol(resume, "thread_id")
+    _require(
+        resume.get("status") == "task_created",
+        "agent_workflow_resume.status must be task_created",
+    )
+    _require(
+        resume.get("production_task_created") is True,
+        "agent_workflow_resume.production_task_created must be true",
+    )
+    _require(
+        resume.get("confirmation_gate") == "fingerprint_verified",
+        "agent_workflow_resume.confirmation_gate must be fingerprint_verified",
+    )
+    _require(
+        resume.get("project_id") == gate.get("project_id"),
+        "agent_workflow_resume.project_id must match smoke_gate.project_id",
+    )
+    _require(
+        resume.get("task_id") == gate.get("task_id"),
+        "agent_workflow_resume.task_id must match smoke_gate.task_id",
+    )
+    task_status = payload.get("task_status") if isinstance(payload.get("task_status"), dict) else {}
+    _require(
+        resume.get("series_id") == task_status.get("series_id"),
+        "agent_workflow_resume.series_id must match task_status.series_id",
+    )
+    _require(
+        resume.get("workflow_type") == task_status.get("workflow_type"),
+        "agent_workflow_resume.workflow_type must match task_status.workflow_type",
     )
 
 
@@ -1003,6 +1041,7 @@ def verify_acceptance_payload(
     _verify_agent_model_gateway(payload)
     _verify_agent_project_context(payload, gate)
     _verify_agent_workflow_confirmation(payload, gate)
+    _verify_agent_workflow_resume(payload, gate)
     _require_int_metric(payload, "rag_document_count")
     _require_int_metric(payload, "rag_chunk_count")
     _require(payload["rag_document_count"] >= gate["min_documents"], "rag_document_count below smoke gate minimum")
@@ -1041,6 +1080,7 @@ def verify_acceptance_payload(
             "agent_model_gateway_status": payload["agent_model_gateway_status"],
             "agent_project_context_status": payload["agent_project_context_status"],
             "agent_workflow_confirmation_status": payload["agent_workflow_confirmation_status"],
+            "agent_workflow_resume_status": payload["agent_workflow_resume_status"],
             "deployment_identity_status": payload["deployment_identity_status"],
             "production_readiness_status": payload["production_readiness_status"],
             "remote_evidence_ids_status": payload["remote_evidence_ids_status"],

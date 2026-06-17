@@ -124,6 +124,7 @@ def build_apply_request(
             "--require-model --expected-model-wire-api responses "
             "--expected-model-provider-profile rawchat --require-model-tool-loop "
             "--require-project-agent-context --require-agent-workflow-confirmation "
+            "--require-agent-workflow-resume "
             "--require-deployment-identity --require-production-readiness "
             "--deployment-id <accepted_release_or_commit> "
             "--expected-health-version <expected_health_version> "

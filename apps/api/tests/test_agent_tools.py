@@ -77,7 +77,7 @@ def test_preflight_workflow_checks_remote_runtime_when_project_root_present(tmp_
     result = tools.preflight_workflow(context, series_id=11, workflow_type="bold_fmriprep_xcpd_report")
 
     assert result["ok"] is True
-    assert any(check["name"] == "remote_fmriprep_script_exists" for check in result["checks"])
+    assert any(check["name"] == "deployment_local_fmriprep_script_exists" for check in result["checks"])
     assert "private-host-root" not in json.dumps(result)
     assert "run_fmriprep.sh" in json.dumps(result)
 

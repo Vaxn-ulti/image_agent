@@ -32,7 +32,7 @@ def test_remote_bold_validate_uses_path_safe_remote_preflight_status(monkeypatch
         "preflight_bold_fmriprep_xcpd_remote",
         lambda *, bids_dir, output_dir, work_dir, require_bids=True: {
             "ok": False,
-            "runtime_backend": "remote_script_wrapper",
+            "runtime_backend": "deployment_local_script_wrapper",
             "blocking_errors": ["fmriprep_script_exists is missing or not accessible: run_fmriprep.sh"],
             "checks": [
                 {"name": "fmriprep_script_exists", "status": "fail", "path": str(fmriprep)},

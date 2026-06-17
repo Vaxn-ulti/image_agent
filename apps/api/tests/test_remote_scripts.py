@@ -130,6 +130,7 @@ def test_remote_script_runner_passes_task_environment_and_discovers_outputs(tmp_
     captured = json.loads(env_capture.read_text(encoding="utf-8"))
     outputs = discover_bold_fmriprep_xcpd_outputs(output)
     assert result["ok"] is True
+    assert result["runtime_backend"] == "deployment_local_script_wrapper"
     assert captured["IMAGE_AGENT_TASK_BIDS_DIR"] == str(bids)
     assert captured["IMAGE_AGENT_TASK_XCPD_DIR"] == str(output / "xcpd")
     assert captured["IMAGE_AGENT_TASK_TEMPLATEFLOW_DIR"] == str(shared_templateflow)
@@ -143,7 +144,7 @@ def test_remote_script_runner_passes_task_environment_and_discovers_outputs(tmp_
     assert outputs["logs"]
     assert outputs["reports"][0]["source_stage"] in {"fmriprep", "xcpd"}
     assert outputs["figures"][0]["source_stage"] == "xcpd"
-    assert "START remote script step 1/2" in log.read_text(encoding="utf-8")
+    assert "START deployment-local script step 1/2" in log.read_text(encoding="utf-8")
 
 
 def test_remote_script_task_environment_excludes_model_and_sudo_secrets(tmp_path, monkeypatch):
@@ -185,14 +186,14 @@ def test_remote_script_timeout_uses_configured_limit_and_logs_redacted_tail(tmp_
 
     monkeypatch.setattr(remote_scripts.subprocess, "run", fake_run)
 
-    with pytest.raises(RuntimeError, match="remote script timed out after 7s") as exc:
+    with pytest.raises(RuntimeError, match="deployment-local script timed out after 7s") as exc:
         remote_scripts._run_script(script, env={}, log_path=log, step=1, total=1)
 
     text = log.read_text(encoding="utf-8")
     assert str(tmp_path) not in str(exc.value)
     assert script.name in str(exc.value)
     assert observed["timeout"] == 7
-    assert "TIMEOUT remote script step 1/1" in text
+    assert "TIMEOUT deployment-local script step 1/1" in text
     assert "patient Jane Doe" not in text
     assert "sk-test-secret" not in text
     assert "C:/Users/A/private" not in text
@@ -212,7 +213,7 @@ def test_remote_script_failure_logs_redacted_stdout_tail(tmp_path, monkeypatch):
     monkeypatch.setenv("IMAGE_AGENT_REMOTE_SCRIPT_TIMEOUT_SEC", "13")
     monkeypatch.setattr(remote_scripts.subprocess, "run", lambda *args, **kwargs: FakeProc())
 
-    with pytest.raises(RuntimeError, match="remote script failed rc=2") as exc:
+    with pytest.raises(RuntimeError, match="deployment-local script failed rc=2") as exc:
         remote_scripts._run_script(script, env={}, log_path=log, step=1, total=1)
 
     text = log.read_text(encoding="utf-8")
@@ -233,7 +234,7 @@ def test_remote_script_run_rejects_missing_script_before_subprocess(tmp_path, mo
 
     monkeypatch.setattr(remote_scripts.subprocess, "run", fail_if_called)
 
-    with pytest.raises(RuntimeError, match="remote script is not executable") as exc:
+    with pytest.raises(RuntimeError, match="deployment-local script is not executable") as exc:
         remote_scripts._run_script(missing, env={}, log_path=log, step=1, total=1)
 
     assert str(tmp_path) not in str(exc.value)
@@ -252,7 +253,7 @@ def test_remote_script_run_rejects_non_executable_file_on_posix_before_subproces
     monkeypatch.setattr(remote_scripts.os, "access", lambda path, mode: False)
     monkeypatch.setattr(remote_scripts.subprocess, "run", fail_if_called)
 
-    with pytest.raises(RuntimeError, match="remote script is not executable") as exc:
+    with pytest.raises(RuntimeError, match="deployment-local script is not executable") as exc:
         remote_scripts._run_script(script, env={}, log_path=log, step=1, total=1)
 
     assert str(tmp_path) not in str(exc.value)
@@ -325,6 +326,78 @@ def test_remote_script_preflight_checks_templateflow_cache(tmp_path, monkeypatch
     assert checks["templateflow_cache_writable"]["status"] == "pass"
     assert checks["templateflow_cache_writable"]["path"] == str(shared_templateflow)
     assert resolve_templateflow_dir(work) == shared_templateflow
+
+
+def test_remote_script_preflight_rejects_unlocked_container_images(tmp_path, monkeypatch):
+    bids = tmp_path / "bids"
+    output = tmp_path / "output"
+    work = tmp_path / "work"
+    bids.mkdir()
+    license_path = tmp_path / "license.txt"
+    fmriprep_script = tmp_path / "run_fmriprep.sh"
+    xcpd_script = tmp_path / "run_xcpd.sh"
+    license_path.write_text("license", encoding="utf-8")
+    fmriprep_script.write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+    xcpd_script.write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+    fmriprep_script.chmod(0o755)
+    xcpd_script.chmod(0o755)
+    monkeypatch.setenv("IMAGE_AGENT_FS_LICENSE", str(license_path))
+    monkeypatch.setenv("IMAGE_AGENT_BOLD_FMRIPREP_SCRIPT", str(fmriprep_script))
+    monkeypatch.setenv("IMAGE_AGENT_BOLD_XCPD_SCRIPT", str(xcpd_script))
+    monkeypatch.setenv("IMAGE_AGENT_BOLD_FMRIPREP_IMAGE", "nipreps/fmriprep:latest")
+    monkeypatch.setenv("IMAGE_AGENT_BOLD_XCPD_IMAGE", "pennlinc/xcp_d")
+
+    result = preflight_bold_fmriprep_xcpd_remote(bids_dir=bids, output_dir=output, work_dir=work)
+
+    assert result["ok"] is False
+    failed = {check["name"]: check for check in result["checks"] if check["status"] == "fail"}
+    assert failed["fmriprep_image_locked"]["image"] == "nipreps/fmriprep:latest"
+    assert failed["xcpd_image_locked"]["image"] == "pennlinc/xcp_d"
+    assert "fixed tag or digest" in " ".join(result["blocking_errors"])
+
+
+def test_remote_script_preflight_rejects_latest_tag_inside_scripts(tmp_path, monkeypatch):
+    bids = tmp_path / "bids"
+    output = tmp_path / "output"
+    work = tmp_path / "work"
+    bids.mkdir()
+    license_path = tmp_path / "license.txt"
+    fmriprep_script = tmp_path / "run_fmriprep.sh"
+    xcpd_script = tmp_path / "run_xcpd.sh"
+    license_path.write_text("license", encoding="utf-8")
+    fmriprep_script.write_text(
+        "#!/usr/bin/env bash\n"
+        "docker run --rm nipreps/fmriprep:latest /data /out participant\n",
+        encoding="utf-8",
+    )
+    xcpd_script.write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+    fmriprep_script.chmod(0o755)
+    xcpd_script.chmod(0o755)
+    monkeypatch.setenv("IMAGE_AGENT_FS_LICENSE", str(license_path))
+    monkeypatch.setenv("IMAGE_AGENT_BOLD_FMRIPREP_SCRIPT", str(fmriprep_script))
+    monkeypatch.setenv("IMAGE_AGENT_BOLD_XCPD_SCRIPT", str(xcpd_script))
+
+    result = preflight_bold_fmriprep_xcpd_remote(bids_dir=bids, output_dir=output, work_dir=work)
+
+    assert result["ok"] is False
+    failed = {check["name"]: check for check in result["checks"] if check["status"] == "fail"}
+    assert failed["fmriprep_script_version_lock"]["script"] == "run_fmriprep.sh"
+    assert ":latest" in " ".join(result["blocking_errors"])
+
+
+def test_remote_script_task_environment_exports_locked_container_images(tmp_path, monkeypatch):
+    monkeypatch.setenv("IMAGE_AGENT_BOLD_FMRIPREP_IMAGE", "nipreps/fmriprep:25.2.5")
+    monkeypatch.setenv("IMAGE_AGENT_BOLD_XCPD_IMAGE", "pennlinc/xcp_d:26.0.2")
+
+    env = remote_scripts._task_env(
+        task_id=44,
+        bids_dir=tmp_path / "bids",
+        output_dir=tmp_path / "output",
+        work_dir=tmp_path / "work",
+    )
+
+    assert env["IMAGE_AGENT_TASK_FMRIPREP_IMAGE"] == "nipreps/fmriprep:25.2.5"
+    assert env["IMAGE_AGENT_TASK_XCPD_IMAGE"] == "pennlinc/xcp_d:26.0.2"
 
 
 def test_remote_script_preflight_templateflow_error_uses_path_safe_label(tmp_path, monkeypatch):

@@ -500,6 +500,58 @@ def _validate_agent_workflow_confirmation(
     }
 
 
+def _validate_agent_workflow_resume(
+    resume: dict,
+    *,
+    thread_id: str,
+    project_id: int,
+    series_id: int,
+    workflow_type: str,
+) -> dict:
+    _require(bool(resume.get("agent_run_id")), "agent workflow resume failed: missing agent_run_id")
+    _require(resume.get("thread_id") == thread_id, "agent workflow resume failed: thread_id mismatch")
+    _require(resume.get("status") == "task_created", f"agent workflow resume failed: status={resume.get('status')}")
+    task = resume.get("task") if isinstance(resume.get("task"), dict) else {}
+    task_id = _int_metric(task.get("id"), task.get("task_id"))
+    _require(task_id is not None and task_id > 0, "agent workflow resume failed: task_id missing")
+    task_project_id = _int_metric(task.get("project_id"), resume.get("project_id"))
+    task_series_id = _int_metric(task.get("series_id"))
+    task_workflow_type = task.get("workflow_type")
+    _require(task_project_id == project_id, "agent workflow resume failed: project_id mismatch")
+    _require(task_series_id == series_id, "agent workflow resume failed: series_id mismatch")
+    _require(
+        task_workflow_type == workflow_type and _is_privacy_safe_symbol(task_workflow_type),
+        "agent workflow resume failed: workflow_type mismatch",
+    )
+    initial_status = task.get("status")
+    _require(
+        isinstance(initial_status, str) and _is_privacy_safe_symbol(initial_status),
+        "agent workflow resume failed: task status invalid",
+    )
+    production_task_created = resume.get("production_task_created")
+    if production_task_created is None and isinstance(resume.get("safe_metadata"), dict):
+        production_task_created = resume["safe_metadata"].get("production_task_created")
+    _require(production_task_created is True, "agent workflow resume failed: production_task_created must be true")
+    safe_metadata = resume.get("safe_metadata") if isinstance(resume.get("safe_metadata"), dict) else {}
+    confirmation_gate = safe_metadata.get("confirmation_gate")
+    _require(
+        confirmation_gate == "fingerprint_verified",
+        "agent workflow resume failed: confirmation_gate must be fingerprint_verified",
+    )
+    return {
+        "agent_run_id": resume["agent_run_id"],
+        "thread_id": thread_id,
+        "status": "task_created",
+        "project_id": task_project_id,
+        "series_id": task_series_id,
+        "workflow_type": task_workflow_type,
+        "task_id": task_id,
+        "initial_status": initial_status,
+        "production_task_created": True,
+        "confirmation_gate": confirmation_gate,
+    }
+
+
 def _validate_completed_task(task: dict, task_id: int, project_id: int | None) -> dict:
     _require(int(task.get("id") or 0) == task_id, "completed task check failed: task_id mismatch")
     _require(task.get("status") == "completed", f"completed task check failed: status={task.get('status')}")
@@ -1173,6 +1225,11 @@ def main(argv: Sequence[str] | None = None) -> None:
         help="Fail unless /agent/runs can prepare a workflow confirmation without creating a production task.",
     )
     parser.add_argument(
+        "--require-agent-workflow-resume",
+        action="store_true",
+        help="Fail unless /agent/runs/{thread_id}/resume approves the prepared confirmation and creates a backend task.",
+    )
+    parser.add_argument(
         "--require-deployment-identity",
         action="store_true",
         help="Fail unless --deployment-id names the accepted remote release or commit.",
@@ -1311,6 +1368,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         raise SystemExit("--require-agent-workflow-confirmation requires --project-id")
     if args.require_agent_workflow_confirmation and not args.launch_workflow_type:
         raise SystemExit("--require-agent-workflow-confirmation requires --launch-workflow-type")
+    if args.require_agent_workflow_resume and not args.require_agent_workflow_confirmation:
+        raise SystemExit("--require-agent-workflow-resume requires --require-agent-workflow-confirmation")
     if args.require_completed_upload and (args.project_id is None or args.upload_session_id is None):
         raise SystemExit("--require-completed-upload requires --project-id and --upload-session-id")
     if args.require_real_evidence_ids and (
@@ -1445,6 +1504,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     launched_task = None
     uploaded_series = None
     agent_workflow_confirmation = None
+    agent_workflow_resume = None
     if args.require_uploaded_series:
         uploaded_series = _validate_uploaded_series(
             _upload_nifti(base, args.project_id, Path(args.upload_nifti_file)),
@@ -1463,29 +1523,69 @@ def main(argv: Sequence[str] | None = None) -> None:
             f"Prepare a workflow confirmation for series {args.launch_series_id} using workflow "
             f"{args.launch_workflow_type}. Do not launch it."
         )
+        agent_workflow_run = _request("POST", f"{base}/agent/runs", {"project_id": args.project_id, "message": workflow_message})
         agent_workflow_confirmation = _validate_agent_workflow_confirmation(
-            _request("POST", f"{base}/agent/runs", {"project_id": args.project_id, "message": workflow_message}),
+            agent_workflow_run,
             project_id=args.project_id,
             series_id=args.launch_series_id,
             workflow_type=args.launch_workflow_type,
         )
+    if args.require_agent_workflow_resume:
+        _require(agent_workflow_confirmation is not None, "--require-agent-workflow-resume requires a prepared confirmation")
+        thread_id = agent_workflow_run.get("thread_id") if isinstance(agent_workflow_run, dict) else None
+        _require(isinstance(thread_id, str) and bool(thread_id), "agent workflow resume failed: confirmation thread_id missing")
+        confirmation_payload = agent_workflow_run.get("confirmation") if isinstance(agent_workflow_run, dict) else None
+        _require(isinstance(confirmation_payload, dict), "agent workflow resume failed: confirmation payload missing")
+        agent_workflow_resume = _validate_agent_workflow_resume(
+            _request(
+                "POST",
+                f"{base}/agent/runs/{quote(thread_id, safe='')}/resume",
+                {"approved": True, "confirmation": confirmation_payload},
+            ),
+            thread_id=thread_id,
+            project_id=args.project_id,
+            series_id=args.launch_series_id,
+            workflow_type=args.launch_workflow_type,
+        )
+        if args.task_id is None and (
+            args.require_completed_task
+            or args.require_container_native_qc
+            or args.require_scientific_report_artifacts
+            or args.min_native_qc_images > 0
+            or args.min_scientific_report_images > 0
+            or args.require_real_evidence_ids
+        ):
+            args.task_id = agent_workflow_resume["task_id"]
+        launched_task = {
+            "task_id": agent_workflow_resume["task_id"],
+            "project_id": agent_workflow_resume["project_id"],
+            "series_id": agent_workflow_resume["series_id"],
+            "workflow_type": agent_workflow_resume["workflow_type"],
+            "initial_status": agent_workflow_resume["initial_status"],
+        }
     if args.require_launched_task:
-        launched_task_response = _request(
-            "POST",
-            f"{base}/series/{args.launch_series_id}/run",
-            {"workflow_type": args.launch_workflow_type},
-        )
-        launched_task_id = _int_metric(launched_task_response.get("id"), launched_task_response.get("task_id"))
-        _require(launched_task_id is not None and launched_task_id > 0, "launched task check failed: task_id missing")
-        if args.task_id is None:
-            args.task_id = launched_task_id
-        launched_task = _validate_launched_task(
-            launched_task_response,
-            task_id=args.task_id,
-            series_id=args.launch_series_id,
-            workflow_type=args.launch_workflow_type,
-            project_id=args.project_id,
-        )
+        if agent_workflow_resume is not None:
+            _require(
+                launched_task is not None,
+                "launched task check failed: agent workflow resume did not produce launched task evidence",
+            )
+        else:
+            launched_task_response = _request(
+                "POST",
+                f"{base}/series/{args.launch_series_id}/run",
+                {"workflow_type": args.launch_workflow_type},
+            )
+            launched_task_id = _int_metric(launched_task_response.get("id"), launched_task_response.get("task_id"))
+            _require(launched_task_id is not None and launched_task_id > 0, "launched task check failed: task_id missing")
+            if args.task_id is None:
+                args.task_id = launched_task_id
+            launched_task = _validate_launched_task(
+                launched_task_response,
+                task_id=args.task_id,
+                series_id=args.launch_series_id,
+                workflow_type=args.launch_workflow_type,
+                project_id=args.project_id,
+            )
     if args.project_id is not None:
         project_series = _request("GET", f"{base}/projects/{args.project_id}/series")
         project_contract = _validate_project_series_contract(
@@ -1548,6 +1648,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         "require_model": bool(args.require_model),
         "require_project_agent_context": bool(args.require_project_agent_context),
         "require_agent_workflow_confirmation": bool(args.require_agent_workflow_confirmation),
+        "require_agent_workflow_resume": bool(args.require_agent_workflow_resume),
         "require_deployment_identity": bool(args.require_deployment_identity),
         "require_production_readiness": bool(args.require_production_readiness),
         "deployment_id": args.deployment_id,
@@ -1624,6 +1725,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         "agent_run_project_id": run.get("project_id") if run else None,
         "agent_workflow_confirmation_status": "passed" if agent_workflow_confirmation else "skipped",
         "agent_workflow_confirmation": agent_workflow_confirmation,
+        "agent_workflow_resume_status": "passed" if agent_workflow_resume else "skipped",
+        "agent_workflow_resume": agent_workflow_resume,
         "intent": (run.get("intent") or run.get("agent_intent")) if run else None,
         "agent_intent": (run.get("agent_intent") or run.get("intent")) if run else None,
         "selected_skill": run.get("selected_skill") if run else None,
