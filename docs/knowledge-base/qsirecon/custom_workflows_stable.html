@@ -1,0 +1,312 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" />
+  <meta name="readthedocs-addons-api-version" content="1"><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Custom Reconstruction Workflows &mdash; qsirecon 26.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/theme_overrides.css?v=c2e89e5a" />
+      <link rel="stylesheet" type="text/css" href="_static/sphinx-design.min.css?v=95c83b7e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2b5cba5c"></script>
+      <script src="_static/doctools.js?v=9a2dae69"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="https://cdn.rawgit.com/chrisfilo/zenodo.js/v0.1/zenodo.js"></script>
+      <script src="_static/design-tabs.js?v=f930bc37"></script>
+    <script src="_static/js/theme.js"></script>
+    <script src="_static/js/versions.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Outputs of QSIRecon" href="outputs.html" />
+    <link rel="prev" title="Built-In Reconstruction Workflows" href="builtin_workflows.html" /> 
+<script async type="text/javascript" src="/_/static/javascript/readthedocs-addons.js"></script><meta name="readthedocs-project-slug" content="qsirecon" /><meta name="readthedocs-version-slug" content="stable" /><meta name="readthedocs-resolver-filename" content="/building_workflows.html" /><meta name="readthedocs-http-status" content="200" /></head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            qsirecon
+          </a>
+              <div class="switch-menus">
+                <div class="version-switch"></div>
+                <div class="language-switch"></div>
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="models.html">Available Models in <em>QSIRecon</em></a></li>
+<li class="toctree-l1"><a class="reference internal" href="builtin_workflows.html">Built-In Reconstruction Workflows</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Custom Reconstruction Workflows</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#pipeline-level-metadata">Pipeline-level metadata</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#pipeline-nodes">Pipeline nodes</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#connecting-nodes">Connecting Nodes</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#passing-method-specific-outputs-from-one-node-as-inputs-to-another">Passing method-specific outputs from one node as inputs to another</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#mapping-scalar-data-to-different-output-spaces">Mapping scalar data to different output spaces</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#mapping-scalar-data-to-bundles">Mapping scalar data to bundles</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#references">References</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="outputs.html">Outputs of <em>QSIRecon</em></a></li>
+<li class="toctree-l1"><a class="reference internal" href="contributors.html">Contributing to <em>QSIRecon</em></a></li>
+<li class="toctree-l1"><a class="reference internal" href="changes.html">What’s New</a></li>
+<li class="toctree-l1"><a class="reference internal" href="comparisons.html">Comparisons to other pipelines</a></li>
+<li class="toctree-l1"><a class="reference internal" href="help.html">Getting help</a></li>
+<li class="toctree-l1"><a class="reference internal" href="license.html">License information</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api_reference.html">API Documentation</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">qsirecon</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Custom Reconstruction Workflows</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/building_workflows.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="custom-reconstruction-workflows">
+<span id="building-workflows"></span><h1>Custom Reconstruction Workflows<a class="headerlink" href="#custom-reconstruction-workflows" title="Link to this heading"></a></h1>
+<p><em>QSIRecon</em> workflows are defined in <code class="docutils literal notranslate"><span class="pre">YAML</span></code> files. The <a class="reference internal" href="builtin_workflows.html#builtin-workflows"><span class="std std-ref">Built-In Reconstruction Workflows</span></a>
+can be found in the <em>QSIRecon</em> <code class="docutils literal notranslate"><span class="pre">YAML</span></code> format on
+<a class="reference external" href="https://github.com/PennLINC/qsirecon/tree/main/qsirecon/data/pipelines">github</a>,
+and are a great place to get started with customizing parts of these workflows.</p>
+<p>This format has a few key parts.</p>
+<section id="pipeline-level-metadata">
+<h2>Pipeline-level metadata<a class="headerlink" href="#pipeline-level-metadata" title="Link to this heading"></a></h2>
+<p>At the root level of the Recon Spec there are</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dsistudio_pipeline</span>
+<span class="nt">anatomical</span><span class="p">:</span>
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mrtrix_5tt_hsvs</span>
+<span class="nt">nodes</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">&quot;name&quot;</span></code> element defines the name of the pipeline. There will be a directory in your working
+directory with this name. The <code class="docutils literal notranslate"><span class="pre">&quot;anatomical&quot;</span></code> field lists additional things to compute
+based on the T1w or T2w images in the input data. Currently accepted values are</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;mrtrix_5tt_hsvs&quot;</span></code>: A <a class="reference external" href="http://www.mrtrix.org/">MRtrix</a> 5tt segmentation based on Smith <em>et al.</em><a class="footnote-reference brackets" href="#footcite-smith2020hybrid" id="id1" role="doc-noteref"><span class="fn-bracket">[</span>1<span class="fn-bracket">]</span></a>.
+This requires <a class="reference internal" href="input_data.html#include-freesurfer"><span class="std std-ref">Including FreeSurfer Data</span></a>.</p></li>
+</ul>
+</div></blockquote>
+</section>
+<section id="pipeline-nodes">
+<h2>Pipeline nodes<a class="headerlink" href="#pipeline-nodes" title="Link to this heading"></a></h2>
+<p>A <em>node</em> in the <em>QSIRecon</em> <code class="docutils literal notranslate"><span class="pre">&quot;nodes&quot;</span></code> list represents a unit of processing.
+Unlike NiPype nodes, which represent a single call to a commandline program
+or function, a node here represents a set of steps that accomplish a task.
+For example, if you want to perform CSD there are other steps that should
+happen before actually fitting spherical harmonics to the data.
+The entry for this in the <code class="docutils literal notranslate"><span class="pre">&quot;nodes&quot;</span></code> list could look like:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">nodes</span><span class="p">:</span>
+<span class="p p-Indicator">-</span><span class="w">   </span><span class="nt">action</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">csd</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">msmt_csd</span>
+<span class="w">    </span><span class="nt">parameters</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">fod</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">algorithm</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">msmt_csd</span>
+<span class="w">            </span><span class="nt">max_sh</span><span class="p">:</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8</span>
+<span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8</span>
+<span class="w">        </span><span class="nt">mtnormalize</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">        </span><span class="nt">response</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">algorithm</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dhollander</span>
+<span class="w">    </span><span class="nt">qsirecon_suffix</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">MRtrix3_act-FAST</span>
+<span class="w">    </span><span class="nt">software</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">MRTrix3</span>
+</pre></div>
+</div>
+<p><em>QSIRecon</em> figures out which software to use based on the values specified
+for <code class="docutils literal notranslate"><span class="pre">&quot;software&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;action&quot;</span></code>. The full list of recognized actions
+for each software package can be found in
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">qsirecon.workflows.build_workflow.workflow_from_spec()</span></code>.
+All nodes must have a <code class="docutils literal notranslate"><span class="pre">name</span></code> element, this serves
+as an id for this node and is used for <a class="reference internal" href="#passing-downstream"><span class="std std-ref">Passing method-specific outputs from one node as inputs to another</span></a>.</p>
+<section id="connecting-nodes">
+<span id="id2"></span><h3>Connecting Nodes<a class="headerlink" href="#connecting-nodes" title="Link to this heading"></a></h3>
+<p>Mixing between software packages is something <em>QSIRecon</em> generally does well.
+There are a number of ways that nodes can exchange data with one another.</p>
+<section id="passing-method-specific-outputs-from-one-node-as-inputs-to-another">
+<span id="passing-downstream"></span><h4>Passing method-specific outputs from one node as inputs to another<a class="headerlink" href="#passing-method-specific-outputs-from-one-node-as-inputs-to-another" title="Link to this heading"></a></h4>
+<p>When one node produces outputs that are specifically used as inputs for
+another node, you can pass them by matching the <code class="docutils literal notranslate"><span class="pre">&quot;input&quot;</span></code> field to the
+name of the upstream node. Here is an example connecting a CSD calculation
+to MRtrix3 tractography.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">nodes</span><span class="p">:</span>
+<span class="p p-Indicator">-</span><span class="w">   </span><span class="nt">action</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">csd</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">msmt_csd</span>
+<span class="w">    </span><span class="nt">qsirecon_suffix</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">MRtrix3_act-FAST</span>
+<span class="w">    </span><span class="nt">software</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">MRTrix3</span>
+
+<span class="p p-Indicator">-</span><span class="w">   </span><span class="nt">action</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tractography</span>
+<span class="w">    </span><span class="nt">input</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">msmt_csd</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">track_ifod2</span>
+<span class="w">    </span><span class="nt">qsirecon_suffix</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">MRtrix3_act-FAST</span>
+<span class="w">    </span><span class="nt">software</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">MRTrix3</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>There can only be zero (inputs come from the input data) or one
+(inputs come from a mixture of the input data and the “input” node)
+name specified for <code class="docutils literal notranslate"><span class="pre">&quot;input&quot;</span></code>.</p>
+</div>
+</section>
+<section id="mapping-scalar-data-to-different-output-spaces">
+<span id="scalars-resampling"></span><h4>Mapping scalar data to different output spaces<a class="headerlink" href="#mapping-scalar-data-to-different-output-spaces" title="Link to this heading"></a></h4>
+<p>Most workflows produce interesting maps of model-derived parameters.
+These parameters are calculated in subject native space, which is not
+particularly useful for statistics. You can map these scalars to standard
+spaces with a “template mapper”. Suppose I wanted to fit a NODDI model and
+a DKI model. Then I wanted to transform their model-derived parameters to
+the template space used in QSIPrep. My <code class="docutils literal notranslate"><span class="pre">&quot;nodes&quot;</span></code> might look like:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">nodes</span><span class="p">:</span>
+<span class="p p-Indicator">-</span><span class="w">   </span><span class="nt">action</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DKI_reconstruction</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dipy_dki</span>
+<span class="w">    </span><span class="nt">qsirecon_suffix</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DIPYDKI</span>
+<span class="w">    </span><span class="nt">software</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Dipy</span>
+<span class="p p-Indicator">-</span><span class="w">   </span><span class="nt">action</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fit_noddi</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fit_noddi</span>
+<span class="w">    </span><span class="nt">qsirecon_suffix</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">NODDI</span>
+<span class="w">    </span><span class="nt">software</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">AMICO</span>
+<span class="p p-Indicator">-</span><span class="w">   </span><span class="nt">action</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">template_map</span>
+<span class="w">    </span><span class="nt">input</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">qsirecon</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">template_map</span>
+<span class="w">    </span><span class="nt">parameters</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">interpolation</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">NearestNeighbor</span>
+<span class="w">    </span><span class="nt">scalars_from</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dipy_dki</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gqi_scalars</span>
+<span class="w">    </span><span class="nt">software</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">qsirecon</span>
+</pre></div>
+</div>
+<p>By listing the names of the scalar-producing nodes in the <code class="docutils literal notranslate"><span class="pre">&quot;scalars_from&quot;</span></code> field
+you will end up with the scalars in both subject native and template space in the
+output directory for each node that produces the scalars.</p>
+</section>
+<section id="mapping-scalar-data-to-bundles">
+<span id="scalars-to-bundles"></span><h4>Mapping scalar data to bundles<a class="headerlink" href="#mapping-scalar-data-to-bundles" title="Link to this heading"></a></h4>
+<p>Perhaps the most biologically meaningful unit of analysis for dMRI is
+the bundle. Much like <a class="reference internal" href="#scalars-resampling"><span class="std std-ref">Mapping scalar data to different output spaces</span></a>, the scalar maps
+produced by nodes can be summarized along bundles. The requirements
+for bundle mapping are</p>
+<blockquote>
+<div><ol class="arabic simple">
+<li><p>A bundle-creating node (such as autotrack or pyafq)</p></li>
+<li><p>A scalar-producing node</p></li>
+<li><p>A bundle_means node that sets up the mapping</p></li>
+</ol>
+</div></blockquote>
+<p>Here is a small example where we use autotrack bundles:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">nodes</span><span class="p">:</span>
+<span class="p p-Indicator">-</span><span class="w">   </span><span class="nt">action</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DKI_reconstruction</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dipy_dki</span>
+<span class="w">    </span><span class="nt">qsirecon_suffix</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DIPYDKI</span>
+<span class="w">    </span><span class="nt">software</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Dipy</span>
+<span class="p p-Indicator">-</span><span class="w">   </span><span class="nt">action</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fit_noddi</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fit_noddi</span>
+<span class="w">    </span><span class="nt">qsirecon_suffix</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">NODDI</span>
+<span class="w">    </span><span class="nt">software</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">AMICO</span>
+<span class="p p-Indicator">-</span><span class="w">   </span><span class="nt">action</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">autotrack</span>
+<span class="w">    </span><span class="nt">input</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dsistudio_gqi</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">autotrackgqi</span>
+<span class="w">    </span><span class="nt">qsirecon_suffix</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DSIStudio</span>
+<span class="w">    </span><span class="nt">software</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DSI Studio</span>
+<span class="p p-Indicator">-</span><span class="w">   </span><span class="nt">action</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bundle_map</span>
+<span class="w">    </span><span class="nt">input</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">autotrackgqi</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bundle_means</span>
+<span class="w">    </span><span class="nt">scalars_from</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dipy_dki</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fit_noddi</span>
+<span class="w">    </span><span class="nt">software</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">qsirecon</span>
+</pre></div>
+</div>
+<p>This will produce a tsv with the NODDI and DKI scalars summarized for
+each bundle produced by autotrack.</p>
+</section>
+</section>
+</section>
+<section id="references">
+<h2>References<a class="headerlink" href="#references" title="Link to this heading"></a></h2>
+<div class="docutils container" id="id3">
+<aside class="footnote-list brackets">
+<aside class="footnote brackets" id="footcite-smith2020hybrid" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id1">1</a><span class="fn-bracket">]</span></span>
+<p>Robert Smith, Antonin Skoch, Claude J Bajada, Svenja Caspers, and Alan Connelly. Hybrid surface-volume segmentation for improved anatomically-constrained tractography. <em>OHBM</em>, 2020. URL: <a class="reference external" href="https://www.um.edu.mt/library/oar/handle/123456789/59839">https://www.um.edu.mt/library/oar/handle/123456789/59839</a>.</p>
+</aside>
+</aside>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="builtin_workflows.html" class="btn btn-neutral float-left" title="Built-In Reconstruction Workflows" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="outputs.html" class="btn btn-neutral float-right" title="Outputs of QSIRecon" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2021-2026, qsirecon team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

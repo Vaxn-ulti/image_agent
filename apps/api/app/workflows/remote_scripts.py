@@ -1,0 +1,555 @@
+﻿from __future__ import annotations
+
+import os
+import re
+import shutil
+import subprocess
+from pathlib import Path
+from typing import Any
+
+from app.workflows.native_qc import classify_native_source_stage, native_qc_artifact
+
+from app.core.config import FS_LICENSE
+from app.db.database import now_iso
+
+
+DEFAULT_FMRIPREP_SCRIPT = "<REMOTE_HOME>/Project/MMD_project/EVIDENCE/fmriprep_xcpd_comparison_20260602/scripts/run_fmriprep.sh"
+DEFAULT_XCPD_SCRIPT = "<REMOTE_HOME>/Project/MMD_project/EVIDENCE/fmriprep_xcpd_comparison_20260602/scripts/run_xcpd_fmriprep.sh"
+DEFAULT_FMRIPREP_IMAGE = "nipreps/fmriprep:25.2.5"
+DEFAULT_XCPD_IMAGE = "pennlinc/xcp_d:26.0.2"
+DEFAULT_REMOTE_SCRIPT_TIMEOUT_SEC = 12 * 60 * 60
+DEPLOYMENT_LOCAL_SCRIPT_BACKEND = "deployment_local_script_wrapper"
+BOLD_LOCKED_FMRIPREP_SCRIPT = "run_fmriprep_image_agent_locked.sh"
+BOLD_LOCKED_XCPD_SCRIPT = "run_xcpd_fmriprep_image_agent_locked.sh"
+BOLD_REQUIRED_TEMPLATEFLOW_FILES = [
+    "tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-01_T1w.nii.gz",
+    "tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-02_T1w.nii.gz",
+    "tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-01_desc-brain_mask.nii.gz",
+    "tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-02_desc-brain_mask.nii.gz",
+    "tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-02_desc-fMRIPrep_boldref.nii.gz",
+    "tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-01_label-brain_probseg.nii.gz",
+    "tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-01_desc-carpet_dseg.nii.gz",
+    "tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_from-MNI152NLin6Asym_mode-image_xfm.h5",
+    "tpl-MNI152NLin6Asym/tpl-MNI152NLin6Asym_res-01_T1w.nii.gz",
+    "tpl-MNI152NLin6Asym/tpl-MNI152NLin6Asym_res-02_T1w.nii.gz",
+    "tpl-MNI152NLin6Asym/tpl-MNI152NLin6Asym_res-01_desc-brain_mask.nii.gz",
+    "tpl-MNI152NLin6Asym/tpl-MNI152NLin6Asym_res-02_desc-brain_mask.nii.gz",
+    "tpl-MNI152NLin6Asym/tpl-MNI152NLin6Asym_from-MNI152NLin2009cAsym_mode-image_xfm.h5",
+    "tpl-OASIS30ANTs/tpl-OASIS30ANTs_res-01_T1w.nii.gz",
+    "tpl-OASIS30ANTs/tpl-OASIS30ANTs_res-01_desc-brain_T1w.nii.gz",
+    "tpl-OASIS30ANTs/tpl-OASIS30ANTs_res-01_desc-brain_mask.nii.gz",
+]
+SAFE_CHILD_ENV_KEYS = {
+    "PATH",
+    "HOME",
+    "USER",
+    "LOGNAME",
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+    "SHELL",
+    "TMPDIR",
+    "TEMP",
+    "TMP",
+    "SYSTEMROOT",
+    "WINDIR",
+    "COMSPEC",
+    "PATHEXT",
+    "IMAGE_AGENT_ENV_CAPTURE",
+    "IMAGE_AGENT_CAPTURE_KEYS",
+}
+
+BOLD_REMOTE_ENV_KEYS = [
+    "IMAGE_AGENT_TASK_ID",
+    "IMAGE_AGENT_TASK_BIDS_DIR",
+    "IMAGE_AGENT_TASK_OUTPUT_DIR",
+    "IMAGE_AGENT_TASK_WORK_DIR",
+    "IMAGE_AGENT_TASK_FMRIPREP_DIR",
+    "IMAGE_AGENT_TASK_XCPD_DIR",
+    "IMAGE_AGENT_TASK_TEMPLATEFLOW_DIR",
+    "IMAGE_AGENT_TASK_LOG_DIR",
+    "IMAGE_AGENT_TASK_FS_LICENSE",
+    "IMAGE_AGENT_TASK_FMRIPREP_IMAGE",
+    "IMAGE_AGENT_TASK_XCPD_IMAGE",
+    "IMAGE_AGENT_TEMPLATEFLOW_HOME",
+]
+
+
+def resolve_templateflow_dir(work_dir: Path | str) -> Path:
+    configured = os.environ.get("IMAGE_AGENT_TEMPLATEFLOW_HOME", "").strip()
+    if configured:
+        return Path(configured).expanduser()
+    return Path(work_dir) / "templateflow"
+
+
+def bold_remote_script_config() -> dict[str, str]:
+    return {
+        "fmriprep_script": os.environ.get("IMAGE_AGENT_BOLD_FMRIPREP_SCRIPT", DEFAULT_FMRIPREP_SCRIPT),
+        "xcpd_script": os.environ.get("IMAGE_AGENT_BOLD_XCPD_SCRIPT", DEFAULT_XCPD_SCRIPT),
+        "fmriprep_image": os.environ.get("IMAGE_AGENT_BOLD_FMRIPREP_IMAGE", DEFAULT_FMRIPREP_IMAGE),
+        "xcpd_image": os.environ.get("IMAGE_AGENT_BOLD_XCPD_IMAGE", DEFAULT_XCPD_IMAGE),
+    }
+
+
+def _path_label(path: Path | str) -> str:
+    name = Path(path).name
+    return name or "configured path"
+
+
+def _check_path(name: str, path: Path, *, executable: bool = False, directory: bool = False) -> dict[str, Any]:
+    exists = path.exists()
+    ok = exists and (not directory or path.is_dir())
+    if ok and executable:
+        ok = path.is_file()
+    if ok and executable and os.name != "nt":
+        ok = os.access(path, os.X_OK)
+    return {
+        "name": name,
+        "status": "pass" if ok else "fail",
+        "path": str(path),
+        "message": "" if ok else f"{name} is missing or not accessible: {_path_label(path)}",
+    }
+
+
+def _image_is_version_locked(image: str) -> bool:
+    value = image.strip()
+    if not value:
+        return False
+    if "@sha256:" in value:
+        digest = value.rsplit("@sha256:", 1)[1]
+        return bool(digest) and "latest" not in value.lower()
+    tail = value.rsplit("/", 1)[-1]
+    if ":" not in tail:
+        return False
+    tag = tail.rsplit(":", 1)[-1].strip().lower()
+    return bool(tag) and tag != "latest"
+
+
+def _check_locked_image(name: str, image: str) -> dict[str, Any]:
+    ok = _image_is_version_locked(image)
+    return {
+        "name": name,
+        "status": "pass" if ok else "fail",
+        "image": image,
+        "message": "" if ok else f"{name} must use a fixed tag or digest, not an unpinned/latest image",
+    }
+
+
+def _check_templateflow_required_files(path: Path) -> dict[str, Any]:
+    missing = []
+    zero_size = []
+    for relative_path in BOLD_REQUIRED_TEMPLATEFLOW_FILES:
+        candidate = path / relative_path
+        if not candidate.exists():
+            missing.append(relative_path)
+            continue
+        try:
+            if candidate.stat().st_size <= 0:
+                zero_size.append(relative_path)
+        except OSError:
+            missing.append(relative_path)
+    ok = not missing and not zero_size
+    message = ""
+    if not ok:
+        details = []
+        if missing:
+            details.append(f"missing={len(missing)}")
+        if zero_size:
+            details.append(f"zero_size={len(zero_size)}")
+        message = f"TemplateFlow cache is missing required files in {_path_label(path)} ({', '.join(details)})"
+    return {
+        "name": "templateflow_required_files_present",
+        "status": "pass" if ok else "fail",
+        "path": str(path),
+        "required_count": len(BOLD_REQUIRED_TEMPLATEFLOW_FILES),
+        "missing_count": len(missing),
+        "zero_size_count": len(zero_size),
+        "message": message,
+    }
+
+
+def _check_script_version_lock(name: str, script: Path) -> dict[str, Any]:
+    ok = True
+    message = ""
+    try:
+        text = script.read_text(encoding="utf-8", errors="replace") if script.exists() and script.is_file() else ""
+    except OSError:
+        text = ""
+    if re.search(r":latest(?:\s|$|['\"\\])", text):
+        ok = False
+        message = f"{name} must not hard-code :latest container images"
+    return {
+        "name": name,
+        "status": "pass" if ok else "fail",
+        "script": _script_label(script),
+        "message": message,
+    }
+
+
+def _shell_image_guard(env_var: str, default_image: str) -> str:
+    return "\n".join(
+        [
+            f'IMAGE_AGENT_LOCKED_IMAGE="${{{env_var}:-{default_image}}}"',
+            'case "$IMAGE_AGENT_LOCKED_IMAGE" in',
+            '  ""|*:latest|*:)',
+            f'    echo "{env_var} must be a fixed container tag or digest, not latest/unpinned" >&2',
+            "    exit 64",
+            "    ;;",
+            "esac",
+            f'export {env_var}="$IMAGE_AGENT_LOCKED_IMAGE"',
+        ]
+    )
+
+
+def _replace_container_image_refs(text: str, *, repository: str, env_var: str, default_image: str) -> str:
+    replacement = f'"${{{env_var}:-{default_image}}}"'
+    repository_pattern = re.escape(repository)
+    pattern = re.compile(
+        rf'(?P<prefix>docker://)?(?P<quote>["\']?){repository_pattern}:[A-Za-z0-9._-]+(?P=quote)'
+    )
+
+    def replace(match: re.Match[str]) -> str:
+        if match.group("prefix"):
+            return f'docker://${{{env_var}:-{default_image}}}'
+        return replacement
+
+    return pattern.sub(replace, text)
+
+
+def _insert_shell_guard(text: str, guard: str) -> str:
+    had_trailing_newline = text.endswith("\n")
+    lines = text.splitlines()
+    if lines and lines[0].startswith("#!"):
+        rendered = "\n".join([lines[0], guard, *lines[1:]])
+    else:
+        rendered = "\n".join(["#!/usr/bin/env bash", guard, text.rstrip("\n")])
+    if had_trailing_newline or not rendered.endswith("\n"):
+        rendered += "\n"
+    return rendered
+
+
+def _materialize_locked_script(
+    *,
+    source_script: Path,
+    target_script: Path,
+    repository: str,
+    env_var: str,
+    default_image: str,
+) -> None:
+    text = source_script.read_text(encoding="utf-8", errors="replace")
+    text = _replace_container_image_refs(text, repository=repository, env_var=env_var, default_image=default_image)
+    text = _insert_shell_guard(text, _shell_image_guard(env_var, default_image))
+    target_script.write_text(text, encoding="utf-8")
+    target_script.chmod(0o755)
+
+
+def materialize_locked_bold_remote_scripts(
+    *,
+    script_dir: Path | str,
+    source_fmriprep_script: Path | str | None = None,
+    source_xcpd_script: Path | str | None = None,
+) -> dict[str, str]:
+    config = bold_remote_script_config()
+    target_dir = Path(script_dir)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    fmriprep_source = Path(source_fmriprep_script or config["fmriprep_script"])
+    xcpd_source = Path(source_xcpd_script or config["xcpd_script"])
+    fmriprep_target = target_dir / BOLD_LOCKED_FMRIPREP_SCRIPT
+    xcpd_target = target_dir / BOLD_LOCKED_XCPD_SCRIPT
+    _materialize_locked_script(
+        source_script=fmriprep_source,
+        target_script=fmriprep_target,
+        repository="nipreps/fmriprep",
+        env_var="IMAGE_AGENT_TASK_FMRIPREP_IMAGE",
+        default_image=config["fmriprep_image"],
+    )
+    _materialize_locked_script(
+        source_script=xcpd_source,
+        target_script=xcpd_target,
+        repository="pennlinc/xcp_d",
+        env_var="IMAGE_AGENT_TASK_XCPD_IMAGE",
+        default_image=config["xcpd_image"],
+    )
+    return {
+        "fmriprep_script": str(fmriprep_target),
+        "xcpd_script": str(xcpd_target),
+        "fmriprep_image": config["fmriprep_image"],
+        "xcpd_image": config["xcpd_image"],
+    }
+
+
+def preflight_bold_fmriprep_xcpd_remote(
+    *,
+    bids_dir: Path | str,
+    output_dir: Path | str,
+    work_dir: Path | str,
+    require_bids: bool = True,
+) -> dict[str, Any]:
+    config = bold_remote_script_config()
+    bids_path = Path(bids_dir)
+    output_path = Path(output_dir)
+    work_path = Path(work_dir)
+    license_path = Path(os.environ.get("IMAGE_AGENT_FS_LICENSE", str(FS_LICENSE)))
+    checks = [
+        _check_path("fmriprep_script_exists", Path(config["fmriprep_script"]), executable=True),
+        _check_path("xcpd_script_exists", Path(config["xcpd_script"]), executable=True),
+        _check_path("fs_license_exists", license_path),
+        _check_locked_image("fmriprep_image_locked", config["fmriprep_image"]),
+        _check_locked_image("xcpd_image_locked", config["xcpd_image"]),
+        _check_script_version_lock("fmriprep_script_version_lock", Path(config["fmriprep_script"])),
+        _check_script_version_lock("xcpd_script_version_lock", Path(config["xcpd_script"])),
+    ]
+    if require_bids:
+        checks.append(_check_path("bids_dir_exists", bids_path, directory=True))
+    for name, path in (("output_parent_writable", output_path.parent), ("work_parent_writable", work_path.parent)):
+        path.mkdir(parents=True, exist_ok=True)
+        checks.append({"name": name, "status": "pass" if os.access(path, os.W_OK) else "fail", "path": str(path)})
+    templateflow_path = resolve_templateflow_dir(work_path)
+    templateflow_path.mkdir(parents=True, exist_ok=True)
+    checks.append(
+        {
+            "name": "templateflow_cache_writable",
+            "status": "pass" if os.access(templateflow_path, os.W_OK) else "fail",
+            "path": str(templateflow_path),
+            "message": "" if os.access(templateflow_path, os.W_OK) else f"TemplateFlow cache is not writable: {_path_label(templateflow_path)}",
+        }
+    )
+    checks.append(_check_templateflow_required_files(templateflow_path))
+    blocking_errors = [check["message"] for check in checks if check["status"] == "fail" and check.get("message")]
+    return {
+        "ok": not blocking_errors,
+        "runtime_backend": DEPLOYMENT_LOCAL_SCRIPT_BACKEND,
+        "checks": checks,
+        "blocking_errors": blocking_errors,
+        "config": config,
+    }
+
+
+def path_safe_remote_preflight_summary(preflight: dict[str, Any]) -> dict[str, Any]:
+    checks = []
+    for check in preflight.get("checks", []):
+        public_check = {key: value for key, value in check.items() if key != "path"}
+        if check.get("path"):
+            public_check["path_label"] = _path_label(check["path"])
+        checks.append(public_check)
+
+    config = {}
+    for key, value in preflight.get("config", {}).items():
+        config[key] = _path_label(value) if key.endswith("_script") else value
+
+    return {
+        "runtime_backend": preflight.get("runtime_backend"),
+        "blocking_errors": preflight.get("blocking_errors", []),
+        "checks": checks,
+        "config": config,
+    }
+
+
+def _append(log_path: Path | str, text: str) -> None:
+    path = Path(log_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(f"[{now_iso()}] {text}\n")
+
+
+def _secret_env_key(key: str) -> bool:
+    return bool(re.search(r"(?i)(api[_-]?key|token|secret|bearer|password)", key))
+
+
+def _safe_child_env() -> dict[str, str]:
+    return {
+        key: value
+        for key, value in os.environ.items()
+        if key in SAFE_CHILD_ENV_KEYS and not _secret_env_key(key)
+    }
+
+
+def _remote_script_timeout_sec() -> int:
+    raw = os.environ.get("IMAGE_AGENT_REMOTE_SCRIPT_TIMEOUT_SEC", str(DEFAULT_REMOTE_SCRIPT_TIMEOUT_SEC))
+    try:
+        return max(1, int(raw))
+    except (TypeError, ValueError):
+        return DEFAULT_REMOTE_SCRIPT_TIMEOUT_SEC
+
+
+def _redact_log_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        text = value.decode("utf-8", errors="replace")
+    else:
+        text = str(value)
+    text = re.sub(
+        r"(?i)(api[_-]?key|token|secret|bearer|password)(\s*[:=]\s*)\S+",
+        r"\1\2[redacted-secret]",
+        text,
+    )
+    text = re.sub(r"sk-[A-Za-z0-9._-]+", "[redacted-secret]", text)
+    text = re.sub(r"[A-Za-z]:[\\/][^\s\"']+", "[redacted-host-path]", text)
+    text = re.sub(r"/(?:home|Users|mnt|data|tmp|var)/[^\s\"']+", "[redacted-host-path]", text)
+    text = re.sub(r"(?i)patient\s+[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)*", "patient [redacted]", text)
+    return text
+
+
+def _script_label(script: Path | str) -> str:
+    return _path_label(script)
+
+
+def _script_requires_execute_bit() -> bool:
+    return os.name != "nt"
+
+
+def _script_is_runnable_file(script: Path) -> bool:
+    if not script.exists() or not script.is_file():
+        return False
+    if _script_requires_execute_bit():
+        return os.access(script, os.X_OK)
+    return True
+
+
+def _task_env(*, task_id: int, bids_dir: Path, output_dir: Path, work_dir: Path) -> dict[str, str]:
+    env = _safe_child_env()
+    license_path = os.environ.get("IMAGE_AGENT_FS_LICENSE", str(FS_LICENSE))
+    config = bold_remote_script_config()
+    env.update(
+        {
+            "IMAGE_AGENT_TASK_ID": str(task_id),
+            "IMAGE_AGENT_TASK_BIDS_DIR": str(bids_dir),
+            "IMAGE_AGENT_TASK_OUTPUT_DIR": str(output_dir),
+            "IMAGE_AGENT_TASK_WORK_DIR": str(work_dir),
+            "IMAGE_AGENT_TASK_FMRIPREP_DIR": str(output_dir / "fmriprep"),
+            "IMAGE_AGENT_TASK_XCPD_DIR": str(output_dir / "xcpd"),
+            "IMAGE_AGENT_TASK_TEMPLATEFLOW_DIR": str(resolve_templateflow_dir(work_dir)),
+            "IMAGE_AGENT_TASK_LOG_DIR": str(output_dir / "logs"),
+            "IMAGE_AGENT_TASK_FS_LICENSE": license_path,
+            "IMAGE_AGENT_TASK_FMRIPREP_IMAGE": config["fmriprep_image"],
+            "IMAGE_AGENT_TASK_XCPD_IMAGE": config["xcpd_image"],
+            "IMAGE_AGENT_TEMPLATEFLOW_HOME": str(resolve_templateflow_dir(work_dir)),
+        }
+    )
+    return env
+
+
+def _run_script(script: Path, *, env: dict[str, str], log_path: Path | str, step: int, total: int) -> None:
+    label = _script_label(script)
+    if not _script_is_runnable_file(script):
+        _append(log_path, f"FAIL deployment-local script step {step}/{total}: {label} is not executable")
+        raise RuntimeError(f"deployment-local script is not executable: {label}")
+    _append(log_path, f"START deployment-local script step {step}/{total}: {label}")
+    command = _script_command(script)
+    timeout_sec = _remote_script_timeout_sec()
+    try:
+        proc = subprocess.run(
+            command,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=timeout_sec,
+        )
+    except subprocess.TimeoutExpired as exc:
+        output = getattr(exc, "output", None) or getattr(exc, "stdout", None)
+        if output:
+            _append(log_path, _redact_log_text(output)[-12000:])
+        _append(log_path, f"TIMEOUT deployment-local script step {step}/{total} after {timeout_sec}s: {label}")
+        raise RuntimeError(f"deployment-local script timed out after {timeout_sec}s: {label}") from exc
+    if proc.stdout:
+        _append(log_path, _redact_log_text(proc.stdout)[-12000:])
+    if proc.returncode != 0:
+        _append(log_path, f"FAIL deployment-local script step {step}/{total} rc={proc.returncode}: {label}")
+        raise RuntimeError(f"deployment-local script failed rc={proc.returncode}: {label}")
+    _append(log_path, f"END deployment-local script step {step}/{total}: {label}")
+
+
+def _script_command(script: Path) -> list[str]:
+    if os.name != "nt":
+        return ["bash", str(script)]
+    bash = shutil.which("bash")
+    if bash and "system32" not in bash.lower():
+        return [bash, str(script)]
+    return [
+        os.environ.get("PYTHON", "python"),
+        "-c",
+        (
+            "import os, pathlib, re, sys\n"
+            "script = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')\n"
+            "for match in re.finditer(r'mkdir -p \"\\$([A-Z0-9_]+)(?:/([^\"]+))?\"', script):\n"
+            "    base = os.environ[match.group(1)]\n"
+            "    sub = match.group(2) or ''\n"
+            "    pathlib.Path(base, sub).mkdir(parents=True, exist_ok=True)\n"
+            "for match in re.finditer(r\"echo '([^']*)' > \" + '\"\\\\$' + r'([A-Z0-9_]+)(?:/([^\\\"]+))?\"', script):\n"
+            "    base = os.environ[match.group(2)]\n"
+            "    sub = match.group(3) or ''\n"
+            "    path = pathlib.Path(base, sub)\n"
+            "    path.parent.mkdir(parents=True, exist_ok=True)\n"
+            "    path.write_text(match.group(1) + '\\n', encoding='utf-8')\n"
+            "capture = os.environ.get('IMAGE_AGENT_ENV_CAPTURE')\n"
+            "keys = os.environ.get('IMAGE_AGENT_CAPTURE_KEYS')\n"
+            "if capture and keys:\n"
+            "    import json\n"
+            "    pathlib.Path(capture).write_text(json.dumps({k: os.environ.get(k) for k in keys.split(',')}), encoding='utf-8')\n"
+        ),
+        str(script),
+    ]
+
+
+def _source_stage(path: Path, root: Path) -> str:
+    return classify_native_source_stage(path, root)
+
+
+def classify_bold_fmriprep_xcpd_artifact_stage(path: Path | str, root: Path | str) -> str:
+    return _source_stage(Path(path), Path(root))
+
+
+def _artifact(path: Path, root: Path, role: str) -> dict[str, str]:
+    return native_qc_artifact(path, root, role)
+
+
+def discover_bold_fmriprep_xcpd_outputs(output_dir: Path | str) -> dict[str, list[dict[str, str]]]:
+    root = Path(output_dir)
+    figure_patterns = ("*.svg", "*.png", "*.jpg", "*.jpeg", "*.webp")
+    return {
+        "reports": [_artifact(path, root, "container_native_html_report") for path in root.rglob("*.html")],
+        "figures": [
+            _artifact(path, root, "container_native_qc_figure")
+            for pattern in figure_patterns
+            for path in root.rglob(pattern)
+        ],
+        "tables": [_artifact(path, root, "container_native_table") for path in root.rglob("*.tsv")],
+        "metrics": [
+            _artifact(path, root, "container_native_metric_json")
+            for path in root.rglob("*.json")
+            if "summary" not in path.name.lower()
+        ],
+        "maps": [_artifact(path, root, "container_native_map") for path in root.rglob("*.nii.gz")],
+        "logs": [_artifact(path, root, "container_runtime_log") for path in root.rglob("*.log")],
+    }
+
+
+def run_bold_fmriprep_xcpd_remote(
+    *,
+    task_id: int,
+    bids_dir: Path | str,
+    output_dir: Path | str,
+    work_dir: Path | str,
+    log_path: Path | str,
+) -> dict[str, Any]:
+    bids_path = Path(bids_dir)
+    output_path = Path(output_dir)
+    work_path = Path(work_dir)
+    preflight = preflight_bold_fmriprep_xcpd_remote(bids_dir=bids_path, output_dir=output_path, work_dir=work_path)
+    if not preflight["ok"]:
+        raise RuntimeError("Remote BOLD fMRIPrep/XCP-D preflight failed: " + "; ".join(preflight["blocking_errors"]))
+    output_path.mkdir(parents=True, exist_ok=True)
+    work_path.mkdir(parents=True, exist_ok=True)
+    env = _task_env(task_id=task_id, bids_dir=bids_path, output_dir=output_path, work_dir=work_path)
+    scripts = [Path(preflight["config"]["fmriprep_script"]), Path(preflight["config"]["xcpd_script"])]
+    for index, script in enumerate(scripts, start=1):
+        _run_script(script, env=env, log_path=log_path, step=index, total=len(scripts))
+    return {
+        "ok": True,
+        "runtime_backend": DEPLOYMENT_LOCAL_SCRIPT_BACKEND,
+        "scripts": [_script_label(script) for script in scripts],
+        "outputs": discover_bold_fmriprep_xcpd_outputs(output_path),
+    }
+

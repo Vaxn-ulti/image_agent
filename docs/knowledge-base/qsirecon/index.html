@@ -1,0 +1,240 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" />
+  <meta name="readthedocs-addons-api-version" content="1"><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QSIRecon: Reconstruction of preprocessed q-space images (dMRI) &mdash; qsirecon 26.1.0.dev1+g79953f538 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/theme_overrides.css?v=c2e89e5a" />
+      <link rel="stylesheet" type="text/css" href="_static/sphinx-design.min.css?v=95c83b7e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=814afc9d"></script>
+      <script src="_static/doctools.js?v=9a2dae69"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="https://cdn.rawgit.com/chrisfilo/zenodo.js/v0.1/zenodo.js"></script>
+      <script src="_static/design-tabs.js?v=f930bc37"></script>
+    <script src="_static/js/theme.js"></script>
+    <script src="_static/js/versions.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Installation" href="installation.html" /> 
+<script async type="text/javascript" src="/_/static/javascript/readthedocs-addons.js"></script><meta name="readthedocs-project-slug" content="qsirecon" /><meta name="readthedocs-version-slug" content="latest" /><meta name="readthedocs-resolver-filename" content="/" /><meta name="readthedocs-http-status" content="200" /></head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="#" class="icon icon-home">
+            qsirecon
+          </a>
+              <div class="switch-menus">
+                <div class="version-switch"></div>
+                <div class="language-switch"></div>
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="models.html">Available Models in <em>QSIRecon</em></a></li>
+<li class="toctree-l1"><a class="reference internal" href="builtin_workflows.html">Built-In Reconstruction Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="building_workflows.html">Custom Reconstruction Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="outputs.html">Outputs of <em>QSIRecon</em></a></li>
+<li class="toctree-l1"><a class="reference internal" href="contributors.html">Contributing to <em>QSIRecon</em></a></li>
+<li class="toctree-l1"><a class="reference internal" href="changes.html">What’s New</a></li>
+<li class="toctree-l1"><a class="reference internal" href="comparisons.html">Comparisons to other pipelines</a></li>
+<li class="toctree-l1"><a class="reference internal" href="help.html">Getting help</a></li>
+<li class="toctree-l1"><a class="reference internal" href="license.html">License information</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api_reference.html">API Documentation</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="#">qsirecon</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="#" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">QSIRecon: Reconstruction of preprocessed q-space images (dMRI)</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="qsirecon-reconstruction-of-preprocessed-q-space-images-dmri">
+<h1>QSIRecon: Reconstruction of preprocessed q-space images (dMRI)<a class="headerlink" href="#qsirecon-reconstruction-of-preprocessed-q-space-images-dmri" title="Link to this heading"></a></h1>
+<a class="reference external image-reference" href="https://github.com/PennLINC/qsirecon"><img alt="GitHub Repository" src="https://img.shields.io/badge/Source%20Code-pennlinc%2Fqsirecon-purple" />
+</a>
+<a class="reference external image-reference" href="http://qsirecon.readthedocs.io/en/latest/?badge=latest"><img alt="Documentation Status" src="https://readthedocs.org/projects/qsirecon/badge/?version=latest" />
+</a>
+<a class="reference external image-reference" href="https://hub.docker.com/r/pennlinc/qsirecon/tags/"><img alt="Docker" src="https://img.shields.io/badge/docker-pennlinc/qsirecon-brightgreen.svg?logo=docker&amp;style=flat" />
+</a>
+<a class="reference external image-reference" href="https://circleci.com/gh/PennLINC/qsirecon/tree/main"><img alt="Test Status" src="https://circleci.com/gh/PennLINC/qsirecon/tree/main.svg?style=svg" /></a>
+<a class="reference external image-reference" href="https://doi.org/10.1038/s41592-021-01185-5"><img alt="Publication DOI" src="https://img.shields.io/badge/Nature%20Methods-10.1038%2Fs41592--021--01185--5-purple" />
+</a>
+<a class="reference external image-reference" href="https://doi.org/10.5281/zenodo.14193616"><img alt="Zenodo DOI" src="https://zenodo.org/badge/DOI/10.5281/zenodo.14193616.svg" /></a>
+<a class="reference external image-reference" href="https://opensource.org/licenses/BSD-3-Clause"><img alt="License" src="https://img.shields.io/badge/License-BSD--3--Clause-green" />
+</a>
+<p>Full documentation at <a class="reference external" href="https://qsirecon.readthedocs.io">https://qsirecon.readthedocs.io</a></p>
+<section id="about">
+<h2>About<a class="headerlink" href="#about" title="Link to this heading"></a></h2>
+<p>QSIRecon builds post-processing workflows that produce many of the biologically-interesting dMRI
+derivatives used for hypothesis testing. The main goal of QSIRecon is to make the state-of-the-art
+methods available in <a class="reference external" href="https://dipy.org">Dipy</a>, <a class="reference external" href="http://www.mrtrix.org/">MRTrix</a>, <a class="reference external" href="http://dsi-studio.labsolver.org/">DSI Studio</a>, <a class="reference external" href="https://yeatmanlab.github.io/pyAFQ/">PyAFQ</a>  and other software packages easy to apply on
+preprocessed dMRI data. QSIRecon is companion software for <a class="reference external" href="https://xcp-d.readthedocs.io">XCP-D</a>,
+doing for dMRI what XCP-D does for BOLD.</p>
+<p>QSIRecon workflows can produce outputs such as</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>ODF/FOD reconstruction</p></li>
+<li><p>Model fits and parameter estimation</p></li>
+<li><p>Tractography</p></li>
+<li><p>Tractometry</p></li>
+<li><p>Regional connectivity</p></li>
+<li><p>Tabular data</p></li>
+</ul>
+</div></blockquote>
+<img alt="https://github.com/PennLINC/qsirecon/raw/main/docs/_static/workflow_full.png" src="https://github.com/PennLINC/qsirecon/raw/main/docs/_static/workflow_full.png" />
+</section>
+<section id="citing-qsirecon">
+<h2>Citing QSIRecon<a class="headerlink" href="#citing-qsirecon" title="Link to this heading"></a></h2>
+<p>If you use QSIRecon in your research, please use the boilerplate generated by the workflow.
+The main citation is</p>
+<blockquote>
+<div><p>Cieslak, M., Cook, P. A., He, X., Yeh, F. C., Dhollander, T., Adebimpe, A.,
+… &amp; Satterthwaite, T. D. (2021). QSIPrep: an integrative platform for preprocessing
+and reconstructing diffusion MRI data. Nature methods, 18(7), 775-778.</p>
+</div></blockquote>
+</section>
+<section id="contents">
+<h2>Contents<a class="headerlink" href="#contents" title="Link to this heading"></a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="installation.html#running-qsirecon-via-containers">Running <em>QSIRecon</em> via containers</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick Start</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#command-line-arguments">Command-Line Arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#troubleshooting">Troubleshooting</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="models.html">Available Models in <em>QSIRecon</em></a><ul>
+<li class="toctree-l2"><a class="reference internal" href="models/dti.html">Diffusion tensor imaging (DTI)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="models/dki.html">Diffusional kurtosis imaging (DKI)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="models/mapmri.html">Mean Apparent Propagator MRI (MAP-MRI)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="models/gqi.html">Generalized q-Sampling Imaging (GQI)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="models/noddi.html">Neurite Orientation Dispersion and Density Imaging (NODDI)</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="builtin_workflows.html">Built-In Reconstruction Workflows</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="builtin_workflows.html#id2">Workflows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="builtin_workflows.html#which-workflows-are-appropriate-for-your-dmri-data">Which workflows are appropriate for your dMRI data?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="builtin_workflows.html#connectivity-matrices">Connectivity matrices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="builtin_workflows.html#references">References</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="building_workflows.html">Custom Reconstruction Workflows</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="building_workflows.html#pipeline-level-metadata">Pipeline-level metadata</a></li>
+<li class="toctree-l2"><a class="reference internal" href="building_workflows.html#pipeline-nodes">Pipeline nodes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="building_workflows.html#references">References</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="outputs.html">Outputs of <em>QSIRecon</em></a><ul>
+<li class="toctree-l2"><a class="reference internal" href="outputs.html#dataset-organization">Dataset Organization</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="contributors.html">Contributing to <em>QSIRecon</em></a><ul>
+<li class="toctree-l2"><a class="reference internal" href="contributors.html#patching-working-repositories">Patching working repositories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="contributors.html#adding-dependencies">Adding dependencies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="contributors.html#rebuilding-docker-image">Rebuilding Docker image</a></li>
+<li class="toctree-l2"><a class="reference internal" href="contributors.html#adding-new-features-to-the-citation-boilerplate">Adding new features to the citation boilerplate</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="changes.html">What’s New</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="changes.html#april-20-2026">26.0.0 (April 20, 2026)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes.html#february-18-2026">1.2.0 (February 18, 2026)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes.html#august-19-2025">1.1.1 (August 19, 2025)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes.html#april-14-2025">1.1.0 (April 14, 2025)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes.html#march-12-2025">1.0.1 (March 12, 2025)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes.html#march-11-2025">1.0.0 (March 11, 2025)</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="comparisons.html">Comparisons to other pipelines</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="comparisons.html#reconstruction">Reconstruction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="comparisons.html#tractography">Tractography</a></li>
+<li class="toctree-l2"><a class="reference internal" href="comparisons.html#qc">QC</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="help.html">Getting help</a></li>
+<li class="toctree-l1"><a class="reference internal" href="license.html">License information</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api_reference.html">API Documentation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/qsirecon.workflows.html">qsirecon.workflows package</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/qsirecon.interfaces.html">qsirecon.interfaces package</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="installation.html" class="btn btn-neutral float-right" title="Installation" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2021-2026, qsirecon team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
