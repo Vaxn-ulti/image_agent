@@ -303,6 +303,22 @@ def test_local_main_flow_smoke_records_safe_upload_workflow_eligibility(tmp_path
     smoke = _load_smoke_module()
     output_json = tmp_path / "local-smoke-eligibility.json"
 
+    workflow_metadata = {
+        "workflow_type": "t1_deepprep_anat_report",
+        "runtime_workflow_type": "t1_deepprep",
+        "display_name": "T1 DeepPrep anatomical processing, QC, and report",
+        "workflow_family": "anatomical",
+        "workflow_role": "complete_processing",
+        "capability_summary": "Runs DeepPrep anatomical processing with QC and report outputs.",
+        "pipeline_stages": [{"name": "Pipeline execution", "purpose": "Run the configured processing container."}],
+        "primary_outputs": ["pipeline derivatives"],
+        "qc_outputs": ["container-native QC artifacts"],
+        "report_outputs": ["HTML scientific report"],
+        "limitations": ["Requires supported T1w input.", "Unsafe C:/Users/A/private/debug path must be removed."],
+        "agent_selectable": True,
+        "is_report_only": False,
+        "debug_path": "C:/Users/A/private/data",
+    }
     workflow_eligibility = {
         "blocked_workflows": [
             {
@@ -312,9 +328,17 @@ def test_local_main_flow_smoke_records_safe_upload_workflow_eligibility(tmp_path
             }
         ],
         "policy_version": "workflow_eligibility_v1",
-        "primary_recommendation": {"workflow_type": "t1_deepprep_anat_report"},
+        "primary_recommendation": {
+            "workflow_type": "t1_deepprep_anat_report",
+            "workflow_metadata": workflow_metadata,
+        },
         "production_task_created": False,
-        "runnable_workflows": [{"workflow_type": "t1_deepprep_anat_report"}],
+        "runnable_workflows": [
+            {
+                "workflow_type": "t1_deepprep_anat_report",
+                "workflow_metadata": workflow_metadata,
+            }
+        ],
     }
 
     def fake_upload_nifti(base, project_id, path):
@@ -373,9 +397,45 @@ def test_local_main_flow_smoke_records_safe_upload_workflow_eligibility(tmp_path
             }
         ],
         "policy_version": "workflow_eligibility_v1",
-        "primary_recommendation": {"workflow_type": "t1_deepprep_anat_report"},
+        "primary_recommendation": {
+            "workflow_type": "t1_deepprep_anat_report",
+            "workflow_metadata": {
+                "agent_selectable": True,
+                "capability_summary": "Runs DeepPrep anatomical processing with QC and report outputs.",
+                "display_name": "T1 DeepPrep anatomical processing, QC, and report",
+                "is_report_only": False,
+                "limitations": ["Requires supported T1w input."],
+                "pipeline_stages": [{"name": "Pipeline execution", "purpose": "Run the configured processing container."}],
+                "primary_outputs": ["pipeline derivatives"],
+                "qc_outputs": ["container-native QC artifacts"],
+                "report_outputs": ["HTML scientific report"],
+                "runtime_workflow_type": "t1_deepprep",
+                "workflow_family": "anatomical",
+                "workflow_role": "complete_processing",
+                "workflow_type": "t1_deepprep_anat_report",
+            },
+        },
         "production_task_created": False,
-        "runnable_workflows": [{"workflow_type": "t1_deepprep_anat_report"}],
+        "runnable_workflows": [
+            {
+                "workflow_type": "t1_deepprep_anat_report",
+                "workflow_metadata": {
+                    "agent_selectable": True,
+                    "capability_summary": "Runs DeepPrep anatomical processing with QC and report outputs.",
+                    "display_name": "T1 DeepPrep anatomical processing, QC, and report",
+                    "is_report_only": False,
+                    "limitations": ["Requires supported T1w input."],
+                    "pipeline_stages": [{"name": "Pipeline execution", "purpose": "Run the configured processing container."}],
+                    "primary_outputs": ["pipeline derivatives"],
+                    "qc_outputs": ["container-native QC artifacts"],
+                    "report_outputs": ["HTML scientific report"],
+                    "runtime_workflow_type": "t1_deepprep",
+                    "workflow_family": "anatomical",
+                    "workflow_role": "complete_processing",
+                    "workflow_type": "t1_deepprep_anat_report",
+                },
+            }
+        ],
     }
     assert "C:/Users/A/private" not in json.dumps(payload)
 
@@ -798,6 +858,79 @@ def test_local_main_flow_smoke_can_wait_for_completed_task_and_outputs(tmp_path,
         }
     ]
     assert "C:/Users/A/private" not in json.dumps(payload)
+
+
+def test_local_main_flow_smoke_can_require_task_events(tmp_path, monkeypatch):
+    smoke = _load_smoke_module()
+    output_json = tmp_path / "local-smoke-events.json"
+
+    def fake_upload_nifti(base, project_id, path):
+        return {"series": {"id": 21, "project_id": project_id, "modality": "T1"}}
+
+    def fake_request(method, url, payload=None):
+        if method == "GET" and url.endswith("/health"):
+            return {"status": "ok", "app": "image_agent", "version": "0.2.0"}
+        if method == "POST" and url.endswith("/projects"):
+            return {"id": 13, "name": payload["name"]}
+        if method == "GET" and url.endswith("/projects/13/series"):
+            return [{"id": 21, "project_id": 13, "modality": "T1"}]
+        if method == "POST" and url.endswith("/series/21/run"):
+            return {"id": 34, "project_id": 13, "series_id": 21, "workflow_type": "t1_deepprep_mock", "status": "queued"}
+        if method == "GET" and url.endswith("/projects/13/tasks"):
+            return [{"id": 34, "project_id": 13, "series_id": 21, "workflow_type": "t1_deepprep_mock", "status": "queued"}]
+        if method == "GET" and url.endswith("/tasks/34"):
+            return {"id": 34, "project_id": 13, "series_id": 21, "workflow_type": "t1_deepprep_mock", "status": "completed"}
+        if method == "GET" and url.endswith("/tasks/34/events"):
+            return {
+                "status": "ok",
+                "task": {
+                    "id": 34,
+                    "project_id": 13,
+                    "series_id": 21,
+                    "workflow_type": "t1_deepprep_mock",
+                    "status": "completed",
+                    "progress": 100,
+                },
+                "main_log": {"tail": "completed"},
+                "remote_logs": [
+                    {"name": "deepprep.log", "source_stage": "deepprep", "size_bytes": 48, "tail": "completed"},
+                ],
+                "events": [
+                    {"type": "task.status", "status": "completed", "progress": 100},
+                    {"type": "task.remote_log", "name": "deepprep.log", "source_stage": "deepprep", "size_bytes": 48},
+                ],
+            }
+        if method == "GET" and url.endswith("/agent/model/status"):
+            return {"configured": False}
+        if method == "GET" and url.endswith("/agent/rag/status"):
+            return {"grounding_policy": {"raw_sources_indexed": False}, "index": {"document_count": 72}}
+        raise AssertionError(f"unexpected request: {method} {url}")
+
+    monkeypatch.setattr(smoke, "_upload_nifti", fake_upload_nifti)
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    smoke.main(
+        [
+            "--api-base",
+            "http://api.local",
+            "--wait-task-completion-timeout-seconds",
+            "3",
+            "--wait-task-completion-poll-seconds",
+            "0",
+            "--require-task-events",
+            "--output-json",
+            str(output_json),
+        ]
+    )
+
+    payload = json.loads(output_json.read_text(encoding="utf-8"))
+    assert payload["task_events_status"] == "passed"
+    assert payload["task_events_task_id"] == 34
+    assert payload["task_events_event_types"] == ["task.remote_log", "task.status"]
+    assert payload["task_events_status_event_status"] == "completed"
+    assert payload["task_events_remote_log_count"] == 1
+    assert payload["task_events_remote_log_source_stages"] == ["deepprep"]
+    assert payload["task_events_main_log_tail_present"] is True
 
 
 def test_local_main_flow_smoke_can_require_result_contracts(tmp_path, monkeypatch):

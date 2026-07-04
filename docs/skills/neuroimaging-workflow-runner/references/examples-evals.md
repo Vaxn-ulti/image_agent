@@ -48,7 +48,7 @@ Inputs:
 - DWI NIfTI, `.bval`, `.bvec`, and JSON sidecar.
 - JSON sidecar contains `PhaseEncodingDirection` and `TotalReadoutTime`.
 - Host FSL exists at `/home/yyf/project/MCI_project/tools/fsl` and exposes GPU `eddy_cuda`.
-- `pennlinc/qsiprep:latest` exposes MRtrix toolbox commands.
+- `pennlinc/qsiprep:26.0.0` exposes MRtrix toolbox commands.
 
 Expected:
 
@@ -77,7 +77,7 @@ Expected:
 Inputs:
 
 - DWI NIfTI, `.bval`, and `.bvec`.
-- Image is `pennlinc/qsiprep:latest` (or another QSIPrep image).
+- Image is `pennlinc/qsiprep:26.0.0` (or another QSIPrep image).
 - Container probe finds no `eddy_cuda*` executable (neither `eddy_cuda`, `eddy_cuda11.0`, nor any versioned binary).
 
 Expected:

@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   project_id INTEGER NOT NULL,
   series_id INTEGER NOT NULL,
   workflow_type TEXT NOT NULL,
+  runtime_workflow_type TEXT,
   status TEXT NOT NULL,
   progress INTEGER NOT NULL DEFAULT 0,
   log_path TEXT NOT NULL,

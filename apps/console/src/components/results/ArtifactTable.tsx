@@ -1,6 +1,5 @@
-import { ExternalLink } from 'lucide-react';
-import { artifactUrl } from '../../lib/resultArtifacts';
 import type { OutputItem } from '../../lib/types';
+import { AuthenticatedArtifactOpenButton } from './AuthenticatedArtifact';
 import { DataTable, TableCell, TableHead, TableHeaderCell, TableRow } from '../ui/DataTable';
 import { Panel, PanelBody, PanelHeader, PanelTitle } from '../ui/Panel';
 
@@ -12,6 +11,7 @@ type ArtifactTableProps = {
 };
 
 export function ArtifactTable({ apiBase, artifacts, taskId, title = 'Artifacts' }: ArtifactTableProps) {
+  void apiBase;
   return (
     <Panel>
       <PanelHeader>
@@ -34,7 +34,6 @@ export function ArtifactTable({ apiBase, artifacts, taskId, title = 'Artifacts' 
           <tbody>
             {artifacts.map((artifact, index) => {
               const relativePath = artifact.relative_path || artifact.path || `artifact-${index}`;
-              const url = artifactUrl(taskId, artifact, apiBase);
               return (
                 <TableRow key={`${relativePath}-${index}`}>
                   <TableCell mono>{relativePath}</TableCell>
@@ -44,9 +43,7 @@ export function ArtifactTable({ apiBase, artifacts, taskId, title = 'Artifacts' 
                   <TableCell>{artifact.artifact_origin || '-'}</TableCell>
                   <TableCell>{artifact.size_bytes ? `${artifact.size_bytes} B` : '-'}</TableCell>
                   <TableCell>
-                    <a className="inline-flex items-center gap-1 font-semibold text-accent hover:underline" href={url} rel="noreferrer" target="_blank">
-                      Open <ExternalLink className="h-3.5 w-3.5" />
-                    </a>
+                    <AuthenticatedArtifactOpenButton className="inline-flex items-center gap-1 font-semibold text-accent hover:underline" relativePath={relativePath} taskId={taskId} />
                   </TableCell>
                 </TableRow>
               );

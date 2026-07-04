@@ -4,6 +4,13 @@ from pathlib import Path
 from typing import Any, Callable
 
 from app.agent.graph import AgentRunner
+from app.agent.chat import (
+    _generic_read_only_reply,
+    _inventory_capability_reply,
+    _is_inventory_capability_question,
+    _is_result_analysis_question,
+    _status_reply,
+)
 from app.agent.incubation import IncubationLedger
 from app.agent.model_gateway import ModelGateway
 from app.agent.rag_orchestration import retrieve_reference_context
@@ -162,6 +169,19 @@ class LangGraphAgentRunner(AgentRunner):
             "project_id": state.get("project_context", {}).get("project_id"),
             "workflow_registry": state.get("project_context", {}).get("workflows") or [],
             "production_task_created": False,
+            "events": self._append_event(
+                state,
+                {
+                    "type": "agent.graph.load_context",
+                    "status": "ok",
+                    "message": "Loaded project context.",
+                    "metadata": {
+                        "project_id": state.get("project_context", {}).get("project_id"),
+                        "series_count": len(state.get("project_context", {}).get("series") or []),
+                        "task_count": len(state.get("project_context", {}).get("tasks") or []),
+                    },
+                },
+            ),
         }
 
     def _node_classify_intent(self, state: ImageAgentState) -> dict[str, Any]:
@@ -174,6 +194,19 @@ class LangGraphAgentRunner(AgentRunner):
             "intent": intent,
             "decision": decision,
             "planner_tool_trace": planner_tool_trace,
+            "events": self._append_event(
+                state,
+                {
+                    "type": "agent.graph.classify_intent",
+                    "status": "ok",
+                    "message": f"Classified intent as {intent}.",
+                    "metadata": {
+                        "intent": intent,
+                        "action_lane": decision.get("action_lane") or decision.get("lane"),
+                        "requires_confirmation": decision.get("requires_confirmation"),
+                    },
+                },
+            ),
         }
 
     def _node_retrieve_rag(self, state: ImageAgentState) -> dict[str, Any]:
@@ -184,7 +217,21 @@ class LangGraphAgentRunner(AgentRunner):
             root=self.rag_root,
             limit=5,
         )
-        return {"retrieved_context": retrieved_context}
+        return {
+            "retrieved_context": retrieved_context,
+            "events": self._append_event(
+                state,
+                {
+                    "type": "agent.graph.retrieve_rag",
+                    "status": "ok",
+                    "message": "Retrieved reference context.",
+                    "metadata": {
+                        "mode": retrieved_context.get("mode") or retrieved_context.get("tool"),
+                        "result_count": len(retrieved_context.get("results") or []),
+                    },
+                },
+            ),
+        }
 
     def _node_select_skill(self, state: ImageAgentState) -> dict[str, Any]:
         decision = state.get("decision") or {}
@@ -193,6 +240,15 @@ class LangGraphAgentRunner(AgentRunner):
         return {
             "selected_skill": selected_skill,
             "skill_context": skill_context,
+            "events": self._append_event(
+                state,
+                {
+                    "type": "agent.graph.select_skill",
+                    "status": "ok",
+                    "message": f"Selected skill {selected_skill}.",
+                    "metadata": {"selected_skill": selected_skill},
+                },
+            ),
         }
 
     def _node_match_workflow(self, state: ImageAgentState) -> dict[str, Any]:
@@ -200,19 +256,36 @@ class LangGraphAgentRunner(AgentRunner):
         workflow_type = str(decision.get("workflow_type") or "")
         lane = decision.get("action_lane") or decision.get("lane")
         if self._looks_like_observe_repair(state):
-            return {
+            update = {
                 "lane": OBSERVE_REPAIR_LANE,
                 "workflow_match": {"status": "not_applicable", "reason": "task observation request"},
             }
+            return self._with_match_event(state, update)
         if lane == INCUBATION_LANE:
-            return {
+            update = {
                 "lane": INCUBATION_LANE,
                 "workflow_match": {"status": "no_fixed_match", "workflow_type": workflow_type},
             }
+            return self._with_match_event(state, update)
+        if decision.get("intent") != "run_workflow":
+            update = {
+                "lane": READ_ONLY_LANE,
+                "workflow_match": {"status": "not_applicable", "reason": "read-only intent"},
+            }
+            return self._with_match_event(state, update)
+        if not self._asks_for_fixed_workflow_confirmation(state.get("message", "")):
+            update = {
+                "lane": READ_ONLY_LANE,
+                "workflow_match": {
+                    "status": "not_applicable",
+                    "reason": "explicit workflow launch intent is required before confirmation",
+                },
+            }
+            return self._with_match_event(state, update)
         if workflow_type:
             workflow = self._registry_workflow(workflow_type, state)
             if workflow and workflow.get("lane") == FIXED_WORKFLOW:
-                return {
+                update = {
                     "lane": FIXED_WORKFLOW,
                     "workflow_match": {
                         "status": "exact_fixed_match",
@@ -220,7 +293,8 @@ class LangGraphAgentRunner(AgentRunner):
                         "runtime_workflow_type": workflow.get("runtime_workflow_type") or workflow_type,
                     },
                 }
-            return {
+                return self._with_match_event(state, update)
+            update = {
                 "lane": INCUBATION_LANE,
                 "workflow_match": {
                     "status": "no_fixed_match",
@@ -228,15 +302,26 @@ class LangGraphAgentRunner(AgentRunner):
                     "reason": "workflow is not a fixed registry entry",
                 },
             }
-        if decision.get("intent") == "run_workflow":
-            return {
-                "lane": INCUBATION_LANE,
-                "workflow_match": {"status": "no_fixed_match", "reason": "planner did not select a fixed workflow"},
+            return self._with_match_event(state, update)
+        workflow = self._match_fixed_workflow_by_capability(state)
+        if workflow is not None:
+            matched_workflow_type = str(workflow.get("type") or "")
+            decision = {**decision, "workflow_type": matched_workflow_type}
+            update = {
+                "lane": FIXED_WORKFLOW,
+                "decision": decision,
+                "workflow_match": {
+                    "status": "capability_fixed_match",
+                    "workflow_type": matched_workflow_type,
+                    "runtime_workflow_type": workflow.get("runtime_workflow_type") or matched_workflow_type,
+                },
             }
-        return {
-            "lane": READ_ONLY_LANE,
-            "workflow_match": {"status": "not_applicable"},
+            return self._with_match_event(state, update)
+        update = {
+            "lane": INCUBATION_LANE,
+            "workflow_match": {"status": "no_fixed_match", "reason": "planner did not select a fixed workflow"},
         }
+        return self._with_match_event(state, update)
 
     def _node_fixed_workflow(self, state: ImageAgentState) -> dict[str, Any]:
         result = self._prepare_confirmation(
@@ -253,9 +338,9 @@ class LangGraphAgentRunner(AgentRunner):
             "preflight": preflight,
             "confirmation": result.get("confirmation"),
             "answer": result.get("answer"),
-            "result": {**result, "production_task_created": False},
+            "result": {**result, "events": self._append_events(state, result.get("events") or []), "production_task_created": False},
             "production_task_created": False,
-            "events": result.get("events") or [],
+            "events": self._append_events(state, result.get("events") or []),
         }
 
     def _node_incubation(self, state: ImageAgentState) -> dict[str, Any]:
@@ -273,12 +358,13 @@ class LangGraphAgentRunner(AgentRunner):
         )
         result["proposed_toolchain"] = proposal
         result["production_task_created"] = False
+        result["task_creation_allowed"] = False
         return {
             "lane": INCUBATION_LANE,
             "proposal": proposal,
-            "result": result,
+            "result": {**result, "events": self._append_events(state, result.get("events") or [])},
             "production_task_created": False,
-            "events": result.get("events") or [],
+            "events": self._append_events(state, result.get("events") or []),
         }
 
     def _node_read_only(self, state: ImageAgentState) -> dict[str, Any]:
@@ -289,6 +375,7 @@ class LangGraphAgentRunner(AgentRunner):
             skill_context=state.get("skill_context") or {},
             retrieved_context=state.get("retrieved_context") or {},
         )
+        answer = self._stabilize_read_only_answer(answer, state)
         return {
             "lane": READ_ONLY_LANE,
             "answer": answer,
@@ -300,10 +387,17 @@ class LangGraphAgentRunner(AgentRunner):
                 "retrieved_context": state.get("retrieved_context") or {},
                 "answer": answer,
                 "decision": state.get("decision") or {},
-                "events": [{"type": "agent.final", "message": "Answered without workflow execution."}],
+                "events": self._append_event(
+                    state,
+                    {"type": "agent.final", "status": "ok", "message": "Answered without workflow execution."},
+                ),
                 "production_task_created": False,
             },
             "production_task_created": False,
+            "events": self._append_event(
+                state,
+                {"type": "agent.final", "status": "ok", "message": "Answered without workflow execution."},
+            ),
         }
 
     def _node_observe_repair(self, state: ImageAgentState) -> dict[str, Any]:
@@ -317,7 +411,12 @@ class LangGraphAgentRunner(AgentRunner):
         }
         repair_plan = {
             "status": "draft_only",
+            "policy": "read_only_observe_repair",
             "auto_retry_allowed": False,
+            "auto_rerun_allowed": False,
+            "requires_preflight_before_retry": True,
+            "requires_human_confirmation_before_retry": True,
+            "forbidden_actions": ["auto_retry", "auto_rerun", "task_creation"],
             "blocking_reason": "Retries must re-enter registry, preflight, and human confirmation.",
             "next_steps": [
                 "Review sanitized task logs and result-summary evidence.",
@@ -332,6 +431,28 @@ class LangGraphAgentRunner(AgentRunner):
             f"Reason: {observation['error_message']}. "
             "I can draft a repair plan, but I will not retry without registry, preflight, and human confirmation."
         )
+        answer = self._answer(
+            message=state.get("message", ""),
+            project_context={
+                **(state.get("project_context") or {}),
+                "task_observation": observation,
+                "repair_plan": repair_plan,
+            },
+            decision={
+                **(state.get("decision") or {}),
+                "intent": "observe_repair",
+                "auto_retry_allowed": False,
+                "production_task_created": False,
+            },
+            skill_context=state.get("skill_context") or {},
+            retrieved_context=state.get("retrieved_context") or {},
+            extra_context={
+                "Task observation JSON": observation,
+                "Repair plan JSON": repair_plan,
+            },
+        )
+        if self._answer_stopped_early(answer):
+            answer = self._observe_repair_fallback_answer(observation, repair_plan)
         return {
             "lane": OBSERVE_REPAIR_LANE,
             "task_observation": observation,
@@ -345,10 +466,127 @@ class LangGraphAgentRunner(AgentRunner):
                 "answer": answer,
                 "task_observation": observation,
                 "repair_plan": repair_plan,
-                "events": [{"type": "agent.repair_plan_drafted", "message": "Drafted repair plan without retry."}],
+                "events": self._append_event(
+                    state,
+                    {
+                        "type": "agent.repair_plan_drafted",
+                        "status": "ok",
+                        "message": "Drafted repair plan without retry.",
+                    },
+                ),
                 "production_task_created": False,
             },
             "production_task_created": False,
+            "events": self._append_event(
+                state,
+                {
+                    "type": "agent.repair_plan_drafted",
+                    "status": "ok",
+                    "message": "Drafted repair plan without retry.",
+                },
+            ),
+        }
+
+    def _stabilize_read_only_answer(self, answer: str, state: ImageAgentState) -> str:
+        message = state.get("message", "")
+        project_context = self._chat_style_project_context(state)
+        if _is_inventory_capability_question(message):
+            return _inventory_capability_reply(project_context)
+        if _is_result_analysis_question(message):
+            recommended_next_step = (
+                (state.get("decision") or {}).get("recommended_next_step")
+                or (state.get("decision") or {}).get("tool_chain_hint")
+                or "Review backend task records and registered result artifacts before preparing any workflow."
+            )
+            stable_answer = _status_reply(project_context, str(recommended_next_step), message=message)
+            if self._answer_stopped_early(answer) or "No workflow was launched" not in str(answer):
+                return stable_answer
+        if self._answer_stopped_early(answer):
+            recommended_next_step = (
+                (state.get("decision") or {}).get("recommended_next_step")
+                or (state.get("decision") or {}).get("tool_chain_hint")
+                or "Review uploaded files, detected series, task status, and workflow eligibility before preparing any workflow."
+            )
+            return _generic_read_only_reply(project_context, str(recommended_next_step))
+        return answer
+
+    def _chat_style_project_context(self, state: ImageAgentState) -> dict[str, Any]:
+        project_context = dict(state.get("project_context") or {})
+        project_context.setdefault("supported_workflows", project_context.get("workflows") or [])
+        project_context.setdefault("result_summaries", project_context.get("result_summaries") or [])
+        project_context.setdefault("outputs", project_context.get("outputs") or [])
+        project_context.setdefault("tasks", project_context.get("tasks") or [])
+        return project_context
+
+    @staticmethod
+    def _answer_stopped_early(answer: str | None) -> bool:
+        text = " ".join(str(answer or "").split())
+        if not text:
+            return True
+        lowered = text.lower()
+        deflection_markers = (
+            "请把你要我先回答的具体问题发给我",
+            "请把具体问题发给我",
+            "请明确你的问题",
+            "没有收到明确的问题",
+            "please send the specific question",
+            "please provide the specific question",
+            "i did not receive a clear question",
+        )
+        if any(marker in lowered for marker in deflection_markers):
+            return True
+        if any(marker in text for marker in ("我先看", "先看一下", "先看一看", "我来查看", "我会查看")):
+            return True
+        early_markers = (
+            "我先看",
+            "先看一下",
+            "let me check",
+            "i will inspect",
+            "i'll inspect",
+            "thinking",
+        )
+        return any(marker in text.lower() for marker in early_markers)
+
+    @staticmethod
+    def _observe_repair_fallback_answer(observation: dict[str, Any], repair_plan: dict[str, Any]) -> str:
+        next_steps = repair_plan.get("next_steps") if isinstance(repair_plan.get("next_steps"), list) else []
+        return (
+            "Observation summary\n"
+            f"1. Task {observation.get('task_id')} is {observation.get('status')} at {observation.get('progress')}%.\n"
+            f"2. Workflow: {observation.get('workflow_type') or 'unknown'}.\n"
+            f"3. Reported reason: {observation.get('error_message') or 'No task error message was recorded.'}\n\n"
+            "Repair policy\n"
+            "1. This is a read-only ObserveRepair review.\n"
+            "2. I will not retry, rerun, or create a production task automatically.\n"
+            "3. Any retry must go through registry, preflight, human confirmation, fingerprint verification, task_service.create_series_task(), and the pipeline runner.\n\n"
+            "Suggested next steps\n"
+            + "\n".join(f"{index}. {step}" for index, step in enumerate(next_steps, 1))
+        ).strip()
+
+    def _append_event(self, state: ImageAgentState, event: dict[str, Any]) -> list[dict[str, Any]]:
+        return [*(state.get("events") or []), event]
+
+    def _append_events(self, state: ImageAgentState, events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [*(state.get("events") or []), *events]
+
+    def _with_match_event(self, state: ImageAgentState, update: dict[str, Any]) -> dict[str, Any]:
+        match = update.get("workflow_match") or {}
+        lane = update.get("lane")
+        return {
+            **update,
+            "events": self._append_event(
+                state,
+                {
+                    "type": "agent.graph.match_workflow",
+                    "status": str(match.get("status") or "ok"),
+                    "message": f"Routed agent lane to {lane or 'unknown'}.",
+                    "metadata": {
+                        "lane": lane,
+                        "workflow_type": match.get("workflow_type"),
+                        "reason": match.get("reason"),
+                    },
+                },
+            ),
         }
 
     def _route_lane(self, state: ImageAgentState) -> str:
@@ -368,6 +606,8 @@ class LangGraphAgentRunner(AgentRunner):
             "lane": state.get("lane"),
         }
         result["graph_state"] = self._public_graph_state(state)
+        if state.get("proposal"):
+            result["proposed_toolchain"] = state["proposal"]
         if state.get("task_observation"):
             result["task_observation"] = state["task_observation"]
         if state.get("repair_plan"):
@@ -383,7 +623,16 @@ class LangGraphAgentRunner(AgentRunner):
         if self.thread_store.is_expired(record):
             return {"lane": record.get("confirmation", {}).get("action_lane"), "confirmation_gate": "expired"}
         pending_confirmation = record.get("confirmation") or {}
-        if confirmation_fingerprint(confirmation) != record.get("confirmation_fingerprint"):
+        stored_fingerprint = record.get("confirmation_fingerprint")
+        provided_fingerprint = None
+        if isinstance(confirmation, dict):
+            provided_fingerprint = confirmation.get("fingerprint") or confirmation.get("confirmation_fingerprint")
+        if provided_fingerprint is not None and provided_fingerprint != stored_fingerprint:
+            return {"lane": pending_confirmation.get("action_lane"), "confirmation_gate": "fingerprint_mismatch"}
+        if (
+            confirmation_fingerprint(pending_confirmation) != stored_fingerprint
+            or confirmation_fingerprint(confirmation or {}) != stored_fingerprint
+        ):
             return {"lane": pending_confirmation.get("action_lane"), "confirmation_gate": "fingerprint_mismatch"}
         if pending_confirmation.get("action_lane") == INCUBATION_LANE:
             return {"lane": INCUBATION_LANE, "confirmation_gate": "incubation_blocked"}
@@ -428,6 +677,87 @@ class LangGraphAgentRunner(AgentRunner):
             return get_workflow(workflow_type)
         except Exception:
             return None
+
+    def _match_fixed_workflow_by_capability(self, state: ImageAgentState) -> dict[str, Any] | None:
+        decision = state.get("decision") or {}
+        query = " ".join(
+            str(part or "")
+            for part in (
+                state.get("message"),
+                decision.get("summary"),
+                decision.get("modality"),
+            )
+        )
+        query_text = self._normalize_match_text(query)
+        query_tokens = self._match_tokens(query_text)
+        if not query_tokens:
+            return None
+        series_modality = self._decision_series_modality(state)
+        best: tuple[int, dict[str, Any]] | None = None
+        for workflow in state.get("workflow_registry") or []:
+            if workflow.get("lane") != FIXED_WORKFLOW:
+                continue
+            if workflow.get("agent_selectable") is not True:
+                continue
+            if series_modality and str(workflow.get("modality") or "").upper() != series_modality:
+                continue
+            fields = self._workflow_capability_fields(workflow)
+            field_text = self._normalize_match_text(" ".join(fields))
+            field_tokens = self._match_tokens(field_text)
+            score = len(query_tokens & field_tokens)
+            for alias in workflow.get("agent_selection_aliases") or []:
+                alias_text = self._normalize_match_text(str(alias or ""))
+                if alias_text and alias_text in query_text:
+                    score += 6
+            if score >= 4 and (best is None or score > best[0]):
+                best = (score, workflow)
+        return best[1] if best else None
+
+    def _decision_series_modality(self, state: ImageAgentState) -> str:
+        decision = state.get("decision") or {}
+        series_id = decision.get("series_id")
+        if series_id is None:
+            return ""
+        for series in (state.get("project_context") or {}).get("series") or []:
+            if str(series.get("id") or series.get("series_id") or "") == str(series_id):
+                return str(series.get("modality") or "").upper()
+        return ""
+
+    def _workflow_capability_fields(self, workflow: dict[str, Any]) -> list[str]:
+        fields = [
+            workflow.get("type"),
+            workflow.get("label"),
+            workflow.get("display_name"),
+            workflow.get("workflow_family"),
+            workflow.get("workflow_role"),
+            workflow.get("capability_summary"),
+        ]
+        for key in ("primary_outputs", "qc_outputs", "report_outputs", "limitations", "agent_selection_aliases"):
+            values = workflow.get(key)
+            if isinstance(values, list):
+                fields.extend(str(value) for value in values)
+        for stage in workflow.get("pipeline_stages") or []:
+            if isinstance(stage, dict):
+                fields.extend(str(stage.get(key) or "") for key in ("name", "purpose"))
+        return [str(field) for field in fields if field]
+
+    @staticmethod
+    def _normalize_match_text(value: str) -> str:
+        return "".join(char.lower() if char.isalnum() else " " for char in value)
+
+    @staticmethod
+    def _match_tokens(value: str) -> set[str]:
+        stopwords = {
+            "and",
+            "for",
+            "from",
+            "outputs",
+            "report",
+            "run",
+            "the",
+            "with",
+        }
+        return {token for token in value.split() if len(token) > 2 and token not in stopwords}
 
     def _looks_like_observe_repair(self, state: ImageAgentState) -> bool:
         message = state.get("message", "").lower()
@@ -487,6 +817,8 @@ class LangGraphAgentRunner(AgentRunner):
             ],
             "blocking_gaps": self._blocking_gaps(state),
             "promotion_status": "blocked_by_gaps",
+            "task_creation_allowed": False,
+            "forbidden_actions": ["confirmation_creation", "production_task_creation", "pipeline_runner_launch"],
             "production_enabled": False,
             "production_task_created": False,
         }

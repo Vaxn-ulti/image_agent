@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -8,11 +9,20 @@ import pytest
 import app.workflows.remote_scripts as remote_scripts
 from app.workflows.remote_scripts import (
     BOLD_REMOTE_ENV_KEYS,
+    BOLD_REQUIRED_TEMPLATEFLOW_FILES,
     discover_bold_fmriprep_xcpd_outputs,
+    materialize_locked_bold_remote_scripts,
     preflight_bold_fmriprep_xcpd_remote,
     resolve_templateflow_dir,
     run_bold_fmriprep_xcpd_remote,
 )
+
+
+def _write_required_templateflow_files(root: Path) -> None:
+    for relative_path in BOLD_REQUIRED_TEMPLATEFLOW_FILES:
+        path = root / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"templateflow")
 
 
 def test_remote_script_preflight_reports_missing_scripts_and_license(tmp_path, monkeypatch):
@@ -117,6 +127,7 @@ def test_remote_script_runner_passes_task_environment_and_discovers_outputs(tmp_
     monkeypatch.setenv("IMAGE_AGENT_ENV_CAPTURE", str(env_capture))
     monkeypatch.setenv("IMAGE_AGENT_CAPTURE_KEYS", ",".join(BOLD_REMOTE_ENV_KEYS))
     shared_templateflow = tmp_path / "shared-templateflow"
+    _write_required_templateflow_files(shared_templateflow)
     monkeypatch.setenv("IMAGE_AGENT_TEMPLATEFLOW_HOME", str(shared_templateflow))
 
     result = run_bold_fmriprep_xcpd_remote(
@@ -314,6 +325,7 @@ def test_remote_script_preflight_checks_templateflow_cache(tmp_path, monkeypatch
     fmriprep_script.chmod(0o755)
     xcpd_script.chmod(0o755)
     shared_templateflow = tmp_path / "shared-templateflow"
+    _write_required_templateflow_files(shared_templateflow)
     monkeypatch.setenv("IMAGE_AGENT_FS_LICENSE", str(license_path))
     monkeypatch.setenv("IMAGE_AGENT_BOLD_FMRIPREP_SCRIPT", str(fmriprep_script))
     monkeypatch.setenv("IMAGE_AGENT_BOLD_XCPD_SCRIPT", str(xcpd_script))
@@ -324,8 +336,76 @@ def test_remote_script_preflight_checks_templateflow_cache(tmp_path, monkeypatch
     checks = {check["name"]: check for check in result["checks"]}
     assert result["ok"] is True
     assert checks["templateflow_cache_writable"]["status"] == "pass"
+    assert checks["templateflow_required_files_present"]["status"] == "pass"
     assert checks["templateflow_cache_writable"]["path"] == str(shared_templateflow)
     assert resolve_templateflow_dir(work) == shared_templateflow
+
+
+def test_remote_script_preflight_rejects_missing_templateflow_required_files(tmp_path, monkeypatch):
+    bids = tmp_path / "bids"
+    output = tmp_path / "output"
+    work = tmp_path / "work"
+    bids.mkdir()
+    license_path = tmp_path / "license.txt"
+    fmriprep_script = tmp_path / "run_fmriprep.sh"
+    xcpd_script = tmp_path / "run_xcpd.sh"
+    license_path.write_text("license", encoding="utf-8")
+    fmriprep_script.write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+    xcpd_script.write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+    fmriprep_script.chmod(0o755)
+    xcpd_script.chmod(0o755)
+    shared_templateflow = tmp_path / "shared-templateflow"
+    shared_templateflow.mkdir()
+    monkeypatch.setenv("IMAGE_AGENT_FS_LICENSE", str(license_path))
+    monkeypatch.setenv("IMAGE_AGENT_BOLD_FMRIPREP_SCRIPT", str(fmriprep_script))
+    monkeypatch.setenv("IMAGE_AGENT_BOLD_XCPD_SCRIPT", str(xcpd_script))
+    monkeypatch.setenv("IMAGE_AGENT_TEMPLATEFLOW_HOME", str(shared_templateflow))
+
+    result = preflight_bold_fmriprep_xcpd_remote(bids_dir=bids, output_dir=output, work_dir=work)
+
+    checks = {check["name"]: check for check in result["checks"]}
+    message = " ".join(result["blocking_errors"])
+    assert result["ok"] is False
+    assert checks["templateflow_required_files_present"]["status"] == "fail"
+    assert "TemplateFlow cache is missing required files" in message
+    assert "shared-templateflow" in message
+    assert str(tmp_path) not in message
+
+
+def test_remote_script_preflight_rejects_missing_oasis_templateflow_file(tmp_path, monkeypatch):
+    bids = tmp_path / "bids"
+    output = tmp_path / "output"
+    work = tmp_path / "work"
+    bids.mkdir()
+    license_path = tmp_path / "license.txt"
+    fmriprep_script = tmp_path / "run_fmriprep.sh"
+    xcpd_script = tmp_path / "run_xcpd.sh"
+    license_path.write_text("license", encoding="utf-8")
+    fmriprep_script.write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+    xcpd_script.write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+    fmriprep_script.chmod(0o755)
+    xcpd_script.chmod(0o755)
+    shared_templateflow = tmp_path / "shared-templateflow"
+    _write_required_templateflow_files(shared_templateflow)
+    mni_carpet = (
+        shared_templateflow
+        / "tpl-MNI152NLin2009cAsym"
+        / "tpl-MNI152NLin2009cAsym_res-01_desc-carpet_dseg.nii.gz"
+    )
+    if mni_carpet.exists():
+        mni_carpet.unlink()
+    monkeypatch.setenv("IMAGE_AGENT_FS_LICENSE", str(license_path))
+    monkeypatch.setenv("IMAGE_AGENT_BOLD_FMRIPREP_SCRIPT", str(fmriprep_script))
+    monkeypatch.setenv("IMAGE_AGENT_BOLD_XCPD_SCRIPT", str(xcpd_script))
+    monkeypatch.setenv("IMAGE_AGENT_TEMPLATEFLOW_HOME", str(shared_templateflow))
+
+    result = preflight_bold_fmriprep_xcpd_remote(bids_dir=bids, output_dir=output, work_dir=work)
+
+    checks = {check["name"]: check for check in result["checks"]}
+    assert result["ok"] is False
+    assert checks["templateflow_required_files_present"]["status"] == "fail"
+    assert checks["templateflow_required_files_present"]["missing_count"] == 1
+    assert "TemplateFlow cache is missing required files" in " ".join(result["blocking_errors"])
 
 
 def test_remote_script_preflight_rejects_unlocked_container_images(tmp_path, monkeypatch):
@@ -376,6 +456,9 @@ def test_remote_script_preflight_rejects_latest_tag_inside_scripts(tmp_path, mon
     monkeypatch.setenv("IMAGE_AGENT_FS_LICENSE", str(license_path))
     monkeypatch.setenv("IMAGE_AGENT_BOLD_FMRIPREP_SCRIPT", str(fmriprep_script))
     monkeypatch.setenv("IMAGE_AGENT_BOLD_XCPD_SCRIPT", str(xcpd_script))
+    templateflow = tmp_path / "templateflow"
+    _write_required_templateflow_files(templateflow)
+    monkeypatch.setenv("IMAGE_AGENT_TEMPLATEFLOW_HOME", str(templateflow))
 
     result = preflight_bold_fmriprep_xcpd_remote(bids_dir=bids, output_dir=output, work_dir=work)
 
@@ -383,6 +466,60 @@ def test_remote_script_preflight_rejects_latest_tag_inside_scripts(tmp_path, mon
     failed = {check["name"]: check for check in result["checks"] if check["status"] == "fail"}
     assert failed["fmriprep_script_version_lock"]["script"] == "run_fmriprep.sh"
     assert ":latest" in " ".join(result["blocking_errors"])
+
+
+def test_materialize_locked_bold_scripts_rewrites_latest_sources_and_passes_preflight(tmp_path, monkeypatch):
+    bids = tmp_path / "bids"
+    output = tmp_path / "output"
+    work = tmp_path / "work"
+    source_dir = tmp_path / "source"
+    wrapper_dir = tmp_path / "wrappers"
+    bids.mkdir()
+    source_dir.mkdir()
+    license_path = tmp_path / "license.txt"
+    license_path.write_text("license", encoding="utf-8")
+    source_fmriprep = source_dir / "run_fmriprep.sh"
+    source_xcpd = source_dir / "run_xcpd_fmriprep.sh"
+    source_fmriprep.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        "docker run --rm nipreps/fmriprep:latest \"$@\"\n",
+        encoding="utf-8",
+    )
+    source_xcpd.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        "docker run --rm pennlinc/xcp_d:latest \"$@\"\n",
+        encoding="utf-8",
+    )
+
+    generated = materialize_locked_bold_remote_scripts(
+        script_dir=wrapper_dir,
+        source_fmriprep_script=source_fmriprep,
+        source_xcpd_script=source_xcpd,
+    )
+
+    fmriprep_script = Path(generated["fmriprep_script"])
+    xcpd_script = Path(generated["xcpd_script"])
+    fmriprep_text = fmriprep_script.read_text(encoding="utf-8")
+    xcpd_text = xcpd_script.read_text(encoding="utf-8")
+    assert "nipreps/fmriprep:latest" not in fmriprep_text
+    assert "pennlinc/xcp_d:latest" not in xcpd_text
+    assert "IMAGE_AGENT_TASK_FMRIPREP_IMAGE" in fmriprep_text
+    assert "IMAGE_AGENT_TASK_XCPD_IMAGE" in xcpd_text
+    assert os.access(fmriprep_script, os.X_OK) is True
+    assert os.access(xcpd_script, os.X_OK) is True
+
+    monkeypatch.setenv("IMAGE_AGENT_FS_LICENSE", str(license_path))
+    monkeypatch.setenv("IMAGE_AGENT_BOLD_FMRIPREP_SCRIPT", str(fmriprep_script))
+    monkeypatch.setenv("IMAGE_AGENT_BOLD_XCPD_SCRIPT", str(xcpd_script))
+    templateflow = tmp_path / "templateflow"
+    _write_required_templateflow_files(templateflow)
+    monkeypatch.setenv("IMAGE_AGENT_TEMPLATEFLOW_HOME", str(templateflow))
+
+    result = preflight_bold_fmriprep_xcpd_remote(bids_dir=bids, output_dir=output, work_dir=work)
+
+    assert result["ok"] is True
 
 
 def test_remote_script_task_environment_exports_locked_container_images(tmp_path, monkeypatch):

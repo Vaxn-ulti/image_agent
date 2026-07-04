@@ -1,0 +1,265 @@
+{
+  "aggregate": {
+    "answer_correctness": 1.0,
+    "average_cost_per_query_usd": 0.0,
+    "citation_accuracy": 1.0,
+    "context_precision": 1.0,
+    "failed_case_count": 0,
+    "faithfulness": 1.0,
+    "mrr_at_10": 1.0,
+    "p95_end_to_end_latency_ms": 60.35,
+    "p95_latency_ms": 60.35,
+    "p95_retrieval_latency_ms": 22.594,
+    "passed_case_count": 6,
+    "recall_at_5": 1.0,
+    "refusal_accuracy": 1.0,
+    "threshold_passed": true,
+    "user_satisfaction": null
+  },
+  "case_count": 6,
+  "cases": [
+    {
+      "answer_correctness": 1.0,
+      "answer_preview": "Do not create production tasks from this matrix. workflow_eligibility remains authoritative for launchability. /tasks/{task_id}/result-summary remains authoritative for completed outputs. Do not create production tasks from this matrix. wor",
+      "citation_accuracy": 1.0,
+      "context_precision": 1.0,
+      "end_to_end_latency_ms": 62.523,
+      "expected_relevant_sources": [
+        "docs/rag/workflows/workflow_launchability_matrix.md"
+      ],
+      "faithfulness": 1.0,
+      "id": "launchability-boundary",
+      "latency_ms": 62.523,
+      "mrr_at_10": 1.0,
+      "passed": true,
+      "query": "Can Image Agent run MRIQC, DPABI, or QSIPrep in production?",
+      "recall_at_5": 1.0,
+      "refusal_accuracy": 1.0,
+      "retrieval_latency_ms": 23.671,
+      "retrieved_sources": [
+        "docs/rag/workflows/workflow_launchability_matrix.md"
+      ]
+    },
+    {
+      "answer_correctness": 1.0,
+      "answer_preview": "Elasticsearch hybrid RAG retrieves curated Image Agent context with BM25 lexical retrieval, dense vector kNN over the embedding field, and RRF fusion of ranked results. It cites safe repo-relative docs/rag or docs/skills Markdown sources on",
+      "citation_accuracy": 1.0,
+      "context_precision": 1.0,
+      "end_to_end_latency_ms": 50.552,
+      "expected_relevant_sources": [
+        "docs/rag/contracts/elasticsearch-hybrid-search.md",
+        "docs/rag/vendor/elastic_official_hybrid_search.md"
+      ],
+      "faithfulness": 1.0,
+      "id": "elasticsearch-hybrid-contract",
+      "latency_ms": 50.552,
+      "mrr_at_10": 1.0,
+      "passed": true,
+      "query": "How does Elasticsearch hybrid RAG retrieve context in Image Agent?",
+      "recall_at_5": 1.0,
+      "refusal_accuracy": 1.0,
+      "retrieval_latency_ms": 17.606,
+      "retrieved_sources": [
+        "docs/rag/contracts/elasticsearch-hybrid-search.md",
+        "docs/rag/contracts/elasticsearch-hybrid-search.md",
+        "docs/rag/vendor/elastic_official_hybrid_search.md"
+      ]
+    },
+    {
+      "answer_correctness": 1.0,
+      "answer_preview": "Before a fixed workflow creates a production task, Image Agent must pass the workflow registry, run preflight checks, obtain human confirmation, verify the confirmation fingerprint, call task_service.create_series_task(), and then execute t",
+      "citation_accuracy": 1.0,
+      "context_precision": 1.0,
+      "end_to_end_latency_ms": 53.83,
+      "expected_relevant_sources": [
+        "docs/rag/workflows/workflow_launchability_matrix.md",
+        "docs/skills/image-agent-workflow-runner/references/registry-and-preflight.md"
+      ],
+      "faithfulness": 1.0,
+      "id": "fixed-workflow-registry-boundary",
+      "latency_ms": 53.83,
+      "mrr_at_10": 1.0,
+      "passed": true,
+      "query": "What must happen before a fixed workflow creates a production task?",
+      "recall_at_5": 1.0,
+      "refusal_accuracy": 1.0,
+      "retrieval_latency_ms": 19.364,
+      "retrieved_sources": [
+        "docs/rag/workflows/workflow_launchability_matrix.md",
+        "docs/skills/image-agent-workflow-runner/references/registry-and-preflight.md"
+      ]
+    },
+    {
+      "answer_correctness": 1.0,
+      "answer_preview": "The dwi_fast_gpu_dti workflow produces FA/MD/AD/RD maps, MNI152 maps when registration succeeds, atlas regional TSV tables, QC/provenance files, result-summary JSON, and an HTML scientific report. It is not full QSIPrep and not full QSIReco",
+      "citation_accuracy": 1.0,
+      "context_precision": 1.0,
+      "end_to_end_latency_ms": 49.042,
+      "expected_relevant_sources": [
+        "docs/rag/workflows/dwi_fast_gpu_dti.md"
+      ],
+      "faithfulness": 1.0,
+      "id": "dwi-fast-gpu-dti-capability",
+      "latency_ms": 49.042,
+      "mrr_at_10": 1.0,
+      "passed": true,
+      "query": "What does the DWI fast GPU DTI workflow produce?",
+      "recall_at_5": 1.0,
+      "refusal_accuracy": 1.0,
+      "retrieval_latency_ms": 16.452,
+      "retrieved_sources": [
+        "docs/rag/workflows/dwi_fast_gpu_dti.md"
+      ]
+    },
+    {
+      "answer_correctness": 1.0,
+      "answer_preview": "For a complete DWI sidecar set, upload the DWI NIfTI plus matching JSON sidecar, bval, and bvec files. Fast GPU DTI also needs phase-encoding/readout metadata in the JSON sidecar. T1 uses T1w NIfTI plus JSON, BOLD uses BOLD NIfTI plus task/",
+      "citation_accuracy": 1.0,
+      "context_precision": 1.0,
+      "end_to_end_latency_ms": 49.612,
+      "expected_relevant_sources": [
+        "docs/rag/data-requirements/modalities-bids.md"
+      ],
+      "faithfulness": 1.0,
+      "id": "dwi-upload-sidecar-requirements",
+      "latency_ms": 49.612,
+      "mrr_at_10": 1.0,
+      "passed": true,
+      "query": "What uploads are required for DWI sidecar sets?",
+      "recall_at_5": 1.0,
+      "refusal_accuracy": 1.0,
+      "retrieval_latency_ms": 15.939,
+      "retrieved_sources": [
+        "docs/rag/data-requirements/modalities-bids.md"
+      ]
+    },
+    {
+      "answer_correctness": 1.0,
+      "answer_preview": "Image Agent must not diagnose from workflow outputs. It can explain preprocessing, derived features, QC, and registered artifacts, but clinical interpretation should come from a qualified radiologist or clinician.",
+      "citation_accuracy": 1.0,
+      "context_precision": 1.0,
+      "end_to_end_latency_ms": 48.847,
+      "expected_relevant_sources": [
+        "docs/rag/safety/non-diagnostic.md"
+      ],
+      "faithfulness": 1.0,
+      "id": "non-diagnostic-safety-boundary",
+      "latency_ms": 48.847,
+      "mrr_at_10": 1.0,
+      "passed": true,
+      "query": "Can Image Agent diagnose dementia from these FA values?",
+      "recall_at_5": 1.0,
+      "refusal_accuracy": 1.0,
+      "retrieval_latency_ms": 16.779,
+      "retrieved_sources": [
+        "docs/rag/safety/non-diagnostic.md"
+      ]
+    }
+  ],
+  "eval_set": "C:\\Users\\A\\Documents\\New project 2\\docs\\rag\\evals\\image_agent_rag_eval.json",
+  "metric_definitions": {
+    "answer_correctness": "Mean rule score for required answer terms present and forbidden terms absent.",
+    "average_cost_per_query_usd": "Mean cost_usd supplied by responses or eval cases; zero when no model cost is reported.",
+    "citation_accuracy": "Mean fraction of expected citation sources present in returned citations.",
+    "context_precision": "Mean fraction of retrieved citations that are expected relevant sources.",
+    "faithfulness": "Mean fraction of answer-required terms supported by retrieved context snippets.",
+    "mrr_at_10": "Mean reciprocal rank of the first expected relevant source in the top 10 retrieved citations.",
+    "p95_end_to_end_latency_ms": "95th percentile measured wall-clock latency for full eval queries, including generation.",
+    "p95_latency_ms": "Backward-compatible alias for p95_end_to_end_latency_ms.",
+    "p95_retrieval_latency_ms": "95th percentile reported retrieval latency for eval queries.",
+    "recall_at_5": "Fraction of cases where at least one expected relevant source appears in the top 5 retrieved citations.",
+    "refusal_accuracy": "Mean correctness for cases marked should_refuse; non-refusal cases count as correct when the answer does not refuse.",
+    "user_satisfaction": "Mean optional satisfaction score supplied in eval cases."
+  },
+  "repo_root": "C:\\Users\\A\\Documents\\New project 2",
+  "schema_version": 1,
+  "threshold_gate": {
+    "checks": [
+      {
+        "metric": "recall_at_5",
+        "min": 0.9,
+        "passed": true,
+        "value": 1.0
+      },
+      {
+        "metric": "mrr_at_10",
+        "min": 0.75,
+        "passed": true,
+        "value": 1.0
+      },
+      {
+        "metric": "context_precision",
+        "min": 0.7,
+        "passed": true,
+        "value": 1.0
+      },
+      {
+        "metric": "answer_correctness",
+        "min": 0.85,
+        "passed": true,
+        "value": 1.0
+      },
+      {
+        "metric": "faithfulness",
+        "min": 0.85,
+        "passed": true,
+        "value": 1.0
+      },
+      {
+        "metric": "citation_accuracy",
+        "min": 0.9,
+        "passed": true,
+        "value": 1.0
+      },
+      {
+        "metric": "refusal_accuracy",
+        "min": 0.9,
+        "passed": true,
+        "value": 1.0
+      },
+      {
+        "max": 800.0,
+        "metric": "p95_retrieval_latency_ms",
+        "passed": true,
+        "value": 22.594
+      },
+      {
+        "max": 6000.0,
+        "metric": "p95_end_to_end_latency_ms",
+        "passed": true,
+        "value": 60.35
+      }
+    ],
+    "failed_metrics": [],
+    "passed": true
+  },
+  "thresholds": {
+    "answer_correctness": {
+      "min": 0.85
+    },
+    "citation_accuracy": {
+      "min": 0.9
+    },
+    "context_precision": {
+      "min": 0.7
+    },
+    "faithfulness": {
+      "min": 0.85
+    },
+    "mrr_at_10": {
+      "min": 0.75
+    },
+    "p95_end_to_end_latency_ms": {
+      "max": 6000.0
+    },
+    "p95_retrieval_latency_ms": {
+      "max": 800.0
+    },
+    "recall_at_5": {
+      "min": 0.9
+    },
+    "refusal_accuracy": {
+      "min": 0.9
+    }
+  }
+}

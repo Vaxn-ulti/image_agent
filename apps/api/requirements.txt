@@ -12,4 +12,5 @@ scipy==1.15.3
 nilearn==0.11.1
 langgraph==0.4.8
 llama-index==0.12.37
+elasticsearch==9.4.1
 openai==1.109.1

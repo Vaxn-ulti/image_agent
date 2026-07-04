@@ -16,10 +16,10 @@ QSIRecon consumes completed QSIPrep output. It is not a direct raw-DWI preproces
 
 ## Container/CLI Usage
 
-Image Agent legacy QSIRecon uses a Docker image such as:
+Image Agent legacy QSIRecon is locked to:
 
 ```text
-pennlinc/qsirecon:latest
+pennlinc/qsirecon:26.0.0
 ```
 
 Backend command shape:
@@ -30,7 +30,7 @@ docker run --rm --gpus all \
   -v {output}:/out \
   -v {work}:/work \
   -v {fs_license}:/opt/freesurfer/license.txt:ro \
-  pennlinc/qsirecon:latest \
+  pennlinc/qsirecon:26.0.0 \
   /data /out participant \
   --participant-label sub-01 \
   --input-type qsiprep \

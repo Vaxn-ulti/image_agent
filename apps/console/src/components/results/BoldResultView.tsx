@@ -1,6 +1,6 @@
 import type { OutputItem, ResultSummary } from '../../lib/types';
-import { ExternalLink } from 'lucide-react';
-import { artifactUrl, displayArtifactName } from '../../lib/resultArtifacts';
+import { displayArtifactName } from '../../lib/resultArtifacts';
+import { AuthenticatedArtifactImageLink, AuthenticatedArtifactOpenButton } from './AuthenticatedArtifact';
 import { MetricAvailabilityGrid } from './MetricAvailabilityGrid';
 import { ScientificChartPanel } from './ScientificChartPanel';
 import { SourceArtifactList } from './SourceArtifactList';
@@ -20,24 +20,21 @@ function findFigure(figures: OutputItem[], tokens: string[]) {
 }
 
 function BoldReportFigure({ apiBase, figure, taskId }: { apiBase: string; figure?: OutputItem; taskId: number }) {
+  void apiBase;
   if (!figure) {
     return <div className="rounded-md border border-dashed border-border bg-panel p-4 text-sm text-muted">BOLD report figure is not registered for this panel.</div>;
   }
 
   const name = displayArtifactName(figure);
-  const url = artifactUrl(taskId, figure, apiBase);
+  const relativePath = figure.relative_path || figure.path || name;
   const originLabel = figure.native_artifact === false ? 'Derived BOLD report figure' : 'Native BOLD QC figure';
 
   return (
     <figure className="overflow-hidden rounded-md border border-border bg-background">
-      <a className="block" href={url} rel="noreferrer" target="_blank">
-        <img alt={`${originLabel}: ${name}`} className="h-52 w-full bg-white object-contain p-3" loading="lazy" src={url} />
-      </a>
+      <AuthenticatedArtifactImageLink alt={`${originLabel}: ${name}`} className="h-52 w-full bg-white object-contain p-3" relativePath={relativePath} taskId={taskId} />
       <figcaption className="flex items-center justify-between gap-3 border-t border-border px-3 py-2 text-xs">
-        <span className="min-w-0 truncate font-mono text-muted">{figure.relative_path || figure.path || name}</span>
-        <a className="inline-flex shrink-0 items-center gap-1 font-semibold text-accent hover:underline" href={url} rel="noreferrer" target="_blank">
-          Open <ExternalLink className="h-3 w-3" />
-        </a>
+        <span className="min-w-0 truncate font-mono text-muted">{relativePath}</span>
+        <AuthenticatedArtifactOpenButton className="inline-flex shrink-0 items-center gap-1 font-semibold text-accent hover:underline" relativePath={relativePath} taskId={taskId} />
       </figcaption>
     </figure>
   );

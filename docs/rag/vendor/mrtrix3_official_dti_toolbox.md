@@ -12,7 +12,7 @@ status: curated_summary
 
 Use this source when maintaining or explaining the MRtrix toolbox portion of `dwi_fast_gpu_dti`.
 
-Image Agent runs MRtrix commands inside a toolbox image, currently `pennlinc/qsiprep:latest`, but it does not run the full QSIPrep pipeline for production fast DTI.
+Image Agent runs MRtrix commands inside a toolbox image, currently `pennlinc/qsiprep:26.0.0`, but it does not run the full QSIPrep pipeline for production fast DTI.
 
 ## Container/CLI Usage
 
@@ -38,7 +38,7 @@ docker run --rm --gpus all --network host \
   -v {output}:/out \
   -v {work}:/work \
   --entrypoint bash \
-  pennlinc/qsiprep:latest \
+  pennlinc/qsiprep:26.0.0 \
   -lc "{mrtrix_command}"
 ```
 

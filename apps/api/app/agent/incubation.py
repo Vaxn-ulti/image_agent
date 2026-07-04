@@ -9,6 +9,10 @@ from typing import Any
 
 from app.db.database import now_iso
 
+TOOLCHAIN_PROPOSAL_CONTRACT_VERSION = "toolchain_proposal.v1"
+INCUBATION_LANE = "toolchain_incubation"
+INCUBATION_FORBIDDEN_ACTIONS = ["confirmation_creation", "production_task_creation", "pipeline_runner_launch"]
+
 
 class IncubationLedger:
     def __init__(self, root: Path | str) -> None:
@@ -28,6 +32,8 @@ class IncubationLedger:
         script_paths: list[Path | str] | None = None,
         script_text: str | None = None,
         known_script_roots: list[Path | str] | None = None,
+        requested_workflow_type: str | None = None,
+        requested_action_lane: str | None = None,
     ) -> dict[str, Any]:
         proposal_id = "inc_" + uuid.uuid4().hex[:12]
         primitive_chain, decomposition = decompose_toolchain_steps(
@@ -53,7 +59,11 @@ class IncubationLedger:
         )
         payload = {
             "proposal_id": proposal_id,
-            "lane": "toolchain_incubation",
+            "contract_version": TOOLCHAIN_PROPOSAL_CONTRACT_VERSION,
+            "lane": INCUBATION_LANE,
+            "action_lane": INCUBATION_LANE,
+            "requested_action_lane": str(requested_action_lane or "").strip(),
+            "requested_workflow_type": str(requested_workflow_type or "").strip(),
             "status": "proposed",
             "objective": objective,
             "input_modality": input_modality or "UNKNOWN",
@@ -67,6 +77,10 @@ class IncubationLedger:
             "validation_runs": [],
             "human_reviews": [],
             "promotion_suggestion": None,
+            "task_created": False,
+            "confirmation_created": False,
+            "task_creation_allowed": False,
+            "forbidden_actions": INCUBATION_FORBIDDEN_ACTIONS,
             "production_enabled": False,
             "production_task_created": False,
             "created_at": now_iso(),

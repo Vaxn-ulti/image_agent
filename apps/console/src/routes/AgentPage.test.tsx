@@ -43,6 +43,26 @@ vi.mock('../lib/api', () => ({
           progress: 0,
         },
       }),
+      listProjectAgentRuns: vi.fn().mockResolvedValue({
+        agent_runs: [],
+        contract_version: 'project_agent_run_history.v1',
+        project_id: 13,
+      }),
+      getAgentRun: vi.fn().mockResolvedValue({
+        agent_run_id: 'agent_run_history_123',
+        answer: 'Reviewed task evidence.',
+        contract_version: 'agent_run_lookup.v1',
+        events: [
+          {
+            event_type: 'agent_tool_invoked',
+            metadata: { note: '[redacted-host-path]' },
+            status: 'ok',
+          },
+        ],
+        project_id: 13,
+        selected_skill: 'image-agent-operator',
+        status: 'answered',
+      }),
       listSeries: vi.fn().mockResolvedValue([]),
       ragStatus: vi.fn().mockResolvedValue({
         dependencies: { llama_index: { available: true } },
@@ -115,6 +135,162 @@ describe('AgentPage', () => {
     expect(await screen.findByText(/inspect_task_status/)).toBeInTheDocument();
     expect(api.runAgent).toHaveBeenCalledWith(13, 'What happened to DWI?');
     expect(api.ragQuery).not.toHaveBeenCalled();
+  });
+
+  it('keeps multi-line Agent answers readable in the chat bubble', async () => {
+    vi.mocked(api.runAgent).mockResolvedValueOnce({
+      agent_run_id: 'agent_run_inventory_123',
+      answer: 'Uploaded files\n1. sub-01_T1w.nii.gz\n\nRunnable fixed workflows\n1. t1_deepprep_anat_report',
+      intent: 'inventory_capability',
+      selected_skill: 'image-agent-operator',
+      status: 'answered',
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/projects/13/agent']}>
+          <Routes>
+            <Route element={<AgentPage />} path="/projects/:projectId/agent" />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await userEvent.type(screen.getByLabelText('Agent query'), '我上传了什么文件，可以跑什么任务');
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    const bubble = await screen.findByText(/Uploaded files/);
+    expect(bubble).toHaveClass('whitespace-pre-line');
+    expect(bubble.textContent).toContain('Runnable fixed workflows');
+  });
+
+  it('shows current Agent graph progress events in the evidence panel', async () => {
+    vi.mocked(api.runAgent).mockResolvedValueOnce({
+      agent_run_id: 'agent_run_events_123',
+      answer: 'I reviewed the project without preparing a workflow confirmation.',
+      events: [
+        { type: 'agent.graph.load_context', status: 'ok', message: 'Loaded project context.' },
+        { type: 'agent.graph.classify_intent', status: 'ok', message: 'Classified intent as answer_question.' },
+        { type: 'agent.graph.match_workflow', status: 'not_applicable', message: 'Routed agent lane to read_only.' },
+      ],
+      intent: 'answer_question',
+      selected_skill: 'image-agent-operator',
+      status: 'answered',
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/projects/13/agent']}>
+          <Routes>
+            <Route element={<AgentPage />} path="/projects/:projectId/agent" />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await userEvent.type(screen.getByLabelText('Agent query'), '帮我看看这个项目当前适合做什么');
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    expect(await screen.findByText('Agent Progress')).toBeInTheDocument();
+    expect(screen.getByText('agent.graph.load_context')).toBeInTheDocument();
+    expect(screen.getByText('Loaded project context.')).toBeInTheDocument();
+    expect(screen.getByText('agent.graph.match_workflow')).toBeInTheDocument();
+    expect(screen.queryByText('Approval required')).not.toBeInTheDocument();
+  });
+
+  it('shows read-only project Agent run history from the ledger contract', async () => {
+    vi.mocked(api.listProjectAgentRuns).mockResolvedValueOnce({
+      agent_runs: [
+        {
+          agent_run_id: 'agent_run_history_123',
+          created_at: '2026-06-19T10:00:00+00:00',
+          event_count: 3,
+          model_gateway_access: 'openai_sdk_gateway',
+          project_id: 13,
+          request_type: 'run',
+          selected_skill: 'image-agent-operator',
+          status: 'answered',
+        },
+      ],
+      contract_version: 'project_agent_run_history.v1',
+      project_id: 13,
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/projects/13/agent']}>
+          <Routes>
+            <Route element={<AgentPage />} path="/projects/:projectId/agent" />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText('Run History')).toBeInTheDocument();
+    expect(await screen.findByText('agent_run_history_123')).toBeInTheDocument();
+    expect(screen.getByText('answered')).toBeInTheDocument();
+    expect(screen.getByText('image-agent-operator')).toBeInTheDocument();
+    expect(screen.getByText('3 events')).toBeInTheDocument();
+    expect(api.listProjectAgentRuns).toHaveBeenCalledWith(13);
+    expect(document.body.textContent).not.toContain('patient');
+    expect(document.body.textContent).not.toContain('/home/yyf/project/image_agent');
+  });
+
+  it('looks up selected Agent run details from the read-only ledger contract', async () => {
+    vi.mocked(api.listProjectAgentRuns).mockResolvedValueOnce({
+      agent_runs: [
+        {
+          agent_run_id: 'agent_run_history_123',
+          event_count: 1,
+          project_id: 13,
+          request_type: 'run',
+          selected_skill: 'image-agent-operator',
+          status: 'answered',
+        },
+      ],
+      contract_version: 'project_agent_run_history.v1',
+      project_id: 13,
+    });
+    vi.mocked(api.getAgentRun).mockResolvedValueOnce({
+      agent_run_id: 'agent_run_history_123',
+      answer: 'Reviewed task evidence.',
+      contract_version: 'agent_run_lookup.v1',
+      events: [
+        {
+          event_type: 'agent_tool_invoked',
+          metadata: { note: '[redacted-host-path]' },
+          status: 'ok',
+        },
+      ],
+      project_id: 13,
+      selected_skill: 'image-agent-operator',
+      status: 'answered',
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/projects/13/agent']}>
+          <Routes>
+            <Route element={<AgentPage />} path="/projects/:projectId/agent" />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Inspect agent_run_history_123' }));
+
+    expect(api.getAgentRun).toHaveBeenCalledWith('agent_run_history_123');
+    expect(await screen.findByText('Run Detail')).toBeInTheDocument();
+    expect(screen.getAllByText('agent_run_history_123').length).toBeGreaterThan(0);
+    expect(screen.getByText('agent_tool_invoked')).toBeInTheDocument();
+    expect(screen.getByText(/Reviewed task evidence/)).toBeInTheDocument();
+    expect(document.body.textContent).toContain('[redacted-host-path]');
+    expect(document.body.textContent).not.toContain('/home/yyf/project/image_agent');
+    expect(document.body.textContent).not.toContain('sk-');
   });
 
   it('redacts backend paths and secrets in Agent evidence JSON', async () => {
@@ -260,6 +436,12 @@ describe('AgentPage', () => {
         project_id: 13,
         series_id: 24,
         type: 'workflow_execution',
+        workflow_metadata: {
+          capability_summary: 'Runs full BOLD preprocessing, XCP-D derived metrics, container-native QC, and report outputs.',
+          display_name: 'BOLD fMRIPrep + XCP-D processing, metrics, QC, and report',
+          runtime_workflow_type: 'bold_fmriprep_xcpd_report',
+          workflow_type: 'bold_fmriprep_xcpd_report',
+        },
         workflow_type: 'bold_fmriprep_xcpd_report',
       },
       intent: 'run_workflow',
@@ -284,6 +466,9 @@ describe('AgentPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Send' }));
 
     expect(await screen.findByText('Approval required')).toBeInTheDocument();
+    expect(screen.getByText('BOLD fMRIPrep + XCP-D processing, metrics, QC, and report')).toBeInTheDocument();
+    expect(screen.getByText('Runs full BOLD preprocessing, XCP-D derived metrics, container-native QC, and report outputs.')).toBeInTheDocument();
+    expect(screen.getByText('Stable workflow ID')).toBeInTheDocument();
     expect(screen.getByText('bold_fmriprep_xcpd_report')).toBeInTheDocument();
     expect(screen.getByText('Task not created yet')).toBeInTheDocument();
     expect(screen.getByText('Backend API creates the task after approval.')).toBeInTheDocument();
@@ -297,6 +482,12 @@ describe('AgentPage', () => {
       project_id: 13,
       series_id: 24,
       type: 'workflow_execution',
+      workflow_metadata: {
+        capability_summary: 'Runs full BOLD preprocessing, XCP-D derived metrics, container-native QC, and report outputs.',
+        display_name: 'BOLD fMRIPrep + XCP-D processing, metrics, QC, and report',
+        runtime_workflow_type: 'bold_fmriprep_xcpd_report',
+        workflow_type: 'bold_fmriprep_xcpd_report',
+      },
       workflow_type: 'bold_fmriprep_xcpd_report',
     });
     expect(await screen.findByText(/Task 118 created/)).toBeInTheDocument();

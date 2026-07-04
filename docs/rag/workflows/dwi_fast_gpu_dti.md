@@ -1,9 +1,34 @@
 ---
 source_type: rag_workflow
 workflow_type: dwi_fast_gpu_dti
+runtime_workflow_type: dwi_fast_gpu_dti
+display_name: DWI fast GPU DTI maps, atlas metrics, QC, and report
+workflow_family: dwi
+workflow_role: complete_processing
+capability_summary: Runs the production DWI fast GPU DTI path with host FSL GPU eddy and MRtrix toolbox steps, producing FA/MD/AD/RD maps, atlas tables, QC/provenance, and an HTML report.
+agent_selectable: true
+is_report_only: false
 modality: DWI
 status: production_supported
 retrieved_date: 2026-06-07
+pipeline_stages:
+  - DWI sidecar validation: Require NIfTI, bval, bvec, and eddy metadata JSON.
+  - host FSL GPU correction: Use deployment-local FSL/GPU tools for correction and registration.
+  - MRtrix tensor metrics: Use the locked QSIPrep toolbox image for tensor-derived maps.
+  - result packaging: Register DTI maps, atlas tables, QC/provenance, and report artifacts.
+primary_outputs:
+  - FA/MD/AD/RD native maps
+  - MNI152 maps
+  - atlas regional TSV tables
+  - result-summary.json
+qc_outputs:
+  - DTI QC/provenance
+  - finite-map checks
+  - runtime evidence
+report_outputs:
+  - HTML scientific report
+limitations:
+  - Requires DWI gradients and JSON sidecar with PhaseEncodingDirection and TotalReadoutTime.
 official_grounding:
   - docs/rag/vendor/fsl_official_fast_dti_tools.md
   - docs/rag/vendor/mrtrix3_official_dti_toolbox.md
@@ -23,6 +48,8 @@ unsupported_boundaries:
   - do not launch without DWI NIfTI, bval, bvec, and JSON phase-encoding/readout metadata
   - do not fabricate acqparams, index files, phase-encoding direction, or readout timing
   - do not replace missing native DWI QC or report artifacts with generated images
+  - not a report-only workflow; it includes correction, tensor modeling, maps, tables, QC/provenance, summaries, and report artifacts
+  - do not bypass registry, preflight, human confirmation, confirmation fingerprint, task_service.create_series_task(), and the pipeline runner
   - do not infer diagnosis, prognosis, dementia status, or treatment recommendations from DTI scalars
 ---
 
@@ -34,14 +61,16 @@ Use this document when the user asks about the production Image Agent DWI workfl
 
 This document is workflow interpretation support. It does not replace backend task records, `/tasks/{task_id}/result-summary`, or artifact metadata.
 
+Image Agent workflow identity: `dwi_fast_gpu_dti` is the stable public workflow_type and runtime_workflow_type for the production DWI fast DTI lane. `workflow_metadata.is_report_only=false`; this is not a report-only workflow. Creating a production task must pass registry, preflight, human confirmation, confirmation fingerprint, task_service.create_series_task(), and the pipeline runner.
+
 ## Workflow Purpose
 
-`dwi_fast_gpu_dti` is the current production DWI path for bounded-runtime scalar DTI outputs. It produces FA/MD/AD/RD maps, MNI152-space maps when registration or fallback resampling succeeds, regional DTI tables, provenance, QC files, and report figures.
+`dwi_fast_gpu_dti` is the current production DWI path for bounded-runtime scalar DTI outputs. It produces FA/MD/AD/RD maps, MNI152-space maps when registration or fallback resampling succeeds, atlas regional TSV tables, provenance, QC/provenance files, and report figures.
 
 It is not full QSIPrep and not full QSIRecon. The workflow uses:
 
 - host FSL for GPU eddy correction and registration checks, including `eddy_cuda`, `flirt`, `dtifit`, `applywarp`, and `fslmaths` availability;
-- MRtrix commands from the `pennlinc/qsiprep:latest` image as a toolbox, including `dwi2mask`, `mrconvert`, `dwi2tensor`, and `tensor2metric`;
+- MRtrix commands from the `pennlinc/qsiprep:26.0.0` image as a toolbox, including `dwi2mask`, `mrconvert`, `dwi2tensor`, and `tensor2metric`;
 - backend result-summary and artifact registration for user-facing outputs.
 
 ## Expected Inputs

@@ -6,6 +6,7 @@ from fastapi import HTTPException
 
 from app.db.database import connect, now_iso, row_to_dict
 from app.db.queries import fetch_rows
+from app.security import auth_required, auth_token, validate_console_credentials
 from app.services.runtime_overrides import main_projects_root
 
 
@@ -14,6 +15,8 @@ def _projects_root() -> Path:
 
 
 def login(req):
+    if not validate_console_credentials(req.username, req.password):
+        raise HTTPException(status_code=401, detail="Invalid username or password")
     with connect() as conn:
         existing = conn.execute("SELECT * FROM users WHERE username=?", (req.username,)).fetchone()
         if existing is None:
@@ -21,7 +24,8 @@ def login(req):
             user = {"id": cur.lastrowid, "username": req.username}
         else:
             user = {"id": existing["id"], "username": existing["username"]}
-    return {"access_token": "mvp-token", "token_type": "bearer", "user": user}
+    token = auth_token() if auth_required() else "mvp-token"
+    return {"access_token": token, "token_type": "bearer", "user": user}
 
 
 def list_projects():

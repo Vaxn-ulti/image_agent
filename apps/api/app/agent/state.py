@@ -38,6 +38,9 @@ class ImageAgentState(TypedDict, total=False):
     project_context: dict[str, Any]
     workflow_registry: list[dict[str, Any]]
     deployment_status: dict[str, Any]
+    decision: dict[str, Any]
+    planner_tool_trace: list[dict[str, Any]]
+    skill_context: dict[str, Any]
     retrieved_context: dict[str, Any]
     selected_skill: str | None
     workflow_match: dict[str, Any] | None
@@ -52,6 +55,7 @@ class ImageAgentState(TypedDict, total=False):
     result_summary: dict[str, Any] | None
     repair_plan: dict[str, Any] | None
     answer: str | None
+    result: dict[str, Any]
     events: list[dict[str, Any]]
     production_task_created: bool
 

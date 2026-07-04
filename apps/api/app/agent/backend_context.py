@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from app.db.queries import fetch_rows
+from app.workflows.registry import list_workflows, workflow_public_metadata, workflow_public_metadata_for_record
 from app.workflows.result_contract import load_result_summary
 
 
@@ -12,7 +13,7 @@ def build_rag_backend_context(project_id: int | None) -> dict[str, Any]:
     return {
         "project_id": project_id,
         "tasks": fetch_rows(
-            "SELECT id, workflow_type, status, progress, error_message FROM tasks WHERE project_id=? ORDER BY id DESC LIMIT 20",
+            "SELECT id, workflow_type, runtime_workflow_type, status, progress, error_message FROM tasks WHERE project_id=? ORDER BY id DESC LIMIT 20",
             (project_id,),
         )
         if project_id
@@ -23,6 +24,10 @@ def build_rag_backend_context(project_id: int | None) -> dict[str, Any]:
         )
         if project_id
         else [],
+        "supported_workflows": [
+            workflow_public_metadata(workflow)
+            for workflow in list_workflows()
+        ],
     }
 
 
@@ -39,6 +44,12 @@ def build_chat_backend_context(
         "project_id": project_id,
         "series": fetch_rows(
             "SELECT id, modality, sequence_label, supported_for_processing, status, confidence FROM imaging_series WHERE project_id=? ORDER BY id DESC LIMIT 20",
+            (project_id,),
+        )
+        if project_id
+        else [],
+        "project_files": fetch_rows(
+            "SELECT id, original_name, file_type, size, sha256, created_at FROM files WHERE project_id=? ORDER BY id DESC LIMIT 50",
             (project_id,),
         )
         if project_id
@@ -75,7 +86,7 @@ def _task_context(project_id: int | None, message: str) -> list[dict]:
     if project_id and requested_ids:
         placeholders = ",".join("?" for _ in requested_ids)
         query = (
-            "SELECT id, project_id, workflow_type, status, progress, error_message "
+            "SELECT id, project_id, workflow_type, runtime_workflow_type, status, progress, error_message "
             f"FROM tasks WHERE project_id=? AND id IN ({placeholders}) ORDER BY id DESC"
         )
         explicit = fetch_rows(query, (project_id, *requested_ids))
@@ -84,6 +95,7 @@ def _task_context(project_id: int | None, message: str) -> list[dict]:
             {
                 "id": task_id,
                 "workflow_type": "unknown",
+                "runtime_workflow_type": None,
                 "status": "not_found_in_project",
                 "progress": 0,
                 "error_message": None,
@@ -94,16 +106,16 @@ def _task_context(project_id: int | None, message: str) -> list[dict]:
         return sorted([*explicit, *missing], key=lambda task: int(task["id"]), reverse=True)
     if project_id:
         return fetch_rows(
-            "SELECT id, project_id, workflow_type, status, progress, error_message FROM tasks WHERE project_id=? ORDER BY id DESC LIMIT 50",
+            "SELECT id, project_id, workflow_type, runtime_workflow_type, status, progress, error_message FROM tasks WHERE project_id=? ORDER BY id DESC LIMIT 50",
             (project_id,),
         )
     if requested_ids:
         placeholders = ",".join("?" for _ in requested_ids)
         return fetch_rows(
-            f"SELECT id, project_id, workflow_type, status, progress, error_message FROM tasks WHERE id IN ({placeholders}) ORDER BY id DESC",
+            f"SELECT id, project_id, workflow_type, runtime_workflow_type, status, progress, error_message FROM tasks WHERE id IN ({placeholders}) ORDER BY id DESC",
             tuple(requested_ids),
         )
-    return fetch_rows("SELECT id, project_id, workflow_type, status, progress, error_message FROM tasks ORDER BY id DESC LIMIT 10")
+    return fetch_rows("SELECT id, project_id, workflow_type, runtime_workflow_type, status, progress, error_message FROM tasks ORDER BY id DESC LIMIT 10")
 
 
 def _output_context(project_id: int | None, task_ids: list[int] | None = None) -> list[dict]:
@@ -133,5 +145,14 @@ def _result_summary_context(tasks: list[dict], *, projects_root: Path) -> list[d
         except FileNotFoundError:
             continue
         if summary:
-            summaries.append(summary)
+            public_summary = dict(summary)
+            public_summary.pop("summary_path", None)
+            public_summary.setdefault(
+                "workflow_metadata",
+                workflow_public_metadata_for_record(
+                    public_summary.get("workflow_type") or task.get("workflow_type"),
+                    task.get("runtime_workflow_type"),
+                ),
+            )
+            summaries.append(public_summary)
     return summaries

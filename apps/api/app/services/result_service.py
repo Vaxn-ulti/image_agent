@@ -3,6 +3,10 @@ from __future__ import annotations
 import json
 import mimetypes
 import re
+import secrets
+import tempfile
+import time
+import zipfile
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -16,8 +20,12 @@ from app.services.project_service import require_project
 from app.services import task_service
 from app.services.runtime_overrides import main_patch_attr_if_changed, main_projects_root
 from app.workflows.artifact_manifest import build_artifact_manifest
+from app.workflows.registry import workflow_public_metadata_for_record
 from app.workflows.result_contract import load_result_summary
 from app.workflows.task_logs import collect_remote_task_logs
+
+_EXPORT_TICKET_TTL_SECONDS = 300
+_export_download_tickets: dict[str, dict[str, Any]] = {}
 
 try:
     from app.workflows.bold_group_analysis import run_group_analysis
@@ -50,7 +58,7 @@ def _redact_log_text(value: str) -> str:
         r"\1=[redacted-secret]",
         text,
     )
-    text = re.sub(r"sk-[A-Za-z0-9._-]+", "[redacted-secret]", text)
+    text = re.sub(r"(?<![A-Za-z0-9])sk-[A-Za-z0-9._-]+", "[redacted-secret]", text)
     text = re.sub(r"[A-Za-z]:[\\/][^\s\"']+", "[redacted-host-path]", text)
     text = re.sub(r"/(?:home|Users|mnt|data|tmp|var)/[^\s\"']+", "[redacted-host-path]", text)
     text = re.sub(r"(?i)\bpatient[-_\s]*[A-Za-z0-9_.-]+", "patient-[redacted]", text)
@@ -77,10 +85,44 @@ def get_logs(task_id):
     text = path.read_text(encoding="utf-8") if path.exists() else ""
     output_dir = _projects_root() / str(task["project_id"]) / "derivatives" / str(task_id) / "output"
     remote_logs = collect_remote_task_logs(output_dir)
+    if not remote_logs and text.strip():
+        remote_logs = [
+            {
+                "name": "task.log",
+                "source_stage": "pipeline_runner",
+                "size_bytes": path.stat().st_size if path.exists() else len(text.encode("utf-8")),
+                "tail": text[-12000:],
+            }
+        ]
     return {
         "task_id": task_id,
         "text": _redact_log_text(text),
         "remote_logs": _safe_remote_logs(remote_logs),
+    }
+
+
+def get_task_events(task_id):
+    task = task_service.get_public_task(task_id)
+    logs = get_logs(task_id)
+    remote_logs = logs.get("remote_logs") if isinstance(logs.get("remote_logs"), list) else []
+    events = [
+        {"type": "task.status", "status": task.get("status"), "progress": task.get("progress")},
+        *[
+            {
+                "type": "task.remote_log",
+                "name": item.get("name"),
+                "source_stage": item.get("source_stage"),
+                "size_bytes": item.get("size_bytes"),
+            }
+            for item in remote_logs
+        ],
+    ]
+    return {
+        "status": "ok",
+        "task": task,
+        "main_log": {"tail": logs.get("text", "")},
+        "remote_logs": remote_logs,
+        "events": events,
     }
 
 
@@ -187,9 +229,19 @@ def get_outputs(task_id):
 
 
 def _public_result_summary(task, payload):
-    public = dict(payload)
+    public = _safe_metadata(dict(payload))
     public["task_id"] = task["id"]
     public["project_id"] = task["project_id"]
+    public["workflow_type"] = task.get("workflow_type") or public.get("workflow_type")
+    public["runtime_workflow_type"] = task.get("runtime_workflow_type") or public.get("runtime_workflow_type")
+    authoritative_metadata = workflow_public_metadata_for_record(
+        task.get("workflow_type") or public.get("workflow_type"),
+        task.get("runtime_workflow_type") or public.get("runtime_workflow_type"),
+    )
+    if authoritative_metadata is not None:
+        public["workflow_metadata"] = authoritative_metadata
+    elif "workflow_metadata" not in public:
+        public["workflow_metadata"] = None
     public.pop("summary_path", None)
     return public
 
@@ -243,7 +295,12 @@ def get_task_artifact_manifest(task_id):
     task = task_service.get_task(task_id)
     output_dir = _task_output_dir(task)
     output_rows = _get_output_rows(task_id)
-    summary = _load_raw_result_summary(task, output_rows)
+    raw_summary = _load_raw_result_summary(task, output_rows)
+    summary = raw_summary
+    if isinstance(raw_summary, dict):
+        summary = _public_result_summary(task, raw_summary)
+        if raw_summary.get("summary_path"):
+            summary["summary_path"] = raw_summary["summary_path"]
     return build_artifact_manifest(task, output_dir, summary, output_rows)
 
 
@@ -263,6 +320,93 @@ def resolve_task_artifact(task_id, relative_path):
 
 def get_task_artifact(task_id, relative_path):
     return resolve_task_artifact(task_id, relative_path)
+
+
+def _iter_safe_output_files(output_dir: Path):
+    root = output_dir.resolve()
+    if not root.exists():
+        return
+    for path in sorted(root.rglob("*")):
+        if not path.is_file():
+            continue
+        try:
+            resolved = path.resolve()
+        except OSError:
+            continue
+        if root not in [resolved, *resolved.parents]:
+            continue
+        try:
+            archive_name = path.relative_to(root).as_posix()
+        except ValueError:
+            continue
+        if _is_safe_relative_path(archive_name):
+            yield archive_name, resolved
+
+
+def create_task_export_bundle(task_id):
+    task = task_service.get_task(task_id)
+    output_dir = _task_output_dir(task)
+    manifest = get_task_artifact_manifest(task_id)
+    summary = get_result_summary(task_id)
+    export_file = tempfile.NamedTemporaryFile(
+        delete=False,
+        prefix=f"image-agent-task-{task_id}-",
+        suffix=".zip",
+    )
+    export_path = Path(export_file.name)
+    export_file.close()
+
+    seen_names = {"artifact_manifest.json", "result_summary.json"}
+    with zipfile.ZipFile(export_path, "w", compression=zipfile.ZIP_DEFLATED) as bundle:
+        bundle.writestr("artifact_manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+        bundle.writestr("result_summary.json", json.dumps(summary, ensure_ascii=False, indent=2))
+        for archive_name, source_path in _iter_safe_output_files(output_dir):
+            if archive_name in seen_names:
+                continue
+            seen_names.add(archive_name)
+            bundle.write(source_path, archive_name)
+
+    return {
+        "path": export_path,
+        "filename": f"image-agent-task-{task_id}-export.zip",
+        "media_type": "application/zip",
+        "task": task,
+    }
+
+
+def create_task_export_ticket(task_id):
+    task_service.get_task(task_id)
+    ticket = secrets.token_urlsafe(32)
+    expires_at = int(time.time()) + _EXPORT_TICKET_TTL_SECONDS
+    _export_download_tickets[ticket] = {"expires_at": expires_at, "task_id": task_id}
+    return {
+        "download_url": f"/tasks/{task_id}/export-bundle-download?ticket={ticket}",
+        "expires_at": expires_at,
+        "task_id": task_id,
+    }
+
+
+def consume_task_export_ticket(task_id, ticket):
+    entry = _export_download_tickets.pop(ticket, None)
+    if not entry:
+        return False
+    if int(entry.get("task_id") or 0) != int(task_id):
+        return False
+    if int(entry.get("expires_at") or 0) < int(time.time()):
+        return False
+    return True
+
+
+def is_valid_task_export_ticket(task_id, ticket):
+    entry = _export_download_tickets.get(ticket)
+    if not entry:
+        return False
+    if int(entry.get("task_id") or 0) != int(task_id):
+        return False
+    if int(entry.get("expires_at") or 0) < int(time.time()):
+        _export_download_tickets.pop(ticket, None)
+        return False
+    return True
 
 
 def bold_group_analysis(project_id, req):

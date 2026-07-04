@@ -27,6 +27,25 @@ def test_cors_origins_are_configured_from_environment(monkeypatch):
     assert "access-control-allow-origin" not in denied.headers
 
 
+def test_auth_rejection_keeps_cors_headers_for_console_origin(monkeypatch):
+    monkeypatch.setenv("IMAGE_AGENT_REQUIRE_AUTH", "true")
+    monkeypatch.setenv("IMAGE_AGENT_CONSOLE_USERNAME", "fjx")
+    monkeypatch.setenv("IMAGE_AGENT_CONSOLE_PASSWORD", "fjx123")
+    monkeypatch.setenv("IMAGE_AGENT_CORS_ORIGINS", "http://10.2.32.14:5180")
+    client = TestClient(create_app())
+
+    result = client.get(
+        "/projects",
+        headers={
+            "Authorization": "Bearer stale-token",
+            "Origin": "http://10.2.32.14:5180",
+        },
+    )
+
+    assert result.status_code == 401
+    assert result.headers["access-control-allow-origin"] == "http://10.2.32.14:5180"
+
+
 def test_production_cors_requires_explicit_origins(monkeypatch):
     monkeypatch.setenv("IMAGE_AGENT_ENV", "production")
     monkeypatch.delenv("IMAGE_AGENT_CORS_ORIGINS", raising=False)

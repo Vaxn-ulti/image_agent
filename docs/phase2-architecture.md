@@ -7,8 +7,8 @@ Phase 2 adds real Docker-based neuroimaging workflows (DeepPrep, QSIPrep, QSIRec
 | workflow_type | Input | Pipeline |
 |---|---|---|
 | `t1_deepprep` | T1 NIfTI (.nii/.nii.gz) | minimal BIDS → `pbfslab/deepprep:25.1.0` anat_only |
-| `dwi_qsiprep` | DWI NIfTI + .bval + .bvec | minimal BIDS → `pennlinc/qsiprep:latest` |
-| `dwi_qsirecon` | existing QSIPrep output (task_id) | → `pennlinc/qsirecon:latest` |
+| `dwi_qsiprep` | DWI NIfTI + .bval + .bvec | minimal BIDS -> `pennlinc/qsiprep:26.0.0` |
+| `dwi_qsirecon` | existing QSIPrep output (task_id) | -> `pennlinc/qsirecon:26.0.0` |
 | `dwi_qsi_full` | DWI NIfTI + .bval + .bvec | QSIPrep → QSIRecon (chained) |
 
 Validation modes (`_validate` suffix, e.g. `t1_deepprep_validate`) only construct the docker command, check image availability via `docker image inspect`, and return the command string. No container is launched.
@@ -17,7 +17,7 @@ Validation modes (`_validate` suffix, e.g. `t1_deepprep_validate`) only construc
 
 - Docker with `sudo -S` (password from env var `IMAGE_AGENT_SUDO_PASSWORD`; never written to disk, code, or logs).
 - FreeSurfer license at `/home/yyf/codex/license.txt` (mounted read-only into containers).
-- Docker images: `pbfslab/deepprep:25.1.0`, `pennlinc/qsiprep:latest`, `pennlinc/qsirecon:latest`.
+- Docker images: `pbfslab/deepprep:25.1.0`, `pennlinc/qsiprep:26.0.0`, `pennlinc/qsirecon:26.0.0`.
 
 ## Storage
 
@@ -68,7 +68,7 @@ SUDO_PASSWORD = os.environ.get("IMAGE_AGENT_SUDO_PASSWORD", "")
 FS_LICENSE = Path(os.environ.get("IMAGE_AGENT_FS_LICENSE", "/home/yyf/codex/license.txt"))
 DOCKER_IMAGES = {
     "deepprep": "pbfslab/deepprep:25.1.0",
-    "qsiprep": "pennlinc/qsiprep:latest",
-    "qsirecon": "pennlinc/qsirecon:latest",
+    "qsiprep": "pennlinc/qsiprep:26.0.0",
+    "qsirecon": "pennlinc/qsirecon:26.0.0",
 }
 ```

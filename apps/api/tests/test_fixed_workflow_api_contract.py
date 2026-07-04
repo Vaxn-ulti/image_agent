@@ -40,6 +40,51 @@ def test_workflow_catalog_exposes_fixed_production_entries():
     assert workflow_labels["bold_second_level"] == "BOLD downstream metrics (single subject)"
 
 
+def test_workflow_catalog_exposes_display_metadata_without_renaming_workflow_type():
+    client = TestClient(app)
+    workflows = client.get("/workflows").json()["workflows"]
+    workflow = next(item for item in workflows if item["type"] == "bold_fmriprep_xcpd_report")
+
+    assert workflow["type"] == "bold_fmriprep_xcpd_report"
+    assert workflow["type"] != workflow["display_name"]
+    assert workflow["display_name"] == "BOLD fMRIPrep + XCP-D processing, metrics, QC, and report"
+    assert workflow["workflow_family"] == "bold"
+    assert workflow["workflow_role"] == "complete_processing"
+    assert workflow["capability_summary"]
+    assert [stage["name"] for stage in workflow["pipeline_stages"]] == [
+        "BIDS preparation",
+        "fMRIPrep preprocessing",
+        "XCP-D postprocessing",
+        "result packaging",
+    ]
+    assert "preprocessed BOLD derivatives" in workflow["primary_outputs"]
+    assert "container-native fMRIPrep and XCP-D QC artifacts" in workflow["qc_outputs"]
+    assert "HTML scientific report" in workflow["report_outputs"]
+    assert workflow["limitations"]
+    assert workflow["is_report_only"] is False
+
+
+def test_user_facing_frontends_launch_workflows_through_agent_confirmation():
+    repo_root = Path(__file__).resolve().parents[3]
+    checked_sources = {
+        "apps/console/src/routes/DashboardPage.tsx": repo_root / "apps" / "console" / "src" / "routes" / "DashboardPage.tsx",
+        "apps/console/src/routes/WorkflowsPage.tsx": repo_root / "apps" / "console" / "src" / "routes" / "WorkflowsPage.tsx",
+        "apps/desktop/src/main.jsx": repo_root / "apps" / "desktop" / "src" / "main.jsx",
+        "apps/desktop/src/lib/api.js": repo_root / "apps" / "desktop" / "src" / "lib" / "api.js",
+    }
+    for label, path in checked_sources.items():
+        source = path.read_text(encoding="utf-8")
+        assert "/series/${" not in source, f"{label} must not call the direct /series/{{series_id}}/run endpoint"
+        assert "api.runSeries" not in source, f"{label} must not bypass Agent confirmation through api.runSeries"
+
+    assert "api.runAgent" in checked_sources["apps/console/src/routes/DashboardPage.tsx"].read_text(encoding="utf-8")
+    assert "api.resumeAgent" in checked_sources["apps/console/src/routes/DashboardPage.tsx"].read_text(encoding="utf-8")
+    assert "api.runAgent" in checked_sources["apps/console/src/routes/WorkflowsPage.tsx"].read_text(encoding="utf-8")
+    assert "api.resumeAgent" in checked_sources["apps/console/src/routes/WorkflowsPage.tsx"].read_text(encoding="utf-8")
+    assert "runAgent" in checked_sources["apps/desktop/src/lib/api.js"].read_text(encoding="utf-8")
+    assert "resumeAgent" in checked_sources["apps/desktop/src/lib/api.js"].read_text(encoding="utf-8")
+
+
 def test_result_summary_endpoint_loads_registered_summary(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DATA_ROOT", tmp_path)
     monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
@@ -91,6 +136,73 @@ def test_result_summary_endpoint_loads_registered_summary(tmp_path, monkeypatch)
 
     assert result.status_code == 200
     assert result.json()["spaces"] == ["T1w", "MNI152"]
+
+
+def test_result_summary_endpoint_overrides_stale_workflow_metadata_with_registry(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "DATA_ROOT", tmp_path)
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(config, "PROJECTS_ROOT", tmp_path / "projects")
+    from app.db import database
+    import app.main as main
+
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(main, "PROJECTS_ROOT", tmp_path / "projects")
+
+    database.init_db()
+    summary = tmp_path / "projects" / "1" / "derivatives" / "44" / "output" / "summary" / "t1_result_summary.json"
+    summary.parent.mkdir(parents=True)
+    summary.write_text(
+        json.dumps(
+            {
+                "contract_version": "1.0",
+                "task_id": 44,
+                "workflow_type": "t1_deepprep",
+                "modality": "T1",
+                "spaces": ["T1w"],
+                "feature_groups": [],
+                "outputs": {},
+                "provenance": {},
+                "workflow_metadata": {
+                    "workflow_type": "t1_deepprep",
+                    "runtime_workflow_type": "t1_deepprep",
+                    "display_name": "t1_deepprep",
+                    "is_report_only": True,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    with database.connect() as conn:
+        conn.execute("INSERT INTO projects(id, name, description, created_at) VALUES(?,?,?,?)", (1, "P", "", database.now_iso()))
+        conn.execute(
+            "INSERT INTO files(id, project_id, original_name, storage_path, file_type, size, sha256, created_at) VALUES(?,?,?,?,?,?,?,?)",
+            (1, 1, "t1.nii.gz", str(tmp_path / "t1.nii.gz"), "NIFTI", 1, "x", database.now_iso()),
+        )
+        conn.execute(
+            "INSERT INTO imaging_series(id, project_id, file_id, sequence_label, supported_for_processing, unsupported_reason, modality, format, confidence, metadata_json, status, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            (1, 1, 1, "T1_MPRAGE", 1, "", "T1", "NIFTI", 0.9, "{}", "detected", database.now_iso()),
+        )
+        conn.execute(
+            "INSERT INTO tasks(id, project_id, series_id, workflow_type, runtime_workflow_type, status, progress, log_path, created_at) VALUES(?,?,?,?,?,?,?,?,?)",
+            (44, 1, 1, "t1_deepprep_anat_report", "t1_deepprep", "completed", 100, str(tmp_path / "44.log"), database.now_iso()),
+        )
+        conn.execute(
+            "INSERT INTO outputs(task_id, output_type, path, preview_path, metadata_json, created_at) VALUES(?,?,?,?,?,?)",
+            (44, "json", str(summary), None, json.dumps({"kind": "result_summary"}), database.now_iso()),
+        )
+
+    result = TestClient(app).get("/tasks/44/result-summary")
+
+    assert result.status_code == 200
+    metadata = result.json()["workflow_metadata"]
+    assert metadata["workflow_type"] == "t1_deepprep_anat_report"
+    assert metadata["runtime_workflow_type"] == "t1_deepprep"
+    assert metadata["display_name"] == "T1 DeepPrep anatomical processing, QC, and report"
+    assert metadata["workflow_type"] != metadata["display_name"]
+    assert metadata["is_report_only"] is False
+    assert metadata["primary_outputs"]
+    assert metadata["qc_outputs"]
+    assert metadata["report_outputs"]
 
 
 def test_result_summary_endpoint_prefers_unified_summary_over_bold_metrics_legacy(tmp_path, monkeypatch):
@@ -396,6 +508,12 @@ def test_task_artifact_manifest_lists_previewable_result_summary_artifacts(tmp_p
                 "modality": "DWI",
                 "spaces": ["DWI", "MNI152"],
                 "feature_groups": ["quality_control"],
+                "workflow_metadata": {
+                    "workflow_type": "dwi_report_only",
+                    "runtime_workflow_type": "dwi_report_only",
+                    "display_name": "dwi_report_only",
+                    "is_report_only": True,
+                },
                 "outputs": {
                     "reports": [
                         {
@@ -477,6 +595,15 @@ def test_task_artifact_manifest_lists_previewable_result_summary_artifacts(tmp_p
 
     assert payload["contract_version"] == "artifact_manifest_v1"
     assert payload["task_id"] == 9
+    assert payload["workflow_type"] == "dwi_fast_gpu_dti"
+    assert payload["runtime_workflow_type"] == "dwi_fast_gpu_dti"
+    assert payload["workflow_metadata"]["workflow_type"] == "dwi_fast_gpu_dti"
+    assert payload["workflow_metadata"]["display_name"] == "DWI fast GPU DTI maps, atlas metrics, QC, and report"
+    assert payload["workflow_metadata"]["workflow_type"] != payload["workflow_metadata"]["display_name"]
+    assert payload["workflow_metadata"]["is_report_only"] is False
+    assert payload["workflow_metadata"]["primary_outputs"]
+    assert payload["workflow_metadata"]["qc_outputs"]
+    assert payload["workflow_metadata"]["report_outputs"]
     assert payload["modality"] == "DWI"
     assert payload["result_summary"]["available"] is True
     assert payload["result_summary"]["summary_path"] == "summary/dwi_result_summary.json"
@@ -600,8 +727,8 @@ def test_dwi_fast_gpu_dti_requires_json_sidecar_metadata(tmp_path, monkeypatch):
         f"/series/{uploaded['series']['id']}/run",
         json={"workflow_type": "dwi_fast_gpu_dti_validate"},
     )
-    assert rejected.status_code == 400
-    assert "JSON sidecar" in rejected.json()["detail"]
+    assert rejected.status_code == 403
+    assert "/agent/runs" in rejected.json()["detail"]
 
     json_sidecar = tmp_path / "sub-001_dwi.json"
     json_sidecar.write_text('{"PhaseEncodingDirection": "j", "TotalReadoutTime": 0.05}', encoding="utf-8")
@@ -631,7 +758,10 @@ def test_dwi_fast_gpu_dti_requires_json_sidecar_metadata(tmp_path, monkeypatch):
         f"/series/{accepted_upload['series']['id']}/run",
         json={"workflow_type": "dwi_fast_gpu_dti_validate"},
     )
-    assert accepted.status_code == 200
+    assert accepted.status_code == 403
+    assert "/agent/runs" in accepted.json()["detail"]
+    with database.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM tasks WHERE workflow_type='dwi_fast_gpu_dti_validate'").fetchone()[0] == 0
 
 
 def test_dwi_fast_gpu_dti_accepts_legacy_bids_sidecar_metadata(tmp_path, monkeypatch):
@@ -674,8 +804,11 @@ def test_dwi_fast_gpu_dti_accepts_legacy_bids_sidecar_metadata(tmp_path, monkeyp
     )
     series_detail = client.get("/series/1").json()
 
-    assert accepted.status_code == 200
+    assert accepted.status_code == 403
+    assert "/agent/runs" in accepted.json()["detail"]
     assert series_detail["workflow_eligibility"]["primary_recommendation"]["workflow_type"] == "dwi_fast_gpu_dti"
+    with database.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM tasks WHERE workflow_type='dwi_fast_gpu_dti_validate'").fetchone()[0] == 0
 
 
 def test_dwi_eligibility_ignores_stale_sidecar_paths(tmp_path, monkeypatch):
@@ -985,4 +1118,75 @@ def test_bold_pipeline_executes_real_metric_command_and_registers_outputs(tmp_pa
     assert any(item[2] == seed_to_roi and item[3]["kind"] == "seed_to_roi" for item in inserted)
     assert any(item[2] == network_dmn and item[3]["kind"] == "network_summary" for item in inserted)
     assert any(item[2] == result_summary and item[3]["kind"] == "result_summary" for item in inserted)
+    assert updates[-1][1]["status"] == "completed"
+
+
+def test_bold_fmriprep_xcpd_pipeline_writes_scientific_report_summary(tmp_path, monkeypatch):
+    from app.workflows import pipeline
+
+    task_id = 135
+    task = {
+        "id": task_id,
+        "project_id": 24,
+        "series_id": 45,
+        "workflow_type": "bold_fmriprep_xcpd_report",
+        "log_path": str(tmp_path / "task.log"),
+    }
+    series = {
+        "id": 45,
+        "project_id": 24,
+        "file_id": 99,
+        "metadata_json": "{}",
+    }
+    dirs = {
+        "root": tmp_path / "task",
+        "bids": tmp_path / "task" / "bids",
+        "output": tmp_path / "task" / "output",
+        "work": tmp_path / "task" / "work",
+    }
+    for directory in dirs.values():
+        directory.mkdir(parents=True, exist_ok=True)
+
+    def write_minimal_container_outputs(**kwargs):
+        output_dir = Path(kwargs["output_dir"])
+        (output_dir / "fmriprep").mkdir(parents=True, exist_ok=True)
+        (output_dir / "xcpd").mkdir(parents=True, exist_ok=True)
+        (output_dir / "tables").mkdir(parents=True, exist_ok=True)
+        (output_dir / "maps").mkdir(parents=True, exist_ok=True)
+        (output_dir / "logs").mkdir(parents=True, exist_ok=True)
+        (output_dir / "fmriprep" / "sub-01.html").write_text("<html>fmriprep</html>", encoding="utf-8")
+        (output_dir / "xcpd" / "sub-01.html").write_text("<html>xcpd</html>", encoding="utf-8")
+        (output_dir / "tables" / "connectivity.tsv").write_text("seed\troi\tcorrelation\nA\tB\t0.1\n", encoding="utf-8")
+        (output_dir / "maps" / "sub-01_space-MNI152NLin6Asym_desc-preproc_bold.nii.gz").write_bytes(b"nifti")
+        (output_dir / "logs" / "xcpd.log").write_text("XCP-D finished successfully\n", encoding="utf-8")
+        outputs = pipeline.discover_bold_fmriprep_xcpd_outputs(output_dir)
+        return {"ok": True, "scripts": ["run_fmriprep.sh", "run_xcpd_fmriprep.sh"], "outputs": outputs}
+
+    updates = []
+    inserted = []
+    monkeypatch.setattr(pipeline, "_row", lambda sql, params=(): task if "FROM tasks WHERE id" in sql else series)
+    monkeypatch.setattr(pipeline, "_rows", lambda sql, params=(): [])
+    monkeypatch.setattr(pipeline, "_build_bids", lambda task_arg, series_arg: dirs)
+    monkeypatch.setattr(pipeline, "_commands", lambda workflow, dirs_arg, **kwargs: [["docker", "run", "bold"]])
+    monkeypatch.setattr(pipeline, "_isolate_stale_task_workspace", lambda task_arg, log_path: None)
+    monkeypatch.setattr(pipeline, "_update", lambda task_id_arg, **values: updates.append((task_id_arg, values)))
+    monkeypatch.setattr(pipeline, "_register_outputs", lambda task_id_arg, output_dir: 5)
+    monkeypatch.setattr(
+        pipeline,
+        "_insert_output",
+        lambda task_id_arg, output_type, path=None, metadata=None: inserted.append((task_id_arg, output_type, Path(path) if path else None, metadata)),
+    )
+    monkeypatch.setattr(pipeline, "run_bold_fmriprep_xcpd_remote", write_minimal_container_outputs)
+
+    pipeline.run_pipeline_task(task_id)
+
+    result_summary = dirs["output"] / "summary" / "bold_result_summary.json"
+    scientific_summary = dirs["output"] / "summary" / "bold_scientific_report_summary.json"
+    main_summary = json.loads(result_summary.read_text(encoding="utf-8"))
+    report_paths = [item["relative_path"] for item in main_summary["outputs"]["reports"]]
+
+    assert scientific_summary.exists()
+    assert "reports/index.html" in report_paths
+    assert "reports/report_manifest.json" in report_paths
+    assert any(item[2] == scientific_summary and item[3]["kind"] == "scientific_report_summary" for item in inserted)
     assert updates[-1][1]["status"] == "completed"

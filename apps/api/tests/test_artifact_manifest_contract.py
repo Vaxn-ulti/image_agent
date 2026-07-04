@@ -224,3 +224,49 @@ def test_artifact_manifest_does_not_promote_reports_assets_to_legacy_native_qc(t
     assert artifact["artifact_origin"] == "generated_from_result_summary"
     assert artifact["native_artifact"] is False
     assert artifact["provenance"]["replaces_native_qc"] is False
+
+
+def test_artifact_manifest_omits_empty_files_from_downloadable_artifacts(tmp_path):
+    output_dir = tmp_path / "output"
+    empty_log = output_dir / "WorkDir" / "nextflow" / "task" / ".command.log"
+    report = output_dir / "reports" / "index.html"
+    empty_log.parent.mkdir(parents=True)
+    report.parent.mkdir(parents=True)
+    empty_log.write_bytes(b"")
+    report.write_text("<html>report</html>", encoding="utf-8")
+
+    result_summary = {
+        "contract_version": "1.0",
+        "modality": "T1",
+        "outputs": {
+            "logs": [
+                {
+                    "name": ".command.log",
+                    "path": str(empty_log),
+                    "relative_path": "WorkDir/nextflow/task/.command.log",
+                    "content_type": "text/plain",
+                }
+            ],
+            "reports": [
+                {
+                    "name": "index.html",
+                    "path": str(report),
+                    "relative_path": "reports/index.html",
+                    "content_type": "text/html",
+                }
+            ],
+        },
+    }
+
+    manifest = build_artifact_manifest(
+        {"id": 11, "project_id": 1, "workflow_type": "t1_deepprep_anat_report", "status": "completed"},
+        output_dir,
+        result_summary,
+        registered_outputs=[],
+    )
+
+    assert [item["relative_path"] for item in manifest["artifacts"]] == ["reports/index.html"]
+    assert {
+        "relative_path": "WorkDir/nextflow/task/.command.log",
+        "reason": "empty_file",
+    } in manifest["omitted_artifacts"]

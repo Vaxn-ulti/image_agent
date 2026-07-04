@@ -17,7 +17,7 @@ Update skills when execution or review exposes a repeatable failure point that a
 - DWI QSIPrep tasks `46` and `47` used `eddy_cpu`, ran too long, were stopped, and are marked `failed`.
 - The production remediation is not to retry CPU eddy and not to run full QSIPrep. Use the lightweight `dwi_fast_gpu_dti` path with host FSL GPU `eddy_cuda`, MRtrix tools from the QSIPrep image as a toolbox, and the 35 minute runtime target.
 - Legacy/experimental QSIPrep still requires CUDA eddy config plus a CUDA-enabled QSIPrep/FSL image when explicitly selected.
-- The locked `pennlinc/qsiprep:1.0.2` image exposes `eddy_cuda11.0` at `/app/.pixi/envs/qsiprep/bin/` for legacy QSIPrep probing, but production fast DTI now probes host FSL under `/home/yyf/project/MCI_project/tools/fsl`.
+- The locked `pennlinc/qsiprep:26.0.0` image exposes `eddy_cuda11.0` at `/app/.pixi/envs/qsiprep/bin/` for legacy QSIPrep probing, but production fast DTI now probes host FSL under `/home/yyf/project/MCI_project/tools/fsl`.
 
 ### API Port 8000 Conflict (2026-05-14)
 

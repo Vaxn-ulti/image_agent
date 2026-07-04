@@ -30,6 +30,11 @@ def runtime_containers():
     return agent_service.runtime_containers()
 
 
+@router.get("/runtime/probe")
+def runtime_probe():
+    return agent_service.runtime_probe()
+
+
 @router.get("/admin/containers")
 def admin_containers():
     return agent_service.admin_containers()

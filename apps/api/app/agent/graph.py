@@ -5,6 +5,13 @@ import os
 from pathlib import Path
 from typing import Any
 
+from app.agent.chat import (
+    _generic_read_only_reply,
+    _inventory_capability_reply,
+    _is_inventory_capability_question,
+    _is_result_analysis_question,
+    _status_reply,
+)
 from app.agent.incubation import IncubationLedger
 from app.agent.model_gateway import ModelGateway
 from app.agent.prompt_loader import load_prompt
@@ -13,7 +20,7 @@ from app.agent.skill_loader import load_skill_context, select_skill
 from app.agent.thread_store import AgentThreadStore, confirmation_fingerprint
 from app.agent.tools import create_workflow_task, preflight_workflow, sandbox_validate_toolchain
 from app.core.config import DATA_ROOT
-from app.workflows.registry import FIXED_WORKFLOW, INCUBATION_LANE
+from app.workflows.registry import FIXED_WORKFLOW, INCUBATION_LANE, get_workflow, workflow_public_metadata
 
 
 PLANNER_SYSTEM_PROMPT = load_prompt("planner")
@@ -124,6 +131,29 @@ class AgentRunner:
                     retrieved_context=retrieved_context,
                     planner_tool_trace=planner_tool_trace,
                 )
+            workflow_type = str(decision.get("workflow_type") or "")
+            if workflow_type:
+                try:
+                    workflow = get_workflow(workflow_type)
+                except KeyError:
+                    workflow = None
+                if workflow is None or workflow.get("lane") != FIXED_WORKFLOW:
+                    return self._prepare_toolchain_proposal(
+                        decision={**decision, "action_lane": INCUBATION_LANE, "lane": INCUBATION_LANE},
+                        project_context=project_context,
+                        selected_skill=selected_skill,
+                        skill_context=skill_context,
+                        retrieved_context=retrieved_context,
+                        planner_tool_trace=[
+                            *planner_tool_trace,
+                            {
+                                "stage": "registry_gate",
+                                "status": "no_fixed_match",
+                                "workflow_type": workflow_type,
+                                "production_task_created": False,
+                            },
+                        ],
+                    )
             return self._prepare_confirmation(
                 decision=decision,
                 project_context=project_context,
@@ -138,6 +168,14 @@ class AgentRunner:
             decision=decision,
             skill_context=skill_context,
             retrieved_context=retrieved_context,
+        )
+        answer = self._stabilize_read_only_answer(
+            answer,
+            {
+                "message": message,
+                "project_context": project_context,
+                "decision": decision,
+            },
         )
         return {
             "status": "answered",
@@ -187,7 +225,22 @@ class AgentRunner:
                 "events": [{"type": "agent.confirmation_expired", "message": "Pending confirmation expired."}],
             }
         pending_confirmation = record.get("confirmation") or {}
-        if confirmation_fingerprint(confirmation) != record.get("confirmation_fingerprint"):
+        stored_fingerprint = record.get("confirmation_fingerprint")
+        provided_fingerprint = None
+        if isinstance(confirmation, dict):
+            provided_fingerprint = confirmation.get("fingerprint") or confirmation.get("confirmation_fingerprint")
+        if provided_fingerprint is not None and provided_fingerprint != stored_fingerprint:
+            return {
+                "status": "blocked",
+                "thread_id": thread_id,
+                "message": "Confirmation payload does not match the server-side pending confirmation.",
+                "production_task_created": False,
+                "events": [{"type": "agent.confirmation_mismatch", "message": "Confirmation fingerprint did not match the pending plan."}],
+            }
+        if (
+            confirmation_fingerprint(pending_confirmation) != stored_fingerprint
+            or confirmation_fingerprint(confirmation or {}) != stored_fingerprint
+        ):
             return {
                 "status": "blocked",
                 "thread_id": thread_id,
@@ -195,7 +248,7 @@ class AgentRunner:
                 "production_task_created": False,
                 "events": [{"type": "agent.confirmation_mismatch", "message": "Confirmation payload did not match the pending plan."}],
             }
-        confirmation = {**pending_confirmation, **confirmation}
+        confirmation = dict(pending_confirmation)
         if confirmation.get("action_lane") == INCUBATION_LANE:
             return {
                 "status": "blocked",
@@ -209,6 +262,8 @@ class AgentRunner:
             "series_id": confirmation.get("series_id"),
             "workflow_type": confirmation.get("workflow_type"),
         }
+        if confirmation.get("runtime_workflow_type"):
+            tool_input["runtime_workflow_type"] = confirmation.get("runtime_workflow_type")
         if create_task_fn is not None:
             tool_confirmation = {**confirmation, "approved": approved}
             result = create_workflow_task(confirmation=tool_confirmation, create_task_fn=create_task_fn)
@@ -266,7 +321,218 @@ class AgentRunner:
                 {"intent": "answer_question", "summary": "The model did not return a structured decision."},
                 tool_trace,
             )
+        if self._asks_for_inventory_or_capability_explanation(message):
+            decision = {
+                **decision,
+                "intent": "answer_question",
+                "action_lane": None,
+                "lane": None,
+                "requires_confirmation": False,
+                "recommended_next_step": "Answer the uploaded-file inventory and runnable-workflow question before preparing any workflow confirmation.",
+            }
+            tool_trace = [
+                *tool_trace,
+                {
+                    "stage": "intent_guard",
+                    "status": "forced_read_only_inventory_capability_answer",
+                    "production_task_created": False,
+                },
+            ]
+        elif (
+            decision.get("intent") == "run_workflow"
+            and (decision.get("action_lane") or decision.get("lane") or FIXED_WORKFLOW) == FIXED_WORKFLOW
+            and not self._asks_for_fixed_workflow_confirmation(message)
+        ):
+            decision = {
+                **decision,
+                "intent": "answer_question",
+                "action_lane": None,
+                "lane": None,
+                "requires_confirmation": False,
+                "recommended_next_step": "Explain the current project, uploaded files, possible workflows, and ask before preparing confirmation.",
+            }
+            tool_trace = [
+                *tool_trace,
+                {
+                    "stage": "intent_guard",
+                    "status": "forced_read_only_until_explicit_fixed_workflow_launch",
+                    "production_task_created": False,
+                },
+            ]
         return decision, tool_trace
+
+    @staticmethod
+    def _asks_for_inventory_or_capability_explanation(message: str) -> bool:
+        text = " ".join(str(message or "").lower().split())
+        if not text:
+            return False
+        negated_launch_tokens = (
+            "do not run",
+            "don't run",
+            "do not start",
+            "don't start",
+            "do not launch",
+            "without launching",
+            "no approval",
+            "\u4e0d\u8981\u542f\u52a8",
+            "\u522b\u542f\u52a8",
+            "\u4e0d\u8981\u8dd1",
+            "\u522b\u8dd1",
+            "\u4e0d\u8981\u7533\u8bf7",
+            "\u5148\u89e3\u91ca",
+            "\u5148\u56de\u7b54",
+        )
+        explicit_launch_tokens = (
+            "run now",
+            "start now",
+            "launch now",
+            "create task",
+            "submit task",
+            "approve",
+            "\u542f\u52a8",
+            "\u5f00\u59cb\u8dd1",
+            "\u76f4\u63a5\u8dd1",
+            "\u7acb\u5373\u8dd1",
+            "\u521b\u5efa\u4efb\u52a1",
+            "\u7533\u8bf7\u8dd1",
+        )
+        if any(token in text for token in explicit_launch_tokens) and not any(token in text for token in negated_launch_tokens):
+            return False
+        inventory_tokens = (
+            "what did i upload",
+            "what have i uploaded",
+            "uploaded files",
+            "current uploads",
+            "uploaded data",
+            "uploaded dataset",
+            "\u4e0a\u4f20\u4e86\u4ec0\u4e48",
+            "\u4e0a\u4f20\u4e86\u54ea\u4e9b",
+            "\u4e0a\u4f20\u7684\u6587\u4ef6",
+            "\u4e0a\u4f20\u7684\u6570\u636e",
+            "\u5df2\u4e0a\u4f20",
+            "\u4ec0\u4e48\u6587\u4ef6",
+            "\u54ea\u4e9b\u6587\u4ef6",
+            "\u54ea\u4e9b\u6570\u636e",
+        )
+        capability_tokens = (
+            "what workflow",
+            "what task",
+            "what can run",
+            "which workflow",
+            "which task",
+            "can run",
+            "can process",
+            "can do",
+            "runnable",
+            "what does",
+            "explain",
+            "possible workflow",
+            "available workflow",
+            "\u53ef\u4ee5\u8dd1\u4ec0\u4e48",
+            "\u80fd\u8dd1\u4ec0\u4e48",
+            "\u53ef\u8dd1",
+            "\u80fd\u505a\u54ea\u4e9b",
+            "\u53ef\u4ee5\u505a\u54ea\u4e9b",
+            "\u80fd\u5904\u7406\u4ec0\u4e48",
+            "\u80fd\u505a\u4ec0\u4e48",
+            "\u9002\u5408\u505a\u4ec0\u4e48",
+            "\u4ec0\u4e48\u4efb\u52a1",
+            "\u4ec0\u4e48\u5de5\u4f5c\u6d41",
+            "\u54ea\u4e9b\u5de5\u4f5c\u6d41",
+            "\u4f1a\u505a\u4ec0\u4e48",
+            "\u89e3\u91ca",
+            "\u8bf4\u660e",
+            "\u5904\u7406\u6d41\u7a0b",
+        )
+        return any(token in text for token in inventory_tokens) or any(token in text for token in capability_tokens)
+
+    @staticmethod
+    def _asks_for_fixed_workflow_confirmation(message: str) -> bool:
+        text = " ".join(str(message or "").lower().split())
+        if not text:
+            return False
+        read_only_phrases = (
+            "do not run",
+            "don't run",
+            "do not start",
+            "don't start",
+            "do not launch",
+            "don't launch",
+            "do not execute",
+            "don't execute",
+            "without launching",
+            "no approval",
+            "what can run",
+            "what task",
+            "what workflow",
+            "which task",
+            "which workflow",
+            "can run",
+            "runnable",
+            "explain",
+            "analyze",
+            "review",
+            "summarize",
+            "what did i upload",
+            "what have i uploaded",
+            "uploaded files",
+            "uploaded data",
+            "\u53ef\u4ee5\u8dd1\u4ec0\u4e48",
+            "\u80fd\u8dd1\u4ec0\u4e48",
+            "\u8dd1\u4ec0\u4e48",
+            "\u4e0d\u8981\u542f\u52a8",
+            "\u522b\u542f\u52a8",
+            "\u4e0d\u542f\u52a8",
+            "\u4e0d\u8981\u8fd0\u884c",
+            "\u522b\u8fd0\u884c",
+            "\u4e0d\u8fd0\u884c",
+            "\u4e0d\u8981\u6267\u884c",
+            "\u522b\u6267\u884c",
+            "\u4e0d\u6267\u884c",
+            "\u4e0d\u8981\u8dd1",
+            "\u522b\u8dd1",
+            "\u4e0d\u8dd1",
+            "\u6682\u65f6\u4e0d",
+            "\u5148\u4e0d\u8981",
+            "\u4e0a\u4f20\u4e86\u4ec0\u4e48",
+            "\u4e0a\u4f20\u4e86\u54ea\u4e9b",
+            "\u54ea\u4e9b\u6570\u636e",
+            "\u4ec0\u4e48\u4efb\u52a1",
+            "\u4ec0\u4e48\u5de5\u4f5c\u6d41",
+            "\u80fd\u505a\u54ea\u4e9b",
+            "\u9002\u5408\u505a\u4ec0\u4e48",
+            "\u89e3\u91ca",
+            "\u5206\u6790",
+            "\u770b\u770b",
+            "\u603b\u7ed3",
+            "\u5148\u56de\u7b54",
+        )
+        if any(phrase in text for phrase in read_only_phrases):
+            return False
+        launch_phrases = (
+            "run ",
+            "start ",
+            "launch ",
+            "submit ",
+            "execute ",
+            "create task",
+            "prepare workflow",
+            "approve",
+            "rerun",
+            "retry",
+            "\u5f00\u59cb\u8dd1",
+            "\u76f4\u63a5\u8dd1",
+            "\u7acb\u5373\u8dd1",
+            "\u5e2e\u6211\u8dd1",
+            "\u7ed9\u6211\u8dd1",
+            "\u8dd1\u8fd9\u4e2a",
+            "\u542f\u52a8",
+            "\u521b\u5efa\u4efb\u52a1",
+            "\u6267\u884c\u5de5\u4f5c\u6d41",
+            "\u8fd0\u884c\u5de5\u4f5c\u6d41",
+            "\u7533\u8bf7\u8dd1",
+        )
+        return any(phrase in text for phrase in launch_phrases)
 
     def _prepare_confirmation(
         self,
@@ -310,6 +576,12 @@ class AgentRunner:
                 "preflight": preflight,
                 "data_candidate_selection": auto_selection,
             }
+        workflow_metadata = workflow_public_metadata(workflow_type)
+        runtime_workflow_type = (
+            preflight.get("runtime_workflow_type")
+            or workflow_metadata.get("runtime_workflow_type")
+            or workflow_type
+        )
         confirmation = {
             "type": "workflow_execution",
             "action_lane": FIXED_WORKFLOW,
@@ -317,6 +589,8 @@ class AgentRunner:
             "project_id": project_context.get("project_id"),
             "series_id": int(series_id),
             "workflow_type": workflow_type,
+            "runtime_workflow_type": runtime_workflow_type,
+            "workflow_metadata": workflow_metadata,
             "summary": decision.get("summary") or "",
             "risks": decision.get("risks")
             or (["long_runtime", "writes_project_outputs"] + (["series_auto_selected"] if auto_selection else [])),
@@ -329,6 +603,7 @@ class AgentRunner:
             selected_skill=selected_skill,
             retrieved_context=retrieved_context,
         )
+        public_confirmation = {**confirmation, "fingerprint": thread_record["confirmation_fingerprint"]}
         return {
             "status": "confirmation_required",
             "thread_id": thread_record["thread_id"],
@@ -338,7 +613,7 @@ class AgentRunner:
             "skill_context": self._public_skill_context(skill_context),
             "retrieved_context": retrieved_context,
             "decision": decision,
-            "confirmation": confirmation,
+            "confirmation": public_confirmation,
             "data_candidate_selection": auto_selection,
             "tool_trace": [
                 *planner_tool_trace,
@@ -430,10 +705,16 @@ class AgentRunner:
             sandbox_dataset=str(project_context.get("project_id") or ""),
             script_paths=decision.get("script_paths") or [],
             script_text=decision.get("script_text"),
+            requested_workflow_type=decision.get("workflow_type"),
+            requested_action_lane=decision.get("action_lane") or decision.get("lane"),
         )
         proposal = {
             "proposal_id": persisted["proposal_id"],
+            "contract_version": persisted["contract_version"],
             "lane": persisted["lane"],
+            "action_lane": persisted["action_lane"],
+            "requested_action_lane": persisted["requested_action_lane"],
+            "requested_workflow_type": persisted["requested_workflow_type"],
             "status": persisted["status"],
             "objective": persisted["objective"],
             "input_modality": persisted["input_modality"],
@@ -443,6 +724,8 @@ class AgentRunner:
             "composition_plan": persisted["composition_plan"],
             "promotion_gate": persisted["promotion_gate"],
             "sandbox_dataset": persisted["sandbox_dataset"],
+            "task_created": False,
+            "confirmation_created": False,
             "production_enabled": False,
             "production_task_created": False,
             "next_step": "sandbox_validate_toolchain",
@@ -464,6 +747,7 @@ class AgentRunner:
             "project_id": project_context.get("project_id"),
             "proposed_toolchain": proposal,
             "validation": validation,
+            "production_task_created": False,
             "tool_trace": [
                 *planner_tool_trace,
                 {"stage": "incubation", "tool": "propose_toolchain", "status": proposal["status"]},
@@ -480,7 +764,11 @@ class AgentRunner:
         decision: dict[str, Any],
         skill_context: dict[str, Any],
         retrieved_context: dict[str, Any],
+        extra_context: dict[str, Any] | None = None,
     ) -> str:
+        extra_sections = ""
+        for title, value in (extra_context or {}).items():
+            extra_sections += "\n\n" + str(title) + ":\n" + json.dumps(value, ensure_ascii=False)[:12000]
         messages = [
             {"role": "system", "content": RESPONDER_SYSTEM_PROMPT},
             {
@@ -493,11 +781,70 @@ class AgentRunner:
                 + json.dumps(self._public_skill_context(skill_context), ensure_ascii=False)[:8000]
                 + "\n\nRetrieved reference context JSON:\n"
                 + json.dumps(retrieved_context, ensure_ascii=False)[:12000]
+                + extra_sections
                 + "\n\nBackend project context JSON:\n"
                 + json.dumps(project_context, ensure_ascii=False)[:20000],
             },
         ]
         return self.gateway.complete_text(messages, purpose="agent_answer")
+
+    def _stabilize_read_only_answer(self, answer: str, state: dict[str, Any]) -> str:
+        message = str(state.get("message") or "")
+        project_context = dict(state.get("project_context") or {})
+        project_context.setdefault("supported_workflows", project_context.get("workflows") or [])
+        project_context.setdefault("result_summaries", project_context.get("result_summaries") or [])
+        project_context.setdefault("outputs", project_context.get("outputs") or [])
+        project_context.setdefault("tasks", project_context.get("tasks") or [])
+        if _is_inventory_capability_question(message):
+            return _inventory_capability_reply(project_context)
+        if _is_result_analysis_question(message):
+            decision = state.get("decision") if isinstance(state.get("decision"), dict) else {}
+            recommended_next_step = (
+                decision.get("recommended_next_step")
+                or decision.get("tool_chain_hint")
+                or "Review backend task records and registered result artifacts before preparing any workflow."
+            )
+            stable_answer = _status_reply(project_context, str(recommended_next_step), message=message)
+            if self._answer_stopped_early(answer) or "No workflow was launched" not in str(answer):
+                return stable_answer
+        if self._answer_stopped_early(answer):
+            decision = state.get("decision") if isinstance(state.get("decision"), dict) else {}
+            recommended_next_step = (
+                decision.get("recommended_next_step")
+                or decision.get("tool_chain_hint")
+                or "Review uploaded files, detected series, task status, and workflow eligibility before preparing any workflow."
+            )
+            return _generic_read_only_reply(project_context, str(recommended_next_step))
+        return answer
+
+    @staticmethod
+    def _answer_stopped_early(answer: str | None) -> bool:
+        text = " ".join(str(answer or "").split())
+        if not text:
+            return True
+        lowered = text.lower()
+        deflection_markers = (
+            "请把你要我先回答的具体问题发给我",
+            "请把具体问题发给我",
+            "请明确你的问题",
+            "没有收到明确的问题",
+            "please send the specific question",
+            "please provide the specific question",
+            "i did not receive a clear question",
+        )
+        if any(marker in lowered for marker in deflection_markers):
+            return True
+        if any(marker in text for marker in ("我先看", "先看一下", "先看一看", "我来查看", "我会查看")):
+            return True
+        early_markers = (
+            "我先看",
+            "先看一下",
+            "let me check",
+            "i will inspect",
+            "i'll inspect",
+            "thinking",
+        )
+        return any(marker in text.lower() for marker in early_markers)
 
     def _load_skill_trace(self, selected_skill: str) -> dict[str, Any]:
         try:

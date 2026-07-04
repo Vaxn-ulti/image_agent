@@ -3,7 +3,10 @@ from app.workflows.registry import (
     get_workflow,
     list_workflows,
     resolve_runtime_workflow_type,
+    workflow_public_metadata,
+    workflow_public_metadata_for_record,
 )
+from app.workflows.eligibility import build_workflow_eligibility
 
 
 def test_workflow_registry_exposes_openai_style_contract_fields():
@@ -100,6 +103,55 @@ def test_all_fixed_workflows_have_structured_display_metadata_without_renaming_i
         assert isinstance(workflow["is_report_only"], bool)
 
 
+def test_workflow_public_metadata_exposes_stable_id_runtime_alias_and_lane_boundaries():
+    metadata = workflow_public_metadata("t1_deepprep_anat_report")
+
+    assert metadata["workflow_type"] == "t1_deepprep_anat_report"
+    assert metadata["runtime_workflow_type"] == "t1_deepprep"
+    assert metadata["lane"] == "fixed_workflow"
+    assert metadata["status"] == "production"
+    assert metadata["agent_selectable"] is True
+    assert metadata["requires_confirmation"] is True
+    assert metadata["display_name"] == "T1 DeepPrep anatomical processing, QC, and report"
+    assert metadata["is_report_only"] is False
+    assert metadata["workflow_type"] != metadata["display_name"]
+
+
+def test_public_metadata_for_runtime_record_keeps_agent_selectable_stable_workflow_boundary():
+    metadata = workflow_public_metadata("t1_deepprep_validate")
+    record_metadata = workflow_public_metadata_for_record("t1_deepprep", "t1_deepprep")
+
+    assert metadata["workflow_type"] == "t1_deepprep_validate"
+    assert metadata["agent_selectable"] is False
+    assert metadata["requires_confirmation"] is True
+    assert record_metadata["workflow_type"] == "t1_deepprep_anat_report"
+    assert record_metadata["runtime_workflow_type"] == "t1_deepprep"
+    assert record_metadata["agent_selectable"] is True
+    assert record_metadata["is_report_only"] is False
+
+
+def test_workflow_eligibility_items_include_public_metadata_without_replacing_machine_id():
+    eligibility = build_workflow_eligibility(
+        {
+            "id": 101,
+            "modality": "T1",
+            "sequence_label": "T1w_MPRAGE",
+            "supported_for_processing": True,
+            "metadata": {},
+        }
+    )
+
+    recommendation = eligibility["primary_recommendation"]
+
+    assert recommendation["workflow_type"] == "t1_deepprep_anat_report"
+    assert recommendation["workflow_metadata"]["workflow_type"] == "t1_deepprep_anat_report"
+    assert recommendation["workflow_metadata"]["runtime_workflow_type"] == "t1_deepprep"
+    assert recommendation["workflow_metadata"]["display_name"] == "T1 DeepPrep anatomical processing, QC, and report"
+    assert recommendation["workflow_metadata"]["agent_selectable"] is True
+    assert recommendation["workflow_metadata"]["is_report_only"] is False
+    assert eligibility["production_task_created"] is False
+
+
 def test_fixed_workflow_runtime_images_are_version_locked():
     workflows = list_workflows(lane="fixed_workflow")
 
@@ -116,6 +168,8 @@ def test_workflow_registry_filters_agent_selectable_fixed_lane():
 
     assert "t1_deepprep_anat_report" in workflow_types
     assert "bold_fmriprep_xcpd_report" in workflow_types
+    assert "dwi_fast_gpu_dti" in workflow_types
+    assert "dwi_fast_gpu_dti_validate" not in workflow_types
     assert all(workflow["lane"] == "fixed_workflow" for workflow in workflows)
     assert all(workflow["agent_selectable"] is True for workflow in workflows)
 

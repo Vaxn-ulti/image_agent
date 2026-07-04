@@ -19,6 +19,26 @@ DEFAULT_FMRIPREP_IMAGE = "nipreps/fmriprep:25.2.5"
 DEFAULT_XCPD_IMAGE = "pennlinc/xcp_d:26.0.2"
 DEFAULT_REMOTE_SCRIPT_TIMEOUT_SEC = 12 * 60 * 60
 DEPLOYMENT_LOCAL_SCRIPT_BACKEND = "deployment_local_script_wrapper"
+BOLD_LOCKED_FMRIPREP_SCRIPT = "run_fmriprep_image_agent_locked.sh"
+BOLD_LOCKED_XCPD_SCRIPT = "run_xcpd_fmriprep_image_agent_locked.sh"
+BOLD_REQUIRED_TEMPLATEFLOW_FILES = [
+    "tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-01_T1w.nii.gz",
+    "tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-02_T1w.nii.gz",
+    "tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-01_desc-brain_mask.nii.gz",
+    "tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-02_desc-brain_mask.nii.gz",
+    "tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-02_desc-fMRIPrep_boldref.nii.gz",
+    "tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-01_label-brain_probseg.nii.gz",
+    "tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-01_desc-carpet_dseg.nii.gz",
+    "tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_from-MNI152NLin6Asym_mode-image_xfm.h5",
+    "tpl-MNI152NLin6Asym/tpl-MNI152NLin6Asym_res-01_T1w.nii.gz",
+    "tpl-MNI152NLin6Asym/tpl-MNI152NLin6Asym_res-02_T1w.nii.gz",
+    "tpl-MNI152NLin6Asym/tpl-MNI152NLin6Asym_res-01_desc-brain_mask.nii.gz",
+    "tpl-MNI152NLin6Asym/tpl-MNI152NLin6Asym_res-02_desc-brain_mask.nii.gz",
+    "tpl-MNI152NLin6Asym/tpl-MNI152NLin6Asym_from-MNI152NLin2009cAsym_mode-image_xfm.h5",
+    "tpl-OASIS30ANTs/tpl-OASIS30ANTs_res-01_T1w.nii.gz",
+    "tpl-OASIS30ANTs/tpl-OASIS30ANTs_res-01_desc-brain_T1w.nii.gz",
+    "tpl-OASIS30ANTs/tpl-OASIS30ANTs_res-01_desc-brain_mask.nii.gz",
+]
 SAFE_CHILD_ENV_KEYS = {
     "PATH",
     "HOME",
@@ -115,6 +135,39 @@ def _check_locked_image(name: str, image: str) -> dict[str, Any]:
     }
 
 
+def _check_templateflow_required_files(path: Path) -> dict[str, Any]:
+    missing = []
+    zero_size = []
+    for relative_path in BOLD_REQUIRED_TEMPLATEFLOW_FILES:
+        candidate = path / relative_path
+        if not candidate.exists():
+            missing.append(relative_path)
+            continue
+        try:
+            if candidate.stat().st_size <= 0:
+                zero_size.append(relative_path)
+        except OSError:
+            missing.append(relative_path)
+    ok = not missing and not zero_size
+    message = ""
+    if not ok:
+        details = []
+        if missing:
+            details.append(f"missing={len(missing)}")
+        if zero_size:
+            details.append(f"zero_size={len(zero_size)}")
+        message = f"TemplateFlow cache is missing required files in {_path_label(path)} ({', '.join(details)})"
+    return {
+        "name": "templateflow_required_files_present",
+        "status": "pass" if ok else "fail",
+        "path": str(path),
+        "required_count": len(BOLD_REQUIRED_TEMPLATEFLOW_FILES),
+        "missing_count": len(missing),
+        "zero_size_count": len(zero_size),
+        "message": message,
+    }
+
+
 def _check_script_version_lock(name: str, script: Path) -> dict[str, Any]:
     ok = True
     message = ""
@@ -130,6 +183,98 @@ def _check_script_version_lock(name: str, script: Path) -> dict[str, Any]:
         "status": "pass" if ok else "fail",
         "script": _script_label(script),
         "message": message,
+    }
+
+
+def _shell_image_guard(env_var: str, default_image: str) -> str:
+    return "\n".join(
+        [
+            f'IMAGE_AGENT_LOCKED_IMAGE="${{{env_var}:-{default_image}}}"',
+            'case "$IMAGE_AGENT_LOCKED_IMAGE" in',
+            '  ""|*:latest|*:)',
+            f'    echo "{env_var} must be a fixed container tag or digest, not latest/unpinned" >&2',
+            "    exit 64",
+            "    ;;",
+            "esac",
+            f'export {env_var}="$IMAGE_AGENT_LOCKED_IMAGE"',
+        ]
+    )
+
+
+def _replace_container_image_refs(text: str, *, repository: str, env_var: str, default_image: str) -> str:
+    replacement = f'"${{{env_var}:-{default_image}}}"'
+    repository_pattern = re.escape(repository)
+    pattern = re.compile(
+        rf'(?P<prefix>docker://)?(?P<quote>["\']?){repository_pattern}:[A-Za-z0-9._-]+(?P=quote)'
+    )
+
+    def replace(match: re.Match[str]) -> str:
+        if match.group("prefix"):
+            return f'docker://${{{env_var}:-{default_image}}}'
+        return replacement
+
+    return pattern.sub(replace, text)
+
+
+def _insert_shell_guard(text: str, guard: str) -> str:
+    had_trailing_newline = text.endswith("\n")
+    lines = text.splitlines()
+    if lines and lines[0].startswith("#!"):
+        rendered = "\n".join([lines[0], guard, *lines[1:]])
+    else:
+        rendered = "\n".join(["#!/usr/bin/env bash", guard, text.rstrip("\n")])
+    if had_trailing_newline or not rendered.endswith("\n"):
+        rendered += "\n"
+    return rendered
+
+
+def _materialize_locked_script(
+    *,
+    source_script: Path,
+    target_script: Path,
+    repository: str,
+    env_var: str,
+    default_image: str,
+) -> None:
+    text = source_script.read_text(encoding="utf-8", errors="replace")
+    text = _replace_container_image_refs(text, repository=repository, env_var=env_var, default_image=default_image)
+    text = _insert_shell_guard(text, _shell_image_guard(env_var, default_image))
+    target_script.write_text(text, encoding="utf-8")
+    target_script.chmod(0o755)
+
+
+def materialize_locked_bold_remote_scripts(
+    *,
+    script_dir: Path | str,
+    source_fmriprep_script: Path | str | None = None,
+    source_xcpd_script: Path | str | None = None,
+) -> dict[str, str]:
+    config = bold_remote_script_config()
+    target_dir = Path(script_dir)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    fmriprep_source = Path(source_fmriprep_script or config["fmriprep_script"])
+    xcpd_source = Path(source_xcpd_script or config["xcpd_script"])
+    fmriprep_target = target_dir / BOLD_LOCKED_FMRIPREP_SCRIPT
+    xcpd_target = target_dir / BOLD_LOCKED_XCPD_SCRIPT
+    _materialize_locked_script(
+        source_script=fmriprep_source,
+        target_script=fmriprep_target,
+        repository="nipreps/fmriprep",
+        env_var="IMAGE_AGENT_TASK_FMRIPREP_IMAGE",
+        default_image=config["fmriprep_image"],
+    )
+    _materialize_locked_script(
+        source_script=xcpd_source,
+        target_script=xcpd_target,
+        repository="pennlinc/xcp_d",
+        env_var="IMAGE_AGENT_TASK_XCPD_IMAGE",
+        default_image=config["xcpd_image"],
+    )
+    return {
+        "fmriprep_script": str(fmriprep_target),
+        "xcpd_script": str(xcpd_target),
+        "fmriprep_image": config["fmriprep_image"],
+        "xcpd_image": config["xcpd_image"],
     }
 
 
@@ -169,6 +314,7 @@ def preflight_bold_fmriprep_xcpd_remote(
             "message": "" if os.access(templateflow_path, os.W_OK) else f"TemplateFlow cache is not writable: {_path_label(templateflow_path)}",
         }
     )
+    checks.append(_check_templateflow_required_files(templateflow_path))
     blocking_errors = [check["message"] for check in checks if check["status"] == "fail" and check.get("message")]
     return {
         "ok": not blocking_errors,

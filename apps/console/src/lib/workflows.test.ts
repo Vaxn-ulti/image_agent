@@ -25,6 +25,32 @@ describe('workflow helpers', () => {
     expect(workflows).toEqual(['t1_deepprep_anat_report', 't1_deepprep_mock']);
   });
 
+  it('excludes non-agent-selectable fixed workflows from launch lists', () => {
+    const catalog = normalizeWorkflowCatalog({
+      workflows: [
+        {
+          agent_selectable: true,
+          display_name: 'T1 DeepPrep anatomical processing, QC, and report',
+          lane: 'fixed_workflow',
+          requires_confirmation: true,
+          runtime_workflow_type: 't1_deepprep',
+          type: 't1_deepprep_anat_report',
+        },
+        {
+          agent_selectable: false,
+          display_name: 'T1 DeepPrep validation',
+          lane: 'fixed_workflow',
+          requires_confirmation: true,
+          runtime_workflow_type: 't1_deepprep_validate',
+          type: 't1_deepprep_validate',
+        },
+      ],
+    });
+
+    expect(catalog.workflows).toEqual(['t1_deepprep_anat_report']);
+    expect(catalog.items.t1_deepprep_validate).toBeUndefined();
+  });
+
   it('preserves workflow catalog metadata for display and agent-safe capability wording', () => {
     const catalog = normalizeWorkflowCatalog({
       workflows: [

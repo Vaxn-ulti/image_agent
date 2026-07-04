@@ -193,7 +193,7 @@
   - Updated deployment/product-readiness docs so strict acceptance is described as deployed-server local Docker/toolchain verification.
   - Fixed production runtime image defaults so workflow execution paths no longer depend on Docker `:latest` tags:
     - DeepPrep: `pbfslab/deepprep:25.1.0`
-    - QSIPrep/MRtrix runner image: `pennlinc/qsiprep:1.0.2`
+    - QSIPrep/MRtrix runner image: `pennlinc/qsiprep:26.0.0`
     - QSIRecon: `pennlinc/qsirecon:26.0.0`
     - fMRIPrep: `nipreps/fmriprep:25.2.5`
     - XCP-D: `pennlinc/xcp_d:26.0.2`
@@ -209,6 +209,105 @@
   - Verification: `python -m pytest tests/test_skill_and_rag_docs.py::test_product_readiness_documents_fast_launch_main_flow_and_boundaries tests/test_skill_and_rag_docs.py::test_developer_testing_matrix_documents_control_and_execution_planes tests/test_skill_and_rag_docs.py::test_remote_smoke_acceptance_json_verifier_is_documented -q` returned `3 passed`.
 
 ## 2026-06-17
+
+- Reoriented the RAG upgrade away from Qdrant and onto Elasticsearch hybrid search while preserving the LangGraph main-chain baseline.
+  - User selected `dae26e15` as the pre-Qdrant baseline.
+  - Backed up Qdrant WIP to `C:\Users\A\Documents\New project 2_repo_archive\pre-elasticsearch-reset-from-qdrant-wip-20260617T154913`.
+  - Restored tracked files to the clean pre-Qdrant state and confirmed no Qdrant implementation or RAG contract references remain; current Qdrant mentions are rollback/backup notes only.
+  - Added local Elasticsearch hybrid RAG contract generation: mapping, hybrid RRF query template, and bulk NDJSON under `.rag_index/elasticsearch`.
+  - Added strict smoke and saved acceptance verifier gates for `--require-elasticsearch-hybrid-rag`; production evidence must report `rag_elasticsearch_hybrid_status=passed`, `rag_rebuild_elasticsearch_hybrid` matching status indexed chunks, `persisted=true`, `rag_elasticsearch_hybrid.mode=connected`, positive `rag_elasticsearch_hybrid.indexed_chunk_count`, absent `rag_elasticsearch_hybrid.error`, `lexical_retriever=standard`, `vector_retriever=knn`, `dense_vector_field=embedding`, `fusion=rrf`, `rag_elasticsearch_hybrid_query_retrieval_source=elasticsearch_hybrid`, and Elastic RRF official source URL.
+  - Added `docs/rag/contracts/elasticsearch-hybrid-search.md` with Elastic official dense-vector, kNN, and RRF sources and boundaries.
+  - Updated release gate, stale-task apply request, production/readiness docs, and developer testing matrix to require persisted Elasticsearch hybrid RAG for strict remote acceptance.
+  - Verification so far:
+    - `python -m pytest apps/api/tests/test_agent_state_and_rag_index.py::test_local_rag_index_writes_elasticsearch_hybrid_contract apps/api/tests/test_agent_state_and_rag_index.py::test_local_rag_index_persists_semantic_chunks_with_hashes_and_filters -q` -> `2 passed`.
+    - `python -m pytest apps/api/tests/test_requirements_contract.py::test_backend_requirements_include_neuroimaging_and_agent_dependencies apps/api/tests/test_rag_reference_context.py::test_retrieve_reference_context_uses_persistent_index_when_available -q` -> `2 passed`.
+    - `python -m pytest apps/api/tests/test_smoke_remote_agent.py::test_smoke_remote_agent_require_elasticsearch_hybrid_rag_rejects_non_elasticsearch_index apps/api/tests/test_smoke_remote_agent.py::test_smoke_remote_agent_require_elasticsearch_hybrid_rag_records_acceptance_evidence -q` -> `2 passed`.
+    - `python -m pytest apps/api/tests/test_verify_remote_smoke_acceptance.py::test_verify_remote_smoke_acceptance_rejects_weak_evidence -q` -> `113 passed`.
+    - `python -m pytest apps/api/tests/test_release_gate_command_plan.py::test_remote_release_gate_command_plan_orders_safe_remote_acceptance_steps apps/api/tests/test_release_gate_command_plan.py::test_remote_release_gate_command_plan_requires_full_strict_smoke_flags -q` -> `14 passed`.
+    - `python -m pytest apps/api/tests/test_build_stale_task_apply_request.py::test_build_stale_task_apply_request_includes_post_apply_gates apps/api/tests/test_verify_stale_task_apply_request.py::test_verify_stale_task_apply_request_requires_complete_readiness_smoke_flags -q` -> `20 passed`.
+    - `python -m pytest apps/api/tests/test_skill_and_rag_docs.py::test_elasticsearch_hybrid_rag_contract_documents_official_sources_and_boundaries apps/api/tests/test_skill_and_rag_docs.py::test_rag_corpus_contains_required_sections_and_vendor_metadata apps/api/tests/test_skill_and_rag_docs.py::test_all_indexed_rag_docs_have_basic_machine_readable_frontmatter -q` -> `3 passed`.
+    - `python -m pytest apps/api/tests -q` -> `882 passed, 9 warnings`.
+    - `python -m py_compile apps/api/app/agent/rag_index.py apps/api/app/agent/langgraph_runner.py apps/api/scripts/smoke_remote_agent.py apps/api/scripts/verify_remote_smoke_acceptance.py apps/api/scripts/verify_release_gate_command_plan.py apps/api/scripts/build_stale_task_apply_request.py apps/api/scripts/verify_stale_task_apply_request.py` -> passed.
+    - `git diff --check` -> passed.
+  - Full-suite follow-up:
+    - Fixed a LangGraph capability metadata matching gap found by the full backend run: fixed-lane `run_workflow` planner decisions that omit `workflow_type` now recover the fixed workflow from registry capability metadata and series modality before confirmation.
+  - Remaining blocker: no deployed Elasticsearch service acceptance has run yet; strict production gate still needs deployment-server local Docker/toolchain, model gateway, real upload/workflow/task/QC/report evidence, and fresh saved JSON verification.
+  - Continued Elasticsearch hybrid from local contract to an injectable/ENV-configured client boundary:
+    - `build_local_rag_index` can now write curated chunks to Elasticsearch through an injected client or `IMAGE_AGENT_ELASTICSEARCH_URL`.
+    - Successful bulk indexing records `hybrid_search.persisted=true`, `mode=connected`, and `indexed_chunk_count` in the manifest/status path.
+    - `retrieve_from_local_rag_index` now uses Elasticsearch RRF hybrid retrieval when the manifest is connected and falls back to deterministic local retrieval otherwise.
+    - `IMAGE_AGENT_ELASTICSEARCH_API_KEY` is documented as optional secret env material and must stay out of git/status payloads.
+    - Added TDD coverage for connected bulk indexing, raw snapshot exclusion from indexed docs, and connected hybrid retrieval query shape.
+    - Verification: `python -m pytest apps/api/tests/test_agent_state_and_rag_index.py -q -k "elasticsearch_hybrid_client"` -> `2 passed`; `python -m pytest apps/api/tests/test_agent_state_and_rag_index.py apps/api/tests/test_rag_query.py apps/api/tests/test_rag_reference_context.py apps/api/tests/test_agent_api.py -q -k "rag"` -> `43 passed, 39 deselected, 3 warnings`; `python -m pytest apps/api/tests -q` -> `884 passed, 9 warnings`.
+    - Remaining blocker unchanged: a real deployed Elasticsearch service still has not been rebuilt/queried in this local session.
+  - Tightened Elasticsearch hybrid acceptance from status-only to status plus query-path evidence:
+    - `/agent/rag/query` responses now expose `retrieval_mode` and `retrieval_source`.
+    - `--require-elasticsearch-hybrid-rag` now posts a dedicated Elasticsearch hybrid contract query and fails unless it returns `retrieval_mode=elasticsearch_hybrid` and cites `docs/rag/contracts/elasticsearch-hybrid-search.md`.
+    - Saved strict smoke JSON and offline verifier now require `rag_elasticsearch_hybrid_query_status=passed`, `rag_elasticsearch_hybrid_query_mode=elasticsearch_hybrid`, and `rag_elasticsearch_hybrid_query_source`.
+    - Release gate expected evidence, acceptance template, product readiness, and developer testing matrix were updated for the query gate.
+    - Verification: `python -m pytest apps/api/tests/test_rag_query.py::test_build_rag_response_exposes_persistent_retrieval_mode apps/api/tests/test_smoke_remote_agent.py::test_smoke_remote_agent_require_elasticsearch_hybrid_rag_records_acceptance_evidence apps/api/tests/test_smoke_remote_agent.py::test_smoke_remote_agent_require_elasticsearch_hybrid_rag_rejects_fallback_query apps/api/tests/test_verify_remote_smoke_acceptance.py::test_verify_remote_smoke_acceptance_rejects_weak_evidence -q` -> `119 passed`.
+  - Tightened Elasticsearch hybrid from deterministic local vector evidence to production embedding evidence:
+    - Local contract builds still use `embedding_provider=local_hashing` and `embedding_production_ready=false` for mock/control-plane tests.
+    - `build_local_rag_index()` and `retrieve_from_local_rag_index()` now support injected embedding vectors and OpenAI-compatible embedding env config via `IMAGE_AGENT_RAG_EMBEDDING_PROVIDER`, `IMAGE_AGENT_RAG_EMBEDDING_MODEL`, `IMAGE_AGENT_RAG_EMBEDDING_API_KEY`, and `IMAGE_AGENT_RAG_EMBEDDING_BASE_URL`.
+    - Strict smoke and saved JSON verifier now reject missing/local/mock embedding providers and require `embedding_production_ready=true`, with rebuild/status provider match.
+    - Release gate expected evidence and deployment/RAG/product-readiness docs now state that `local_hashing` blocks production release.
+    - Verification: `python -m pytest apps/api/tests/test_agent_state_and_rag_index.py::test_local_rag_index_writes_elasticsearch_hybrid_contract apps/api/tests/test_agent_state_and_rag_index.py::test_local_rag_index_uses_configured_embedding_provider_for_elasticsearch_vectors apps/api/tests/test_agent_state_and_rag_index.py::test_local_rag_index_uses_env_configured_openai_embedding_provider -q` -> `3 passed`; `python -m pytest apps/api/tests/test_release_gate_command_plan.py apps/api/tests/test_skill_and_rag_docs.py -q` -> `82 passed`; `python -m pytest apps/api/tests/test_smoke_remote_agent.py apps/api/tests/test_verify_remote_smoke_acceptance.py -q` -> `299 passed`.
+    - Fresh full verification: `python -m pytest apps/api/tests -q` -> `908 passed, 9 warnings`; `git diff --check` -> passed with the existing `apps/api/requirements.txt` LF-to-CRLF warning; `rg --ignore-case "qdrant" apps docs/rag docs/deployment docs/skills` -> no implementation/contract matches.
+  - Hardened embedding provider failure handling:
+    - Failed configured embeddings now produce redacted `embedding_error` evidence with `mode=embedding_error`, `persisted=false`, and `embedding_production_ready=false`.
+    - Rebuild skips connected Elasticsearch bulk writes on embedding failure so local-hash vectors do not contaminate a production index.
+    - Query falls back to local retrieval when query embedding generation fails instead of sending a local-hash vector to a production vector index.
+    - Verification so far: `python -m pytest apps/api/tests/test_agent_state_and_rag_index.py::test_local_rag_index_safely_downgrades_when_configured_embedding_provider_fails apps/api/tests/test_agent_state_and_rag_index.py::test_retrieve_from_local_rag_index_skips_elasticsearch_when_query_embedding_provider_fails apps/api/tests/test_agent_state_and_rag_index.py::test_local_rag_index_uses_env_configured_openai_embedding_provider apps/api/tests/test_agent_state_and_rag_index.py::test_local_rag_index_uses_configured_embedding_provider_for_elasticsearch_vectors -q` -> `4 passed`.
+    - Fresh full verification: `python -m pytest apps/api/tests -q` -> `910 passed, 9 warnings`; `git diff --check` -> passed with the existing `apps/api/requirements.txt` LF-to-CRLF warning; `rg --ignore-case "qdrant" apps docs/rag docs/deployment docs/skills` -> no implementation/contract matches.
+  - Hardened strict acceptance against stale embedding-error evidence:
+    - live strict smoke now rejects `hybrid_search.embedding_error` from both status and rebuild evidence;
+    - saved strict smoke verifier now rejects `rag_elasticsearch_hybrid.embedding_error` and `rag_rebuild_elasticsearch_hybrid.embedding_error`;
+    - release gate expected evidence and docs now require absent embedding-error evidence.
+    - Verification so far: `python -m pytest apps/api/tests/test_smoke_remote_agent.py apps/api/tests/test_verify_remote_smoke_acceptance.py -q` -> `302 passed`; `python -m pytest apps/api/tests/test_skill_and_rag_docs.py apps/api/tests/test_release_gate_command_plan.py -q` -> `82 passed`.
+    - Fresh full verification: `python -m pytest apps/api/tests -q` -> `913 passed, 9 warnings`; `git diff --check` -> passed with the existing `apps/api/requirements.txt` LF-to-CRLF warning; `rg --ignore-case "qdrant" apps docs/rag docs/deployment docs/skills` -> no implementation/contract matches.
+  - Hardened strict acceptance for dense-vector dimension evidence:
+    - live strict smoke and saved verifier now require positive `rag_elasticsearch_hybrid.dense_vector_dims`;
+    - rebuild/status `dense_vector_dims` must match, like indexed chunk count and embedding provider;
+    - release gate expected evidence and docs now include positive matching dense-vector dimensions.
+    - Verification so far: `python -m pytest apps/api/tests/test_smoke_remote_agent.py apps/api/tests/test_verify_remote_smoke_acceptance.py -q` -> `305 passed`; `python -m pytest apps/api/tests/test_skill_and_rag_docs.py apps/api/tests/test_release_gate_command_plan.py -q` -> `82 passed`.
+    - Fresh full verification: `python -m pytest apps/api/tests -q` -> `916 passed, 9 warnings`.
+  - Hardened strict acceptance for embedding-model evidence:
+    - live strict smoke and saved verifier now require non-empty `rag_elasticsearch_hybrid.embedding_model`;
+    - rebuild/status `embedding_model` must match, like indexed chunk count, dense vector dimensions, and embedding provider;
+    - release gate expected evidence and docs now include present matching embedding-model evidence.
+    - Verification so far: `python -m pytest apps/api/tests/test_smoke_remote_agent.py::test_smoke_remote_agent_require_elasticsearch_hybrid_rag_records_acceptance_evidence apps/api/tests/test_smoke_remote_agent.py::test_smoke_remote_agent_require_elasticsearch_hybrid_rag_rejects_weak_connected_evidence -q` -> `6 passed`; `python -m pytest apps/api/tests/test_verify_remote_smoke_acceptance.py::test_verify_remote_smoke_acceptance_accepts_strict_payload apps/api/tests/test_verify_remote_smoke_acceptance.py::test_verify_remote_smoke_acceptance_rejects_weak_evidence -q` -> `133 passed`; `python -m pytest apps/api/tests/test_skill_and_rag_docs.py apps/api/tests/test_release_gate_command_plan.py -q` -> `82 passed`.
+    - Fresh full verification: `python -m pytest apps/api/tests/test_smoke_remote_agent.py apps/api/tests/test_verify_remote_smoke_acceptance.py -q` -> `308 passed`; `python -m pytest apps/api/tests -q` -> `919 passed, 9 warnings`; `git diff --check` -> passed with the existing `apps/api/requirements.txt` LF-to-CRLF warning; `rg --ignore-case "qdrant" apps docs/rag docs/deployment docs/skills` -> no implementation/contract matches.
+  - Hardened saved verifier checked output for embedding evidence:
+    - offline verifier `checked` now exports status/rebuild `embedding_provider` and `embedding_production_ready`, alongside model and dense-vector evidence;
+    - release gate expected evidence and docs now mention rebuild-side `embedding_production_ready=true` explicitly.
+    - Verification so far: `python -m pytest apps/api/tests/test_verify_remote_smoke_acceptance.py::test_verify_remote_smoke_acceptance_accepts_strict_payload -q` -> `1 passed`.
+    - Fresh full verification: `python -m pytest apps/api/tests/test_verify_remote_smoke_acceptance.py::test_verify_remote_smoke_acceptance_accepts_strict_payload apps/api/tests/test_verify_remote_smoke_acceptance.py::test_verify_remote_smoke_acceptance_rejects_weak_evidence -q` -> `133 passed`; `python -m pytest apps/api/tests/test_skill_and_rag_docs.py apps/api/tests/test_release_gate_command_plan.py -q` -> `82 passed`; `python -m pytest apps/api/tests/test_smoke_remote_agent.py apps/api/tests/test_verify_remote_smoke_acceptance.py -q` -> `308 passed`; `python -m pytest apps/api/tests -q` -> `919 passed, 9 warnings`; `git diff --check` -> passed with the existing `apps/api/requirements.txt` LF-to-CRLF warning; `rg --ignore-case "qdrant" apps docs/rag docs/deployment docs/skills` -> no implementation/contract matches.
+  - Hardened saved verifier checked output for Elasticsearch hybrid query evidence:
+    - offline verifier `checked` now exports `rag_elasticsearch_hybrid_query_mode` and `rag_elasticsearch_hybrid_query_source`, alongside query status and retrieval source;
+    - release gate expected evidence and product readiness now require query mode, retrieval source, and contract source together.
+    - Verification so far: `python -m pytest apps/api/tests/test_verify_remote_smoke_acceptance.py::test_verify_remote_smoke_acceptance_accepts_strict_payload -q` -> `1 passed`.
+    - Fresh full verification: `python -m pytest apps/api/tests/test_verify_remote_smoke_acceptance.py::test_verify_remote_smoke_acceptance_accepts_strict_payload apps/api/tests/test_verify_remote_smoke_acceptance.py::test_verify_remote_smoke_acceptance_rejects_weak_evidence -q` -> `133 passed`; `python -m pytest apps/api/tests/test_skill_and_rag_docs.py apps/api/tests/test_release_gate_command_plan.py -q` -> `82 passed`; `python -m pytest apps/api/tests/test_smoke_remote_agent.py apps/api/tests/test_verify_remote_smoke_acceptance.py -q` -> `308 passed`; `python -m pytest apps/api/tests -q` -> `919 passed, 9 warnings`; `git diff --check` -> passed with the existing `apps/api/requirements.txt` LF-to-CRLF warning; `rg --ignore-case "qdrant" apps docs/rag docs/deployment docs/skills` -> no implementation/contract matches.
+  - Hardened saved verifier checked output for Elasticsearch hybrid error absence:
+    - offline verifier `checked` now exports status/rebuild `error_absent` and `embedding_error_absent` booleans;
+    - release gate expected evidence and docs now use those checked fields for visible absence evidence.
+    - Verification so far: `python -m pytest apps/api/tests/test_verify_remote_smoke_acceptance.py::test_verify_remote_smoke_acceptance_accepts_strict_payload -q` -> `1 passed`.
+    - Fresh full verification: `python -m pytest apps/api/tests/test_verify_remote_smoke_acceptance.py::test_verify_remote_smoke_acceptance_accepts_strict_payload apps/api/tests/test_verify_remote_smoke_acceptance.py::test_verify_remote_smoke_acceptance_rejects_weak_evidence -q` -> `133 passed`; `python -m pytest apps/api/tests/test_skill_and_rag_docs.py apps/api/tests/test_release_gate_command_plan.py -q` -> `82 passed`; `python -m pytest apps/api/tests/test_smoke_remote_agent.py apps/api/tests/test_verify_remote_smoke_acceptance.py -q` -> `308 passed`; `python -m pytest apps/api/tests -q` -> `919 passed, 9 warnings`; `git diff --check` -> passed with the existing `apps/api/requirements.txt` LF-to-CRLF warning; `rg --ignore-case "qdrant" apps docs/rag docs/deployment docs/skills` -> no implementation/contract matches.
+  - Hardened release gate live strict smoke expected evidence:
+    - `run_strict_remote_smoke_acceptance.expected_success` now requires Elasticsearch hybrid query mode, retrieval source, and contract source together;
+    - release gate tests now inspect the live-smoke step directly instead of relying only on global JSON string matches.
+    - Verification so far: `python -m pytest apps/api/tests/test_release_gate_command_plan.py::test_remote_release_gate_command_plan_orders_safe_remote_acceptance_steps -q` -> `1 passed`.
+    - Fresh full verification: `python -m pytest apps/api/tests/test_release_gate_command_plan.py apps/api/tests/test_skill_and_rag_docs.py -q` -> `82 passed`; `python -m pytest apps/api/tests/test_smoke_remote_agent.py apps/api/tests/test_verify_remote_smoke_acceptance.py -q` -> `308 passed`; `python -m pytest apps/api/tests -q` -> `919 passed, 9 warnings`; `git diff --check` -> passed with the existing `apps/api/requirements.txt` LF-to-CRLF warning; `rg --ignore-case "qdrant" apps docs/rag docs/deployment docs/skills` -> no implementation/contract matches.
+    - Continued strict release-gate hardening: live smoke expected-success now must explicitly list absent `rag_elasticsearch_hybrid.error`, absent `rag_elasticsearch_hybrid.embedding_error`, absent `rag_rebuild_elasticsearch_hybrid.error`, and absent `rag_rebuild_elasticsearch_hybrid.embedding_error`, so rebuild-side failures cannot be hidden behind saved offline verifier checks.
+    - Continued Elasticsearch hybrid production-path hardening:
+      - connected bulk/search now unwraps official Python client-style response objects (`.body`/`.raw`) as well as plain dicts;
+      - search object responses no longer crash retrieval, and bulk object responses with `errors=true` no longer pass as persisted evidence.
+      - Verification so far: `python -m pytest apps/api/tests/test_agent_state_and_rag_index.py::test_local_rag_index_handles_elasticsearch_python_object_responses apps/api/tests/test_agent_state_and_rag_index.py::test_local_rag_index_rejects_elasticsearch_object_bulk_errors -q` -> failed before fix, then `2 passed`; `python -m pytest apps/api/tests/test_agent_state_and_rag_index.py -q` -> `28 passed`; `python -m pytest apps/api/tests/test_rag_query.py -q` -> `15 passed`.
+    - Hardened Elasticsearch hybrid result safety:
+      - connected search hits without safe repo-relative `source` are skipped before becoming RAG citations;
+      - missing source, absolute paths, Windows drive paths, `..` traversal paths, URL strings, app/runtime paths, and raw-source paths no longer appear in `elasticsearch_hybrid` results;
+      - connected Elasticsearch citations are now allowlisted to Markdown under `docs/rag/` or `docs/skills/`, excluding `docs/rag/vendor/raw-sources/`;
+      - connected searches with hits but no safe citation source now fall back to deterministic local retrieval instead of being counted as `elasticsearch_hybrid` evidence.
+      - Verification so far: `python -m pytest apps/api/tests/test_agent_state_and_rag_index.py::test_retrieve_from_elasticsearch_hybrid_skips_hits_without_safe_source -q` -> failed before fix, then `1 passed`; `python -m pytest apps/api/tests/test_agent_state_and_rag_index.py::test_retrieve_from_elasticsearch_hybrid_falls_back_when_no_safe_hits -q` -> failed before fix, then `1 passed`; `python -m pytest apps/api/tests/test_agent_state_and_rag_index.py apps/api/tests/test_rag_query.py -q` -> `45 passed`; `python -m pytest apps/api/tests/test_smoke_remote_agent.py apps/api/tests/test_verify_remote_smoke_acceptance.py -q` -> `308 passed`; `python -m pytest apps/api/tests/test_release_gate_command_plan.py apps/api/tests/test_skill_and_rag_docs.py -q` -> `82 passed`; `python -m pytest apps/api/tests -q` -> `923 passed, 9 warnings`; `git diff --check` -> passed with the existing `apps/api/requirements.txt` LF-to-CRLF warning; `rg --ignore-case "qdrant" apps docs/rag docs/deployment docs/skills` -> no implementation/contract matches.
 
 - Started the fast-launch Image Agent mock/control-plane completion goal, with no subagents and git checks limited to work-block cadence.
 - Added and verified frontend/backend control-plane tests for upload, workflow eligibility, Agent confirmation boundaries, and T1 mock result contracts:
@@ -234,15 +333,1845 @@
   - Added a frontend result-detail contract for missing container-native QC: derived scientific report artifacts render, but the UI states that they do not replace native container QC evidence.
   - Updated console `OutputItem` types for artifact-manifest classification fields.
   - Updated Image Agent developer contracts to document that frontends, Agent, and RAG use display metadata, while task launch, confirmation fingerprint, DB rows, and runner dispatch continue using stable machine ids.
+  - Added `workflow_public_metadata()` so the same registry-derived display/capability metadata is available to API/Agent surfaces without changing stable task workflow ids.
+  - Fixed workflow confirmations now include read-only `workflow_metadata` for frontend review; resume accepts the frontend-returned metadata, while task creation still resolves runtime execution through registry/preflight.
+  - Strict remote smoke now records safe confirmation `workflow_metadata`, and the offline verifier requires metadata `workflow_type` to match the stable id, display name to remain display-only, and `is_report_only=false` before accepting production launch evidence.
+  - Strict Elasticsearch hybrid acceptance now requires `configured=true`, a privacy-safe `index`, and matching rebuild/status index evidence before production launch evidence can pass.
+  - `/deployment.fast_launch_readiness` now requires current `/agent/rag/status` Elasticsearch hybrid evidence in addition to the strict remote acceptance id, so the frontend/operator gate blocks local-contract or fallback RAG even if someone exports a valid-looking acceptance env flag.
+  - Strict remote smoke now saves `fast_launch_readiness_status=pre_acceptance` before acceptance env export, and offline acceptance verification re-checks `fast_launch_readiness.checks.rag_elasticsearch_hybrid.status=passed` against the same connected Elasticsearch hybrid status evidence.
+  - Promoted `dwi_fast_gpu_dti` into the Agent-selectable fixed workflow set as `production_contract`, while keeping `dwi_fast_gpu_dti_validate` non-Agent-selectable and keeping QSIPrep/QSIRecon/QSI full in incubation/non-production Agent lanes.
 - RED/GREEN notes:
   - Initial incorrect Vitest command `--runInBand` failed because Vitest does not support that Jest flag; reran with project syntax.
   - `test_langgraph_agent_runner_resume_uses_preflight_runtime_workflow_type` first failed because resume created `bold_fmriprep_xcpd_report` instead of the preflight runtime workflow type.
   - `ResultDetailPage` native-QC boundary test first failed because the UI did not show the missing native QC warning.
   - Workflow metadata doc/registry tests first failed on missing metadata and missing contract wording, then passed after the targeted changes.
+  - `test_langgraph_agent_runner_fixed_workflow_returns_confirmation_without_task_creation` first failed because LangGraph confirmations lacked `workflow_metadata`.
+  - `test_agent_resume_approved_confirmation_creates_real_task` first failed with HTTP 422 because the resume schema rejected frontend-returned `workflow_metadata`.
+  - `test_workflow_registry_filters_agent_selectable_fixed_lane` first failed because the DWI production fixed workflow was missing from the Agent-selectable registry filter.
+  - Strict smoke/offline verifier metadata tests first failed because saved confirmation evidence lacked `workflow_metadata`, checked output lacked metadata fields, and weak metadata was not rejected.
+  - Elasticsearch hybrid strict evidence tests first failed because `configured`/`index` were not checked or emitted, and live smoke had a duplicate return key that overwrote the validated hybrid index.
+  - `test_deployment_fast_launch_readiness_requires_current_elasticsearch_hybrid` first failed because `/deployment.fast_launch_readiness` did not expose `checks.rag_elasticsearch_hybrid` and still returned `ready=true` for `mode=local_contract`.
+  - `test_smoke_remote_agent_records_production_readiness_when_required` first failed because strict smoke saved `production_readiness` but not `fast_launch_readiness`; verifier weak-evidence tests first failed because saved JSON accepted blocked fast-launch RAG evidence.
 - Verification:
   - `python -m pytest tests/test_workflow_registry.py -q` returned `10 passed`.
   - `python -m pytest tests/test_skill_and_rag_docs.py::test_developer_contract_documents_workflow_display_metadata_boundary tests/test_workflow_registry.py tests/test_agent_graph.py::test_langgraph_agent_runner_resume_uses_preflight_runtime_workflow_type -q` returned `12 passed`.
   - `python -m pytest tests/test_agent_graph.py::test_langgraph_agent_runner_resume_uses_preflight_runtime_workflow_type tests/test_agent_graph.py::test_langgraph_agent_runner_fixed_workflow_returns_confirmation_without_task_creation tests/test_agent_graph.py::test_langgraph_agent_runner_unknown_workflow_returns_structured_incubation_proposal -q` returned `3 passed`.
+  - `python -m pytest apps/api/tests/test_agent_graph.py::test_langgraph_agent_runner_fixed_workflow_returns_confirmation_without_task_creation apps/api/tests/test_agent_api.py::test_agent_resume_approved_confirmation_creates_real_task apps/api/tests/test_fixed_workflow_api_contract.py::test_workflow_catalog_exposes_display_metadata_without_renaming_workflow_type -q` returned `3 passed`.
+  - `python -m pytest apps/api/tests/test_workflow_registry.py apps/api/tests/test_fixed_workflow_api_contract.py -q` returned `31 passed`.
+  - `python -m pytest apps/api/tests/test_workflow_registry.py::test_workflow_registry_filters_agent_selectable_fixed_lane -q` failed before fix, then returned `1 passed`.
+  - `python -m pytest apps/api/tests/test_agent_graph.py::test_langgraph_agent_runner_matches_dwi_fixed_workflow_from_capability_metadata -q` returned `1 passed`.
+  - `python -m pytest apps/api/tests/test_agent_graph.py apps/api/tests/test_agent_tools.py apps/api/tests/test_agent_api.py -q` returned `86 passed`.
+  - `python -m pytest apps/api/tests/test_verify_remote_smoke_acceptance.py::test_verify_remote_smoke_acceptance_accepts_strict_payload apps/api/tests/test_verify_remote_smoke_acceptance.py::test_verify_remote_smoke_acceptance_rejects_weak_evidence -q` returned `137 passed`.
+  - `python -m pytest apps/api/tests/test_smoke_remote_agent.py apps/api/tests/test_verify_remote_smoke_acceptance.py -q` returned `315 passed`.
+  - `python -m pytest apps/api/tests/test_smoke_remote_agent.py apps/api/tests/test_verify_remote_smoke_acceptance.py -q` returned `318 passed`.
+  - `python -m pytest apps/api/tests/test_agent_api.py -q` returned `46 passed, 3 warnings`.
+  - `python -m pytest apps/api/tests/test_release_gate_command_plan.py apps/api/tests/test_skill_and_rag_docs.py -q` returned `82 passed`.
+  - `python -m pytest apps/api/tests -q` returned `928 passed, 9 warnings`.
+  - `python -m py_compile apps/api/app/workflows/registry.py apps/api/app/agent/graph.py apps/api/app/agent/langgraph_runner.py apps/api/app/schemas.py` passed.
+  - `python -m py_compile apps/api/app/workflows/registry.py apps/api/app/agent/langgraph_runner.py` passed.
+  - `python -m pytest apps/api/tests -q` returned `924 passed, 9 warnings`.
+  - `git diff --check` passed with the existing `apps/api/requirements.txt` LF-to-CRLF warning.
+  - `rg --ignore-case "qdrant" apps docs/rag docs/deployment docs/skills` returned no implementation/contract matches.
   - `npm.cmd test -- workflows.test.ts WorkflowsPage.test.tsx ResultDetailPage.test.tsx` returned `20 passed`.
   - `python apps/api/scripts/audit_skill_maintenance.py --json` returned `status=passed` with no findings.
   - `git status --short --branch` was checked; the worktree remains large/WIP with pre-existing modified files and new `apps/api/app/agent/langgraph_runner.py` plus `docs/work-log-2026-06-17.md`.
+
+- Continued strict task-observation acceptance hardening:
+  - Added read-only `GET /tasks/{task_id}/events` for public task state, redacted main-log tail, remote-log summaries, and `task.status`/`task.remote_log` event summaries.
+  - The endpoint uses `task_service.get_public_task()` so `log_path` and other raw backend task fields are not exposed.
+  - Strict smoke now supports `--require-task-events` and records `task_events_status`, `task_events_task_id`, `task_events_event_types`, `task_events_status_event_status`, `task_events_remote_log_count`, `task_events_remote_log_source_stages`, and `task_events_main_log_tail_present`.
+  - The offline strict smoke verifier now requires `smoke_gate.require_task_events=true`, matching task id, completed task status, both task event types, positive remote-log count, privacy-safe source stages, and main-log tail evidence.
+  - Strict smoke rejects unredacted host paths or secret-like tokens in task event log tails, keeping task observation read-only and safe; it does not retry, rerun, or create production tasks.
+  - Updated release gate command plan, production runbook, acceptance template, product readiness gate, and developer testing matrix so task events are part of the machine-checked remote release gate.
+  - Verification so far: `python -m pytest apps/api/tests/test_api_flow.py::test_task_logs_redact_secrets_and_backend_paths -q` -> `1 passed, 3 warnings`; `python -m pytest apps/api/tests/test_smoke_remote_agent.py::test_smoke_remote_agent_require_task_events_rejects_unredacted_log_tail apps/api/tests/test_smoke_remote_agent.py::test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier -q` -> `2 passed`; `python -m pytest apps/api/tests/test_smoke_remote_agent.py apps/api/tests/test_verify_remote_smoke_acceptance.py apps/api/tests/test_release_gate_command_plan.py -q` -> `350 passed`; `python -m pytest apps/api/tests/test_release_gate_command_plan.py apps/api/tests/test_skill_and_rag_docs.py -q` -> `83 passed`.
+
+- Continued Elasticsearch hybrid migration hardening from the `dae26e15` baseline direction:
+  - Configured/injected Elasticsearch no longer creates or bulk-writes a connected index when the embedding provider is missing or local-hash based; rebuild reports `mode=embedding_required`, `persisted=false`, `indexed_chunk_count=0`, `embedding_provider=local_hashing`, and `embedding_production_ready=false`.
+  - Completely unconfigured local developer runs still write local contract artifacts and report `mode=local_contract`, so mock/control-plane work remains runnable without a production search stack.
+  - Connected Elasticsearch error/bulk/search tests now explicitly declare production embedding vectors before exercising connected branches.
+  - Updated the Elasticsearch hybrid contract, production runbook, and documentation tests to state that `embedding_required` is a release-blocking mode and must not create or bulk-write the connected index.
+  - Verification so far: `python -m pytest apps/api/tests/test_agent_state_and_rag_index.py apps/api/tests/test_agent_api.py::test_agent_rag_endpoints_use_env_configured_elasticsearch_hybrid_client apps/api/tests/test_skill_and_rag_docs.py -q` -> failed before test-contract update, then `90 passed, 3 warnings`; `python -m pytest apps/api/tests/test_agent_state_and_rag_index.py apps/api/tests/test_rag_query.py apps/api/tests/test_agent_api.py apps/api/tests/test_smoke_remote_agent.py apps/api/tests/test_verify_remote_smoke_acceptance.py apps/api/tests/test_release_gate_command_plan.py apps/api/tests/test_skill_and_rag_docs.py -q` -> `501 passed, 3 warnings`; `python -m pytest apps/api/tests -q` -> `945 passed, 9 warnings`; `python -m py_compile apps/api/app/agent/rag_index.py apps/api/tests/test_agent_api.py apps/api/tests/test_agent_state_and_rag_index.py apps/api/tests/test_skill_and_rag_docs.py` -> passed; `rg --ignore-case "qdrant" apps docs/rag docs/deployment docs/skills` -> no implementation/contract matches; `git diff --check` -> passed with line-ending warnings only.
+
+- Continued deployed-runtime acceptance hardening:
+  - Strict remote smoke now supports `--require-runtime-toolchain` and calls the deployed API server's `/runtime/containers` before accepting launch evidence.
+  - Saved strict smoke JSON now records only a safe runtime summary: `runtime_toolchain_status=passed`, `runtime_toolchain.workflow_tool_execution=deployment_server_local`, `runtime_toolchain.docker_runtime_host=api_server`, `runtime_toolchain.fs_license_exists=true`, and `runtime_toolchain.required_workflow_available=true`.
+  - The saved evidence deliberately omits `fs_license_path`, Docker inspect tails, backend paths, and secrets; the offline verifier rejects unexpected runtime-toolchain keys and weak/missing required workflow evidence.
+  - Release gate command plan, stale-task apply request, production runbook, acceptance template, product readiness, and developer testing matrix now require `--require-runtime-toolchain` alongside production readiness, task events, Agent confirmation/resume, real evidence ids, Elasticsearch hybrid RAG, QC, and report gates.
+  - Verification so far: target runtime-toolchain/release/doc slice failed before implementation and then returned `285 passed`; wider strict-smoke/verifier/release/doc slice failed before fixture sync and then returned `462 passed`; `python -m pytest apps/api/tests -q` returned `962 passed, 9 warnings`; py_compile passed for the touched scripts/tests; `rg --ignore-case "qdrant" apps docs/rag docs/deployment docs/skills` returned no matches; `git diff --check` passed with line-ending warnings only.
+  - Remaining launch blocker is operational, not local code: fresh strict remote smoke still needs to run on the deployed server after approved stale-task reconciliation and normal restart.
+
+- Continued Elasticsearch hybrid official-source hardening:
+  - Added `docs/rag/vendor/elastic_official_hybrid_search.md` as the curated, manifest-backed Elastic source for BM25, `dense_vector`, kNN, and RRF.
+  - Downloaded Elastic official raw snapshots for `dense_vector`, kNN search, and RRF and recorded `elastic_dense_vector`, `elastic_knn_search`, and `elastic_rrf` in `docs/rag/vendor/raw-sources/manifest.json` with SHA256 and byte counts.
+  - Updated `docs/rag/contracts/elasticsearch-hybrid-search.md` so `official_grounding` includes the curated Elastic vendor doc, while raw snapshots remain provenance evidence only.
+  - Verification so far: the new doc/source test failed before the curated source existed and then returned `1 passed`; related vendor provenance tests returned `3 passed`; `vendor_raw_source_status()` reports `curated_provenance_ok=True`, pointer integrity ok, and vendor coverage catalog `complete 22/22`; `python -m pytest apps/api/tests/test_agent_state_and_rag_index.py apps/api/tests/test_rag_query.py apps/api/tests/test_skill_and_rag_docs.py -q` returned `104 passed`; a temporary rebuild indexed the curated Elastic vendor doc and contract but no `raw-sources/elastic_*` snapshots.
+
+- Continued Elasticsearch hybrid production embedding hardening:
+  - Added an OpenAI-compatible HTTP `/embeddings` fallback for configured RAG embedding providers when the OpenAI SDK is missing or cannot initialize in the deployment image.
+  - The SDK path remains preferred; the fallback reuses `IMAGE_AGENT_RAG_EMBEDDING_PROVIDER`, `IMAGE_AGENT_RAG_EMBEDDING_MODEL`, `IMAGE_AGENT_RAG_EMBEDDING_API_KEY`, `IMAGE_AGENT_RAG_EMBEDDING_BASE_URL`, and timeout configuration, normalizing either root `/v1` or direct `/embeddings` base URLs.
+  - Updated the Elasticsearch hybrid contract and production runbook to document the SDK-preferred/HTTP-fallback boundary while keeping connected Elasticsearch acceptance, production embedding evidence, and workflow launch gates unchanged.
+  - RED/GREEN: `test_local_rag_index_uses_openai_compatible_http_embedding_provider_without_sdk` first failed with `mode=embedding_required`, then passed after the HTTP embedding fallback drove connected Elasticsearch rebuild/query vectors.
+  - Verification: targeted embedding/doc slice returned `64 passed, 3 warnings`; wider RAG/API/doc slice returned `106 passed, 3 warnings`; full `python -m pytest apps/api/tests -q` returned `963 passed, 9 warnings`; py_compile passed for touched files; `rg --ignore-case "qdrant" apps docs/rag docs/deployment docs/skills` returned no matches; `git diff --check` passed with line-ending warnings only.
+
+- Redistributed the current BMAD audit again and tightened the query-side Elasticsearch hybrid guardrails:
+  - confirmed the deployed server is still running `engine=llama_index` at `/agent/rag/status`, with no live `hybrid_search` evidence yet;
+  - confirmed active tasks 83 and 84 are still running, so stale-task reconciliation remains a release gate;
+  - added TDD coverage that prevents query-time ES use when runtime embeddings are not actually production-configured, and prevents safe-but-stale ES hits outside the current manifest from counting as connected Elasticsearch hybrid evidence;
+  - verified `apps/api/tests/test_agent_state_and_rag_index.py`, `apps/api/tests/test_rag_query.py`, `apps/api/tests/test_api_flow.py::test_task_observe_repair_endpoint_is_read_only_and_redacted`, and the console ObserveRepair tests still pass.
+
+- Aligned the Console Workflows page with the Agent confirmation gate:
+  - replaced direct UI launch through `api.runSeries()` with `api.runAgent()` preparation and inline confirmation approval through `api.resumeAgent()`;
+  - preserved the existing workflow catalog display metadata and task handoff behavior after confirmed task creation;
+  - added/updated WorkflowsPage tests so QSIRecon preparation carries the completed QSIPrep dependency into the Agent prompt, direct `runSeries` is not called, and task creation happens only after approval;
+  - verified WorkflowsPage, AgentPage, API client, frontend typecheck, and backend fixed workflow confirmation/resume contract slices.
+
+- Continued Elasticsearch hybrid acceptance evidence hardening:
+  - RAG manifest/status/rebuild evidence now records `embedding_transport` as either `sdk` or `openai_compatible_http`, plus the privacy-safe boolean `embedding_endpoint_configured`.
+  - Fast-launch readiness, strict remote smoke, and offline acceptance verification now reject missing/invalid transport evidence and require rebuild/status agreement for both transport and endpoint-configured flags.
+  - Updated Elasticsearch hybrid contract, production runbook, product readiness, and the Image Agent testing matrix so deployment acceptance can prove production embedding transport without leaking endpoint URLs or keys.
+  - RED/GREEN: transport-aware RAG manifest/smoke/verifier tests first failed with missing transport evidence, then returned `172 passed`; wider RAG/API/smoke/verifier/doc slice returned `494 passed, 3 warnings`; full `python -m pytest apps/api/tests -q` returned `968 passed, 9 warnings`.
+
+- Continued remote release gate synchronization for Elasticsearch hybrid:
+  - Added explicit transport and endpoint-configured expected-success items to `docs/deployment/remote-release-gate-command-plan.json` for both live strict smoke and offline verifier steps.
+  - RED/GREEN: the release gate plan test first failed on missing `rag_elasticsearch_hybrid.embedding_transport production-safe`, then returned `25 passed`; wider release gate plus strict verifier slice returned `187 passed`; py_compile passed.
+- Hardened the release gate verifier itself:
+  - `apps/api/scripts/verify_release_gate_command_plan.py` now refuses plans that drop the Elasticsearch hybrid transport or endpoint-configured success items from either strict smoke or offline verification.
+  - A focused red-green test now proves the verifier rejects those omissions, and the widened release-gate regression slice still passes at `195 passed`.
+
+- Redistributed the current review with BMAD-style roles and used that split to finish one production-facing hardening pass:
+  - fixed production task creation so `IMAGE_AGENT_ENV=production` requires a confirmed Agent gate and rejects incubation/debug workflows from direct task creation;
+  - expanded confirmation fingerprints to cover the canonical full pending confirmation payload, including preflight and workflow display metadata;
+  - narrowed the Agent `preflight_workflow` tool schema to fixed workflow registry entries so debug/mock runtime entries are not model-visible launch candidates;
+  - tightened RAG/ObserveRepair recommendations so failed-task and missing-report advice stays read-only and requires new preflight plus human confirmation before any retry or rerun;
+  - preserved local mock/control-plane flow outside production mode;
+  - restored missing `embedding_transport` and `embedding_endpoint_configured` fields in connected Elasticsearch hybrid status evidence;
+  - kept the change verified with focused API, registry, Agent-resume, and RAG tests.
+
+- Redistributed BMAD roles again on 2026-06-18 and closed two contract gaps:
+  - RAG/Data Engineer confirmed the Elasticsearch hybrid code path and official-source docs are strong, but current local/deployed evidence still does not prove connected ES hybrid with production embeddings.
+  - QA/Release/Security confirmed fresh strict remote acceptance is still missing and flagged stale tasks 83/84 plus a historical secret-rotation/audit risk in tracked review notes.
+  - Architect/PO confirmed the fixed workflow path exists but found resume did not reject client-submitted confirmation mismatches; `AgentRunner` and `LangGraphAgentRunner` now require the submitted confirmation payload to match the stored fingerprint before task creation.
+  - Console workflow approval now displays `confirmation.workflow_metadata` display name, capability summary, and output labels while preserving stable `workflow_type` for approval and task creation.
+  - Verified targeted red/green slices: WorkflowsPage QSIRecon confirmation metadata test -> `1 passed`; graph/API confirmation mismatch tests -> `2 passed, 3 warnings`.
+
+- Clarified the broader BMAD role map and tightened user-facing frontend workflow launch gates:
+  - Recorded the fuller BMAD-style role set in `docs/work-log-2026-06-18.md`: Orchestrator/Master, Analyst, PM, PO, Architect, UX, Developer, QA/Test Architect, DevOps/Platform, Security/Compliance, Technical Writer/Knowledge Curator, and Data/RAG Engineer.
+  - Added a static backend contract test that prevents Console Dashboard, Console Workflows, and Desktop user-facing code from launching fixed workflows through direct `/series/{series_id}/run` or `api.runSeries`.
+  - Console Dashboard now prepares workflow launch through `api.runAgent`, opens the Agent confirmation drawer, and only records a started task after `api.resumeAgent` returns `task_created`.
+  - Desktop workflow buttons now prepare through `api.runAgent` and require an explicit local user confirmation before `api.resumeAgent(..., true, confirmation)` can create a task.
+  - Verification: frontend contract test -> `1 passed, 3 warnings`; Console Dashboard/Workflows/Agent/API client tests -> `53 passed`; Desktop `npm ci` then `npm run build` -> passed; `git diff --check` -> passed with line-ending warnings only.
+
+- Tightened the Elasticsearch hybrid runtime evidence gate:
+  - Added a manifest-matching guard in `apps/api/app/agent/rag_index.py` so ES hybrid queries only run when runtime embedding provider, model, and vector dims match the connected index manifest.
+  - Added a failing test first for the model-mismatch case, then verified it falls back to the curated local index rather than querying Elasticsearch with mismatched runtime embeddings.
+  - Verification: focused RAG/rebuild/query/verifier slice -> `220 passed, 3 warnings`; `py_compile` passed; `git diff --check` passed with line-ending warnings only.
+
+- Re-expanded BMAD redistribution into finer Product/Analyst, Architect/Workflow, QA/Test Architect + DevOps/Security, UX/Frontend Contract, and RAG Curator/Technical Writer lanes, then closed a canonical workflow identity gap:
+  - Deployment overlay verifier bundle now compiles on `yyf@10.2.32.14`; the materialized release-gate plan `/tmp/image_agent_remote_release_gate_plan_20260617T215323Z.json` verifies with `status=passed` and remains correctly `operator_authorization_required` before stale-task apply/restart/strict smoke. No mutating remote action was run.
+  - Added `tasks.runtime_workflow_type` and preserved stable canonical `workflow_type` through Agent resume, task rows, Agent run ledger, and public API payloads.
+  - `task_service.create_series_task()` now stores canonical ids such as `t1_deepprep_anat_report` while separately passing runner aliases such as `t1_deepprep` through `runtime_workflow_type`; `pipeline.run_pipeline_task()` uses the runtime id for command dispatch.
+  - RED/GREEN: `test_agent_resume_preserves_canonical_workflow_type_and_records_runtime_alias` first failed because runtime alias evidence was missing; focused canonical/runtime slice returned `7 passed`; wider related API/Graph/Tools/Pipeline slice returned `95 passed, 3 warnings`; `git diff --check` passed with line-ending warnings only.
+  - The remaining launch blocker is still operational proof on the deployed server: stale-task approval refresh, fresh strict remote smoke within 24h, and live connected Elasticsearch evidence from the deployment API server.
+
+- Closed the task-observation/runtime-alias follow-up:
+  - `/tasks/{task_id}/observe-repair`, Agent read-task tools, project context, and backend RAG/chat task context now include `runtime_workflow_type` alongside stable `workflow_type`.
+  - This keeps ObserveRepair read-only while giving the user, Agent, and frontend enough context to understand which concrete pipeline runner was used.
+  - RED/GREEN: the ObserveRepair API test first failed on missing `task.runtime_workflow_type`; focused runtime-observation slice returned `5 passed`; wider related API/tools/registry/pipeline slice returned `78 passed, 3 warnings`; `git diff --check` passed with line-ending warnings only.
+
+- Hardened strict smoke acceptance launch provenance:
+  - `launched_task.launch_source` is now explicit in smoke JSON and verifier checks, with strict acceptance requiring `agent_workflow_resume` and direct series-run fallback marked only as `direct_series_run`.
+  - `verify_remote_smoke_acceptance.py` now rejects direct-series launch provenance for strict acceptance.
+  - Verification: targeted smoke/verifier launch-source tests returned `2 passed` and `168 passed`; full smoke/verifier suites returned `353 passed`; console and desktop builds passed.
+  - Remaining blocker is still operational/deployment-side: the deployed server currently reports `engine=llama_index`, so fresh connected Elasticsearch hybrid evidence has not yet been proven on the deployment target.
+
+- Locked the same launch-source requirement into the remote release gate:
+  - `docs/deployment/remote-release-gate-command-plan.json` now lists both live `launched_task.launch_source=agent_workflow_resume` and offline `checked.launched_task_launch_source=agent_workflow_resume` expected-success evidence.
+  - `apps/api/scripts/verify_release_gate_command_plan.py` rejects command plans that drop either item.
+  - `docs/deployment/remote-agent-production.md` now documents that direct `/series/{series_id}/run` fallback evidence is diagnostic only and cannot satisfy strict production acceptance.
+  - RED/GREEN: release-gate plan test first failed on missing launch-source evidence, then `python -m pytest apps/api/tests/test_release_gate_command_plan.py -q` returned `35 passed`; smoke/verifier regression returned `353 passed`.
+
+- Added an early, non-mutating Elasticsearch hybrid prerequisite gate:
+  - Read-only remote checks confirmed the deployed API still serves `index.engine=llama_index` and the deployed `.env` lacks explicit ES URL plus production RAG embedding provider/model/base URL.
+  - `apps/api/scripts/verify_elasticsearch_hybrid_prerequisites.py` now validates those prerequisites with privacy-safe boolean/status output only.
+  - `docs/deployment/remote-release-gate-command-plan.json`, `verify_release_gate_command_plan.py`, `build_stale_task_apply_request.py`, and `verify_stale_task_apply_request.py` now require this preflight before strict smoke.
+  - Verification: the prereq/release-gate/apply-request slice returned `83 passed`; related script compilation passed; `git diff --check` passed with line-ending warnings only.
+
+- Re-expanded BMAD-style redistribution and added live readiness diagnostics:
+  - Product/Analyst confirmed Console Dashboard and Workflows use Agent prepare/resume rather than bypassing the confirmation gate, while flagging production reference-preview fallback and task-observer visibility as the next frontend product gaps.
+  - `/deployment.fast_launch_readiness.checks.rag_elasticsearch_hybrid.blocking_codes` now exposes stable, privacy-safe failure categories for operator/frontend diagnostics without printing endpoint URLs, keys, backend paths, patient data, or raw source paths.
+  - `docs/product-readiness.md`, `docs/deployment/remote-agent-production.md`, and `docs/work-log-2026-06-18.md` now document that those codes are remediation hints, not replacements for connected Elasticsearch rebuild/query, strict smoke, or offline verifier evidence.
+  - Verification: `python -m pytest apps/api/tests/test_agent_api.py::test_deployment_fast_launch_readiness_requires_current_elasticsearch_hybrid apps/api/tests/test_agent_api.py::test_deployment_fast_launch_readiness_requires_embedding_endpoint_configured apps/api/tests/test_agent_api.py::test_deployment_fast_launch_readiness_accepts_privacy_safe_remote_acceptance_id apps/api/tests/test_verify_elasticsearch_hybrid_prerequisites.py -q` returned `5 passed, 3 warnings`.
+
+- Folded QA/RAG subagent follow-up into the release gate:
+  - ES hybrid prerequisite preflight now fails when a supplied live RAG status is not `mode=connected` or `persisted=true`, closing a prereq false-positive window.
+  - Release gate metadata now treats all mutating remote steps as operator-authorized: stale-task apply, normal restart, and strict remote smoke.
+  - RAG audit confirmed the active production contract files are Qdrant-free and the local/connected/strict ES hybrid tiers are separated, with only historical Qdrant mentions in process logs.
+  - Verification: prereq/release-gate/readiness focused slice returned `42 passed, 3 warnings`; related `py_compile` passed; `git diff --check` passed with existing line-ending warnings only.
+
+- Used finer BMAD-style roles to close the next boundary/test gaps:
+  - Product/PO, Architect, QA, UX/Frontend, and DevOps/RAG subagents confirmed the local LangGraph backbone is credible, while fresh strict remote acceptance and deployed connected Elasticsearch hybrid evidence remain the P0 blockers.
+  - Added API-level proof for unknown fixed workflow routing: real `/agent/runs` + LangGraph now has a regression test showing an unknown `fixed_workflow` request returns `toolchain_proposed`, stays in `toolchain_incubation`, and creates no production task.
+  - ES hybrid prereq verification now requires current `/agent/rag/status`; config-only evidence no longer passes.
+  - Strict smoke workflow metadata negative coverage now individually checks `capability_summary`, `pipeline_stages`, `primary_outputs`, `qc_outputs`, `report_outputs`, and `limitations`.
+  - Verification: related API/Graph/prereq/release-gate/strict-smoke focused slice returned `215 passed, 3 warnings`; final focused rerun returned `175 passed, 3 warnings`; related `py_compile` passed.
+
+- Downstreamed the preflight gate into task creation:
+  - `create_workflow_task()` now refuses to create a task unless the approved confirmation includes `preflight.ok=true`.
+  - It also rejects a confirmation whose `preflight.workflow_type` does not match the stable `workflow_type`, keeping canonical workflow identity tied to the server-side preflight/fingerprint chain.
+  - Updated task-creating Agent resume fixtures to include the same preflight evidence as real `_prepare_confirmation()` output.
+  - RED/GREEN: the tool-layer test first failed because missing preflight still created a task; focused Agent tool/API/graph slice returned `24 passed, 3 warnings`; related `py_compile` passed.
+
+- Aligned the legacy `AgentRunner` path with LangGraph for unknown fixed workflows:
+  - `AgentRunner.run()` now consults the workflow registry before preparing a fixed-workflow confirmation and reroutes unknown/non-fixed fixed-workflow claims into incubation/proposal.
+  - `_prepare_toolchain_proposal()` now explicitly returns `production_task_created=False`, so unknown workflow proposals have the same public contract across both runner implementations.
+  - RED/GREEN: the new legacy unknown-workflow regression first failed because the old path returned `preflight_failed`; the full graph regression slice returned `31 passed`, and the targeted API/tool rerun returned `2 passed, 3 warnings`.
+
+- Removed the Console Dashboard static T1 reference preview fallback:
+  - Result/QC preview now renders only backend artifact-backed images from the artifact manifest or result summary.
+  - When no native image artifact exists, the dashboard shows the existing empty state instead of reference screenshots or segmentation legend labels.
+  - RED/GREEN: the new Dashboard regression first failed on the old static fallback; `npm.cmd test -- DashboardPage.test.tsx` returned `23 passed`.
+
+- Hardened the stale-task apply handoff so the operator authorization request is fully materialized:
+  - `build_stale_task_apply_request.py` now requires concrete deployment, health version, NIfTI, workflow type, project id, and upload session id inputs and embeds them into the strict smoke command.
+  - `verify_stale_task_apply_request.py` now rejects placeholder-based executable commands and validates the dynamic strict-smoke values as concrete deployment-safe identifiers.
+  - The stale-task apply request keeps the Elasticsearch hybrid prerequisite preflight before strict smoke, matching the newer release-gate materializer path.
+  - Verification: stale-task apply builder/verifier tests returned `42 passed`; release-gate plan suite returned `41 passed`; ES hybrid smoke/RAG regression slice returned `178 passed`.
+
+- Closed a workflow runtime-alias evidence gap found by BMAD-style RAG/Data and QA/Release audits:
+  - `workflow_public_metadata()` now exposes stable `workflow_type`, concrete `runtime_workflow_type`, lane/status, confirmation requirement, and capability fields together.
+  - Strict smoke JSON and `verify_remote_smoke_acceptance.py` now preserve and verify runtime alias evidence; mismatched confirmation metadata versus launched-task runtime alias is rejected.
+  - RAG task-state answers now distinguish stable workflow ids from concrete runner aliases with `via runtime runner ...`.
+  - Verification: RAG query suite returned `18 passed`; registry/smoke/verifier focused slice returned `189 passed`.
+
+- Added registry-backed workflow capability context to `/agent/rag/query`:
+  - `build_rag_backend_context()` now includes `supported_workflows` from `workflow_public_metadata()`, so RAG can explain fixed workflow capabilities, runtime aliases, and incubation boundaries from the authoritative registry.
+  - RAG answers now summarize supported workflow capabilities when the context is present, including stable id, runtime runner alias, lane, display name, and capability summary.
+  - This remains explanatory only; task creation and fingerprints still use stable `workflow_type`, while pipeline dispatch uses `runtime_workflow_type`.
+  - Verification: RAG query suite returned `19 passed`; related Agent API/workflow registry slice returned `14 passed, 3 warnings`.
+
+- Locked runtime workflow alias evidence into the remote release gate:
+  - `remote-release-gate-command-plan.json` now requires live strict smoke evidence that confirmation metadata runtime alias matches the launched task runtime alias, plus offline verifier checked fields for the same evidence.
+  - `verify_release_gate_command_plan.py` rejects plans that omit either the live strict-smoke runtime alias checks or the offline checked runtime alias checks.
+  - RED/GREEN: release-gate tests first failed on missing runtime alias expected-success evidence, then returned `41 passed`; strict smoke verifier slice returned `177 passed`; related script `py_compile` passed; `git diff --check` passed with line-ending warnings only.
+
+- Added strict Agent workflow fingerprint-negative acceptance evidence:
+  - Recast BMAD/METHOD delegation into PO/PM, QA, and Tech Writer/Architect roles; all pointed to the same launch-critical gap: positive Agent resume evidence was not enough without a tampered-confirmation negative proof.
+  - `smoke_remote_agent.py` now supports `--require-agent-workflow-fingerprint-negative`, sends the tampered `/agent/runs/{thread_id}/resume` before the valid resume, and records `fingerprint_mismatch`, `production_task_created=false`, and `task_created=false`.
+  - `verify_remote_smoke_acceptance.py`, release gate expected-success fields, stale-task apply strict-smoke commands, runbooks, product-readiness docs, and image-agent testing matrix now require the same negative evidence.
+  - Verification: doc-lock slice returned `3 passed`; focused smoke/verifier/release-gate/stale-task/doc slice returned `280 passed`.
+  - Remaining P0: deployment still needs fresh connected Elasticsearch hybrid RAG, production embedding, local Docker/toolchain, and strict remote smoke/verifier evidence from the deployment server.
+
+- Added ObserveRepair read-only evidence to strict remote acceptance:
+  - BMAD QA/PO audit confirmed the code path was read-only but the deployment gate only proved `/tasks/{task_id}/events`, not `/tasks/{task_id}/observe-repair`.
+  - `smoke_remote_agent.py` now supports `--require-observe-repair` and records read-only policy, no auto rerun, no production task, and retry prerequisites from the deployed API.
+  - `verify_remote_smoke_acceptance.py`, release gate plan/verifier, stale-task apply handoff builder/verifier, production runbook, acceptance template, product-readiness, and image-agent testing matrix now require ObserveRepair evidence.
+  - Verification: focused smoke/verifier/release-gate/stale-task/doc slice returned `297 passed`; related script `py_compile` passed.
+  - Remaining P0: fresh deployed strict smoke still has to be run on the deployment server with connected Elasticsearch hybrid RAG, production embeddings, local Docker/toolchain, real evidence ids, fingerprint-negative, and ObserveRepair evidence.
+
+- Added unknown workflow incubation evidence to strict remote acceptance:
+  - `smoke_remote_agent.py` now supports `--require-unknown-workflow-incubation`, sends an unregistered `codex_unknown_workflow_smoke` Agent probe, and records proposal-only evidence with `toolchain_incubation`, no confirmation, no task, and no production task.
+  - `verify_remote_smoke_acceptance.py`, release gate plan/verifier, stale-task apply handoff builder/verifier, production runbook, acceptance template, product-readiness, and image-agent testing matrix now require the same unknown-workflow no-production-task evidence.
+  - Verification: focused smoke/verifier slice returned `201 passed`; release-gate/stale-task/doc slice returned `115 passed`.
+  - Remaining P0: fresh deployed strict smoke still has to be run on the deployment server with connected Elasticsearch hybrid RAG, production embeddings, local Docker/toolchain, real evidence ids, fingerprint-negative, ObserveRepair, and unknown-workflow incubation evidence.
+
+- Hardened Elasticsearch hybrid prerequisite and stale-task handoff evidence:
+  - `verify_elasticsearch_hybrid_prerequisites.py` now requires real current ES hybrid status evidence beyond `mode=connected`: configured/persisted, privacy-safe index, positive indexed chunks and dense-vector dimensions, `fusion=rrf`, absent hybrid/embedding errors, production non-local embedding provider/model/transport, endpoint configured, production-ready embedding, and status embedding model matching `IMAGE_AGENT_RAG_EMBEDDING_MODEL`.
+  - The script remains privacy-safe: it emits only booleans, safe symbols, and counts, and does not print keys, endpoint URLs, backend paths, patient data, raw error text, or mismatched model values.
+  - Release gate and stale-task apply handoff now require the same detailed ES prereq expected-success list; the old `status=passed`-only stale-task handoff is rejected.
+  - Verification: prereq tests returned `17 passed`; stale-task builder/verifier tests returned `46 passed`; combined prereq/release-gate/stale-task slice returned `130 passed`; related script `py_compile` passed.
+  - Remaining P1: ES index rebuild/query still needs a follow-up for stale Elasticsearch docs and mixed stale+valid hit handling so valid ES citations do not fall back to local retrieval.
+
+- Fixed Elasticsearch hybrid mixed stale+valid hit fallback:
+  - `_retrieve_from_elasticsearch_hybrid()` now ignores stale safe-looking ES hits that are absent from the current local manifest without discarding valid current-manifest hits from the same response.
+  - `retrieval_mode=elasticsearch_hybrid` is preserved when at least one valid current safe citation remains; deterministic local fallback is reserved for responses with no usable safe/current ES evidence.
+  - Updated the ES hybrid contract to require current-manifest membership and document per-hit stale filtering.
+  - RED/GREEN: the mixed stale+valid regression first failed with `mode=elasticsearch_hybrid_fallback`; focused ES filtering slice returned `4 passed`.
+  - Remaining P1: rebuild-side ES index reconciliation/pruning is still useful hardening, but stale query hits no longer poison valid ES query evidence.
+
+- Reconciled the dedicated Elasticsearch hybrid index on rebuild:
+  - Connected rebuild now deletes an existing `image_agent_rag` index, recreates the current mapping, and bulk-writes only current curated chunks with `refresh=wait_for`.
+  - This prevents stale ES documents from surviving across source/metadata/embedding changes and reduces the chance that strict query evidence is polluted by prior rebuilds.
+  - Updated the ES hybrid contract and doc lock with the dedicated-index ownership/recreate rule.
+  - RED/GREEN: `test_local_rag_index_recreates_existing_elasticsearch_index_on_rebuild` first failed because no delete occurred; connected rebuild focused slice returned `5 passed`.
+  - Remaining P0: deployment server still needs fresh connected ES rebuild/status/query plus strict smoke and offline verifier evidence with production embeddings and local Docker/toolchain.
+
+- Bound Elasticsearch hybrid strict query evidence to the connected status configuration:
+  - `/agent/rag/query` now returns sanitized query-time ES evidence for real hybrid retrieval.
+  - Strict smoke persists query-time index, dense-vector dimensions, embedding provider/model/transport, endpoint configured, and production-ready flags.
+  - Offline verifier and release-gate expected-success now reject query evidence that drifts from status/rebuild evidence, including embedding-model mismatch.
+  - Verification: focused RAG/smoke/verifier slice returned `211 passed`; release-gate query-evidence slice returned `15 passed`.
+  - Remaining P0: fresh deployment-server strict smoke/offline verifier evidence is still required before mainline/launch readiness.
+
+- Aligned offline verifier checked output with release-gate expected success:
+  - `verify_remote_smoke_acceptance.py` now exports checked query citation count and top score after validating both are positive.
+  - This closes the gap where the release gate expected `checked.rag_elasticsearch_hybrid_query_citation_count>0` and `checked.rag_elasticsearch_hybrid_query_top_score>0`, but the report did not show those values.
+  - Verification: strict verifier focused slice returned `207 passed`; release-gate ordering assertion returned `1 passed`; related `py_compile` passed.
+
+- Tightened strict remote verifier runtime-alias proof:
+  - `verify_remote_smoke_acceptance.py` now requires `launched_task.runtime_workflow_type` to be present, privacy-safe, and equal to `agent_workflow_confirmation.workflow_metadata.runtime_workflow_type`.
+  - This preserves stable `workflow_type` for DB/fingerprint/task identity while proving the concrete pipeline runner alias used by the launched task.
+  - RED/GREEN: the weak-evidence case for missing launched runtime alias first failed to raise, then the strict verifier slice returned `208 passed`; verifier script `py_compile` passed.
+
+- Aligned Elasticsearch RRF official-source evidence to Elastic's canonical docs URL:
+  - The raw snapshot `docs/rag/vendor/raw-sources/elastic_rrf.html` declares `https://www.elastic.co/docs/reference/elasticsearch/rest-apis/reciprocal-rank-fusion` as canonical, so the active RAG contract, curated vendor doc, manifest, RAG index official-source list, strict smoke script, verifier, and fixtures now use that URL.
+  - The docs regression now asserts the RRF contract/vendor/manifest URL matches the canonical link in the stored raw snapshot, keeping RAG grounding tied to real official documentation rather than stale guide URLs.
+  - RED/GREEN: the docs contract test first failed on the old RRF URL, then the docs/index slice returned `2 passed`; smoke/verifier slice returned `209 passed`; related `py_compile` passed.
+
+- Strengthened release-gate evidence for unknown workflow incubation and ObserveRepair:
+  - Offline strict verifier `checked.*` output now includes unknown-workflow `confirmation_created=false` and `proposal_production_task_created=false`, plus ObserveRepair retry prerequisites requiring preflight and human confirmation.
+  - The remote release gate plan and verifier now require those stronger live strict-smoke and offline checked expected-success items, so saved JSON review proves the same no-production-task/no-auto-rerun boundaries as the live smoke.
+  - RED/GREEN: strict verifier checked-output test first failed on the missing unknown confirmation field; release-gate expected-success tests first failed for the new items; strict verifier slice returned `208 passed`, focused release-gate slice returned `24 passed`, full release-gate suite returned `90 passed`, and the actual command-plan verifier printed `status=passed`.
+
+- Propagated the stronger unknown/ObserveRepair evidence into stale-task apply handoff:
+  - `build_stale_task_apply_request.py` now includes strict-smoke expected-success entries for unknown workflow no confirmation/no proposal-created production task and ObserveRepair retry prerequisites.
+  - `verify_stale_task_apply_request.py` now rejects handoff JSON that omits those live expected-success entries or their offline `checked.*` verifier counterparts.
+  - RED/GREEN: builder test first failed because strict smoke had no expected_success; new verifier tests first accepted incomplete handoff JSON; focused tests then passed and the full stale-task apply builder/verifier suite returned `48 passed`.
+
+- Improved Dashboard Agent approval display without changing backend confirmation payloads:
+  - The floating Dashboard confirmation drawer now displays `confirmation.workflow_metadata.display_name` and `capability_summary` when present, while retaining `workflow_type` as a clearly labeled stable workflow ID.
+  - Approve/cancel still sends the original confirmation object to `api.resumeAgent()`, preserving the stable `workflow_type` fingerprint/task contract.
+  - RED/GREEN: Dashboard approval test first failed because the metadata display name was missing; then `DashboardPage.test.tsx` returned `23 passed` and console `tsc -b --noEmit` passed.
+
+- Improved project Agent approval display without changing backend confirmation payloads:
+  - The AgentPage approval panel now displays `confirmation.workflow_metadata.display_name` and `capability_summary` when present, while retaining `workflow_type` as a clearly labeled stable workflow ID.
+  - Approve/cancel still sends the original confirmation object to `api.resumeAgent()`, preserving the stable `workflow_type` fingerprint/task contract.
+  - RED/GREEN: focused AgentPage approval test first failed because the metadata display name was missing; then `AgentPage.test.tsx` returned `8 passed` and console `tsc -b --noEmit` passed.
+
+- Improved task monitor workflow display without changing task identity:
+  - `TasksPage` now reads `/workflows` through the existing catalog normalizer and shows `display_name` for task rows when available.
+  - Each row still renders `Stable workflow ID: {task.workflow_type}`, and task/result/ObserveRepair actions continue to use backend task ids and stable task records.
+  - RED/GREEN: focused TasksPage catalog-display test first failed on the raw-only workflow id; then `TasksPage.test.tsx` returned `5 passed` and console `tsc -b --noEmit` passed.
+
+- Improved results index workflow display without changing result links or task identity:
+  - `ResultsIndexPage` now reads `/workflows` through the existing catalog normalizer and shows `display_name` for completed result cards when available.
+  - Each card still renders `Stable workflow ID: {task.workflow_type}`, and result links continue to target `/projects/{projectId}/results/{task.id}`.
+  - RED/GREEN: focused ResultsIndexPage catalog-display test first failed on the raw-only workflow id; then `ResultsIndexPage.test.tsx` returned `2 passed` and console `tsc -b --noEmit` passed.
+
+- Improved reports workflow display without changing result links or task identity:
+  - `ReportsPage` now reads `/workflows` through the existing catalog normalizer and shows `display_name` for scientific report cards when available.
+  - Each card still renders `Stable workflow ID: {task.workflow_type}`, and "View Report" links continue to target `/projects/{projectId}/results/{task.id}`.
+  - RED/GREEN: focused ReportsPage catalog-display test first failed on the raw-only report title; then `ReportsPage.test.tsx` returned `3 passed`.
+
+- Improved result-detail header workflow display without changing result summary identity:
+  - `ResultDetailPage` now reads `/workflows` through the existing catalog normalizer and passes an optional `workflowDisplayName` into `ResultStudioLayout`/`ResultSummaryHeader`.
+  - The result header description uses the friendly display label when available and still renders `Stable workflow ID: {summary.workflow_type}`.
+  - `summary.workflow_type`, artifact manifests, provenance, and result URLs remain unchanged.
+  - RED/GREEN: focused ResultDetailPage header test first failed on the raw-only workflow id; then `ResultDetailPage.test.tsx ResultStudioLayout.test.tsx` returned `8 passed`.
+  - Combined frontend workflow-display slice returned `26 passed`; console `tsc -b --noEmit` passed.
+
+- Completed Dashboard/Workflows display-only workflow metadata pass:
+  - Dashboard recommended plan, task observation card, active workflow step, Recent Runs fallback, and Results Preview pipeline now use workflow catalog `display_name` where available.
+  - Workflows task-started success and approval surfaces now describe the fixed workflow with the display name and label the machine id as `Stable workflow ID`.
+  - Launch, confirmation, query keys, result URLs, task records, and fingerprints still use stable `workflow_type`/task ids; no backend API contract drift.
+  - RED/GREEN: Dashboard display test first failed on missing observation-surface labels, then `DashboardPage.test.tsx` returned `24 passed`; Workflows launch-success test first failed on raw `dwi_qsirecon`, then `WorkflowsPage.test.tsx` returned `5 passed`.
+  - Combined frontend workflow-display/main-loop slice returned `55 passed`; console `tsc -b --noEmit` and targeted `git diff --check` passed.
+
+- Hardened Elasticsearch hybrid prerequisite acceptance against a false-positive production status:
+  - `verify_elasticsearch_hybrid_prerequisites.py` now rejects `.env` files where `IMAGE_AGENT_RAG_EMBEDDING_PROVIDER` is still local/non-production, even when `/agent/rag/status` reports connected Elasticsearch hybrid.
+  - Release-gate plan validation, stale-task apply request generation/verification, and the remote release gate command plan now require `rag_embedding_provider_production_configured=true` before strict remote smoke.
+  - Updated the deployment runbook and 2026-06-18 work log with the new safe checked field and privacy boundary.
+  - RED/GREEN: prerequisite test first failed because `local_hashing` did not raise, then the prerequisite suite returned `18 passed`; release-gate/stale-task expected-success tests first failed on the missing checked field, then returned `2 passed`.
+  - Combined backend slice returned `160 passed`; `py_compile` passed for the touched scripts.
+  - Remaining P0 is still deployment-side: fresh strict remote acceptance must run on the deployment server with connected Elasticsearch hybrid RAG, production embeddings, local Docker/toolchain, real evidence ids, fingerprint-negative, ObserveRepair, and unknown-workflow incubation evidence.
+
+- Hardened runtime workflow alias evidence across the remote acceptance chain:
+  - Live smoke now requires `runtime_workflow_type` on Agent resume-created tasks and completed task status, keeping stable `workflow_type` as the launch machine ID while preserving the runtime alias needed by pipeline execution evidence.
+  - Offline strict verifier now requires `task_status`, `launched_task`, `agent_workflow_resume`, and confirmation metadata runtime aliases to be privacy-safe and mutually aligned.
+  - Release-gate and stale-task apply-request expected-success material now includes resume/task-status runtime alias alignment, so deployment handoff cannot silently omit these checks.
+  - RED/GREEN: focused verifier/runtime-alias cases first failed on missing enforcement, then `215 passed`; broad smoke/verifier returned `404 passed`; release/stale gate returned `142 passed`; relevant scripts passed `py_compile`.
+
+- Closed the stale-task apply verifier side of runtime alias handoff:
+  - `verify_stale_task_apply_request.py` now independently requires strict-smoke expected-success entries for Agent resume and task-status `runtime_workflow_type` alignment, plus matching saved-verifier `checked.*` entries.
+  - This prevents a regenerated or hand-edited stale-task apply request from dropping runtime alias evidence while still passing the handoff verifier.
+  - RED/GREEN: the new verifier regression first failed with `DID NOT RAISE`, then passed; stale handoff returned `49 passed`, release/smoke gate slice returned `95 passed`, and `py_compile` passed.
+
+- Brought stale-task apply handoff expected-success closer to release-gate parity:
+  - The handoff builder and verifier now require full fingerprint-negative evidence: passed status, fingerprint mismatch gate, no task, and no production task.
+  - They now require full unknown-workflow incubation evidence: passed status, `toolchain_incubation` lane, no task, no confirmation, no production task, and no proposal-created production task.
+  - They now require full ObserveRepair read-only evidence: passed status, read-only policy, no auto rerun, no production task, and retry prerequisites requiring preflight plus human confirmation.
+  - Matching saved verifier `checked.*` expected-success entries are now required for all three lanes.
+  - RED/GREEN: focused builder/verifier tests first failed on missing expected-success items, then the focused parity set returned `4 passed`; touched scripts passed `py_compile`.
+
+- Added stale-task handoff parity for deployment-local toolchain and task observation evidence:
+  - The handoff builder and verifier now require runtime toolchain expected-success proving the workflow tool execution happens on the deployment server, Docker is owned by the API server context, and the required workflow is available.
+  - They now require task-events expected-success proving task observation passed, remote-log events are present, and remote log count is positive.
+  - Matching saved verifier `checked.runtime_toolchain_*` and `checked.task_events_*` entries are now required.
+  - RED/GREEN: focused tests first failed on missing runtime/toolchain and task-events expected-success, then returned `3 passed`; touched scripts passed `py_compile`.
+
+- Added stale-task handoff parity for Elasticsearch hybrid transport/query evidence:
+  - The handoff builder and verifier now require strict-smoke expected-success for production-safe Elasticsearch hybrid embedding transport, endpoint configuration, rebuild/status alignment, and hybrid query index/vector/provider/model/transport/production-ready evidence.
+  - Matching saved verifier `checked.rag_elasticsearch_hybrid_*` and `checked.rag_elasticsearch_hybrid_query_*` entries are now required.
+  - RED/GREEN: focused tests first failed on missing Elasticsearch hybrid strict evidence, then returned `3 passed`.
+
+- Added stale-task handoff parity for Agent-resumed launch identity:
+  - The handoff builder and verifier now require strict-smoke expected-success proving `launched_task.launch_source=agent_workflow_resume`, confirmation metadata runtime workflow type matches the launched task runtime workflow type, and launched task runtime workflow type is present.
+  - Matching saved verifier `checked.launched_task_*` and `checked.agent_workflow_confirmation_metadata_runtime_workflow_type` entries are now required.
+  - RED/GREEN: focused tests first failed on missing launch identity evidence, then returned `3 passed`.
+
+- Added a stale-task handoff parity guard against release-gate drift:
+  - `test_stale_task_apply_expected_success_covers_release_gate_strict_evidence` now extracts release-gate strict expected-success mappings from `verify_release_gate_command_plan.py` and asserts both the stale handoff builder and verifier cover every live and saved-verifier evidence field.
+  - Current audit result: release gate has 32 grouped live strict evidence fields and 32 grouped saved-verifier evidence fields, all covered by stale handoff.
+  - Verification: focused parity guard returned `1 passed`.
+
+- Added a stale-task handoff parity guard for Elasticsearch hybrid prerequisites:
+  - `test_stale_task_apply_elasticsearch_prereq_expected_success_covers_release_gate` now extracts the release-gate ES prerequisite expected-success tuple from `verify_release_gate_command_plan.py` and asserts both the stale handoff builder and verifier cover every production ES/embedding preflight field.
+  - Current audit result: stale handoff covers all release-gate ES prerequisite fields, including production embedding provider/model/endpoint, connected persisted ES hybrid status, positive chunks/vector dimensions, RRF fusion, absent errors, production-safe transport, and production-ready embedding.
+  - Verification: focused ES prereq parity guard returned `1 passed`.
+
+- Added a stale-task handoff command parity guard for strict remote smoke:
+  - `test_stale_task_apply_strict_smoke_command_covers_release_gate_flags` now extracts `static_strict_smoke_flags` from `verify_release_gate_command_plan.py` and asserts the generated stale handoff strict-smoke command includes every release-gate static flag.
+  - Current audit result: the stale handoff strict-smoke command covers all 32 release-gate static flags, including model/tool-loop, project context, fixed workflow confirmation/resume/fingerprint-negative, unknown-workflow incubation, production readiness, runtime toolchain, Elasticsearch hybrid RAG, upload/task/ObserveRepair/launched-task evidence, launchability matrix, native QC, scientific report artifacts, and output JSON.
+  - Verification: focused strict-smoke command parity guard returned `1 passed`.
+
+- Fixed deployment runbook stale-apply CLI drift:
+  - `docs/deployment/remote-agent-production.md` now documents the current `build_stale_task_apply_request.py` required arguments for deployment id, expected health version, remote NIfTI file, registered workflow type, project id, and upload session id.
+  - Added `test_remote_production_runbook_stale_apply_builder_uses_current_required_cli_args` so the runbook cannot drift back to the old missing-argument command.
+  - RED/GREEN: the focused docs contract test first failed on missing `--deployment-id`, then returned `1 passed`.
+
+- Fixed deployment runbook release-gate materializer CLI drift:
+  - `docs/deployment/remote-agent-production.md` now documents the current `build_release_gate_command_plan.py` materialization arguments for deployment id, expected health version, remote NIfTI file, registered workflow type, project id, upload session id, and evidence timestamp.
+  - Added `test_remote_production_runbook_release_gate_materializer_uses_current_required_cli_args` so the runbook cannot drift back to a command that leaves release-gate placeholders unresolved.
+  - RED/GREEN: the focused docs contract test first failed on missing `--deployment-id`, then returned `1 passed`.
+
+- Hardened release-gate materializer missing-argument feedback:
+  - `build_release_gate_command_plan.py` now rejects missing deployment id, expected health version, remote NIfTI file, workflow type, project id, upload session id, and evidence timestamp before calling the release-gate verifier.
+  - This makes operator errors actionable as `<field> is required` instead of a generic unresolved-placeholder failure.
+  - RED/GREEN: `test_build_release_gate_command_plan_rejects_missing_materialization_args` first failed on the old generic placeholder error, then returned `1 passed`.
+
+- Hardened release-gate materializer argument safety:
+  - `build_release_gate_command_plan.py` now rejects unsafe deployment/version symbols, non-remote NIfTI paths, mock/invalid workflow types, and non-positive project/upload ids before command materialization.
+  - RED/GREEN: unsafe deployment id first failed through the generic verifier path, then focused missing/unsafe materialization tests returned `2 passed`.
+
+- Hardened Agent production workflow selectability:
+  - `preflight_workflow()` now blocks registry workflows that are not explicitly `agent_selectable` from entering the Agent production confirmation path.
+  - `create_workflow_task()` also rejects non-selectable registry workflows even if a forged confirmation carries a passed preflight.
+  - RED/GREEN: `t1_deepprep_validate` first passed preflight and then created a forged task; after the guard, `test_agent_tools.py` returned `19 passed` and the LangGraph/Agent safety slice returned `35 passed`.
+
+- Aligned frontend workflow launch lists with the Agent-selectable backend contract:
+  - `normalizeWorkflowCatalog()` now filters non-`agent_selectable` fixed workflows out of frontend launch lists, unless the backend explicitly marks an item `api_runnable`.
+  - `WorkflowCatalogItem` now types the backend `agent_selectable` field, preserving API contract clarity without changing task creation payloads.
+  - RED/GREEN: `t1_deepprep_validate` first remained in the frontend launch list, then `src/lib/workflows.test.ts` returned `12 passed`; Workflows/Dashboard/API helper slice returned `58 passed`; `npx.cmd tsc -b --noEmit` passed.
+
+- Aligned desktop workflow buttons with the Agent-selectable launch contract:
+  - Added a tested `apps/desktop/src/lib/workflows.mjs` helper and reused it from `main.jsx`.
+  - Desktop now filters non-`agent_selectable` fixed workflows from launch buttons and limits fallback buttons to production Agent-selectable workflow ids.
+  - RED/GREEN: desktop helper test first failed on the missing module, then `node --test src/lib/workflows.test.mjs` returned `1 pass`; `npm.cmd run build` passed for `apps/desktop`.
+
+- Hardened direct `/series/{series_id}/run` against fixed workflow bypass:
+  - `task_service.create_series_task()` now blocks registry fixed workflows unless the call carries `confirmed_agent_gate=True`.
+  - This keeps formal fixed-workflow task creation on the registry -> preflight -> human confirmation -> fingerprint -> Agent resume -> task service -> pipeline runner path.
+  - Direct local diagnostics for explicit API-runnable debug workflows such as `t1_deepprep_mock` remain allowed.
+  - Product readiness docs now state formal launch must come from `/agent/runs/{thread_id}/resume` and direct series-run is local diagnostic-only for debug/mock API-runnable workflows.
+  - RED/GREEN: direct `t1_deepprep_anat_report` and `dwi_fast_gpu_dti_validate` launches first returned `200`, then the focused direct-run tests passed; the direct-run/Agent boundary slice returned `12 passed`; local smoke mock/resume checks returned `2 passed`; the product-readiness docs contract returned `1 passed`.
+
+- Aligned Elasticsearch hybrid query evidence with the persisted manifest/status index:
+  - `retrieve_from_local_rag_index()` now passes `manifest.hybrid_search.index` into connected Elasticsearch query execution and records that same value in `elasticsearch_hybrid_query.index`.
+  - This prevents strict smoke from recording default `image_agent_rag` query evidence when a deployment uses a release-specific Elasticsearch index.
+  - The default remains `image_agent_rag` when the manifest omits an index, preserving local contract behavior.
+  - RED/GREEN: a custom manifest index first still searched `image_agent_rag`; after the fix the focused ES query/rebuild slice returned `5 passed`, `test_rag_query.py` returned `20 passed`, and RAG py_compile passed.
+
+- Added configurable Elasticsearch hybrid index support and read-only preflight alignment:
+  - `IMAGE_AGENT_ELASTICSEARCH_INDEX` can now select a privacy-safe release/environment-specific RAG index while preserving `image_agent_rag` as the default.
+  - Connected rebuild, manifest/status evidence, query evidence, release-gate expected-success, and stale-task apply expected-success now agree on the configured index.
+  - `verify_elasticsearch_hybrid_prerequisites.py` now requires `rag_status_hybrid_index_matches_env=true` when an explicit index is configured, preventing strict smoke from running against stale/default ES status evidence.
+  - RAG contract, remote production runbook, and product readiness docs now document the env var, default, privacy boundary, and preflight match requirement.
+  - RED/GREEN: configured-index rebuild/query, prerequisite mismatch, release-gate/stale-task parity, and docs contract slices moved from failing to passing; touched scripts passed `py_compile`.
+
+- Aligned RAG workflow maturity text with the fixed workflow registry:
+  - `docs/rag/workflows/bold_fmriprep_xcpd_report.md` now declares `status: production_supported` and identifies `bold_fmriprep_xcpd_report` as the stable fixed `workflow_type`, not a report-only or incubation-only path.
+  - `workflow_launchability_matrix.md` now records `bold_fmriprep_xcpd_report` as `production_supported`, with the explicit registry -> preflight -> human confirmation -> fingerprint -> `task_service.create_series_task()` -> pipeline runner boundary.
+  - RAG backend-context capability summaries now surface `not report-only` and `requires human confirmation` from structured workflow metadata so Agent/RAG explanations preserve the same API contract as task creation.
+  - RED/GREEN: workflow RAG docs contract tests first failed on the stale incubation wording, then returned `2 passed`; RAG capability response first omitted the not-report-only boundary, then the focused response tests returned `2 passed`.
+
+- Aligned T1 RAG workflow docs with the stable public workflow id:
+  - `docs/rag/workflows/t1_deepprep_anat_report.md` now states that `t1_deepprep_anat_report` is the stable public `workflow_type` for Agent confirmation, fingerprints, database task records, frontend launch controls, and RAG explanations.
+  - The same document states that `t1_deepprep` is only the `runtime_workflow_type` used by the pipeline runner.
+  - `workflow_launchability_matrix.md` now has a primary production row for `t1_deepprep_anat_report`; `t1_deepprep` is documented as a runtime/historical alias, not the preferred new launch id.
+  - Both docs now carry the `workflow_metadata.is_report_only=false` and not-report-only boundary, preventing the report suffix from being mistaken for report-only behavior.
+  - RED/GREEN: T1 RAG docs tests first failed on missing stable-id/runtime-alias wording and then returned `2 passed`; runtime RAG capability coverage returned `3 passed`.
+
+- Aligned DWI RAG workflow docs with the fixed workflow gate and non-report-only boundary:
+  - `docs/rag/workflows/dwi_fast_gpu_dti.md` now states that `dwi_fast_gpu_dti` is the stable public `workflow_type` and `runtime_workflow_type` for the production DWI fast DTI lane.
+  - The DWI RAG doc now states `workflow_metadata.is_report_only=false` and describes the workflow as correction, tensor modeling, maps, tables, QC/provenance, summaries, and report artifacts, not report-only output.
+  - The same doc now states that production task creation must pass registry, preflight, human confirmation, confirmation fingerprint, `task_service.create_series_task()`, and the pipeline runner.
+  - RED/GREEN: DWI docs coverage first failed on missing `workflow_metadata.is_report_only=false` and the fixed workflow gate phrase, then focused docs returned `2 passed`; runtime RAG capability coverage returned `3 passed`.
+
+- Hardened unknown fixed-workflow incubation persistence:
+  - IncubationLedger proposals now persist `contract_version`, `requested_workflow_type`, `requested_action_lane`, `action_lane=toolchain_incubation`, and explicit `task_created=false`, `confirmation_created=false`, `production_task_created=false`, `production_enabled=false` audit fields.
+  - Agent proposal creation now passes the original planner workflow/lane into the ledger before redirecting unknown fixed-workflow requests into incubation.
+  - RED/GREEN: the unknown fixed-workflow LangGraph test first failed on missing persisted `contract_version`, then passed; the focused unknown/incubation graph slice returned `6 passed`; the incubation ledger suite returned `9 passed`.
+
+- Aligned LangGraph ObserveRepair with the read-only tool contract:
+  - Graph repair plans now expose `policy=read_only_observe_repair`, `auto_rerun_allowed=false`, `requires_preflight_before_retry=true`, `requires_human_confirmation_before_retry=true`, and `forbidden_actions=["auto_retry", "auto_rerun", "task_creation"]`.
+  - The graph path still only observes failed task state and drafts repair next steps; it does not create tasks, rerun pipelines, or perform automatic repair.
+  - RED/GREEN: the ObserveRepair graph test first failed on missing `policy`, then passed; the dispatcher/tool read-only contract tests returned `2 passed`.
+
+- Removed misleading ReportsPage workflow-name fallback:
+  - ReportsPage now uses structured `display_name` when the workflow catalog provides it, otherwise falls back to the stable `task.workflow_type` exactly.
+  - This avoids turning complete processing workflow ids such as `dwi_fast_gpu_dti` into synthetic `... Report` labels when catalog metadata is absent.
+  - RED/GREEN: ReportsPage first failed because it rendered `dwi fast gpu dti Report`; after the fix `ReportsPage.test.tsx` returned `3 passed`; backend registry/display metadata guards returned `12 passed`.
+
+- Added machine-readable Elastic hybrid RAG source boundaries:
+  - `docs/rag/vendor/elastic_official_hybrid_search.md` now exposes `unsupported_boundaries` in frontmatter, covering task-launcher exclusion, raw snapshot provenance-only use, backend state authority, unknown workflow incubation, and ObserveRepair read-only/no-rerun policy.
+  - RED/GREEN: the new Elastic vendor boundary test first failed on the missing metadata, then the focused Elastic docs/frontmatter slice and related RAG query/reference slice passed.
+
+- Hardened Elastic hybrid RAG response evidence sanitization:
+  - `build_rag_response()` now re-sanitizes LangGraph-returned `elasticsearch_hybrid_query` before returning API/RAG output, keeping only privacy-safe index/vector/provider/model/transport/boolean readiness fields.
+  - Base URLs, API keys, authorization strings, and arbitrary error text are dropped at the response boundary even if an upstream graph node returns them.
+  - RED/GREEN: the new RAG response regression first failed with leaked `embedding_base_url`, `embedding_api_key`, and `error`, then `test_rag_query.py` returned `24 passed`; the Elasticsearch index safety slice returned `6 passed, 32 deselected`.
+
+- Added public task workflow metadata for task observation:
+  - `/tasks/{task_id}`, `/projects/{project_id}/tasks`, and ObserveRepair task payloads now attach registry-derived `workflow_metadata` for known workflow ids while preserving stable `workflow_type` and `runtime_workflow_type`.
+  - Unknown historical task rows remain readable with `workflow_metadata=null`; public payloads still omit `log_path`.
+  - RED/GREEN: task observation API first failed on missing `workflow_metadata`, then focused task metadata/API contract tests returned `3 passed`; Agent task/ObserveRepair tool slice returned `2 passed`; console typecheck passed.
+
+- Aligned frontend task/report displays with task payload workflow metadata:
+  - TasksPage and ReportsPage now prefer `task.workflow_metadata.display_name`, then workflow catalog metadata, then stable `task.workflow_type`.
+  - Both views continue to show `Stable workflow ID: <workflow_type>`, keeping capability display separate from task creation, confirmation fingerprint, and database IDs.
+  - RED/GREEN: new frontend tests first failed when catalog was empty and task metadata was ignored; after the fix TasksPage returned `6 passed`, ReportsPage returned `4 passed`, console `tsc -b --noEmit` passed, and focused backend task metadata/log redaction coverage returned `2 passed`.
+
+- Extended task payload workflow metadata fallback to Results Studio:
+  - ResultsIndexPage now prefers `task.workflow_metadata.display_name`, then workflow catalog metadata, then stable `task.workflow_type`.
+  - Result cards still preserve `Stable workflow ID: <workflow_type>` and route by task ID, keeping result/QC entry points aligned with backend task records.
+  - RED/GREEN: the new ResultsIndexPage regression first failed when catalog was empty and task metadata was ignored; after the fix `ResultsIndexPage.test.tsx` returned `3 passed`.
+
+- Added result-summary workflow metadata for result detail/report/QC views:
+  - `/tasks/{task_id}/result-summary` now includes registry-derived `workflow_metadata`, including alias resolution from historical/runtime rows such as `t1_deepprep` to stable public metadata for `t1_deepprep_anat_report`.
+  - ResultDetailPage now prefers `summary.workflow_metadata.display_name`, then workflow catalog metadata, then stable `summary.workflow_type`.
+  - `summary_path` remains omitted from public result-summary payloads, and task creation/database workflow IDs remain unchanged.
+  - RED/GREEN: backend result-summary first failed on missing `workflow_metadata`, then focused backend coverage returned `2 passed`; frontend detail first rendered the machine ID with an empty catalog, then `ResultDetailPage.test.tsx` returned `6 passed`; console typecheck passed.
+
+- Aligned the result-summary RAG contract with workflow metadata boundaries:
+  - `docs/rag/contracts/result-summary.md` now documents `workflow_metadata` fields as display/interpretation-only context for Agent, RAG, and frontend result views.
+  - The contract preserves raw `workflow_type` as the stable machine id for task creation, confirmation fingerprint, database task records, artifact routing, and audit logs.
+  - Historical/runtime alias metadata resolution is documented without authorizing alias-based production task creation or relaunch.
+  - Public result-summary responses still omit `summary_path`; RAG answers should use safe relative/download/artifact-manifest references.
+  - RED/GREEN: `test_result_summary_rag_contract_documents_workflow_metadata_boundary` first failed on missing `workflow_metadata`, then returned `1 passed`.
+
+- Extended Agent/RAG consumption of result-summary workflow metadata:
+  - `build_chat_backend_context()` now enriches result summaries with registry-derived `workflow_metadata`, including historical/runtime alias resolution to stable public workflow metadata.
+  - Agent-facing result summaries preserve raw `workflow_type` but omit `summary_path`, keeping host paths out of chat/RAG context.
+  - `build_rag_response()` now summarizes backend result summaries using display name, raw workflow id, public metadata id, modality, and not-report-only boundary.
+  - RED/GREEN: backend context first failed with missing `workflow_metadata`, then passed; RAG answer first ignored result summaries, then passed.
+
+- Aligned Agent tool result-summary reads with the public contract:
+  - `read_result_summary()` now enriches both registered-output and fallback-discovered summaries with workflow registry metadata and removes `summary_path` before returning to Agent tools.
+  - `read_task()` now resolves historical/runtime aliases such as `t1_deepprep` to stable public metadata while preserving the raw task `workflow_type`.
+  - This keeps model-facing tools aligned with frontend/API/RAG result-summary boundaries and avoids leaking backend host paths.
+  - RED/GREEN: focused Agent tool tests first failed on missing `workflow_metadata`, then returned `2 passed`; the alias task guard returned `1 passed`.
+
+- Hardened Elasticsearch hybrid RAG prerequisite evidence:
+  - `verify_elasticsearch_hybrid_prerequisites.py` now checks that env-configured embedding provider matches current `/agent/rag/status` provider after backend normalization (`openai`, `openai_compatible`, and `custom` -> `openai`).
+  - Provider drift such as `IMAGE_AGENT_RAG_EMBEDDING_PROVIDER=rawchat` with status provider `openai` now blocks preflight without printing provider values, URLs, API keys, or host paths.
+  - Release-gate and stale-task handoff expected-success lists now require `rag_status_hybrid_embedding_provider_matches_env=true`.
+  - RED/GREEN: provider drift first passed incorrectly, then focused ES prerequisite tests returned `3 passed`; release-gate/stale-task expected-success tests returned `3 passed`.
+
+- Extended strict remote smoke evidence for result-summary workflow metadata:
+  - `smoke_remote_agent.py` now requires `/tasks/{task_id}/result-summary` to include safe structured `workflow_metadata` and records it in the smoke JSON evidence.
+  - `verify_remote_smoke_acceptance.py` now verifies result-summary metadata with the same fixed-workflow metadata contract used for Agent confirmation: stable `workflow_type`, matching `runtime_workflow_type`, non-machine display name, capability summary, pipeline stages, primary/QC/report outputs, limitations, and `is_report_only=false`.
+  - This closes the loop between result-summary/report/QC display evidence and the stable task identity boundary; task creation, fingerprints, and DB records still use `workflow_type`.
+  - RED/GREEN: result-summary metadata overrides first passed incorrectly in the strict verifier, then `test_verify_remote_smoke_acceptance.py` returned `279 passed`; smoke script result-summary metadata coverage returned `133 passed`; `py_compile` for both scripts passed.
+
+- Aligned remote acceptance docs with result-summary workflow metadata evidence:
+  - Remote acceptance template, production runbook, product-readiness gate, and image-agent developer testing matrix now require `task_result_summary.workflow_metadata.*` evidence alongside result-summary artifact/download checks.
+  - The docs state that result-summary workflow metadata is display/interpretation evidence only and does not replace stable `workflow_type` for task creation, confirmation fingerprints, database records, or artifact routes.
+  - RED/GREEN: the new docs contract test first failed on missing `task_result_summary.workflow_metadata.workflow_type`, then `test_skill_and_rag_docs.py` returned `64 passed`.
+
+- Added machine-readable result-summary metadata evidence to release handoffs:
+  - `verify_remote_smoke_acceptance.py` now emits `checked.task_result_summary_metadata_workflow_type`, `checked.task_result_summary_metadata_runtime_workflow_type`, and `checked.task_result_summary_metadata_is_report_only`.
+  - Remote release-gate plan, release-gate verifier, stale-task apply builder, and stale-task apply verifier now require both strict-smoke result-summary metadata evidence and saved-verifier checked evidence.
+  - This makes the result-summary/report/QC workflow identity boundary visible in machine-readable release evidence, not just enforced internally.
+  - RED/GREEN: checked metadata and stale expected-success tests first failed on missing fields, then focused release/stale/verifier suites returned `373 passed` and `61 passed`; touched scripts passed `py_compile`.
+
+- Hardened Elasticsearch hybrid query component evidence:
+  - `retrieve_from_local_rag_index()` now includes privacy-safe query evidence for the actual hybrid components: `lexical_retriever=standard`, `vector_retriever=knn`, and `fusion=rrf`, alongside index and embedding metadata.
+  - `build_rag_response()` preserves those safe hybrid query fields while continuing to strip endpoints, API keys, authorization strings, and arbitrary errors.
+  - `smoke_remote_agent.py` and `verify_remote_smoke_acceptance.py` now require the hybrid query evidence to match `/agent/rag/status`, so strict remote acceptance cannot pass with an Elasticsearch label that omits BM25/kNN/RRF proof.
+  - Remote release-gate plan, release-gate verifier, stale-task apply builder, and stale-task apply verifier now require both raw smoke and `checked.*` evidence for the hybrid query components.
+  - RED/GREEN: hybrid query component tests first failed on missing fields and missing verifier gates; then RAG query/index tests returned `63 passed`, strict smoke/verifier tests returned `416 passed`, release/stale handoff tests returned `161 passed`, touched scripts passed `py_compile`, and `git diff --check` returned exit 0.
+
+- Hardened read-only Elasticsearch hybrid prerequisite component checks:
+  - `verify_elasticsearch_hybrid_prerequisites.py` now emits and enforces `/agent/rag/status.index.hybrid_search` component evidence for `lexical_retriever=standard`, `vector_retriever=knn`, and `dense_vector_field=embedding` before strict smoke can mutate remote state.
+  - Release-gate and stale-task handoff expected-success lists now require those read-only preflight fields, keeping deployment-server acceptance aligned with the strict RAG query evidence.
+  - RED/GREEN: focused prereq/release/stale tests first failed on missing fields and missing verifier gates, then returned `20 passed`; the related verifier group returned `187 passed`.
+
+- Extended Elasticsearch hybrid query field evidence:
+  - `retrieve_from_local_rag_index()` now includes `dense_vector_field=embedding` in privacy-safe `elasticsearch_hybrid_query` evidence alongside lexical, vector, fusion, index, and embedding metadata.
+  - `build_rag_response()`, strict remote smoke, saved smoke verifier, remote release-gate plan, and stale-task handoff expected-success lists now preserve and require this query-time field.
+  - RED/GREEN: focused RAG/smoke/verifier/release/stale tests first failed on missing query-time `dense_vector_field`, then returned `250 passed`; the related full evidence group returned `646 passed`.
+
+- Aligned human acceptance docs with Elasticsearch query dense-vector field evidence:
+  - Remote production runbook, remote acceptance template, product-readiness gate, image-agent developer testing matrix, and Elasticsearch hybrid RAG contract now explicitly require `rag_elasticsearch_hybrid_query_dense_vector_field=embedding`.
+  - The docs state that the query-time dense-vector field must match `rag_elasticsearch_hybrid.dense_vector_field`, keeping human/operator acceptance aligned with strict smoke and saved-verifier machine checks.
+  - RED/GREEN: docs contract tests first failed on the missing runbook phrase, then focused docs tests returned `3 passed`; full docs contract suite returned `64 passed`.
+
+- Aligned read-only Elasticsearch hybrid preflight docs with component evidence:
+  - Product readiness, remote production runbook, and image-agent developer testing matrix now require the preflight script `verify_elasticsearch_hybrid_prerequisites.py` to prove `rag_status_hybrid_lexical_retriever=standard`, `rag_status_hybrid_vector_retriever=knn`, and `rag_status_hybrid_dense_vector_field=embedding` before strict smoke mutates remote state.
+  - The docs keep this preflight explicitly read-only and non-acceptance: it does not replace `/agent/rag/rebuild`, `/agent/rag/query`, strict remote smoke, or saved-JSON verification.
+  - RED/GREEN: the new docs contract first failed on missing component fields/read-only wording, then the focused test returned `1 passed`; full docs contract suite returned `65 passed`.
+
+- Aligned human acceptance docs with Elasticsearch query component evidence:
+  - Product readiness, remote production runbook, remote acceptance template, image-agent developer testing matrix, and the Elasticsearch hybrid RAG contract now require `rag_elasticsearch_hybrid_query_lexical_retriever=standard`, `rag_elasticsearch_hybrid_query_vector_retriever=knn`, and `rag_elasticsearch_hybrid_query_fusion=rrf` alongside the query dense-vector field.
+  - The docs now state that query-time hybrid components must match `rag_elasticsearch_hybrid`, preventing human/operator acceptance from proving status metadata while missing actual `/agent/rag/query` BM25/kNN/RRF evidence.
+  - RED/GREEN: the new docs contract first failed on missing query component fields, then the focused test returned `1 passed`.
+
+- Tightened strict smoke launch provenance at the live script boundary:
+  - `smoke_remote_agent.py` now rejects `--require-production-readiness --require-launched-task`, `--require-deployment-identity --require-launched-task`, and `--require-runtime-toolchain --require-launched-task` unless `--require-agent-workflow-resume` is also present.
+  - Direct `/series/{series_id}/run` launch evidence remains available for local/diagnostic smoke, but it can no longer produce production-readiness, deployment-identity, or deployment-local runtime-toolchain strict launch evidence that the offline verifier would later reject.
+  - RED/GREEN: the new smoke tests first produced `launch_source=direct_series_run` without raising; after the guards, all three strict tests and the diagnostic direct-run regression returned `4 passed`, and `py_compile` passed for the touched script.
+
+- Synchronized strict launch-source guard into human acceptance docs:
+  - Remote production runbook, remote acceptance template, product-readiness gate, and image-agent developer testing matrix now state that `--require-production-readiness --require-launched-task`, `--require-deployment-identity --require-launched-task`, and `--require-runtime-toolchain --require-launched-task` must also include `--require-agent-workflow-resume`.
+  - The docs now explicitly mark `direct_series_run` as local/diagnostic smoke only, not strict deployment launch evidence.
+  - RED/GREEN: the docs contract first failed on the acceptance template missing the combined flag rule, then returned `1 passed`.
+
+- Hardened read-only Elasticsearch preflight official-source evidence:
+  - `verify_elasticsearch_hybrid_prerequisites.py` now requires `/agent/rag/status.index.hybrid_search.official_sources` to include the official Elasticsearch RRF documentation URL before strict smoke mutates remote state.
+  - The preflight emits only `rag_status_hybrid_official_rrf_source_present=true`; it does not print raw official-source URL lists, endpoint URLs, secrets, backend paths, or raw errors.
+  - Release-gate and stale-task handoff expected-success lists now require `rag_status_hybrid_official_rrf_source_present=true`, keeping the read-only preflight aligned with strict smoke and saved verifier RRF source requirements.
+  - RED/GREEN: prereq tests first failed on the missing checked field and accepted missing/wrong `official_sources`; stale handoff tests then failed until the builder and verifier both required the new field; focused prereq/release/stale/docs coverage returned `25 passed` and `168 passed`.
+
+- Hardened strict smoke Elasticsearch RRF source evidence against raw URL/path leakage:
+  - `smoke_remote_agent.py` still requires live `/agent/rag/status.index.hybrid_search.official_sources` to include the official Elastic RRF URL, but saved strict smoke evidence now records only `rag_elasticsearch_hybrid.official_rrf_source_present=true`.
+  - `rag_before`, `rag_after`, and fast-launch RAG summaries now sanitize hybrid search metadata and collapse raw `official_sources` lists into boolean official-source presence, preventing internal URLs or backend paths from entering acceptance JSON.
+  - `verify_remote_smoke_acceptance.py` now rejects saved `rag_elasticsearch_hybrid.official_sources` and requires `rag_elasticsearch_hybrid.official_rrf_source_present=true`, then exposes `checked.rag_elasticsearch_hybrid_official_rrf_source_present=true`.
+  - Release-gate and stale-task handoff expected-success lists now require both the raw smoke boolean and checked verifier boolean; acceptance docs describe the live-backend/source-vs-saved-evidence boundary.
+  - RED/GREEN: strict smoke first saved internal `official_sources` values in `rag_elasticsearch_hybrid` and raw `rag_before`/`rag_after`; verifier first rejected the new strict payload because it required raw `official_sources`; focused smoke/verifier tests returned `285 passed`, and release/stale/docs tests returned `236 passed`.
+
+- Extended saved strict smoke verifier official-source leakage guard:
+  - `verify_remote_smoke_acceptance.py` now scans the whole saved JSON payload and rejects any `official_sources` key, including side-channel summaries such as `rag_before.hybrid_search.official_sources` or `rag_after.hybrid_search.official_sources`.
+  - Rejection messages report only the offending JSON path and do not echo internal URLs, backend paths, or source values.
+  - Remote acceptance docs now state that no raw `official_sources` key may be saved anywhere in strict smoke JSON.
+  - RED/GREEN: a forged `rag_before.hybrid_search.official_sources` payload first passed the verifier; after the global scan, `test_verify_remote_smoke_acceptance.py` returned `285 passed`.
+
+- Aligned live fast-launch Elasticsearch RRF source readiness:
+  - `/deployment.fast_launch_readiness.checks.rag_elasticsearch_hybrid` now requires the running `/agent/rag/status.index.hybrid_search.official_sources` to include the curated official Elastic RRF URL before reporting `status=passed`.
+  - The live readiness payload exposes only `official_rrf_source_present=true/false` and privacy-safe `blocking_codes` such as `rag_hybrid_official_rrf_source_missing`; it does not expose raw `official_sources` lists or source URLs to frontend/operator tooling.
+  - Remote production docs and the image-agent developer testing matrix now require `fast_launch_readiness.checks.rag_elasticsearch_hybrid.official_rrf_source_present=true` alongside `status=passed`.
+  - RED: the new readiness test first returned `ready=true` for a hybrid status carrying only a non-official RRF URL, and the docs contract first failed because the live readiness official-source boolean was undocumented.
+  - GREEN: focused readiness/docs checks returned `4 passed` and `1 passed`; related Agent/RAG/preflight/smoke/verifier/release/stale/docs regression returned `735 passed`; `py_compile` passed for `agent_service.py`; `git diff --check` returned no whitespace errors, only existing CRLF/LF warnings.
+
+- Hardened ObserveRepair Agent-tool evidence before it reaches the model:
+  - `observe_repair_task()` now reuses the Agent tool log redaction path for API keys, bearer-like `sk-*` values, token/password/license assignments, patient labels, and host paths in task errors, main logs, and remote logs.
+  - This keeps ObserveRepair read-only and safe even when consumed directly by LangGraph/Agent tools rather than through the `/tasks/{task_id}/observe-repair` API route's extra response sanitizer.
+  - RED: direct `observe_repair_task()` output first leaked `sk-agent-secret` from the main task log while still reporting `production_task_created=false`.
+  - GREEN: focused ObserveRepair tool/API/dispatcher/LangGraph checks returned `2 passed` and `3 passed`; full Agent tools coverage returned `22 passed`; ObserveRepair plus saved remote-smoke verifier coverage returned `289 passed`; `py_compile` passed for `tools.py`/`tasks.py`; `git diff --check` returned no whitespace errors, only existing CRLF/LF warnings.
+
+- Tightened workflow metadata launch-boundary semantics:
+  - `workflow_public_metadata()` now includes `agent_selectable=true/false` so frontend, Agent, and RAG consumers can distinguish stable public launch workflows from runtime/validation aliases while preserving `workflow_type` as the machine id.
+  - `workflow_public_metadata_for_record("t1_deepprep", "t1_deepprep")` still resolves historical/runtime records to stable public metadata for `t1_deepprep_anat_report`, keeping display names and launch ids separate.
+  - The result-summary RAG contract now states that `workflow_metadata.agent_selectable` is only a display/selection hint and does not authorize task creation; production tasks still require registry, preflight, human confirmation, fingerprint verification, `task_service.create_series_task()`, and the pipeline runner.
+  - RED: registry metadata tests first failed because `agent_selectable` was missing from public metadata, and the docs contract first failed because the boundary was undocumented.
+  - GREEN: focused registry/docs checks returned `2 passed` and `1 passed`; related registry/Agent/RAG/docs coverage returned `61 passed`; console workflow helper coverage returned `12 passed`; `py_compile` passed for `registry.py`; `git diff --check` returned no whitespace errors, only existing CRLF/LF warnings.
+
+- Promoted `agent_selectable` into strict smoke and release evidence:
+  - `smoke_remote_agent.py` now preserves the safe boolean `workflow_metadata.agent_selectable` and rejects task result-summary metadata unless it is `true`.
+  - `verify_remote_smoke_acceptance.py` now requires `agent_workflow_confirmation.workflow_metadata.agent_selectable=true` and `task_result_summary.workflow_metadata.agent_selectable=true`, and emits checked evidence for both fields.
+  - Remote release-gate JSON, release-gate verifier, stale-task apply builder/verifier, deployment docs, product readiness, and the image-agent developer testing matrix now require both live strict-smoke evidence and offline `checked.*` evidence for `agent_selectable=true`.
+  - RED: strict verifier tests first failed with missing `checked.*_metadata_agent_selectable` and accepted false/missing metadata; live smoke first dropped `agent_selectable` and accepted false task result-summary metadata; docs/release/stale checks first failed because their expected-success lists omitted the new evidence.
+  - GREEN: `test_verify_remote_smoke_acceptance.py` plus `test_smoke_remote_agent.py` returned `427 passed`; release/stale/docs coverage returned `172 passed`; touched strict-smoke/release/stale scripts passed `py_compile`.
+
+- Moved Agent confirmation `agent_selectable` enforcement into live smoke:
+  - `smoke_remote_agent.py` now rejects Agent workflow confirmations that omit safe `workflow_metadata` or return `workflow_metadata.agent_selectable` as missing/false.
+  - This prevents strict smoke from saving `agent_workflow_confirmation_status=passed` evidence that only the offline verifier would later reject, keeping the live confirmation step aligned with the production metadata boundary.
+  - RED: the new parameterized confirmation test first generated passed smoke JSON for missing metadata, missing `agent_selectable`, and `agent_selectable=false`.
+  - GREEN: the new rejection test plus the normal Agent confirmation test returned `4 passed`; full smoke/verifier coverage returned `430 passed`; touched scripts passed `py_compile`.
+
+- Completed workflow eligibility metadata propagation and acceptance coverage:
+  - `build_workflow_eligibility()` now attaches public registry `workflow_metadata` to eligibility items while preserving stable `workflow_type` as the machine id.
+  - Strict remote smoke now rejects `primary_recommendation`, `runnable_workflows`, or `blocked_workflows` dict entries whose `workflow_metadata` is missing or does not match the entry `workflow_type`.
+  - Local main-flow smoke now preserves safe workflow capability metadata in saved evidence and still drops unsafe debug paths or host-path text.
+  - The image-agent developer contract now states that `workflow_eligibility.workflow_metadata` is display/interpretation evidence only and does not replace registry, preflight, human confirmation, confirmation fingerprint, `task_service.create_series_task()`, or the pipeline runner.
+  - RED: eligibility registry coverage first failed with `KeyError: 'workflow_metadata'`; remote smoke first accepted missing/mismatched eligibility metadata.
+  - GREEN: focused metadata/smoke tests returned `2 passed` and `4 passed`; full remote/local smoke returned `158 passed`; related registry/API returned `16 passed, 3 warnings`; docs returned `2 passed`; console workflow helper coverage returned `12 passed`; touched Python files passed `py_compile`; `git diff --check` returned no whitespace errors, only existing CRLF/LF warnings.
+
+- Hardened workflow eligibility metadata negative acceptance:
+  - Strict remote smoke now requires eligibility item `workflow_metadata` to include non-empty `display_name`, `capability_summary`, `workflow_family`, `workflow_role`, `pipeline_stages`, `primary_outputs`, `qc_outputs`, `report_outputs`, and `limitations`, plus `agent_selectable=true` and `is_report_only=false`.
+  - This keeps weak or report-only-looking metadata from satisfying deployed workflow launchability evidence while preserving the production creation path through stable `workflow_type`, registry, preflight, human confirmation, fingerprint, `task_service.create_series_task()`, and the pipeline runner.
+  - The image-agent developer testing matrix now explicitly lists weak `workflow_eligibility.workflow_metadata` as a remote smoke negative case.
+  - RED: `test_smoke_remote_agent_rejects_weak_workflow_eligibility_metadata` first failed for all nine weak metadata variants because remote smoke accepted them.
+  - RED: `test_image_agent_skill_references_document_backend_readiness_contracts` first failed because the testing matrix did not document weak metadata negative cases.
+  - GREEN: focused smoke metadata checks returned `12 passed`; docs contract returned `1 passed`; full remote smoke returned `152 passed`; `py_compile` passed for `smoke_remote_agent.py`.
+
+- Promoted workflow eligibility metadata into saved strict-acceptance evidence:
+  - `smoke_remote_agent.py` now emits privacy-safe project and upload-inventory eligibility metadata summaries: status, required field names, workflow types, and item counts.
+  - `verify_remote_smoke_acceptance.py` now requires `project_workflow_eligibility_metadata_*` and `upload_inventory_workflow_eligibility_metadata_*` evidence, confirms the completed task workflow appears in both summaries, and emits checked values for offline release evidence.
+  - The saved evidence avoids raw metadata copies while still proving `/projects/{project_id}/series` and `/projects/{project_id}/datasets/{upload_session_id}/inventory` exposed complete structured workflow metadata.
+  - The image-agent developer testing matrix now documents these fields and the corresponding `checked.*` verifier output.
+  - RED: `test_smoke_remote_agent_validates_dataset_inventory_workflow_eligibility` first failed with `KeyError: 'project_workflow_eligibility_metadata_status'`.
+  - RED: six verifier weak-evidence cases first failed because saved acceptance verification accepted skipped/weak project and upload-inventory metadata summaries.
+  - RED: docs contract first failed because human acceptance docs did not mention the saved eligibility metadata evidence.
+  - GREEN: focused smoke/verifier/docs checks returned `235 passed`; full smoke/verifier suite returned `447 passed`; touched smoke/verifier scripts passed `py_compile`.
+
+- Propagated workflow eligibility metadata evidence into release and stale-task gates:
+  - Remote release-gate expected-success evidence now requires privacy-safe project and upload-inventory workflow eligibility metadata status, workflow-type inclusion, and item counts.
+  - `verify_release_gate_command_plan.py` now fails plans that omit the live smoke evidence or the corresponding `checked.*` offline verifier evidence.
+  - Stale-task apply request builder and verifier constants now mirror the release-gate requirements so stale-task handoff cannot skip structured workflow capability evidence.
+  - RED: release-gate tests first failed because the static plan omitted `project_workflow_eligibility_metadata_*` and `upload_inventory_workflow_eligibility_metadata_*`, and the plan verifier did not reject omissions.
+  - RED: stale-task builder/verifier tests first failed because generated follow-up gates and verifier constants lagged the release-gate strict evidence.
+  - GREEN: focused release/stale checks returned `13 passed`, `1 passed`, and `1 passed`; related release/stale suites returned `181 passed`; touched scripts passed `ast.parse` syntax checks after Windows `py_compile` hit a locked `__pycache__`; `git diff --check` returned no whitespace errors, only existing CRLF/LF warnings.
+
+- Added explicit checked workflow-type inclusion evidence for eligibility metadata:
+  - `verify_remote_smoke_acceptance.py` now emits `checked.project_workflow_eligibility_metadata_task_workflow_type_included=true` and `checked.upload_inventory_workflow_eligibility_metadata_task_workflow_type_included=true` after confirming the completed task workflow is present in project-series and upload-inventory eligibility metadata summaries.
+  - Release-gate and stale-task expected-success lists now require these boolean checked fields in addition to the saved workflow-type lists, making the evidence machine-readable for deployment handoff.
+  - The image-agent developer testing matrix now documents the new checked fields as part of strict remote acceptance.
+  - RED: saved acceptance verifier first failed with `KeyError: 'project_workflow_eligibility_metadata_task_workflow_type_included'`.
+  - RED: release/stale expected-success tests first failed because static plan, verifier requirements, and stale-task builder constants omitted the new checked booleans.
+  - RED: docs contract first failed because the testing matrix did not list the new checked booleans.
+  - GREEN: focused verifier/release/stale checks returned `1 passed`, `15 passed`, and `1 passed`; combined verifier/release/stale/docs checks returned `545 passed`; touched scripts passed `ast.parse`; `git diff --check` returned no whitespace errors, only existing CRLF/LF warnings.
+
+- Tightened Elasticsearch hybrid rebuild/status endpoint drift verification:
+  - `verify_remote_smoke_acceptance.py` now explicitly checks `rag_rebuild_elasticsearch_hybrid.embedding_endpoint_configured` matches `rag_elasticsearch_hybrid.embedding_endpoint_configured` before requiring the rebuild flag to be `true`.
+  - This removes a duplicate rebuild-only truthiness check and makes saved strict acceptance reject rebuild/status drift for the production embedding endpoint evidence.
+  - RED: the weak-evidence cases for rebuild `embedding_endpoint_configured=false/null` first failed with the old message `must be true` instead of `must match status`.
+  - GREEN: filtered drift checks returned `5 passed, 290 deselected`; full saved strict-acceptance verifier returned `295 passed`; release/stale/docs checks returned `250 passed`; touched script passed `ast.parse`; `git diff --check` returned no whitespace errors, only existing CRLF/LF warnings.
+
+- Tightened Elasticsearch hybrid query/status embedding readiness drift verification:
+  - `verify_remote_smoke_acceptance.py` now checks query-time `rag_elasticsearch_hybrid_query_embedding_endpoint_configured` and `rag_elasticsearch_hybrid_query_embedding_production_ready` match the connected status evidence before requiring both values to be `true`.
+  - Remote release-gate JSON, release-gate verifier, stale-task apply builder, and stale-task apply verifier now require live and `checked.*` expected-success lines for query endpoint-configured and production-ready matching status.
+  - RED: query embedding weak-evidence cases first failed with the old `must be true` messages instead of `must match status`.
+  - GREEN: filtered query drift checks returned `5 passed, 290 deselected`; release-gate query evidence checks returned `26 passed, 100 deselected`; stale-task builder focus returned `1 passed`; combined verifier/release/stale/docs checks returned `549 passed`; touched scripts passed `ast.parse`; `git diff --check` returned no whitespace errors, only existing CRLF/LF warnings.
+
+- Tightened Elasticsearch hybrid rebuild/status component drift verification:
+  - `smoke_remote_agent.py` now requires `/agent/rag/rebuild.hybrid_search` to report `lexical_retriever`, `vector_retriever`, `dense_vector_field`, and `fusion` matching the connected `/agent/rag/status` evidence, then saves those fields in `rag_rebuild_elasticsearch_hybrid`.
+  - `verify_remote_smoke_acceptance.py` now rejects saved strict smoke JSON where rebuild BM25/kNN/RRF component evidence drifts from status, and emits checked values for `rag_rebuild_elasticsearch_hybrid_lexical_retriever`, `rag_rebuild_elasticsearch_hybrid_vector_retriever`, `rag_rebuild_elasticsearch_hybrid_dense_vector_field`, and `rag_rebuild_elasticsearch_hybrid_fusion`.
+  - Remote release-gate JSON, release-gate verifier, stale-task apply builder/verifier, RAG contract, remote production runbook, and image-agent developer testing matrix now require rebuild/status component matching so status-only or query-only RRF evidence cannot satisfy release acceptance.
+  - RED: saved strict acceptance weak-evidence tests first accepted rebuild `lexical_retriever`, `vector_retriever`, `dense_vector_field`, and `fusion` drift; live smoke evidence first omitted those fields from `rag_rebuild_elasticsearch_hybrid`.
+  - RED: stale-task builder tests then failed because post-apply strict smoke expected-success lists omitted the new rebuild component matching evidence.
+  - GREEN: focused smoke/verifier checks returned `238 passed`; release/stale checks returned `187 passed`; combined smoke/verifier/release/stale/docs checks returned `554 passed`.
+
+- Synchronized product/operator docs with rebuild/status component matching:
+  - Added a docs contract test requiring product readiness, remote production runbook, remote acceptance template, image-agent testing matrix, and the Elasticsearch hybrid contract to name `rag_rebuild_elasticsearch_hybrid.lexical_retriever`, `rag_rebuild_elasticsearch_hybrid.vector_retriever`, `rag_rebuild_elasticsearch_hybrid.dense_vector_field`, and `rag_rebuild_elasticsearch_hybrid.fusion` as rebuild evidence that must match `rag_elasticsearch_hybrid`.
+  - Updated `docs/product-readiness.md`, `docs/deployment/remote-agent-production.md`, `docs/deployment/remote-agent-acceptance-template.md`, and `docs/rag/contracts/elasticsearch-hybrid-search.md` so human/operator acceptance no longer lags the machine gate.
+  - RED: the new docs test first failed because product readiness still described rebuild evidence only as index/count/dims/embedding matching.
+  - GREEN: focused rebuild docs test returned `1 passed`; Elasticsearch/product/remote docs slice returned `8 passed, 60 deselected`.
+
+- Tightened `/deployment.fast_launch_readiness` Elasticsearch hybrid component gating:
+  - `agent_service._current_rag_elasticsearch_hybrid_check()` now exposes safe `lexical_retriever`, `vector_retriever`, and `dense_vector_field` values and blocks launch readiness unless they are `standard`, `knn`, and `embedding`.
+  - New privacy-safe blocking codes are `rag_hybrid_lexical_retriever_not_standard`, `rag_hybrid_vector_retriever_not_knn`, and `rag_hybrid_dense_vector_field_not_embedding`.
+  - Product readiness and remote production docs now state that operator-facing fast-launch readiness requires those current deployment component fields in addition to connected Elasticsearch, production embeddings, RRF, official RRF source evidence, and no hybrid/embedding errors.
+  - RED: the new API regression first showed readiness stayed `ready=true` when the current hybrid status used degraded component values.
+  - RED: the new docs contract first failed because the fast-launch docs only named RRF/source evidence, not retriever/dense-vector blockers.
+  - GREEN: focused readiness regressions returned `5 passed`; Elasticsearch fast-launch/docs slice returned `11 passed, 111 deselected`.
+
+- Aligned console fast-launch UI with Elasticsearch hybrid readiness components:
+  - `FastLaunchReadiness` frontend types now include the backend `rag_elasticsearch_hybrid` check with safe component fields, production embedding booleans/counts, `official_rrf_source_present`, and privacy-safe `blocking_codes`.
+  - `SettingsPage` now shows a compact ES hybrid RAG readiness tile with `lexical_retriever / vector_retriever / dense_vector_field`, official RRF source status, and backend-provided blocking codes without exposing raw official-source URLs, endpoint URLs, keys, backend paths, or raw errors.
+  - RED: the Settings page regression first failed because the frontend did not render `ES hybrid RAG blocked` or the new component blockers from deployment status.
+  - GREEN: focused Settings fast-launch test returned `1 passed, 5 skipped`; full Settings page test returned `6 passed`; console TypeScript check returned exit 0.
+
+- Added console deployment-response privacy fallback:
+  - `api.deployment()` now applies a deployment-specific sanitizer before UI code sees readiness evidence, preserving safe summary fields and blocking codes while dropping raw official-source lists, raw snapshots/files, endpoint URLs, error fields, keys, tokens, and backend paths.
+  - This does not change the backend API contract; it is a frontend defense-in-depth layer for operator panels that already expect privacy-safe summaries.
+  - RED: the new API client regression first showed `official_sources` from `fast_launch_readiness.checks.rag_elasticsearch_hybrid` reaching UI code.
+  - GREEN: focused deployment sanitization test returned `1 passed, 17 skipped`; API/Settings/AppShell frontend slice returned `27 passed`; console TypeScript check returned exit 0.
+
+- Aligned desktop deployment-response privacy fallback with the console:
+  - `apps/desktop/src/lib/api.js` now sanitizes `api.deployment()` responses before the desktop UI consumes them, dropping raw official-source lists, raw snapshots/files, endpoint URLs, error fields, keys/tokens/secrets, and backend paths while preserving safe readiness summaries and blocking codes.
+  - Added a node:test regression that proves desktop deployment readiness evidence keeps `blocking_codes` and `dense_vector_field` but strips raw Elastic URLs, embedding endpoint URLs, secret values, and backend paths.
+  - RED: the new desktop API regression first failed because `official_sources` reached UI code.
+  - GREEN: focused desktop deployment sanitization test returned `1 passed`; desktop API/workflow tests returned `2 passed`; desktop Vite production build completed successfully.
+
+- Extended desktop frontend sanitization to result/QC display APIs:
+  - `apps/desktop/src/lib/api.js` now applies the shared backend-path sanitizer to upload responses, task list/detail responses, legacy outputs, result summaries, and chat responses.
+  - Result summary and legacy output tests prove `relative_path` and `download_url` remain available for UI display while backend `path`, `preview_path`, `summary_path`, nested `log_path`, secrets, and host paths are stripped or redacted before desktop UI code sees them.
+  - RED: the new desktop result-summary and legacy-output tests first failed because `path` fields reached UI code.
+  - GREEN: focused desktop API tests returned `3 passed`; desktop API/workflow tests returned `4 passed`; desktop Vite production build completed successfully.
+
+- Cleaned desktop local test module-mode warning:
+  - `apps/desktop/package.json` and the root package-lock metadata now declare `"type": "module"`, matching the existing ESM source files and node:test `.mjs` tests.
+  - The desktop node:test run no longer emits `MODULE_TYPELESS_PACKAGE_JSON`, making local desktop verification output cleaner for launch-readiness evidence.
+  - Verification: before the change, `node --test src/lib/api.test.mjs src/lib/workflows.test.mjs` passed but printed the module-type warning; after the change it returned `4 passed` with no module-type warning. `npm.cmd run build` still completed successfully.
+
+- Hardened task observation log privacy in the console and desktop clients:
+  - `api.getLogs()` now uses the same frontend response sanitizer as result/QC/task evidence before UI code sees task log text.
+  - The sanitizer preserves useful operator log content while redacting host paths, `data/projects/...` paths, and secret/token/API-key style values.
+  - RED: console and desktop task-log regressions first failed because `/tasks/{id}/logs` text reached UI code with raw backend paths and secrets.
+  - GREEN: focused log sanitization tests passed; console API/Settings/AppShell tests returned `28 passed`; console TypeScript check returned exit 0; desktop API/workflow tests returned `5 passed`; desktop Vite production build completed successfully.
+
+- Wired the console task monitor to the structured read-only task-events contract:
+  - Added a typed `api.getTaskEvents()` client for `/tasks/{task_id}/events`, reusing the existing frontend sanitizer so task event payloads, main log tails, and remote log summaries are path-safe before UI code consumes them.
+  - Added a dedicated read-only task-events action and panel on `TasksPage` for running/failed/cancelled tasks. The panel shows event types, task status/progress, remote log source stages, main log tail, and remote log summaries without any retry/rerun action.
+  - RED: the API client regression first failed with `api.getTaskEvents is not a function`; the page regression first failed because there was no `Inspect task events for RUN-*` button or structured events panel.
+  - GREEN: focused task-events API and page tests passed; console API/Tasks/Settings/AppShell tests returned `36 passed`; console TypeScript check returned exit 0; console production build completed successfully.
+
+- Mirrored structured read-only task-events observation in the desktop client:
+  - Added `api.getTaskEvents()` for `/tasks/{task_id}/events`, using the shared desktop backend-response sanitizer before UI code consumes task events, main log tails, and remote log summaries.
+  - Added a desktop `Events` task action and `TaskEventsPanel` that displays event types, task status/progress, remote log source stages, main log tail, and remote log summaries. The panel remains observation-only and adds no retry/rerun/repair controls.
+  - RED: the desktop API regression first failed with `api.getTaskEvents is not a function`.
+  - GREEN: focused desktop API tests returned `5 passed`; desktop API/workflow tests returned `6 passed`; desktop Vite production build completed successfully.
+
+- Aligned desktop DWI upload with the backend JSON sidecar contract:
+  - `api.uploadDwi()` now sends the required `json_sidecar` multipart field, matching the console client and the backend `/projects/{project_id}/upload-dwi` contract.
+  - The desktop DWI upload form now requires NIfTI, bval, bvec, and JSON sidecar files before submitting, and resets all four file selections after a successful upload.
+  - Updated the legacy `test_api_flow.py` DWI sidecar regression for the new fixed-workflow gate order: direct `/series/{id}/run` for fixed workflows is rejected with 403 unless it comes through `/agent/runs` confirmation, while the confirmed service path still rejects missing JSON sidecar metadata with 400.
+  - RED: the desktop API regression first failed because `json_sidecar` was missing from FormData.
+  - GREEN: desktop API tests returned `6 passed`; desktop API/workflow tests returned `7 passed`; desktop Vite production build completed successfully; focused backend DWI sidecar/gate tests returned `4 passed`; console DWI upload contract checks passed.
+
+- Aligned desktop Agent run/resume response sanitization with the console:
+  - Added a desktop Agent-specific sanitizer for `api.runAgent()`, `api.resumeAgent()`, and legacy `api.chat()` responses. It preserves safe citation `path` values such as curated RAG document paths while redacting host paths and secret/token/API-key style strings in free text and tool traces.
+  - This keeps the desktop Agent interaction and human-confirmation resume path from exposing backend `log_path`, task host paths, or model/API secrets before UI code consumes the response.
+  - RED: desktop Agent run/resume regressions first failed because raw `/home/yyf/project/image_agent`, `C:/Users/A/private`, `data/projects/...`, `log_path`, and `sk-*` values reached UI code.
+  - GREEN: desktop API tests returned `8 passed`; desktop API/workflow tests returned `9 passed`; desktop Vite production build completed successfully; console Agent sanitization contract checks also passed.
+
+- Made result-summary workflow metadata authoritative from task records and the registry:
+  - `/tasks/{task_id}/result-summary` now overrides stale or weak `workflow_metadata` embedded in runner-written summary files with registry-backed public metadata derived from the task `workflow_type` and `runtime_workflow_type`.
+  - This keeps frontend, Agent, and RAG result views aligned with the stable machine `workflow_type` while preserving metadata as display/interpretation evidence only.
+  - RED: the new API contract regression first failed because a summary file with `workflow_metadata.workflow_type=t1_deepprep`, `display_name=t1_deepprep`, and `is_report_only=true` reached the response unchanged for a `t1_deepprep_anat_report` task.
+  - GREEN: the focused metadata/result-summary/API checks returned `4 passed`; workflow registry checks returned `13 passed`; full fixed-workflow API contract slice returned `23 passed`.
+
+- Extended artifact-manifest report/QC context with registry-backed workflow metadata:
+  - `/tasks/{task_id}/artifact-manifest` now builds from the same public result-summary/task-record normalization path and exposes `runtime_workflow_type` plus registry-backed `workflow_metadata` at the manifest envelope level.
+  - This lets frontend report/QC panels display workflow capability context directly from the stable preview/download contract without trusting stale runner-written metadata or reinterpreting filenames.
+  - The manifest still recomputes safe relative artifact URLs and preserves `summary_path` only internally long enough to emit the safe relative result-summary path.
+  - RED: the manifest API regression first failed with missing `runtime_workflow_type`; after adding the field it exposed another regression where public summary normalization removed the safe manifest `summary_path`.
+  - GREEN: manifest/API/contract checks returned `28 passed`; focused docs contract checks returned `2 passed`; touched Python files passed `py_compile`.
+
+- Aligned the console result-detail header with artifact-manifest workflow metadata:
+  - `ArtifactManifest` frontend types now include optional `workflow_type`, `runtime_workflow_type`, and `workflow_metadata` from the backend manifest envelope.
+  - `ResultDetailPage` now uses result-summary metadata first, then artifact-manifest metadata, then workflow catalog metadata for the display name while preserving the stable `summary.workflow_type` in the visible workflow-id line.
+  - RED: the new ResultDetail regression first rendered `dwi_fast_gpu_dti workflow execution...` even though the manifest supplied the registry-backed display name.
+  - GREEN: focused ResultDetail fallback test returned `1 passed`; full ResultDetail test returned `7 passed`; console API + ResultDetail slice returned `27 passed`; `npm.cmd run lint` completed successfully.
+
+- Mirrored artifact-manifest workflow metadata fallback in the desktop result/QC view:
+  - `api.getArtifactManifest()` now calls `/tasks/{task_id}/artifact-manifest` and uses the shared desktop backend-response sanitizer before UI code sees artifact manifests, preserving registry-backed `workflow_metadata` while stripping backend paths and safe-only `summary_path` internals.
+  - `ResultSummaryPanel` now fetches artifact-manifest alongside result-summary and uses result-summary metadata first, then artifact-manifest metadata for display name/capability chips. The visible machine label still uses stable `workflow_type` plus optional runtime/contract context.
+  - RED: focused desktop regressions first failed because `api.getArtifactManifest` and the result-summary display helper were missing.
+  - GREEN: desktop API/workflow/result-summary tests returned `13 passed`; desktop Vite production build completed successfully.
+
+- Wired console Agent review to the read-only Agent run history contract:
+  - Added frontend types and API helpers for `GET /projects/{project_id}/agent-runs` and `GET /agent/runs/{agent_run_id}`, with the same Agent response sanitizer used by `/agent/runs` so ledger metadata cannot expose backend paths or secrets.
+  - `AgentPage` now shows a compact read-only Run History panel with safe run ids, status, request type, selected skill, and event count, and refreshes that history after Agent run/resume completion.
+  - This improves Agent traceability without letting the frontend infer task creation, retry, or workflow state from history; task creation still comes only from the backend confirmation/resume response and task APIs.
+  - RED: focused console tests first failed because `api.listProjectAgentRuns` and the Run History UI were missing.
+  - GREEN: console API + AgentPage slice returned `30 passed`; `npm.cmd run lint` completed successfully.
+
+- Completed console single Agent run lookup from the read-only ledger:
+  - `AgentRunResponse`/lookup frontend types now cover the backend run contract fields used by the UI, including events, project/task/workflow ids, model gateway access, safe metadata, and runtime workflow context.
+  - Clicking a Run History item now calls `GET /agent/runs/{agent_run_id}` and renders a read-only Run Detail panel with safe status, selected skill, gateway access, answer, and sanitized event metadata.
+  - The detail panel does not expose raw prompts or add run/resume/retry actions; it is audit evidence only before real remote closed-loop testing.
+  - RED: the new AgentPage regression first failed because the run history item was not an inspectable button and no Run Detail panel existed.
+  - GREEN: console API + AgentPage slice returned `32 passed`; `npm.cmd run lint` completed successfully.
+
+- Ran read-only remote readiness probe on the required `yyf@10.2.32.14` server before attempting real closed-loop tests:
+  - SSH connectivity passed; host reported `yyf-ThinkStation-P920` and `/home/yyf/project/image_agent` exists.
+  - The live worktree is not current for this objective: HEAD `0ae5e07` on `feature/claude-frontend-redesign`, many local modifications, and `apps/api/scripts/verify_elasticsearch_hybrid_prerequisites.py` is missing.
+  - The prepared gate verifier overlay `/home/yyf/project/image_agent_releases/codex-gate-verifiers-efca895b-20260613T165132` also lacks the current ES prerequisite script, so it cannot run the latest pre-strict-smoke RAG gate.
+  - Live `/health` returns `app=image_agent`, `version=0.2.0`; `/agent/model/status` reports configured OpenAI/rawchat-style Responses access for `gpt-5.5`.
+  - Live `/agent/rag/status` is still `engine=llama_index` with no connected Elasticsearch hybrid evidence, so it cannot satisfy the updated production RAG requirement.
+  - Live `/runtime/containers` shows Docker/toolchain visibility and FreeSurfer license presence, but the old endpoint still exposes `fs_license_path`/inspect tails and several `:latest` images, which the newer strict acceptance contract is designed to reject.
+  - No mutating remote action, restart, RAG rebuild, upload, task launch, or strict smoke was run. Next remote step must deploy/sync the current gate code to a fresh overlay before running ES hybrid prerequisite checks or real closed-loop smoke.
+
+- Hardened the remote release-gate plan against stale verifier overlays after the yyf read-only probe found the existing overlay missing `verify_elasticsearch_hybrid_prerequisites.py`:
+  - Added a first, read-only `verify_release_overlay_contents` step to `docs/deployment/remote-release-gate-command-plan.json`.
+  - The step uses only shell `test -f` checks and `printf`; it verifies the prepared overlay contains current strict-gate scripts, the Elasticsearch hybrid prerequisite script, the strict smoke verifier, the ES hybrid contract doc, and the restart wrapper before any stale-task apply, restart, ES prerequisite check, upload, task launch, or strict smoke.
+  - `verify_release_gate_command_plan.py` now requires this step, checks its non-mutating/operator-free shape, and validates the expected success markers `release_overlay_current=true`, `required_gate_scripts_present=true`, and `elasticsearch_hybrid_contract_present=true`.
+  - RED: the release-gate order regression first failed because the plan still started at `verify_fresh_stale_task_approval`.
+  - GREEN: the focused order regression returned `1 passed`; release-gate/build/saved-acceptance tests returned `431 passed`; direct plan verifier returned `status=passed` with `step_count=11`; touched release-gate scripts passed `py_compile`.
+
+- Added a local, reviewable release overlay sync plan for creating a current yyf release overlay without touching the dirty live tree:
+  - Added `apps/api/scripts/build_release_overlay_sync_plan.py`.
+  - The default mode outputs a JSON command plan only; the optional `--write-archive` mode creates a local tarball from git tracked files plus unignored untracked files while excluding secret/runtime/dependency/cache/patient-data paths such as `.env`, `.git`, `node_modules`, `.venv`, `.rag_index`, and `data`.
+  - Generated `docs/deployment/remote-release-overlay-sync-plan.json` for release id `codex-es-hybrid-20260619T213000Z`.
+  - The plan stages commands as local preflight, local archive build, scp to `/tmp`, extract to `<release>.incoming`, verify required gate files, promote only if the final release path is absent, and verify the promoted overlay. It does not use `--delete`, `rm -rf`, overwrite an existing release, or copy into `/home/yyf/project/image_agent`.
+  - RED: the first overlay-plan tests failed because the script did not exist; after initial implementation, a new quoting regression failed because remote `ssh '...'` commands embedded `printf '%s...'` single quotes.
+  - GREEN: overlay-plan tests returned `3 passed`; release overlay/release gate builder tests returned `135 passed`; touched release scripts passed `py_compile`; release gate verifier returned `status=passed`; `git diff --check` returned no whitespace errors, only existing CRLF/LF warnings.
+  - No archive build, scp, remote extraction, remote promotion, restart, RAG rebuild, upload, task launch, or strict smoke was run in this slice.
+
+- Built and audited the local release archive needed before yyf overlay upload:
+  - Added archive-level evidence to `build_release_overlay_sync_plan.py`: `archive_sha256`, `required_gate_files_present`, and `missing_required_gate_files`.
+  - Added a tarball test proving `.env`, `data/projects`, `node_modules`, `.rag_index`, ignored files, and dependency/runtime paths stay out of the release archive while unignored safe files and required gate files are included.
+  - RED: the strengthened archive test first failed because the archive report lacked `required_gate_files_present`; after adding it, the fixture showed missing required files and was corrected to include all gate files.
+  - GREEN: overlay sync plan tests returned `4 passed`; release overlay/release gate builder tests returned `136 passed`; touched scripts passed `py_compile`.
+  - Local preflight passed: `git diff --check` returned no whitespace errors, only existing CRLF/LF warnings; `verify_release_gate_command_plan.py docs/deployment/remote-release-gate-command-plan.json` returned `status=passed`.
+  - Created local archive `/tmp/image_agent_release_codex-es-hybrid-20260619T213000Z.tar.gz` with `member_count=514`, `required_gate_files_present=true`, `missing_required_gate_files=[]`, and SHA-256 `33499d4377a7de4e1f4c1d5fb0145e0c7157b958d717a19df2f43624cfed72a5`.
+  - Tar inspection confirmed `.env`, `node_modules`, `.venv`, `.rag_index`, and `data/projects` are absent while `apps/api/scripts/verify_elasticsearch_hybrid_prerequisites.py` and `docs/rag/contracts/elasticsearch-hybrid-search.md` are present.
+  - Read-only yyf path check confirmed the target release overlay, incoming overlay, and remote `/tmp` archive path are currently absent.
+
+- Re-bound the release-gate plan from the stale `codex-gate-verifiers-efca895b-20260613T165132` overlay to the current `codex-es-hybrid-20260619T213000Z` overlay:
+  - `verify_release_gate_command_plan.py` now validates that `release_overlay` is under `/home/yyf/project/image_agent_releases`, ends in a privacy-safe release id, and is not an `.incoming` path, instead of hard-coding one old overlay.
+  - `docs/deployment/remote-release-gate-command-plan.json` now points all overlay commands at `/home/yyf/project/image_agent_releases/codex-es-hybrid-20260619T213000Z`.
+  - RED: the focused release-gate test first failed because the plan still pointed at the stale overlay.
+  - GREEN: focused release-gate order test returned `1 passed`; overlay/release-gate tests returned `136 passed`; direct release-gate verifier returned `status=passed` with `step_count=11`.
+  - No scp/upload, remote extraction, remote promotion, restart, RAG rebuild, task launch, or strict smoke was run.
+
+- Created and verified the current release overlay on the yyf server:
+  - Rechecked the local archive before upload: `/tmp/image_agent_release_codex-es-hybrid-20260619T213000Z.tar.gz`, size `3028715`, SHA-256 `33499d4377a7de4e1f4c1d5fb0145e0c7157b958d717a19df2f43624cfed72a5`.
+  - Rechecked remote preconditions: `/home/yyf/project/image_agent_releases/codex-es-hybrid-20260619T213000Z`, its `.incoming` path, and `/tmp/image_agent_release_codex-es-hybrid-20260619T213000Z.tar.gz` were absent before upload.
+  - Uploaded the archive to yyf `/tmp`; remote `sha256sum` and `stat` matched the local archive.
+  - Extracted to `/home/yyf/project/image_agent_releases/codex-es-hybrid-20260619T213000Z.incoming`, verified required gate files there, promoted it to `/home/yyf/project/image_agent_releases/codex-es-hybrid-20260619T213000Z`, and verified the promoted overlay.
+  - Promoted overlay content check passed with `release_overlay_current=true`, `required_gate_scripts_present=true`, and `elasticsearch_hybrid_contract_present=true`.
+  - Remote release-gate verifier executed from the promoted overlay returned `status=passed`, `step_count=11`.
+  - Final path check showed the promoted overlay exists, `.incoming` is absent, and the uploaded `/tmp` archive remains present for audit.
+  - No API restart, stale-task apply, RAG rebuild, upload, production task launch, or strict smoke was run.
+
+- Ran the read-only Elasticsearch hybrid prerequisite check from the promoted overlay:
+  - Command exited non-zero as expected for the current remote runtime.
+  - Root-cause evidence: `/home/yyf/project/image_agent/.env` has no `IMAGE_AGENT_ELASTICSEARCH_URL`, `IMAGE_AGENT_ELASTICSEARCH_INDEX`, `IMAGE_AGENT_ELASTICSEARCH_API_KEY`, `IMAGE_AGENT_RAG_EMBEDDING_PROVIDER`, `IMAGE_AGENT_RAG_EMBEDDING_MODEL`, `IMAGE_AGENT_RAG_EMBEDDING_BASE_URL`, or `IMAGE_AGENT_RAG_EMBEDDING_API_KEY` entries.
+  - Current live `/agent/rag/status` safe summary is still `engine=llama_index`, with `hybrid_engine=None`, `hybrid_mode=None`, `hybrid_persisted=None`, `indexed_chunk_count=None`, `embedding_provider=None`, and `embedding_model=None`.
+  - The next blocker is configuration/runtime, not overlay freshness: ES service/config, production embedding config, RAG rebuild, and API restart are still needed before strict remote smoke can start.
+
+- Continued ES hybrid readiness from the current yyf evidence:
+  - Read-only port probe showed no listener on `127.0.0.1:9200`, so Elasticsearch is not currently available at the default local endpoint.
+  - `yyf` is in the `sudo` group but not the `docker` group; `/var/run/docker.sock` is owned by `root:docker`, so Docker-level Elasticsearch/service checks require operator/sudo handling.
+  - Presence-only `.env` inspection showed existing model gateway keys are present (`MODEL_PROVIDER`, `OPENAI_MODEL`, `OPENAI_REVIEW_MODEL`, `OPENAI_BASE_URL`, `OPENAI_DISABLE_RESPONSE_STORAGE`, `OPENAI_API_KEY`), while all ES/embedding keys remain missing.
+  - Live `/agent/model/status` reports configured Responses access for `gpt-5.5` with `wire_api=responses` and `reasoning_effort=high`, so the immediate blocker is RAG service/config rather than the model gateway as a whole.
+- Added a secret-safe ES hybrid configuration handoff:
+  - New script: `apps/api/scripts/build_elasticsearch_hybrid_config_plan.py`.
+  - New tests: `apps/api/tests/test_build_elasticsearch_hybrid_config_plan.py`.
+  - Generated plan: `docs/deployment/remote-elasticsearch-hybrid-config-plan.json`.
+  - The plan records observed blockers, missing env keys, an operator-only env template with placeholders, read-only presence verification, restart/rebuild/prerequisite order, and the handoff back to `remote-release-gate-command-plan.json`.
+  - It intentionally does not write the remote `.env`, does not include real URLs or keys, does not print secret values, and keeps strict smoke blocked until the ES prerequisite passes.
+- TDD and verification for the ES hybrid config plan:
+  - RED: `python -m pytest apps/api/tests/test_build_elasticsearch_hybrid_config_plan.py -q` first failed with `FileNotFoundError` because the builder script did not exist.
+  - GREEN: focused config-plan tests returned `3 passed`.
+  - Regression slice: `python -m pytest apps/api/tests/test_build_elasticsearch_hybrid_config_plan.py apps/api/tests/test_verify_elasticsearch_hybrid_prerequisites.py apps/api/tests/test_release_gate_command_plan.py apps/api/tests/test_build_release_overlay_sync_plan.py -q` returned `158 passed`.
+  - `python -m py_compile apps/api/scripts/build_elasticsearch_hybrid_config_plan.py apps/api/scripts/verify_elasticsearch_hybrid_prerequisites.py apps/api/scripts/build_release_overlay_sync_plan.py apps/api/scripts/verify_release_gate_command_plan.py` passed.
+  - `python apps/api/scripts/verify_release_gate_command_plan.py docs/deployment/remote-release-gate-command-plan.json` returned `status=passed`, `step_count=11`.
+  - `git diff --check` passed with only existing CRLF/LF warnings.
+- No ES service was started, no remote secret/config value was changed, no API restart, no RAG rebuild, no upload, no production task launch, and no strict smoke was executed in this slice.
+
+- Hardened the ES hybrid configuration handoff so the generated plan is independently machine-checkable:
+  - Added `apps/api/scripts/verify_elasticsearch_hybrid_config_plan.py`.
+  - Added `apps/api/tests/test_verify_elasticsearch_hybrid_config_plan.py`.
+  - Updated `apps/api/scripts/build_elasticsearch_hybrid_config_plan.py` and regenerated `docs/deployment/remote-elasticsearch-hybrid-config-plan.json` so the ES prerequisite step now explicitly expects BM25/kNN/RRF and production embedding evidence: lexical retriever `standard`, vector retriever `knn`, dense vector field `embedding`, positive dense-vector dimensions, `fusion=rrf`, official RRF source presence, no hybrid/embedding errors, production embedding provider/model/transport/endpoint, and `embedding_production_ready=true`.
+  - The verifier rejects unsafe release overlays, missing ES prerequisite step, secret-like env/command values, wrong step ordering, and incomplete prerequisite expected-success coverage before the plan can be used as release evidence.
+  - RED: `python -m pytest apps/api/tests/test_verify_elasticsearch_hybrid_config_plan.py -q` first failed with `FileNotFoundError` because the verifier did not exist. After initial implementation, the test exposed two useful issues: the verifier over-rejected the safe local `/agent/rag/status` URL, and the generated plan lacked detailed BM25/kNN/RRF/embedding expected-success items.
+  - GREEN: `python -m pytest apps/api/tests/test_verify_elasticsearch_hybrid_config_plan.py -q` returned `14 passed`.
+  - Regression slice: `python -m pytest apps/api/tests/test_build_elasticsearch_hybrid_config_plan.py apps/api/tests/test_verify_elasticsearch_hybrid_config_plan.py apps/api/tests/test_verify_elasticsearch_hybrid_prerequisites.py apps/api/tests/test_release_gate_command_plan.py apps/api/tests/test_build_release_overlay_sync_plan.py -q` returned `172 passed`.
+  - Direct verifier: `python apps/api/scripts/verify_elasticsearch_hybrid_config_plan.py docs/deployment/remote-elasticsearch-hybrid-config-plan.json` returned `status=passed`, `step_count=7`, and the expected mutating/operator steps.
+  - `python -m py_compile apps/api/scripts/build_elasticsearch_hybrid_config_plan.py apps/api/scripts/verify_elasticsearch_hybrid_config_plan.py apps/api/scripts/verify_elasticsearch_hybrid_prerequisites.py` passed.
+  - Secret scan against the ES config plan/script/test slice found only the deliberate negative-test fixtures and no real URL/key material in the plan JSON.
+  - `git diff --check` passed with only existing CRLF/LF warnings.
+- No remote mutation was performed in this verifier-hardening slice; ES service/config, restart, rebuild, upload, production task launch, and strict smoke remain pending.
+
+- Closed the stale-overlay gap introduced by adding the ES config handoff verifier:
+  - `build_release_overlay_sync_plan.py` now treats `build_elasticsearch_hybrid_config_plan.py`, `verify_elasticsearch_hybrid_config_plan.py`, and `docs/deployment/remote-elasticsearch-hybrid-config-plan.json` as required overlay gate files.
+  - `verify_release_gate_command_plan.py` now rejects release gates whose first read-only overlay check does not test those config-handoff files.
+  - Fixed remote command cwd/path handling for repo-root JSON verifiers: ES config handoff continuation now runs from the overlay root with `PYTHONPATH=apps/api`; release-gate materialization command does the same.
+  - Re-bound deployment plans to `/home/yyf/project/image_agent_releases/codex-es-hybrid-config-gate2-20260619T231500Z`.
+  - RED: focused tests first failed on missing ES config handoff file checks, then on wrong verifier cwd.
+  - GREEN: `python -m pytest apps/api/tests/test_build_release_overlay_sync_plan.py apps/api/tests/test_release_gate_command_plan.py apps/api/tests/test_build_elasticsearch_hybrid_config_plan.py apps/api/tests/test_verify_elasticsearch_hybrid_config_plan.py -q` returned `150 passed`; local release-gate verifier returned `status=passed`, `step_count=11`; local ES config handoff verifier returned `status=passed`, `step_count=7`; touched scripts passed `py_compile`; `git diff --check` passed with only existing CRLF/LF warnings.
+- Built and promoted the current gate2 release overlay on yyf:
+  - Local archive `/tmp/image_agent_release_codex-es-hybrid-config-gate2-20260619T231500Z.tar.gz` reported `member_count=519`, `required_gate_files_present=true`, `missing_required_gate_files=[]`, SHA-256 `1aaee37e4c758d2e743c414837bc4bf45045d93e237003b25c63bb832c8b33ed`, size `3039329`.
+  - Archive inspection confirmed required scripts/docs present and `.env`, `data/projects`, `node_modules`, `.rag_index` absent.
+  - Remote path precheck showed final overlay, incoming overlay, and `/tmp` archive absent before upload.
+  - Uploaded archive to yyf `/tmp`; remote hash/size matched; extracted to `.incoming`; required-file check passed; promoted to `/home/yyf/project/image_agent_releases/codex-es-hybrid-config-gate2-20260619T231500Z`.
+  - Promoted overlay content check passed with `release_overlay_current=true`, `required_gate_scripts_present=true`, `elasticsearch_hybrid_contract_present=true`.
+  - Remote verifier from the promoted overlay root returned release gate `status=passed`, `step_count=11`, and ES config handoff `status=passed`, `step_count=7`.
+  - Final path check: gate2 overlay exists, `.incoming` absent, uploaded `/tmp` archive exists for audit.
+- Confirmed current remote runtime blocker remains ES/embedding configuration:
+  - Read-only `.env` presence check reports all seven ES/embedding keys missing.
+  - Read-only gate2 `verify_elasticsearch_hybrid_prerequisites.py` exits non-zero because live `/agent/rag/status` is not `elasticsearch_hybrid` and lacks connected/persisted BM25+kNN/RRF plus production embedding evidence.
+  - No live `.env` edit, Elasticsearch service start, API restart, RAG rebuild, upload, production task launch, or strict smoke was run.
+- Latest read-only yyf time-to-start assessment: Docker is installed, but `yyf` lacks docker-socket access and non-interactive sudo; Elasticsearch `127.0.0.1:9200` is unreachable; live `/agent/rag/status` remains `engine=llama_index` from the older `codex-f57a2ea-20260611T023456` overlay; all ES/embedding env keys are still absent while existing OpenAI gateway env keys are present. Earliest realistic start for real launch closed-loop testing is about 4-6 hours after an operator enables ES service and managed ES/embedding env, otherwise 1-2 days.
+- Portable runtime probe slice added before remote real testing: `/runtime/probe` now exposes install-local Docker/container/resource/Elasticsearch/workflow availability evidence with `machine_binding=runtime_discovered`; `/runtime/containers` embeds this probe and removes path/log-tail leakage from workflow summaries; strict smoke now prefers `/runtime/probe` and falls back to `/runtime/containers`. Verified with `tests/test_runtime_probe.py -q` -> `5 passed` and targeted runtime-toolchain smoke tests -> `3 passed`.
+- Backend mock/control-plane is now green before remote real testing: `python -m pytest apps/api/tests -q` returned `1317 passed, 11 warnings`. Fixed-workflow validate launches remain blocked on direct `/series/{series_id}/run`; confirmed Agent-gated `task_service.create_series_task(..., confirmed_agent_gate=True)` remains the allowed task-creation path.
+- Current yyf remote candidate overlay is `/home/yyf/project/image_agent_releases/codex-es-hybrid-runtime-probe-20260619T215100Z`; archive SHA-256 is `e0f5ba19a5802b730d70e6f53e4ef461d896d6b541fa111350ba63f0187ecfb5`, size `3045774`, `member_count=521`, and remote release-gate plus ES config handoff verifiers pass from the promoted overlay.
+- Real online closed-loop smoke remains blocked before production launch: live API has not restarted into the new overlay (`/runtime/probe` is 404), live RAG is still `engine=llama_index`, ES/embedding env is missing, required pinned Docker images are incomplete, and active tasks 83/84 require human-reviewed stale-task reconciliation before restart. A read-only stale-task dry-run now exists at `/tmp/image_agent_stale_tasks_83_84_dry_run_runtime_probe_20260619T215100Z.json`; no apply/restart/task launch was run.
+- Rootfix6 candidate overlay supersedes rootfix3 for next remote gate use: `/home/yyf/project/image_agent_releases/codex-es-hybrid-runtime-probe-rootfix6-20260619T145350Z`, archive SHA-256 `04292c1ea72aacbe04287861b0cceccdb9cd610294c4e76ad6c72b05aad8a170`, size `3055634`, `member_count=521`. It preserves the live-root stale-task safeguards, adds portable Elasticsearch runtime discovery to `/runtime/probe` and the CLI probe, and keeps the ES hybrid config handoff machine-checkable before strict smoke.
+- Remote rootfix3 release-gate and ES config handoff verifiers pass. Materialized operator plan `/tmp/image_agent_remote_release_gate_plan_rootfix3_20260619T143210Z.json` verifies with `approval_json_status=fresh_reviewed`, expiry `2026-06-20T14:21:27.328242+00:00`, no placeholders in refresh or steps, no API-key shaped values, and no active-task restart override. Current reviewed stale-candidate evidence remains `/tmp/image_agent_stale_tasks_83_84_dry_run_rootfix2_20260619T221206Z.json`, with stale candidates `[83,84]` and approval fingerprint `139113571daf0137a3e34be526fd25ccaa8066aed725ab7c0b846cfc7eb3abd0`; human approval is still required before apply/restart.
+- Current backend mock/control-plane gate is green at `1320 passed, 11 warnings`. Rootfix3 read-only ES prerequisite still blocks strict smoke because ES/embedding env is missing and live RAG is not yet `elasticsearch_hybrid`.
+- Rootfix6 local and remote verification:
+  - Local `verify_release_gate_command_plan.py` returned `status=passed`, `step_count=11`; local `verify_elasticsearch_hybrid_config_plan.py` returned `status=passed`, `step_count=8`.
+  - Targeted regression slice returned `228 passed, 3 warnings`; `git diff --check` returned no whitespace errors, only existing CRLF/LF warnings.
+  - Remote rootfix6 promoted overlay content check passed; remote release-gate verifier returned `status=passed`, `step_count=11`; remote ES config handoff verifier returned `status=passed`, `step_count=8`.
+  - The rootfix6 read-only runtime handoff wrote `/tmp/image_agent_runtime_probe_codex-es-hybrid-runtime-probe-rootfix6-20260619T145350Z.json` and printed only safe markers: `runtime_probe.schema_version=1`, `runtime_probe.machine_binding=runtime_discovered`, `elasticsearch.runtime_discovery_present=true`, `secret_values_not_printed=true`.
+  - Remote runtime discovery found no local Elasticsearch container candidates: `runtime_discovery.status=unavailable`, `count=0`, `running_count=0`, `container_running=false`; ES remains unconfigured with `endpoint_source=not_configured`.
+  - Final backend mock/control-plane suite returned `1323 passed, 11 warnings`; touched scripts passed `compileall`; `git diff --check` returned no whitespace errors, only existing CRLF/LF warnings.
+  - No stale-task apply, API restart, live `.env` edit, Elasticsearch service start, RAG rebuild, upload, production task launch, or strict smoke was executed.
+- Rootfix7 candidate overlay supersedes rootfix6 for the next remote gate continuation: `/home/yyf/project/image_agent_releases/codex-es-hybrid-runtime-probe-rootfix7-20260619T150604Z`, archive SHA-256 `c8a55a92b4b68d0ea85d4df4e2cc81218e0a81f4c708141f78ea9a71604a8ea5`, size `3059860`, `member_count=521`. It adds an operator-authorized ES local Docker provisioning handoff when runtime discovery finds no existing Elasticsearch endpoint.
+  - The ES config handoff now has `step_count=9` and includes `operator_provision_local_elasticsearch_container_if_missing` after read-only runtime discovery and before secret/env application.
+  - The provisioning step is grounded in official Elastic Docker installation/prod guidance, pins `docker.elastic.co/elasticsearch/elasticsearch:9.4.2`, forbids floating tags, keeps generated credentials in the operator-managed secret store, binds the acceptance endpoint to a protected local boundary, and records `production_ha_requires_operator_managed_elasticsearch=true`.
+  - Local verification: ES config plan tests/verifier slice returned `19 passed`; release/config/overlay/stale-task slice returned `216 passed`; local release-gate verifier returned `status=passed`, `step_count=11`; local ES config handoff verifier returned `status=passed`, `step_count=9`; touched scripts passed `compileall`; `git diff --check` returned no whitespace errors, only existing CRLF/LF warnings.
+  - Remote verification from the promoted rootfix7 overlay returned release-gate `status=passed`, `step_count=11`; ES config handoff `status=passed`, `step_count=9`; and grep checks for the provisioning step, pinned image, and production HA boundary all passed.
+  - Rootfix7 read-only runtime probe wrote `/tmp/image_agent_runtime_probe_codex-es-hybrid-runtime-probe-rootfix7-20260619T150604Z.json`; it still reports `status=blocked`, `machine_binding=runtime_discovered`, `elasticsearch_configured=false`, `endpoint_source=not_configured`, and `runtime_discovery.status=unavailable` with no discovered local ES containers.
+  - No stale-task apply, API restart, live `.env` edit, Elasticsearch service/container start, RAG rebuild, upload, production task launch, or strict smoke was executed.
+- Rootfix8 supersedes rootfix7 as the current remote gate continuation because it includes the new Elastic Docker raw-source provenance snapshots in the promoted overlay: `/home/yyf/project/image_agent_releases/codex-es-hybrid-runtime-probe-rootfix8-20260619T151146Z`.
+  - Archive `/tmp/image_agent_release_codex-es-hybrid-runtime-probe-rootfix8-20260619T151146Z.tar.gz` has SHA-256 `14f42aff16f2123698926b7db28543c3d7b1709ad5457d1f3522f23999f4535c`, size `3143464`, `member_count=524`, required gate files present, and no secret/runtime/patient-data paths.
+  - Added raw official snapshots and manifest provenance for `elastic_docker_install`, `elastic_docker_basic`, and `elastic_docker_prod`; RAG metadata audit and vendor pointer tests now cover the 6 Elastic source ids for hybrid retrieval plus Docker runtime boundaries.
+  - Local full backend suite returned `1324 passed, 11 warnings`; local ES config handoff verifier returned `status=passed`, `step_count=9`; local release-gate verifier returned `status=passed`, `step_count=11`; `git diff --check` returned no whitespace errors, only existing CRLF/LF warnings.
+  - Remote rootfix8 promoted overlay verifies release gate `status=passed`, `step_count=11`; ES config handoff `status=passed`, `step_count=9`; and raw-source/pinned-image grep checks returned `elastic_docker_manifest_sources_present=true` and `elasticsearch_image_pinned=true`.
+  - Rootfix8 read-only runtime probe wrote `/tmp/image_agent_runtime_probe_codex-es-hybrid-runtime-probe-rootfix8-20260619T151146Z.json`; yyf still reports `status=blocked`, `elasticsearch_configured=false`, `endpoint_source=not_configured`, and no discovered local Elasticsearch container candidates.
+  - No stale-task apply, API restart, live `.env` edit, Elasticsearch service/container start, RAG rebuild, upload, production task launch, or strict smoke was executed.
+- Rootfix9 supersedes rootfix8 as the current remote gate continuation because both ES prerequisite paths now require deployment-server-local runtime probe evidence:
+  - Archive `/tmp/image_agent_release_codex-es-hybrid-runtime-probe-rootfix9-20260619T152633Z.tar.gz` has SHA-256 `cbd5d54b3243cb60c4a167de354698ed1cb99906e91d3a4a15f2eb9c7348aed9`, size `3147640`, `member_count=524`, required gate files present, and no secret/runtime/patient-data paths.
+  - Remote promoted overlay is `/home/yyf/project/image_agent_releases/codex-es-hybrid-runtime-probe-rootfix9-20260619T152633Z`; the live `/home/yyf/project/image_agent` tree was not modified.
+  - Local full backend suite returned `1338 passed, 11 warnings`; local release-gate verifier returned `status=passed`, `step_count=11`; local ES config handoff verifier returned `status=passed`, `step_count=9`; `git diff --check` returned no whitespace errors, only existing CRLF/LF warnings.
+  - Remote rootfix9 release-gate verifier returned `status=passed`, `step_count=11`; ES config handoff verifier returned `status=passed`, `step_count=9`.
+  - Rootfix9 read-only runtime probe wrote `/tmp/image_agent_runtime_probe_codex-es-hybrid-runtime-probe-rootfix9-20260619T152633Z.json`; yyf still reports `status=blocked`, `docker_requires_sudo`, all fixed workflow images unavailable, `elasticsearch_configured=false`, `endpoint_source=not_configured`, and no discovered local Elasticsearch container candidates.
+  - No stale-task apply, API restart, live `.env` edit, Elasticsearch service/container start, RAG rebuild, upload, production task launch, or strict smoke was executed.
+- Rootfix10 supersedes rootfix9 as the current remote gate continuation because runtime preparation can now explicitly pull missing fixed-workflow Docker images:
+  - Added `IMAGE_AGENT_AUTO_PULL_MISSING_WORKFLOW_IMAGES` and `probe_runtime_environment --prepare-missing-images`. Default runtime probe remains read-only and reports `runtime_preparation.auto_pull_missing_images=false`; the explicit path sets the flag, pulls missing fixed workflow images, re-inspects availability, and records `pull_attempted_count`, `pull_succeeded_count`, and `pull_failed_count`.
+  - `/runtime/probe` now exposes safe `runtime_preparation` evidence and per-workflow `pull_attempted`/`pull_status` without leaking Docker log tails or secrets.
+  - ES config handoff now has `step_count=10` and includes `operator_prepare_fixed_workflow_images_if_missing`, a mutating/operator-authorized step that sources the remote managed env, runs the CLI with `--prepare-missing-images`, and writes the runtime probe JSON before RAG rebuild and strict smoke.
+  - Local verification: runtime/preparation/config/release/stale-task slice returned `239 passed, 3 warnings`; direct release-gate verifier returned `status=passed`, `step_count=11`; direct ES config handoff verifier returned `status=passed`, `step_count=10`; compileall passed for touched runtime/config scripts; full backend mock/control-plane suite returned `1342 passed, 11 warnings`; `git diff --check` returned no whitespace errors, only existing CRLF/LF warnings.
+  - Archive `/tmp/image_agent_release_codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z.tar.gz` has SHA-256 `461e1159b244ddf8e29906d1323991ec410f298a4d880068e1405b844fdb227c`, size `3151315`, `member_count=525`, required gate files present, and no secret/runtime/patient-data paths.
+  - Remote path precheck showed rootfix10 final overlay, incoming overlay, and `/tmp` archive absent; uploaded archive to yyf `/tmp`, verified the remote SHA-256, extracted to `.incoming`, verified required gate/config files plus `--prepare-missing-images` and `IMAGE_AGENT_AUTO_PULL_MISSING_WORKFLOW_IMAGES`, and promoted it to `/home/yyf/project/image_agent_releases/codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z`. The live `/home/yyf/project/image_agent` tree was not modified.
+  - Remote rootfix10 release-gate verifier returned `status=passed`, `step_count=11`; ES config handoff verifier returned `status=passed`, `step_count=10`.
+  - Rootfix10 read-only runtime probe wrote `/tmp/image_agent_runtime_probe_codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z.json` and confirmed the default is non-mutating: `runtime_preparation.auto_pull_missing_images=false`, `pull_attempted_count=0`, `elasticsearch.configured=false`, and `elasticsearch.runtime_discovery.status=unavailable`.
+  - No `--prepare-missing-images` pull, stale-task apply, API restart, live `.env` edit, Elasticsearch service/container start, RAG rebuild, upload ingestion, production task launch, or strict smoke was executed.
+- Began yyf real fixed-workflow closed-loop acceptance from rootfix10 without replacing the old live 8000 service:
+  - Confirmed the old live API on 8000 is not rootfix10 (`/runtime/probe` returns 404), while rootfix10 overlay exposes the new runtime probe.
+  - Started a temporary rootfix10 API on `127.0.0.1:18082` with `IMAGE_AGENT_ROOT=/home/yyf/project/image_agent` so the backend startup migration added `tasks.runtime_workflow_type` to the live DB. A DB backup was saved under `/tmp` before migration.
+  - Created `task_id=119` through the compliant chain: registry workflow `t1_deepprep_anat_report`, deterministic preflight pass, server-side pending confirmation fingerprint, `/agent/runs/{thread_id}/resume`, `task_service.create_series_task(..., confirmed_agent_gate=True)`, and pipeline runner. The task reached the real `pbfslab/deepprep:25.1.0` container but failed on a tiny synthetic T1 candidate with FreeSurfer `anat_motioncor` reporting missing `001.mgz`; `ObserveRepair` remained read-only and did not auto-rerun.
+  - Inspected available T1 candidates and launched `task_id=120` through the same fingerprint-verified chain on a real-size T1 candidate (`project_id=13`, `series_id=22`). Current evidence: `workflow_type=t1_deepprep_anat_report`, `runtime_workflow_type=t1_deepprep`, `production_task_created=true`, `confirmation_gate=fingerprint_verified`, real `pbfslab/deepprep:25.1.0` container running, and DeepPrep progressed beyond the prior failure through `anat_motioncor`, `anat_segment`, `anat_reduce_to_aseg`, `anat_N4_bias_correct`, `anat_talairach_and_nu`, and into later anatomical stages.
+  - Scanned the approved remote MDD upload staging area as a richer data source. It contains real-size MDD NIfTI candidates under BIDS-like anat/func/dwi folders; T1 candidates have typical shapes around `[160-192, 512, 512]` and sizes about `39-47 MB`, while BOLD candidates are 4D runs around `[128, 128, 33-38, 210]`. Raw file names containing subject/person-like labels and absolute source paths were intentionally not recorded in repo logs.
+  - The fixed-image pull watcher is still preparing pinned images in the background; strict full workflow coverage remains blocked until all pinned images are present and ES hybrid prerequisites are configured. No proxy subscription URL or one-shot proxy material was written to repo logs/scripts.
+- Ran parallel yyf real-flow validation slices from the temporary rootfix10 API without bypassing fixed-workflow gates:
+  - `task_id=121` completed successfully through the registry/preflight/pending-confirmation/fingerprint/task-service/pipeline chain using canonical workflow `t1_deepprep_anat_report` and validate runtime `t1_deepprep_validate`; the manifest reports pinned image `pbfslab/deepprep:25.1.0` and `floating_tags_allowed=false`.
+  - BOLD fMRIPrep+XCP-D validation was stopped at preflight before task creation because the deployed fMRIPrep script evidence still contains a hard-coded `:latest` image lock. This is recorded as a version-lock blocker, not a runtime failure.
+  - `task_id=122` was created through the compliant chain for canonical workflow `dwi_fast_gpu_dti` and validate runtime `dwi_fast_gpu_dti_validate`, then failed because the then-configured pinned `pennlinc/qsiprep:1.0.2` container readiness check timed out while the fixed-image pull was still in progress. That exposed a version-lock error; the current contract is corrected to `pennlinc/qsiprep:26.0.0`. No automatic rerun was attempted.
+  - Read-only parallel evidence was saved on yyf under `/tmp/image_agent_parallel_real_validate_20260620T014625+0800`: runtime probe remains blocked by Docker-sudo discovery, missing pinned QSIPrep/QSIRecon/fMRIPrep images, and missing ES hybrid config; task contract evidence confirms ObserveRepair remains read-only with no auto-rerun; preflight matrix confirms T1 real-size and DWI fast validate candidates pass, modality mismatch and unknown workflow do not create production tasks, and BOLD remains blocked by the `:latest` version-lock check.
+  - A later attempt to fill GPU capacity with three additional same-family T1 confirmations was stopped before any new task was created; the user narrowed the strategy to one real validation per fixed workflow. Remote verification showed `tasks.id > 122` count is zero and only the existing task 120 DeepPrep container is running.
+- Corrected the QSIPrep version-lock contract after yyf evidence showed `pennlinc/qsiprep:latest` is QSIPrep `26.0.0` and exposes the required MRtrix toolbox commands plus `eddy_cuda11.0`.
+  - Stopped the obsolete yyf background pull for `pennlinc/qsiprep:1.0.2` without restarting Docker.
+  - Updated production/runtime code, registry runtime-image metadata, config defaults, tests, RAG workflow/vendor docs, skills, product-readiness docs, and current plans from `pennlinc/qsiprep:1.0.2` or `pennlinc/qsiprep:latest` to the fixed tag `pennlinc/qsiprep:26.0.0`.
+  - Tagged the existing yyf `pennlinc/qsiprep:latest` image as `pennlinc/qsiprep:26.0.0`; both point to image id `sha256:fad83a95...` and digest `pennlinc/qsiprep@sha256:b578687c4667ae43f4229212b3ae91c2ff842d49a29d42e64c013aaae9600373`.
+  - Remote fixed-tag probe passed: `QSIPrep v26.0.0`, MRtrix commands `mrinfo`, `mrconvert`, `dwi2mask`, `dwi2tensor`, `tensor2metric`, `mrstats`, `mrcalc`, and `/app/.pixi/envs/qsiprep/bin/eddy_cuda11.0` are available.
+  - TDD evidence: `test_pipeline_runtime_images_are_version_pinned` first failed because code still expected `pennlinc/qsiprep:1.0.2`; after the fix, the runtime-image/docs slice returned `71 passed, 3 warnings`, the focused smoke runtime-toolchain slice returned `3 passed, 150 deselected`, and touched files passed `py_compile`.
+  - yyf `task_id=120` has completed successfully (`status=completed`, `progress=100`) for the real-size T1 DeepPrep full workflow.
+  - Saved read-only completion evidence under `/tmp/image_agent_task120_completed_evidence_20260620T020957+0800`: task 120 has 133 registered outputs (`connectome`, `html_report`, `json`, `log`, `nifti`, `tsv`), a readable result summary, and 143 manifest artifacts with counts `source_artifact=107`, `container_native_qc=9`, `frontend_preview_asset=23`, and `derived_scientific_report=4`. ObserveRepair still reports `policy=read_only_observe_repair`, `auto_rerun_allowed=false`, and `result_summary_status=ok`.
+- Completed the follow-up cleanup for the QSIPrep/QSI fixed-image correction:
+  - Current Phase 2/DWI workflow docs and the legacy acceptance matrix script now use `pennlinc/qsiprep:26.0.0` and `pennlinc/qsirecon:26.0.0` instead of floating tags. The script now reads sudo input from `IMAGE_AGENT_SUDO_PASSWORD` and no longer hard-codes a password.
+  - Added/strengthened doc-contract tests so current QSI container contracts require fixed QSIRecon `26.0.0` and reject `pennlinc/qsirecon:latest`; historical logs and IncubationLedger parsing fixtures still preserve their original `latest` evidence by design.
+  - Local verification after the cleanup: focused QSI doc contract test returned `1 passed`; runtime-image/registry/skill/RAG/release-overlay regression returned `190 passed, 3 warnings`; touched workflow/config modules passed `py_compile`; `git diff --check` reported no whitespace errors, only existing line-ending warnings.
+  - Built and promoted a new remote overlay without modifying the live tree: `/home/yyf/project/image_agent_releases/codex-qsiprep260-runtime-probe-20260619T181921Z`, archive SHA-256 `8fef54e8690564ef94d91b96daa42f67539a8781fcfdef5696359fac8fe9e556`, `member_count=525`, required gate files present, and secret/runtime/patient-data paths excluded.
+  - Restarted only the temporary yyf API on `127.0.0.1:18082` into that overlay. Production port 8000 was not touched. The new 18082 cwd is `/home/yyf/project/image_agent_releases/codex-qsiprep260-runtime-probe-20260619T181921Z/apps/api`.
+  - Remote contract probe from 18082 reports `pipeline_dwi_qsiprep=pennlinc/qsiprep:26.0.0`, `pipeline_dwi_qsi_full=pennlinc/qsiprep:26.0.0`, `dwi_fast_mrtrix=pennlinc/qsiprep:26.0.0`, `config_qsiprep=pennlinc/qsiprep:26.0.0`, and registry DWI fast/validate toolbox images both at `pennlinc/qsiprep:26.0.0`.
+  - Remote `/runtime/containers` from 18082 reports fixed images available for DeepPrep `25.1.0`, QSIPrep `26.0.0`, QSIRecon `26.0.0`, fMRIPrep `25.2.5`, and XCP-D `26.0.2`. ES hybrid remains unconfigured, so strict online smoke still must wait for ES/embedding setup.
+- Re-ran the DWI validate fixed-workflow gate on yyf after the QSIPrep 26.0.0 correction:
+  - Restarted only the temporary yyf API on `127.0.0.1:18082` with `IMAGE_AGENT_ROOT=/home/yyf/project/image_agent`; the process cwd is the promoted overlay `/home/yyf/project/image_agent_releases/codex-qsiprep260-runtime-probe-20260619T181921Z/apps/api`. The old live 8000 service and live code tree were not modified.
+  - Confirmed project 15 / series 27 is a supported DWI NIfTI/BIDS candidate with bval, bvec, and DWI eddy metadata; current `/runtime/containers` reports `dwi_fast_gpu_dti`, `dwi_qsiprep`, and `dwi_qsirecon` fixed images available with QSIPrep/QSIRecon `26.0.0`.
+  - Created `task_id=123` through the required chain: canonical registry workflow `dwi_fast_gpu_dti`, preflight pass with runtime `dwi_fast_gpu_dti_validate`, server-side pending confirmation, fingerprint `417923093fdae885b5c2514f05900ae26f0fe7d719f62508a864424af01ac719`, `/agent/runs/{thread_id}/resume`, `confirmation_gate=fingerprint_verified`, `task_service.create_series_task(..., confirmed_agent_gate=True)`, and pipeline runner.
+  - `task_id=123` completed successfully (`status=completed`, `progress=100`) with `workflow_type=dwi_fast_gpu_dti` and `runtime_workflow_type=dwi_fast_gpu_dti_validate`. This proves the task 122 blocker was the mistaken old `pennlinc/qsiprep:1.0.2` lock rather than the current QSIPrep 26.0.0 runtime.
+  - Runtime manifest evidence records `version_lock.images.dwi_fast_gpu_dti=pennlinc/qsiprep:26.0.0`, `floating_tags_allowed=false`, deployment-server-local execution, host FSL GPU path usage, and the DWI fast DTI validate runner command with `--mrtrix-image pennlinc/qsiprep:26.0.0`.
+  - Result evidence saved under `/tmp/image_agent_dwi_validate_qsiprep260_20260620T022946+0800`: `launch.json`, final task JSON, outputs, events, result summary, artifact manifest, ObserveRepair, redacted log tail, and `task_123_safe_summary.json`.
+  - Result API summary: outputs count `2` (`command=1`, `json=1`), result summary reports `workflow_type=dwi_fast_gpu_dti_validate` and `validation_only=true`, artifact manifest has `16` entries, and ObserveRepair reports `policy=read_only_observe_repair`, `auto_rerun_allowed=false`, and `result_summary_status=ok`.
+  - Remote evidence secret scan is clean for the proxy URL markers, API-key-shaped values, sudo password assignment, and known hard-coded password marker. The saved log tail in the evidence directory was redacted for host paths; the original task log remains in the remote project log directory as runtime evidence.
+- Fixed the BOLD fMRIPrep/XCP-D deployment-local script version-lock blocker:
+  - Added `materialize_locked_bold_remote_scripts()` in `apps/api/app/workflows/remote_scripts.py`. It copies deployment script sources into Image Agent managed wrappers, replaces fMRIPrep/XCP-D image references with task environment variables plus fixed defaults, and adds shell guards that reject empty/unpinned/`:latest` images at runtime.
+  - Added a RED/GREEN contract test proving source scripts that hard-code `nipreps/fmriprep:latest` and `pennlinc/xcp_d:latest` can be materialized into executable locked wrappers that pass the existing BOLD preflight, while the raw `:latest` script preflight rejection remains intact.
+  - Built and promoted a temporary yyf overlay without touching the live tree: `/home/yyf/project/image_agent_releases/codex-bold-wrapper-runtime-probe-20260619T183828Z`, archive SHA-256 `46018ba63977bd5efa1a0f462fbb4d575fdb3720d3bbe428c7ec4155c31d0efa`, `member_count=525`, required files present, and secret/runtime/patient-data paths excluded.
+  - Generated yyf wrappers under `/home/yyf/project/image_agent/runtime_wrappers/bold_fmriprep_xcpd` from the existing deployment scripts. The original fMRIPrep script contained `nipreps/fmriprep:latest`; the managed wrapper uses `IMAGE_AGENT_TASK_FMRIPREP_IMAGE` with fixed default `nipreps/fmriprep:25.2.5`. XCP-D is similarly managed with fixed default `pennlinc/xcp_d:26.0.2`.
+  - Restarted only the temporary yyf API on `127.0.0.1:18082` into the new overlay, with `IMAGE_AGENT_ROOT=/home/yyf/project/image_agent` and the BOLD wrapper env vars set. Production port 8000 and the live code tree were not modified.
+  - Remote BOLD preflight now passes with path-safe checks: wrapper scripts exist, FreeSurfer license exists, `fmriprep_image_locked` and `xcpd_image_locked` pass, and script version-lock checks pass.
+  - Created `task_id=124` through the required fixed-workflow chain for project 16 / series 31: canonical registry workflow `bold_fmriprep_xcpd_report`, preflight pass with validate runtime `bold_fmriprep_xcpd_report_validate`, server-side pending confirmation, fingerprint `cfa03be43571bb0f675c51625d4f25e7a6df575c1827475eef3eaa8c0a9db931`, `/agent/runs/{thread_id}/resume`, `confirmation_gate=fingerprint_verified`, `task_service.create_series_task(..., confirmed_agent_gate=True)`, and pipeline runner.
+  - `task_id=124` completed successfully (`status=completed`, `progress=100`) with `workflow_type=bold_fmriprep_xcpd_report` and `runtime_workflow_type=bold_fmriprep_xcpd_report_validate`. The runtime manifest records `nipreps/fmriprep:25.2.5`, `pennlinc/xcp_d:26.0.2`, deployment-server-local execution, wrapper script commands, and `floating_tags_allowed=false`.
+  - Evidence saved under `/tmp/image_agent_bold_validate_locked_wrapper_20260620T0247+0800`: confirmation, resume response, final task, outputs, events, artifact manifest, ObserveRepair, log tail, and safe summary JSON. Validate-only BOLD registers a `command` output and does not write a full result-summary, so `/tasks/124/result-summary` returned 404 by design; `/tasks/124/artifact-manifest`, `/events`, `/outputs`, and `/observe-repair` returned 200. ObserveRepair remains read-only with `auto_rerun_allowed=false`.
+  - Final local verification for this slice returned `23 passed, 3 warnings`; touched Python modules passed `py_compile`; `git diff --check` reported no whitespace errors, only existing line-ending warnings.
+- Converted Elasticsearch hybrid RAG configuration from an operator prose handoff into Git-managed bootstrap scripts:
+  - Added `apps/api/scripts/setup_elasticsearch_hybrid_rag.py`, a dry-run/apply script that probes local Docker, pulls the fixed Elasticsearch image when authorized, starts a loopback-bound local ES container when missing, writes deployment-local `.env` values, optionally rebuilds ES hybrid RAG, and invokes the existing prerequisite verifier. It pins `docker.elastic.co/elasticsearch/elasticsearch:9.4.2`, rejects floating/`:latest` ES image input, and redacts secret values from JSON reports.
+  - Updated `apps/api/scripts/build_elasticsearch_hybrid_config_plan.py`, `apps/api/scripts/verify_elasticsearch_hybrid_config_plan.py`, and `docs/deployment/remote-elasticsearch-hybrid-config-plan.json` so the ES config handoff now requires `setup_elasticsearch_hybrid_rag_from_git_script` instead of `operator_configure_elasticsearch_service`, `operator_provision_local_elasticsearch_container_if_missing`, and `operator_apply_secret_env`.
+  - Added `scripts/bootstrap_image_agent.py` as the repository-level Git checkout bootstrap entrypoint. Its plan installs API/frontend dependencies, prepares pinned workflow images through `probe_runtime_environment --prepare-missing-images`, and calls the ES hybrid setup script. It does not hard-code yyf/10.2.32.14 and does not serialize secret values.
+  - Updated README and deployment docs to point GitHub installs at `python3 scripts/bootstrap_image_agent.py`, with secret values supplied only through local env/secret manager and generated `.env` files kept out of git.
+  - TDD evidence: setup-script tests first failed because `setup_elasticsearch_hybrid_rag.py` did not exist; config-plan tests then failed because the plan still contained prose/operator steps; bootstrap tests then failed because the repo-level script did not exist. After implementation, the ES/bootstrap/runtime slice returned `41 passed, 3 warnings`; touched scripts passed `py_compile`; `git diff --check` reported no whitespace errors, only existing line-ending warnings; local secret/proxy scan returned no matches.
+  - yyf non-mutating dry-run evidence was generated under `/tmp/image_agent_git_bootstrap_verify`: `bootstrap_dry_run.json` reported `plan_id=image_agent_bootstrap_v1`, `mode=dry_run`, `steps=7`; `es_setup_dry_run.json` reported `plan_id=elasticsearch_hybrid_rag_setup_v1`, `mode=dry_run`, `steps=8`; both reports contained no yyf hard-code, no `latest`, and no `sk-` secret-shaped values.
+  - This is not yet a completed ES hybrid acceptance: no remote ES container was started by this slice, no live `.env` was modified, no production embedding key was applied, no ES RAG rebuild ran, and strict online smoke remains blocked until the Git-managed setup is run with real deployment secrets and then verified through `/agent/rag/status`.
+- Hardened the Git bootstrap/setup scripts for real installation retries:
+  - Added early validation so ES hybrid bootstrap fails before writing `.env` if `IMAGE_AGENT_RAG_EMBEDDING_MODEL` or `IMAGE_AGENT_RAG_EMBEDDING_BASE_URL` is missing.
+  - Changed ES setup to inspect and reuse the Docker network/volume before creating them. This makes repeated installs safer when `image-agent-elastic` or `image-agent-es-data` already exists.
+  - TDD evidence: new tests first failed because missing embedding config was accepted and existing Docker network/volume handling still used blind `docker network create`; after the fix, the ES/bootstrap/runtime slice returned `44 passed, 3 warnings`, touched scripts passed `py_compile`, `git diff --check` reported no whitespace errors, and the secret/proxy scan returned no matches.
+  - yyf read-only prereq check for the next ES apply gate: `/home/yyf/project/image_agent/.env` exists but all ES/embedding keys are still missing; Docker access is currently available to the yyf user; `127.0.0.1:9200` is not listening; the temporary API on `127.0.0.1:18082` is reachable but RAG is still not configured as ES hybrid.
+  - yyf non-mutating dry-run v2 under `/tmp/image_agent_git_bootstrap_verify` produced valid `bootstrap_dry_run_v2.json`, `es_setup_dry_run_v2.json`, and `bootstrap_skip_es_dry_run_v2.json`; all remain dry-run and contain no `latest`, no API-key-shaped value, and no yyf hard-code.
+  - Updated objective allows temporary proxy use for remote image pulls or external access, but no proxy URL/token was written to source, docs, scripts, or repo logs.
+- Reduced manual ES hybrid embedding configuration by deriving RAG embedding env from existing deployment env where safe:
+  - `setup_elasticsearch_hybrid_rag.py` now supports `--derive-embedding-from-env`. It can derive the RAG embedding base URL from existing model env such as `OPENAI_BASE_URL`, default the embedding model to `text-embedding-3-small` when no explicit embedding model is configured, and record only safe source labels such as `base_url_source=OPENAI_BASE_URL` and `api_key_source=existing_runtime_fallback_present`.
+  - yyf read-only env presence showed `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `OPENAI_MODEL` are set, while all RAG-specific ES/embedding keys remain missing. This means the next Git-managed ES setup can derive RAG provider/model/base URL without copying or printing the model key.
+  - The ES config plan now invokes `setup_elasticsearch_hybrid_rag.py --derive-embedding-from-env`; it no longer relies on pre-existing `IMAGE_AGENT_RAG_EMBEDDING_MODEL` or `IMAGE_AGENT_RAG_EMBEDDING_BASE_URL`.
+  - Fixed a release-order bug in the ES config handoff: the setup step no longer runs `--rebuild-rag` or `--verify-prerequisites` before API restart. The order is now ES/env setup, secret-presence check, API restart, workflow image prep, RAG rebuild, ES prerequisite verifier, then strict smoke handoff.
+  - yyf dry-run for derived embedding config wrote `/tmp/image_agent_git_bootstrap_verify/es_setup_derive_dry_run.json`; safe summary: `plan_id=elasticsearch_hybrid_rag_setup_v1`, `mode=dry_run`, `model_source=default_text_embedding_3_small`, `base_url_source=OPENAI_BASE_URL`, `api_key_source=existing_runtime_fallback_present`, and no `latest`, API-key-shaped value, or yyf hard-code marker.
+  - Local verification after this change: ES/bootstrap/config/runtime slice returned `45 passed, 3 warnings`; touched scripts passed `py_compile`; `git diff --check` returned no whitespace errors; secret/proxy scan returned no matches.
+  - Remaining apply prerequisites: run the Git setup on yyf with runtime-only proxy if Docker pull/external access needs it, allow ES container start/write `.env`, restart the API into the updated env, rebuild ES hybrid RAG, and pass the read-only ES prerequisite gate before strict smoke.
+- Advanced the yyf ES hybrid apply gate through the Git-managed setup path:
+  - Ran `setup_elasticsearch_hybrid_rag.py --derive-embedding-from-env --apply` on yyf with runtime-only proxy env and no proxy material written to source/docs/scripts/logs. Report: `/tmp/image_agent_es_setup_apply_20260620T033302+0800.json`.
+  - ES image/container are present and running: `docker.elastic.co/elasticsearch/elasticsearch:9.4.2`, container `image-agent-es`, loopback endpoint `http://127.0.0.1:9200`.
+  - Deployment `.env` now has ES/RAG embedding config written by script: provider `openai_compatible`, model `text-embedding-3-small`, ES index `image_agent_rag_release_20260620`; embedding API key remains supplied through existing deployment model key fallback rather than being copied into logs.
+  - Fixed local code issues exposed by remote acceptance: setup derivation now skips `local-token-hash-v1`, runtime probe honors `IMAGE_AGENT_DOCKER_COMMAND`, and Agent/RAG repo root resolution now follows `IMAGE_AGENT_ROOT` instead of the overlay path.
+  - Restarted only temporary yyf API `127.0.0.1:18082`; production 8000 was not touched.
+  - Remote runtime probe evidence `/tmp/image_agent_runtime_probe_es_20260620T033842+0800.json` discovers one running local ES container.
+  - RAG rebuild now writes `/home/yyf/project/image_agent/.rag_index` and `/agent/rag/status` reads that installed root. Current status is `engine=elasticsearch_hybrid`, configured embedding metadata `openai` / `text-embedding-3-small`, transport `sdk`, endpoint configured, but `mode=embedding_error`, `indexed_chunk_count=0`, and `persisted=false`.
+  - Root cause for remaining blocker: the derived embedding base URL is yyf loopback HTTP port `18081`, and no service is listening there; runtime proxy cannot help a loopback endpoint excluded by `NO_PROXY`.
+- Current ES prereq verifier evidence `/tmp/image_agent_es_prereq_verify_20260620T034355+0800.txt` fails only on connected-index/embedding-readiness outcomes, not on env presence or root-path mismatch.
+
+## Current ES Hybrid Acceptance Status
+
+- ES/embedding blocker is resolved for the temporary yyf acceptance API: pinned TEI local embeddings are running on `127.0.0.1:18081`, RAG rebuild is connected and persisted in Elasticsearch, and `/agent/rag/query` returns `retrieval_source=elasticsearch_hybrid` with official citations.
+- Official Elasticsearch trial license is now active on yyf local ES; after rebuild, `/agent/rag/status`, `/agent/rag/rebuild`, and `/agent/rag/query` all report fusion `rrf`, and the read-only ES hybrid prerequisite gate passes against temporary API `127.0.0.1:18082`.
+- Rawchat/gpt-5.5 Responses-compatible model gateway is configured on yyf temporary API. The OpenAI SDK client now defaults to `trust_env=false`, so ambient proxy variables no longer hijack rawchat calls; explicit yyf direct checks return HTTP `200`.
+- Release overlay RAG provenance is now the active root for Agent/RAG docs while live root remains the persistent data root. `/agent/rag/status` reports 22 complete vendor docs, 61 raw official snapshots, chunks `340`, and ES hybrid fusion `rrf`.
+- Non-task strict smoke passed against temporary yyf API `127.0.0.1:18082`; evidence is `/tmp/image_agent_non_task_strict_rawchat_direct_20260620T135403+0800.json`. Covered model gateway, model tool loop, ES hybrid RRF, raw-source policy, vendor pointer integrity, and launchability matrix.
+- DWI fast full workflow has now closed one real yyf fixed-workflow loop through Agent confirmation/resume and production task execution:
+  - project `15`, upload session `7`, series `27`, task `125`;
+  - Agent confirmation run selected stable workflow `dwi_fast_gpu_dti` with ES hybrid RAG grounding and did not create a task before approval;
+  - fingerprint-negative resume was blocked with no production task;
+  - approved resume created task `125`, which completed with runtime `dwi_fast_gpu_dti`;
+  - latest task/result/ObserveRepair/RAG evidence is `/tmp/image_agent_dwi_task125_api_observe_20260620T214102+0800.json`.
+- BOLD full workflow passed the launch-control gate on yyf but real task `126` failed during the fMRIPrep runtime dependency download:
+  - project `16`, series `31`, workflow `bold_fmriprep_xcpd_report`;
+  - fixed confirmation contract now exposes public `fingerprint` and `runtime_workflow_type` while excluding fingerprint envelope fields from canonical hashing;
+  - fingerprint-negative resume was blocked with `confirmation_gate=fingerprint_mismatch`;
+  - approved resume created task `126` with `confirmation_gate=fingerprint_verified` and `production_task_created=true`;
+  - pipeline runner started a real `nipreps/fmriprep:25.2.5` container, with runtime manifest also locking XCP-D to `pennlinc/xcp_d:26.0.2`;
+  - launch evidence is `/tmp/image_agent_bold31_deterministic_confirmation_resume_20260620T221221+0800.json`;
+  - task log is `/home/yyf/project/image_agent/data/projects/16/logs/126.log`;
+  - failure diagnosis evidence is `/tmp/image_agent_bold126_failure_diagnosis_20260620T224551+0800.json`;
+  - root cause: fMRIPrep reached TemplateFlow download progress around `87%`, then failed with `requests.exceptions.ConnectionError` / `HTTPSConnectionPool(host='templateflow.s3.amazonaws.com', port=443): Read timed out`;
+  - no XCP-D log was created, so the workflow did not reach step `2/2`;
+  - ObserveRepair for task `126` passed the read-only contract (`auto_rerun_allowed=false`, `production_task_created=false`, and retry requires preflight plus human confirmation).
+- Added a portable TemplateFlow cache prewarm path so the next BOLD attempt can be prepared through Git-managed install scripts rather than ad hoc remote edits:
+  - `apps/api/scripts/prewarm_templateflow_cache.py`;
+  - `scripts/bootstrap_image_agent.py --prewarm-templateflow`;
+  - uses pinned `nipreps/fmriprep:25.2.5`, writes `IMAGE_AGENT_TEMPLATEFLOW_HOME` to the chosen env file, and does not store proxy URLs or secrets;
+  - supports Docker client prewarm with runtime-only proxy forwarding plus direct resumable `curl` mode for slow TemplateFlow S3 paths;
+  - `scripts/bootstrap_image_agent.py` now exposes the direct prewarm path through `--templateflow-download-method curl`, `--direct-templateflow-download`, `--templateflow-attempts`, and `--templateflow-request-timeout`;
+  - yyf bootstrap dry-run evidence `/tmp/image_agent_bootstrap_templateflow_direct_dryrun_20260620T233704+0800.json` confirms the Git entrypoint now emits the same direct curl prewarm flags without `latest`, secret-shaped values, or remote-server binding;
+  - yyf temporary overlay prewarm completed through `--download-method curl --direct-download --attempts 3 --request-timeout 240`;
+  - evidence: `/tmp/image_agent_templateflow_prewarm_curl_direct_20260620T232253+0800.json`;
+  - result: `completed_commands=8`, zero-size cache files `0`, and non-empty fixed template files for `MNI152NLin2009cAsym` and `MNI152NLin6Asym`;
+  - BOLD full-workflow preflight now checks those 8 required TemplateFlow files before human confirmation and task creation; yyf dry preflight evidence `/tmp/image_agent_bold_templateflow_preflight_20260620T234210+0800.json` reports `ok=true`, `required_count=8`, `missing_count=0`, and `zero_size_count=0`;
+  - no new production task or automatic BOLD rerun was created after cache preparation.
+- Rawchat direct transport is now reinforced at code and yyf runtime levels:
+  - `ModelGateway` forces `trust_env_proxy=false` for the `rawchat` provider profile and for `rawchat.cn` / `*.rawchat.cn` hosts even if a shell sets `IMAGE_AGENT_MODEL_TRUST_ENV_PROXY=1`;
+  - remote deployment docs now set `IMAGE_AGENT_MODEL_TRUST_ENV_PROXY=0` for rawchat and state that Docker/image-pull proxy settings are not for rawchat traffic;
+  - yyf temporary API `127.0.0.1:18082` was restarted after syncing the hardened gateway; production port `8000` was not touched;
+  - remote evidence `/tmp/image_agent_rawchat_direct_18082_20260620T235031+0800.json` reports `provider_profile=rawchat`, `wire_api=responses`, `configured=true`, `trust_env_proxy=false`, direct gateway access, rawchat host, `NO_PROXY` containing rawchat, and HTTP `200` from both `httpx.Client(trust_env=False)` and `curl --noproxy '*'` probes;
+  - no workflow task was created, no BOLD rerun was attempted, and no proxy URL/token or API key was written to source/docs/scripts/logs.
+- BOLD prepare-only HTTP Agent preflight now passes through the restarted yyf temporary API:
+  - first prepare after the rawchat-only restart exposed a runtime env gap: `/tmp/image_agent_bold_http_prepare_prefight_after_restart_20260620T235350+0800.json` returned `preflight_failed` because `IMAGE_AGENT_TEMPLATEFLOW_HOME` was not inherited by the API process, so the API checked an empty per-project pending TemplateFlow cache;
+  - yyf local `.env` was updated with non-secret `IMAGE_AGENT_TEMPLATEFLOW_HOME` pointing to the prewarmed shared cache, and only temporary API `127.0.0.1:18082` was restarted; production `8000` was not touched;
+  - restart/cache evidence `/tmp/image_agent_templateflow_env_restart_18082_20260620T235752+0800.json` reports `required_count=8`, `missing_count=0`, `zero_size_count=0`, `min_size_bytes=28557`, and `IMAGE_AGENT_MODEL_TRUST_ENV_PROXY=0`;
+  - repeated `/agent/runs` prepare-only evidence `/tmp/image_agent_bold_http_prepare_after_templateflow_env_20260620T235829+0800.json` reports `status=confirmation_required`, `preflight_ok=true`, TemplateFlow required files `pass`, fMRIPrep/XCP-D image lock checks `pass`, stable `workflow_type=bold_fmriprep_xcpd_report`, public fingerprint present, non-report-only structured workflow metadata, and `new_task_ids_after_prepare=[]`;
+  - `/agent/runs/{thread_id}/resume` was not called, no new production task was created, and failed BOLD task `126` was not rerun.
+- Additional yyf HTTP safety-gate evidence was recorded on 2026-06-21:
+  - unknown workflow request for `codex_unknown_workflow_smoke` against project `16` / series `31` returned `status=toolchain_proposed`, `action_lane=toolchain_incubation`, event `agent.toolchain_proposed`, `safe_metadata.production_task_created=false`, no confirmation, no task in response, and `new_task_ids_after_request=[]`; evidence `/tmp/image_agent_unknown_workflow_incubation_http_20260621T000143+0800.json`;
+  - ObserveRepair request for failed task `126` returned `status=answered`, `intent=debug_failure`, `safe_metadata.lane=observe_repair`, event `agent.repair_plan_drafted`, no confirmation, no task in response, and `new_task_ids_after_request=[]`; answer states no retry without registry, preflight, and human confirmation; evidence `/tmp/image_agent_observe_repair_task126_http_20260621T000410+0800.json`;
+  - latest project `16` task remained task `126` with `status=failed`, so neither request created or reran a production task.
+- Closed the structured HTTP response gap found by that safety-gate evidence:
+  - `/agent/runs` now exposes `proposed_toolchain`, `task_observation`, and `repair_plan` in the public response contract, with existing public-value sanitization applied;
+  - LangGraph final-state mapping now promotes incubation proposal state into top-level `proposed_toolchain`;
+  - local TDD/verification passed: the focused unknown-workflow API test, the 5-test LangGraph/API safety slice, the 55-test model/registry/task-creation safety slice, and `py_compile` for the touched agent modules;
+  - yyf temporary API `127.0.0.1:18082` was restarted with overlay code plus live data root and rawchat direct transport (`trust_env_proxy=false`), while production `8000` was not touched;
+  - remote OpenAPI now exposes `proposed_toolchain`, `repair_plan`, and `task_observation`;
+  - structured unknown-workflow evidence `/tmp/image_agent_unknown_workflow_structured_incubation_http_20260621T002300+0800.json` reports `status=toolchain_proposed`, `action_lane=toolchain_incubation`, `proposed_toolchain_present=true`, proposal id `inc_fb4115cedc14`, proposal/promotion-gate `production_task_created=false`, and `new_task_ids_after_request=[]`;
+  - structured ObserveRepair evidence `/tmp/image_agent_observe_repair_structured_read_only_http_20260621T002443+0800.json` reports `repair_plan_present=true`, `task_observation_present=true`, observed task `126`, `auto_retry_allowed=false`, `auto_rerun_allowed=false`, forbidden actions `auto_retry/auto_rerun/task_creation`, and `new_task_ids_after_request=[]`.
+- Tightened portable deployment configuration for Git/script installs:
+  - Python config now honors `IMAGE_AGENT_ENV_FILE` before computing `ROOT`, `DATA_ROOT`, `DB_PATH`, and `PROJECTS_ROOT`, so a deployment env file can define `IMAGE_AGENT_ROOT` without relying on manual shell sourcing before import;
+  - Agent/RAG repo root defaults to `IMAGE_AGENT_RELEASE_ROOT` when set, preserving the split between release overlay docs/code and live persistent data;
+  - local TDD/verification: the new env-file root test first failed on the previous default `.env` behavior, then `test_config_paths.py` returned `4 passed`; deployment/config plan tests returned `37 passed`; related Agent/RAG API slice returned `3 passed, 3 warnings`; touched modules passed `py_compile`;
+  - yyf disk-level verification synced the changed config files into the active 18082 overlay without restarting the API, calling the model, or creating/rerunning tasks; remote py_compile passed and `/tmp/image_agent_env_file_root_verify_20260621T003201+0800.json` proves `env_path=/tmp/image_agent_env_file_root_verify.env`, live `db_path=/home/yyf/project/image_agent/data/app.db`, live `projects_root=/home/yyf/project/image_agent/data/projects`, and release `repo_root=/home/yyf/project/image_agent_releases/codex-bold-wrapper-runtime-probe-20260619T183828Z`.
+- Tightened the Git bootstrap entrypoint so install config is emitted by script rather than only documented:
+  - `scripts/bootstrap_image_agent.py` now starts with `configure_image_agent_root`, which writes `IMAGE_AGENT_ROOT=<repo_root>` to the chosen env file during `--apply`;
+  - existing env file lines are preserved, and only the targeted non-secret key is updated/appended;
+  - TDD evidence: focused bootstrap tests first failed because the plan started at `check_python` and apply did not write `IMAGE_AGENT_ROOT`; after implementation `test_bootstrap_image_agent.py` returned `8 passed`;
+  - broader local verification returned `45 passed` across bootstrap/config/ES-plan/restart-script tests, touched modules passed `py_compile`, and a local dry-run showed first step `configure_image_agent_root`;
+  - yyf dry-run evidence `/tmp/image_agent_bootstrap_root_dryrun_20260621T003636+0800.json` confirms first step command `write_env /tmp/image_agent_bootstrap_root_verify.env IMAGE_AGENT_ROOT <overlay-root>` with mode `dry_run` and no secret/proxy marker in the serialized plan;
+  - no yyf API restart, model call, Docker pull, live `.env` mutation, production task creation, or workflow rerun was performed.
+- Closed the bootstrap env inheritance follow-up:
+  - after writing `IMAGE_AGENT_ROOT`, `scripts/bootstrap_image_agent.py` now injects the selected `IMAGE_AGENT_ENV_FILE` into every real child subprocess environment, so Python imports during the same apply flow read the generated env file;
+  - TDD evidence: the bootstrap apply test first failed because fake subprocess calls saw no `IMAGE_AGENT_ENV_FILE`, then passed after `_run()` propagated it;
+  - local verification again returned `45 passed` across bootstrap/config/ES-plan/restart-script tests, touched modules passed `py_compile`, and a local dry-run still begins with `configure_image_agent_root`;
+  - yyf apply simulation evidence `/tmp/image_agent_bootstrap_env_inheritance_apply_sim_20260621T003926+0800.json` reports `report_status=completed`, temp env file written, `subprocess_count=5`, all subprocess env files set to `/tmp/image_agent_bootstrap_env_inheritance_verify.env`, and API subprocesses keep `PYTHONPATH=<overlay>/apps/api`;
+  - the yyf simulation monkeypatched subprocess execution and only used `/tmp`, so it did not restart the API, call the model, pull Docker images, mutate live `.env`, create production tasks, or rerun workflows.
+- Added explicit bootstrap support for release overlay plus separate live data root:
+  - `scripts/bootstrap_image_agent.py` now accepts `--image-agent-root`; default remains `repo_root`, preserving normal Git checkout behavior;
+  - when provided, the plan/apply path writes `IMAGE_AGENT_ROOT=<image_agent_root>` while commands still run from `repo_root`;
+  - TDD evidence: the new `test_bootstrap_can_write_live_root_separate_from_release_checkout` first failed because `image_agent_root` was unsupported, then passed after adding the parameter to plan/apply/CLI;
+  - local verification: `test_bootstrap_image_agent.py` returned `9 passed`; the bootstrap/config/ES-plan/restart-script slice returned `46 passed`; local dry-run with separate live root reports distinct `repo_root` and `image_agent_root`;
+  - yyf dry-run evidence `/tmp/image_agent_bootstrap_live_root_dryrun_20260621T004322+0800.json` reports overlay `repo_root=/home/yyf/project/image_agent_releases/codex-bold-wrapper-runtime-probe-20260619T183828Z`, live `image_agent_root=/home/yyf/project/image_agent`, and first step `write_env /tmp/image_agent_bootstrap_live_root_verify.env IMAGE_AGENT_ROOT /home/yyf/project/image_agent`;
+  - no yyf API restart, model call, Docker pull, live `.env` mutation, production task creation, or workflow rerun was performed.
+- Added CLI and README coverage for the same live-root bootstrap capability:
+  - CLI-level test proves `scripts/bootstrap_image_agent.py --image-agent-root <live-root>` emits the correct dry-run JSON from the public command entrypoint;
+  - README contract test first failed because `--image-agent-root` was undocumented;
+  - README now documents the release overlay plus live persistent root pattern with `--repo-root`, `--image-agent-root`, and `--env-file`;
+  - follow-up verification returned `48 passed` across bootstrap/config/ES-plan/restart-script tests, and touched modules passed `py_compile`.
+- Persisted both roots in the bootstrap-generated env file:
+  - bootstrap now writes `IMAGE_AGENT_ROOT=<image_agent_root>` for live persistent data and `IMAGE_AGENT_RELEASE_ROOT=<repo_root>` for release overlay code/RAG docs;
+  - TDD evidence: `test_bootstrap_can_write_live_root_separate_from_release_checkout` first failed because there was no `configure_image_agent_release_root` step, then passed after adding it;
+  - local verification again returned `48 passed` across bootstrap/config/ES-plan/restart-script tests, touched modules passed `py_compile`, and local dry-run shows both root configuration steps;
+  - yyf dry-run evidence `/tmp/image_agent_bootstrap_release_root_dryrun_20260621T004939+0800.json` reports generated commands for `IMAGE_AGENT_ROOT=/home/yyf/project/image_agent` and `IMAGE_AGENT_RELEASE_ROOT=/home/yyf/project/image_agent_releases/codex-bold-wrapper-runtime-probe-20260619T183828Z`;
+  - no yyf API restart, model call, Docker pull, live `.env` mutation, production task creation, or workflow rerun was performed.
+- Hardened Elasticsearch hybrid setup for the official Elastic trial-license path:
+  - `setup_elasticsearch_hybrid_rag.py` now includes `start_elasticsearch_trial_license` in the dry-run/apply flow and posts to `/_license/start_trial?acknowledge=true` after the local ES container is available;
+  - the license POST uses a no-proxy loopback opener, so it does not inherit Docker/image-pull proxy settings;
+  - `--skip-start-trial-license` is documented for operator-managed clusters;
+  - remote ES config plan evidence now requires `start_elasticsearch_trial_license` in the setup report and emits `elasticsearch_trial_license_status=started_or_already_started`;
+  - regenerated `docs/deployment/remote-elasticsearch-hybrid-config-plan.json` with the trial-license source and seven-key env checklist;
+  - local TDD/verification returned `48 passed` across bootstrap/setup/config-plan/verifier tests, the generated plan verifier returned `status=passed`, and the touched scripts passed `py_compile`;
+  - no yyf apply, Docker pull, ES trial start, API restart, model call, production task creation, or workflow rerun was performed for this script hardening.
+- Closed the top-level bootstrap handoff for managed Elasticsearch licensing:
+  - `scripts/bootstrap_image_agent.py` now accepts `--skip-elasticsearch-trial-license` and passes it to the ES setup script as `--skip-start-trial-license`;
+  - default bootstrap behavior still starts the official Elastic trial license for the local loopback ES path;
+  - README documents both flags and the operator-managed cluster boundary;
+  - TDD/verification returned `3 passed` for the new RED/GREEN slice, then `50 passed` across bootstrap/setup/config-plan/verifier tests, with touched scripts passing `py_compile`;
+  - yyf non-destructive dry-run evidence `/tmp/image_agent_bootstrap_trial_skip_20260621T010515+0800.json` reports `mode=dry_run`, separate release/live roots, and `skip_start_trial_forwarded=true`; follow-up safety check reported no env file creation and no real proxy/token markers;
+  - no yyf apply, Docker pull, ES trial start, API restart, model call, production task creation, or workflow rerun was performed for this handoff hardening.
+- Added current yyf read-only port/Docker boundary evidence:
+  - production `8000` is healthy but still reports `/agent/rag/status.index.engine=llama_index`, so it cannot satisfy strict ES hybrid acceptance yet;
+  - temporary acceptance `18082` reports ES hybrid connected/persisted/RRF with production-ready embedding evidence, and verifier evidence `/tmp/image_agent_es_prereq_port18082_20260621T010704_18082_010822.json` returns `status=passed`;
+  - production verifier evidence `/tmp/image_agent_es_prereq_port8000_20260621T010704_8000_010822.err` fails on missing ES hybrid/RRF connected evidence;
+  - SSH direct `docker ps` is denied by the Docker socket, and `sudo -n docker ps` requires a password, so SSH-side image preparation/apply steps need explicit operator-authorized sudo or another approved Docker access path;
+  - no yyf API restart, model call, Docker pull, live `.env` mutation, task creation, or workflow rerun was performed for this read-only probe.
+- Updated yyf production `8000` for rawchat direct transport:
+  - restarted `8000` with proxy environment variables unset, `IMAGE_AGENT_MODEL_TRUST_ENV_PROXY=0`, `NO_PROXY` containing `rawchat.cn`, and explicit live/release/env-file root variables;
+  - rebuilt the release-overlay RAG index via `POST /agent/rag/rebuild`, not by hand-editing state;
+  - evidence `/tmp/image_agent_rawchat_direct_rootfix_verify_after_rebuild_20260621T012312+0800.json` reports `passed=true`, no process proxy env keys, `model_gateway_access=direct`, rawchat host, direct `curl --noproxy '*'` probe with remote IP present, `rag_engine=elasticsearch_hybrid`, `rag_hybrid_mode=connected`, `rag_hybrid_fusion=rrf`, and `rag_embedding_production_ready=true`;
+  - evidence `/tmp/image_agent_es_prereq_port8000_after_rawchat_direct_rootfix_20260621T012312+0800.out` reports ES hybrid prerequisite `status=passed` with RRF official source present and secrets redacted;
+  - no proxy URL, rawchat API key, sudo password, production task creation, or workflow rerun was written/performed.
+- Advanced yyf production `8000` no-task main-link acceptance:
+  - fixed smoke/verifier handling for stable `workflow_type=t1_deepprep_anat_report` versus runtime `t1_deepprep`, and for unknown-workflow proposal responses that correctly return `thread_id=null`;
+  - local TDD/verification returned `2 passed`, then `240 passed`, and `py_compile` passed locally plus on yyf;
+  - synced the updated scripts and current Agent/workflow metadata contract modules into the active release overlay, then restarted production `8000` without active tasks;
+  - direct prepare evidence `/tmp/image_agent_t1_prepare_metadata_after_restart_20260621T014544+0800.json` reports confirmation-required T1 DeepPrep metadata with `production_task_created=false`;
+  - no-task smoke evidence `/tmp/image_agent_t1_upload_confirm_no_task_8000_20260621T015553+0800.json` reports ES hybrid RAG passed, runtime toolchain passed, uploaded series `44`, Agent workflow confirmation passed for stable workflow `t1_deepprep_anat_report` and runtime `t1_deepprep`, unknown workflow incubation passed, and no production task creation;
+  - follow-up `/projects/16/tasks` check reported `active_count=0`;
+  - exact port-8000 listener pid `2793629` reports `provider=rawchat`, `IMAGE_AGENT_MODEL_TRUST_ENV_PROXY=0`, and zero proxy env vars, so rawchat remains direct.
+- Remaining strict-launch blocker:
+  - full remote acceptance still needs one production task launch/resume/completion evidence path with task events, ObserveRepair read-only proof, result summary, scientific report/QC artifacts, and verifier acceptance;
+  - `--require-production-readiness` is still expected to fail before that evidence is produced, because the readiness gate is blocked by missing strict remote acceptance rather than by rawchat/RAG/runtime setup.
+- Advanced yyf production task launch/completion evidence:
+  - fixed active-overlay drift for QSIPrep/QSIRecon image locks so runtime probes use `pennlinc/qsiprep:26.0.0` and `pennlinc/qsirecon:26.0.0`; restart evidence `/tmp/image_agent_restart_qsiprep260_overlay_20260621T020616+0800.out`;
+  - fixed active-overlay confirmation fingerprint-envelope drift; restart evidence `/tmp/image_agent_restart_fingerprint_envelope_20260621T021542+0800.out`;
+  - Agent confirmation/resume launched real task `127` for project `13`, series `22`, stable workflow `t1_deepprep_anat_report`, runtime workflow `t1_deepprep`; task completed with `progress=100` and no task error;
+  - the initial full smoke reached the post-run gates but failed because `/tasks/127/events` lacked `task.remote_log`, so no additional task was launched for the fix.
+- Closed task observation/report/QC post-run acceptance for task `127`:
+  - added sanitized `task.log` fallback remote-log events for tasks with a main log but no discoverable native container log;
+  - aligned Agent `read_task_events` and ObserveRepair with the same fallback, preserving `auto_rerun_allowed=false` and `production_task_created=false`;
+  - synced the fixes to yyf and restarted production `8000`; evidence `/tmp/image_agent_restart_remote_log_fallback_20260621T024954+0800.out` and `/tmp/image_agent_restart_observe_repair_log_fallback_20260621T025237+0800.out`;
+  - synced the already-tested artifact-manifest empty-file omission into the active overlay after task `127` exposed two zero-byte Nextflow logs; restart evidence `/tmp/image_agent_restart_artifact_manifest_empty_omit_20260621T025501+0800.out`;
+  - manifest now reports `artifact_count=141`, `bad_size_count=0`, and `omitted_empty_count=2`.
+- Post-run smoke evidence `/tmp/image_agent_task127_postrun_smoke_20260621T025527+0800.json` passed the key existing-task gates:
+  - `runtime_toolchain_status=passed`;
+  - `rag_elasticsearch_hybrid_status=passed`;
+  - `task_events_status=passed` with non-empty `task.remote_log`;
+  - `observe_repair_status=passed`, `policy=read_only_observe_repair`, `auto_rerun_allowed=false`, `production_task_created=false`;
+  - `container_native_qc_status=passed`;
+  - `scientific_report_artifacts_status=passed`.
+- Local verification for this slice:
+  - `python -m pytest apps/api/tests/test_task_logs.py apps/api/tests/test_agent_tools.py::test_read_task_and_events_include_remote_wrapper_logs apps/api/tests/test_agent_tools.py::test_read_task_events_falls_back_to_main_log_when_remote_logs_absent apps/api/tests/test_agent_tools.py::test_observe_repair_task_redacts_sensitive_tool_payload_without_creating_tasks apps/api/tests/test_fixed_workflow_api_contract.py::test_task_artifact_manifest_lists_previewable_result_summary_artifacts apps/api/tests/test_fixed_workflow_api_contract.py::test_task_artifact_manifest_omits_unsafe_or_missing_artifacts -q` returned `8 passed, 3 warnings`;
+  - `python -m py_compile apps/api/app/services/result_service.py apps/api/app/agent/tools.py apps/api/app/workflows/artifact_manifest.py apps/api/app/workflows/task_logs.py` passed;
+  - `git diff --check` passed for the touched observation/manifest files.
+- Remaining strict gate is narrower now:
+  - task `127` proves the fixed T1 production workflow can run to completion and expose events, ObserveRepair, result/QC/report artifacts on production `8000`;
+  - still needed for final production-readiness: a verifier-compatible full strict JSON that includes Agent confirmation/resume/launched-task evidence and then satisfies the readiness gate in the same acceptance chain.
+- Closed the Git/bootstrap configuration gap for production readiness env:
+  - root cause check on yyf production `8000` showed `/deployment.production_readiness` is `ready=true` but `required=false`; `/deployment.fast_launch_readiness` is blocked only by missing strict remote acceptance evidence;
+  - added `scripts/bootstrap_image_agent.py --production --production-cors-origins <https-console-origin> --production-public-base-url <https-api-origin>`;
+  - bootstrap writes only non-secret `IMAGE_AGENT_ENV=production`, `IMAGE_AGENT_CORS_ORIGINS`, and `IMAGE_AGENT_PUBLIC_BASE_URL`, and rejects empty, wildcard, localhost, non-HTTPS, or path/query/fragment origins;
+  - README documents the Git-managed production readiness env setup;
+  - local verification: `python -m pytest apps/api/tests/test_bootstrap_image_agent.py -q` returned `24 passed`, and `python -m py_compile scripts/bootstrap_image_agent.py` passed;
+  - yyf dry-run evidence `/tmp/image_agent_bootstrap_production_readiness_dryrun.json` and overlay dry-run evidence `/tmp/image_agent_overlay_production_readiness_bootstrap_dryrun.json` both report production env write steps without creating env files;
+  - synced the updated bootstrap script into the active release overlay after creating the missing top-level `scripts/` directory there;
+  - no live `.env` mutation, API restart, model call, Docker pull, production task creation, or workflow rerun was performed.
+- Final strict `--require-production-readiness` run is now waiting on real deployment origins, not code:
+  - need a real public HTTPS API origin for `IMAGE_AGENT_PUBLIC_BASE_URL`;
+  - need real public HTTPS console origin(s) for `IMAGE_AGENT_CORS_ORIGINS`;
+  - do not use placeholder/example origins for production readiness evidence.
+- A T1 DeepPrep existing-task observe/report/QC strict gate also passed for task `120`; evidence is `/tmp/image_agent_existing_t1_task120_strict_observe_20260620T142705+0800.json`.
+- `smoke_remote_agent.py` now supports `--skip-agent-run-smoke` for layered acceptance: model status and capability checks still run, explicit workflow confirmation/resume gates still run, but task/result acceptance can avoid re-triggering a generic freeform LLM answer in the same process.
+- Next remote step: run one full acceptance per remaining fixed workflow, starting with the longer BOLD fMRIPrep/XCP-D path when the server can spend that runtime, and keep the generic rawchat Agent answer smoke as a separate monitored gate.
+  - Local focused regression for the touched setup/runtime/root/RAG slice returned `56 passed, 3 warnings`.
+  - Latest local focused regression for rawchat direct gateway, release root, and LangGraph state contract returned `45 passed, 3 warnings`.
+  - Latest local focused regression for task log/artifact/result/confirmation/smoke layering returned `4 passed`, `20 passed`, `24 passed`, `5 passed`, `6 passed`, and the BOLD confirmation/resume contract slice returned `8 passed` across the targeted commands recorded in `docs/work-log-2026-06-20.md`.
+- Rechecked yyf production `8000` rawchat transport after the operator clarified that remote-to-rawchat traffic must be direct:
+  - process env has `IMAGE_AGENT_MODEL_PROVIDER=rawchat`, `IMAGE_AGENT_MODEL_TRUST_ENV_PROXY=0`, `NO_PROXY` containing `rawchat.cn`, and no `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY` keys;
+  - `/agent/model/status` reports configured rawchat Responses access with `deployment.model_gateway_access=direct`;
+  - `curl --noproxy '*' https://rawchat.cn/codex` reached rawchat directly with TLS verification success and a remote IP;
+  - no API restart, live env mutation, model call, Docker pull, production task creation, workflow rerun, proxy URL, rawchat API key, or other secret was written/performed for this recheck.
+- Cleaned up rawchat direct-transport ambiguity on yyf:
+  - stopped a stale localhost-only `18082` test API that still carried ambient proxy variables, even though its model client also forced no proxy;
+  - production `8000` remains the active entrypoint with no proxy env keys, `NO_PROXY` covering `rawchat.cn`, rawchat Responses status configured, and `deployment.model_gateway_access=direct`;
+  - direct `curl --noproxy '*'` to the rawchat models endpoint reached a remote rawchat IP without using an API key;
+  - BOLD task `135` is still running on production `8000`, and its staged BIDS directory contains both BOLD JSON and same-project T1w companion evidence.
+- Advanced BOLD fixed-workflow real acceptance on yyf:
+  - task `135` completed the real `bold_fmriprep_xcpd_report` production workflow on project `24`, series `45`;
+  - fMRIPrep and XCP-D both finished successfully;
+  - no second BOLD task was launched after the post-run contract failures were found.
+- Closed the BOLD post-run result/report/QC gaps exposed by task `135`:
+  - BOLD fMRIPrep/XCP-D pipeline now writes and registers a derived scientific report summary and backfills `reports/index.html` plus report manifest into the public result contract;
+  - result redaction and smoke unsafe-text detection no longer treat normal BIDS labels such as `task-rest` as secret-like `sk-...` tokens;
+  - result summaries omit zero-byte downloadable outputs so they stay aligned with the artifact manifest.
+- Existing-task post-run smoke evidence `/tmp/image_agent_task135_postrun_scientific_report_smoke_20260621T081523+0800.json` passed:
+  - runtime toolchain;
+  - task events;
+  - ObserveRepair read-only policy with `auto_rerun_allowed=false`;
+  - container-native QC;
+  - scientific report artifacts;
+  - task artifact manifest;
+  - task result summary.
+- The same JSON is not a final full strict launch-readiness artifact: `scripts/verify_remote_smoke_acceptance.py` rejects it because it lacks the complete deployment-identity gate (`smoke_gate.require_deployment_identity=true`).
+- Current launch-readiness gap:
+  - real T1 and real BOLD fixed workflows have completion/post-run evidence;
+  - final readiness still needs one verifier-compatible single acceptance payload that combines deployment identity, Agent confirmation/resume launch, production task completion, events, ObserveRepair, QC/report/result artifacts, ES hybrid RAG, and production-readiness evidence.
+- Latest local focused verification for the BOLD post-run closure:
+  - `python -m py_compile apps/api/app/workflows/pipeline.py apps/api/app/services/result_service.py apps/api/app/workflows/result_contract.py apps/api/scripts/smoke_remote_agent.py apps/api/scripts/smoke_local_main_flow.py` passed;
+  - targeted pytest returned `23 passed, 3 warnings`.
+- Added read-only persisted Agent launch evidence reuse to `smoke_remote_agent.py`:
+  - new flags `--reuse-persisted-agent-launch-evidence` and `--agent-state-db`;
+  - verifies an existing task's persisted Agent confirmation, fingerprint-verified resume, and fingerprint-mismatch negative run from local deployment SQLite state;
+  - does not call Agent resume or `/series/{series_id}/run`, so it does not create another production task.
+- yyf reuse smoke for BOLD task `135` produced `/tmp/image_agent_task135_reuse_agent_launch_smoke_20260621T090000+0800.json`:
+  - Agent workflow confirmation passed;
+  - Agent workflow resume passed;
+  - fingerprint negative passed;
+  - launched task evidence passed with `launch_source=agent_workflow_resume`;
+  - completed task, task events, ObserveRepair, container QC, scientific report artifacts, ES hybrid RAG, runtime toolchain, and deployment identity all passed.
+- Verified no new production task was created by the reuse smoke: yyf max task id remained `135`.
+- Strict verifier now fails at the next expected hard gate, `smoke_gate.require_production_readiness must be true`.
+- Remaining evidence gaps for final launch readiness:
+  - production readiness must be enabled with real public HTTPS API and console origins, not placeholders;
+  - task `135` has no `upload_session_id`, so a final strict upload-Agent-workflow-result payload still needs upload-session/uploaded-series evidence from the current upload contract.
+- Latest local focused verification for the persisted launch evidence slice:
+  - `python -m py_compile apps/api/scripts/smoke_remote_agent.py` passed;
+  - targeted pytest returned `6 passed`.
+- Closed the single-file upload-session contract gap:
+  - `/projects/{project_id}/upload` now creates a completed single-file upload session, associates the created imaging series with that session, stores a privacy-safe inventory summary, and returns `upload_session_id`;
+  - `smoke_remote_agent.py` now carries `upload_session_id` from `--require-uploaded-series` into `smoke_gate.upload_session_id`, validates the upload inventory, and allows `--require-completed-upload` when the same smoke run supplies the upload session.
+- Local TDD/verification:
+  - RED: `test_single_file_upload_creates_completed_upload_session` failed because upload returned no `upload_session_id`;
+  - RED: the uploaded-series smoke test failed because `--require-completed-upload` required a pre-supplied session id;
+  - GREEN: focused upload/session/smoke regression returned `5 passed, 3 warnings`;
+  - `python -m py_compile apps/api/app/services/upload_service.py apps/api/scripts/smoke_remote_agent.py` passed.
+- Synced the upload/smoke fixes to yyf active overlay and live root, then restarted production `8000` with proxy env unset and rawchat direct mode preserved; `/health` returned `app=image_agent`, `status=ok`, `version=0.2.0`.
+- yyf real upload-only smoke evidence:
+  - output JSON `/tmp/image_agent_real_upload_session_contract_20260621T084101+0800.json`;
+  - created project `25`;
+  - uploaded one real NIfTI through `/projects/25/upload` from the approved remote staging data source without recording absolute source paths or filenames;
+  - created upload session `9`, completed with `progress=100`;
+  - created series `48`, modality `T1`, linked to upload session `9`;
+  - `uploaded_series_status=passed`;
+  - `upload_inventory_contract_status=passed`;
+  - `upload_inventory_completion_status=passed`;
+  - max task id remained `135`, so this upload-only smoke did not create a production task.
+- Remaining final strict acceptance blockers:
+  - production readiness still needs real public HTTPS API/console origins so `required=true` can be enabled legitimately;
+  - final full-chain acceptance still needs one verifier-compatible payload where upload session, uploaded series, Agent confirmation/resume, task launch/completion, observation, result/QC/report artifacts, ES hybrid RAG, deployment identity, and production readiness are all satisfied together.
+- Added existing uploaded-series evidence mode to `smoke_remote_agent.py`:
+  - new flag `--uploaded-series-id`;
+  - validates an already-uploaded series through `/projects/{project_id}/series` plus `/projects/{project_id}/datasets/{upload_session_id}/inventory`;
+  - avoids re-uploading large files while still filling `smoke_gate.uploaded_series_id` and `smoke_gate.upload_session_id`.
+- yyf no-task T1 upload/Agent confirmation evidence:
+  - selected a real-size T1 NIfTI from the approved remote staging data source by shape/size without recording the source path or filename;
+  - project `27`, upload session `10`, series `49`;
+  - evidence `/tmp/image_agent_upload_agent_confirm_t1_20260621T084542+0800.json`;
+  - upload inventory completed, Agent workflow confirmation passed, unknown workflow incubation passed, ES hybrid RAG passed;
+  - max task id remained `135`, so the no-task confirmation smoke did not create a production task.
+- yyf full upload-Agent-task-result chain evidence:
+  - evidence `/tmp/image_agent_full_chain_t1_existing_upload_20260621T085200+0800.json`;
+  - project `27`, upload session `10`, series `49`, task `136`;
+  - stable workflow `t1_deepprep_anat_report`, runtime workflow `t1_deepprep`;
+  - Agent confirmation passed;
+  - fingerprint negative passed by blocking the tampered resume;
+  - valid Agent resume created task `136`;
+  - unknown workflow incubation passed without task creation;
+  - DeepPrep completed successfully, with 66 succeeded Nextflow processes and registered outputs;
+  - task events, ObserveRepair read-only, result summary, artifact manifest, container QC, scientific report artifacts, ES hybrid RAG, runtime toolchain, and deployment identity all passed in the same JSON.
+- Strict verifier result for the full-chain JSON:
+  - current failure is `smoke_gate.require_production_readiness must be true`;
+  - this is now the primary remaining release gate, not a missing upload/Agent/task/result-chain evidence gap.
+- Latest local focused verification for uploaded-series/full-chain smoke support:
+  - `python -m py_compile apps/api/scripts/smoke_remote_agent.py apps/api/app/services/upload_service.py` passed;
+  - targeted pytest returned `6 passed, 3 warnings`.
+- Rawchat direct connectivity boundary rechecked on yyf:
+  - active API process has no proxy environment variables;
+  - model base remains configured for the rawchat endpoint family;
+  - one-off remote connectivity check used explicit no-proxy curl and received a direct HTTP application response;
+  - rawchat model traffic remains direct-only, while temporary proxy use is restricted to explicit container/image pull operations and must not be persisted in Git scripts or service env.
+- Closed the Git-managed strict acceptance env apply gap:
+  - `scripts/bootstrap_image_agent.py` now supports `--strict-acceptance-json`, `--strict-acceptance-max-age-hours`, and `--config-only`;
+  - bootstrap re-runs the existing strict remote smoke verifier before writing `IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_STATUS=passed` and `IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_ID=<deployment_id>`;
+  - invalid strict JSON is rejected before env mutation;
+  - release gate and stale-task handoff plans now use bootstrap config-only apply instead of the old verifier-only `--emit-fast-launch-env` print step;
+  - the final env apply is now marked as a mutating, operator-authorized configuration step.
+- Verification for this slice:
+  - local `py_compile` passed for bootstrap, release/stale request builders, and release/stale verifiers;
+  - local focused regression returned `225 passed` plus `2 passed` for verifier compatibility;
+  - yyf active overlay scripts were synced and remote `py_compile` passed;
+  - yyf bootstrap dry-run against the current full-chain T1 JSON correctly failed with missing production-readiness gate and did not create the target env file.
+- Closed the post-acceptance fast-launch readiness gate:
+  - release gate and stale-task handoff now restart/reload the API after verified strict acceptance env apply;
+  - a final read-only `/deployment` check must prove `fast_launch_readiness.status=ready` and `fast_launch_readiness.checks.strict_remote_acceptance.status=passed`;
+  - the static release plan now has 13 ordered steps, with the post-acceptance restart marked mutating and operator-authorized.
+- Verification for this slice:
+  - local release/stale regression returned `199 passed`;
+  - local and yyf remote `py_compile` passed for the changed gate scripts;
+  - yyf remote release gate verifier returned `status=passed`, `step_count=13`, and the expected operator/mutating step lists.
+- Hardened rawchat direct-only acceptance:
+  - live strict smoke now fails rawchat targets unless `model_status.trust_env_proxy=false` and `model_status.deployment.model_gateway_access=direct`;
+  - saved strict smoke verifier rejects evidence that routes rawchat through proxy/tunnel access or reports proxy trust;
+  - release gate and stale-task expected-success lists now require the same rawchat direct evidence and verifier `checked.*` fields;
+  - local focused regression returned `441 passed`, and py_compile passed for the changed smoke/verifier/handoff scripts.
+- yyf remote confirmation for rawchat direct-only boundary:
+  - synced the changed scripts and model status output layer to the active overlay;
+  - restarted API `8000` with proxy env explicitly unset;
+  - `/agent/model/status` reports `provider_profile=rawchat`, `wire_api=responses`, `trust_env_proxy=false`, and `model_gateway_access=direct`;
+  - active API process has no proxy environment variables;
+  - direct `curl --noproxy '*'` to rawchat returned an HTTP application response with TLS verification result `0`.
+- No proxy URL, rawchat key, patient path, Docker pull, model call, production task creation, workflow rerun, or ObserveRepair rerun was performed for this boundary fix.
+- Promoted rawchat direct-only evidence into `/deployment.fast_launch_readiness`:
+  - `model_gateway_target` now reports expected/actual `trust_env_proxy`, expected/actual `model_gateway_access`, and `direct_transport`;
+  - readiness blocks unless rawchat GPT-5.5 Responses, model tool loop, `trust_env_proxy=false`, and `model_gateway_access=direct` are all satisfied;
+  - Settings page now displays direct model transport status from backend contract fields.
+- Verification for this slice:
+  - backend RED/GREEN focused readiness tests returned `4 passed`;
+  - Settings page RED/GREEN returned `6 passed`;
+  - broader backend regression returned `656 passed, 3 warnings`;
+  - frontend focused regression returned `31 passed`;
+  - `npm run lint` passed;
+  - local and yyf remote `py_compile` passed for touched backend files.
+- yyf remote readiness state after overlay restart:
+  - API runs from the active release overlay and has no proxy env keys;
+  - `/agent/model/status` reports rawchat, Responses, `trust_env_proxy=false`, and direct model gateway access;
+  - `/deployment.fast_launch_readiness.checks.model_gateway_target.status=passed`;
+  - overall fast-launch readiness remains blocked only by missing strict remote acceptance evidence, while ES hybrid RAG is passed.
+- Fixed the release-overlay restart wrapper contract:
+  - `tools/restart_remote_image_agent_api.sh` now accepts the env file as the first positional argument;
+  - when launched from the release overlay root or `apps/api`, it infers `IMAGE_AGENT_RELEASE_ROOT` from cwd;
+  - after sourcing env, it re-exports the resolved root/release/env values so the app does not fall back to the live main worktree.
+- Updated generated/static release commands:
+  - stale-task apply restarts, Elasticsearch hybrid config restart, and static release/ES plans now call `bash tools/restart_remote_image_agent_api.sh /home/yyf/project/image_agent/.env`;
+  - deployment docs now describe positional env-file and overlay cwd inference.
+- Verification for this slice:
+  - RED/GREEN restart wrapper test returned `7 passed`;
+  - release/stale/ES plan regression returned `233 passed`;
+  - local `py_compile` passed for touched plan scripts;
+  - yyf remote preflight-only restart returned `restart_preflight:ok`;
+  - yyf normal wrapper restart from overlay returned `health:ok app=image_agent`;
+  - the new API process runs from the active overlay, has no proxy env keys, preserves rawchat direct model status, and leaves fast-launch blocked only by missing strict acceptance evidence.
+- Added the production-readiness env gate before strict remote acceptance:
+  - release gate and stale-task follow-up plans now include `apply_production_readiness_env` before restart/preflight;
+  - the step writes `IMAGE_AGENT_ENV=production`, `IMAGE_AGENT_CORS_ORIGINS`, and `IMAGE_AGENT_PUBLIC_BASE_URL` through `scripts/bootstrap_image_agent.py --production --config-only --apply`;
+  - static templates retain `https://<console-hostname>` and `https://<api-hostname>` placeholders, while materialized operator plans must replace them with concrete public HTTPS origins via `--production-cors-origins` and `--production-public-base-url`;
+  - operator/mutating step lists now explicitly include `apply_production_readiness_env`.
+- Verification for this slice:
+  - RED/GREEN release/stale focused tests caught the missing step and then passed;
+  - release/stale/skill-doc regression returned `274 passed`;
+  - local and yyf remote `py_compile` passed for touched plan scripts;
+  - yyf remote static release gate verifier returned `status=passed` with `step_count=14`;
+  - no production `.env` write or restart was performed because the real public HTTPS API/console origins are still an operator-provided input.
+- Tightened fast-launch readiness around production deployment:
+  - `/deployment.fast_launch_readiness.checks.production_deployment` now mirrors the production readiness gate using safe fields;
+  - fast-launch is blocked when `production_readiness.required=false`, even if model, ES hybrid RAG, and strict evidence are otherwise satisfied;
+  - Settings page displays the new production deployment fast-launch gate.
+- Verification for this slice:
+  - RED/GREEN backend readiness focused tests returned `4 passed`;
+  - `apps/api/tests/test_agent_api.py` returned `56 passed, 3 warnings`;
+  - Settings focused test returned `6 passed`;
+  - frontend `npm run lint` passed;
+  - local and yyf remote `py_compile` passed for `agent_service.py`;
+  - yyf restart wrapper preflight returned `restart_preflight:ok`, normal restart returned `health:ok app=image_agent`;
+  - yyf `/deployment.fast_launch_readiness.blocking_reasons` now reports production deployment not enabled plus missing strict acceptance evidence, while model target and ES hybrid RAG remain passed.
+- Tightened strict acceptance evidence around production deployment:
+  - live smoke now saves `fast_launch_readiness.checks.production_deployment` and fails unless it is passed, required, ready, and blocker-free;
+  - saved strict acceptance verifier requires the same production deployment gate and reports `checked.fast_launch_production_deployment_*`;
+  - release/stale gate expected-success lists and final `/deployment` readiness checks now require production deployment passed.
+- Verification for this slice:
+  - RED/GREEN focused smoke/verifier/final-readiness tests passed;
+  - related smoke/verifier/release/stale regression returned `668 passed`;
+  - local and yyf remote `py_compile` passed for touched scripts;
+  - yyf remote static release gate verifier returned `status=passed`, `step_count=14`;
+  - no production `.env` write, restart, model call, or task creation was performed for this evidence-contract update.
+- Rechecked rawchat direct transport on yyf production `8000`:
+  - API pid `3146076` has no proxy environment keys;
+  - `/agent/model/status` reports rawchat Responses access with `trust_env_proxy=false` and `model_gateway_access=direct`;
+  - one-off `curl --noproxy '*'` to the configured rawchat endpoint reached a remote IP with TLS verification result `0`;
+  - no rawchat API key, proxy URL/token, production `.env` write, API restart, model call, Docker pull, task creation, workflow rerun, or ObserveRepair rerun was performed.
+- Added a strict release-gate materialization shortcut for existing uploaded series:
+  - `build_release_gate_command_plan.py --uploaded-series-id <id>` now produces a strict smoke command that reuses the completed uploaded series and omits `--upload-nifti-file`;
+  - `verify_release_gate_command_plan.py` accepts materialized operator plans with either a concrete remote NIfTI file or a concrete uploaded series id, but not both;
+  - the static release plan documents the privacy/same-project boundary for using the existing-series shortcut.
+- Verification for this slice:
+  - RED/GREEN builder function and CLI tests passed;
+  - release gate builder/verifier regression returned `144 passed`;
+  - local and yyf remote `py_compile` passed for touched release-gate scripts;
+  - yyf remote static release gate verifier returned `status=passed`, `step_count=14`;
+  - no production `.env` write, API restart, model call, Docker pull, production task creation, strict smoke, workflow rerun, or ObserveRepair rerun was performed.
+- Extended the existing uploaded-series shortcut to stale-task apply follow-up plans:
+  - `build_stale_task_apply_request.py --uploaded-series-id <id>` now generates strict smoke follow-up commands that reuse a completed uploaded series and omit `--upload-nifti-file`;
+  - `verify_stale_task_apply_request.py` accepts exactly one strict-smoke upload source: concrete remote NIfTI or concrete uploaded series id;
+  - this keeps the final release gate and stale-task-recovery gate aligned, reducing repeated large-file upload risk before strict online smoke.
+- Verification for this slice:
+  - RED/GREEN builder function, builder CLI, and verifier existing-series tests passed;
+  - combined release/stale gate regression returned `210 passed`;
+  - local and yyf remote `py_compile` passed for touched release/stale gate scripts;
+  - yyf remote static release gate verifier returned `status=passed`, `step_count=14`;
+  - no production `.env` write, API restart, model call, Docker pull, production task creation, strict smoke, workflow rerun, or ObserveRepair rerun was performed.
+- Hardened production public-origin validation:
+  - `/deployment.production_readiness`, `scripts/bootstrap_image_agent.py`, and release-gate builder/verifier now reject private/reserved IP origins, bare host names such as `https://api`, and `.local` names for production public API/CORS origin readiness;
+  - production docs now state the same boundary, alongside the existing HTTPS/no path/query/fragment requirement.
+- Verification for this slice:
+  - RED/GREEN production origin tests passed;
+  - related backend/bootstrap/release regression returned `243 passed, 9 warnings`;
+  - local and yyf remote `py_compile` passed for touched backend/bootstrap/release scripts;
+  - yyf remote static release gate verifier returned `status=passed`, `step_count=14`;
+  - no production `.env` write, API restart, model call, Docker pull, production task creation, strict smoke, workflow rerun, or ObserveRepair rerun was performed.
+- Tightened the final fast-launch readiness gate:
+  - post-acceptance `/deployment` checks now require `fast_launch_readiness.checks.production_deployment.status=passed`, `required=true`, and `ready=true`;
+  - release gate and stale-task follow-up verifiers reject final readiness commands or expected-success lists that only prove status without required/ready evidence.
+- Verification for this slice:
+  - RED/GREEN final-readiness gate tests passed;
+  - combined release/stale gate regression returned `218 passed`;
+  - local and yyf remote `py_compile` passed for touched release/stale gate scripts;
+  - yyf remote static release gate verifier returned `status=passed`, `step_count=14`;
+  - no production `.env` write, API restart, model call, Docker pull, production task creation, strict smoke, workflow rerun, or ObserveRepair rerun was performed.
+- Rechecked rawchat direct connectivity on yyf after the direct-connect requirement was restated:
+  - production API process does not expose `HTTP_PROXY`/`HTTPS_PROXY`;
+  - product model status reports `trust_env_proxy=false` and `model_gateway_access=direct`;
+  - remote `curl --noproxy '*'` to the rawchat endpoint reached a public rawchat IP with TLS verification result `0`;
+  - current SSH user cannot inspect Docker daemon/container ownership for the local relay port without elevated privileges;
+  - no proxy URL/token, rawchat API key, production `.env` write, API restart, model call, Docker pull, task creation, workflow rerun, or ObserveRepair rerun was performed.
+- Tightened stale-task apply production-origin materialization:
+  - `build_stale_task_apply_request.py` now requires concrete public HTTPS `--production-cors-origins` and `--production-public-base-url` inputs and rejects placeholders/private deployment origins;
+  - `verify_stale_task_apply_request.py` no longer allows production-origin placeholders and checks `expected_success` against the concrete command values;
+  - RED/GREEN stale-task tests passed, then combined release/stale gate regression returned `220 passed`;
+  - local and yyf remote `py_compile` passed for touched stale-task scripts;
+  - yyf remote static release gate verifier returned `status=passed`, `step_count=14`;
+  - no production `.env` write, API restart, model call, Docker pull, production task creation, strict smoke, workflow rerun, or ObserveRepair rerun was performed.
+- Updated the production runbook to match the new production-origin CLI contract:
+  - documented `--production-cors-origins <https_console_origin>` and `--production-public-base-url <https_api_origin>` for both release-gate materialization and stale-task apply request generation;
+  - added doc-contract tests so those examples cannot drift from the scripts again;
+  - local related docs/release/stale regression returned `223 passed`;
+  - yyf remote static release gate verifier returned `status=passed`, `step_count=14`, and remote focused runbook tests returned `2 passed`;
+  - no production `.env` write, API restart, model call, Docker pull, production task creation, strict smoke, workflow rerun, or ObserveRepair rerun was performed.
+- Tightened static release-gate refresh handoff production-origin guidance:
+  - `remote-release-gate-command-plan.json` now uses `<https_console_origin>` and `<https_api_origin>` in the refresh `materialize_plan_command`;
+  - the refresh handoff includes machine-checkable `production_origin_materialization` required arguments and public-origin boundary text;
+  - `verify_release_gate_command_plan.py` rejects refresh plans missing that boundary;
+  - local related release/stale/doc gate regression returned `223 passed`;
+  - yyf remote `py_compile` passed, static release gate verifier returned `status=passed`, `step_count=14`, and focused refresh tests returned `2 passed`;
+  - no production `.env` write, API restart, model call, Docker pull, production task creation, strict smoke, workflow rerun, or ObserveRepair rerun was performed.
+- Documented the existing uploaded-series shortcut in the production runbook:
+  - release-gate/stale apply materialization can replace `--remote-nifti-file <remote_nifti_file>` with `--uploaded-series-id <uploaded_series_id>`;
+  - strict smoke can replace `--upload-nifti-file <remote-nifti-file>` with `--uploaded-series-id <uploaded_series_id>`;
+  - the shortcut remains same-project/completed-upload-session only, still requires `--require-uploaded-series`, and must not be combined with file-upload flags;
+  - local related docs/release/stale gate regression returned `224 passed`;
+  - yyf remote static release gate verifier returned `status=passed`, `step_count=14`, and focused runbook tests returned `3 passed`;
+  - no production `.env` write, API restart, model call, Docker pull, production task creation, strict smoke, workflow rerun, or ObserveRepair rerun was performed.
+- Aligned the production runbook with the portable runtime probe contract:
+  - `/runtime/probe` is documented as the primary install-local machine-discovered runtime contract for local Docker daemon, workflow image availability, FreeSurfer license presence, resources, and Elasticsearch reachability;
+  - `/runtime/containers` is documented as an older-deployment compatibility fallback only;
+  - strict smoke `--require-runtime-toolchain` runbook text now points at `/runtime/probe` and privacy-safe runtime summaries;
+  - local related docs/release/stale gate regression returned `225 passed`;
+  - yyf remote static release gate verifier returned `status=passed`, `step_count=14`, and focused runbook tests returned `4 passed`;
+  - no production `.env` write, API restart, model call, Docker pull, production task creation, strict smoke, workflow rerun, or ObserveRepair rerun was performed.
+- Tightened the strict smoke runtime-probe CLI contract and rechecked rawchat direct access:
+  - `smoke_remote_agent.py --require-runtime-toolchain` help text now names `/runtime/probe`, while `/runtime/containers` remains implementation fallback only;
+  - added a CLI-help regression test and confirmed probe-first strict-smoke behavior with focused runtime tests;
+  - local strict-smoke/verifier/runbook regression returned `465 passed`;
+  - local and yyf remote `py_compile` passed for strict smoke/verifier scripts;
+  - yyf focused runtime-probe tests returned `2 passed`;
+  - yyf static release gate verifier returned `status=passed`, `step_count=14`;
+  - yyf rawchat recheck confirmed the active public API listener has no `HTTP_PROXY`, `HTTPS_PROXY`, or `ALL_PROXY`, model status reports `trust_env_proxy=false` and direct access, and a no-proxy opener reached rawchat;
+  - no proxy URL/token, rawchat API key, production `.env` write, API restart, Docker pull, production task creation, strict smoke, model generation, workflow rerun, or ObserveRepair rerun was performed.
+- Tightened the Elasticsearch hybrid setup handoff evidence contract:
+  - `setup_elasticsearch_hybrid_rag.py` apply-mode JSON now emits `elastic_container_name`, `elastic_endpoint_bound_to_loopback`, `no_latest_tags`, `env_key_status`, normalized `elasticsearch_trial_license_status`, and secret redaction flags;
+  - the ES config plan builder now greps the setup JSON for loopback/no-latest/env-key/secret-redaction probes;
+  - the ES config plan verifier rejects plans that remove those setup JSON probes;
+  - regenerated `docs/deployment/remote-elasticsearch-hybrid-config-plan.json`;
+  - local ES setup/config/verifier regression returned `42 passed`;
+  - local and yyf remote `py_compile` passed for ES setup/config scripts;
+  - yyf ES config verifier returned `status=passed`, `step_count=9`;
+  - yyf focused ES setup/config/verifier tests returned `42 passed`;
+  - no proxy URL/token, rawchat API key, production `.env` write, API restart, Docker pull, Elasticsearch/embedding container start, RAG rebuild, production task creation, strict smoke, model generation, workflow rerun, or ObserveRepair rerun was performed.
+- Tightened the local embedding setup handoff evidence contract:
+  - `setup_local_embedding_service.py` apply-mode JSON now emits `embedding_container_name`, `embedding_endpoint_bound_to_loopback`, `embedding_endpoint_probe_passed`, `no_latest_tags`, `env_key_status`, and secret redaction flags;
+  - the ES config plan builder now greps the local embedding setup JSON for endpoint/no-latest/env-key/secret-redaction probes;
+  - the ES config plan verifier rejects plans that remove those local embedding setup JSON probes;
+  - regenerated `docs/deployment/remote-elasticsearch-hybrid-config-plan.json`;
+  - local local-embedding plus ES setup/config/verifier regression returned `59 passed`;
+  - local and yyf remote `py_compile` passed for local embedding and ES config scripts;
+  - yyf ES config verifier returned `status=passed`, `step_count=9`;
+  - yyf focused local-embedding plus ES setup/config/verifier tests returned `59 passed`;
+  - no proxy URL/token, rawchat API key, production `.env` write, API restart, Docker pull, Elasticsearch/embedding container start, RAG rebuild, production task creation, strict smoke, model generation, workflow rerun, or ObserveRepair rerun was performed.
+- Aligned the Elasticsearch config env-presence command with its expected-success markers:
+  - `verify_secret_env_presence_without_values` now prints `secret_values_not_printed=true` after only safe key-presence output;
+  - the ES config plan verifier rejects handoff plans that omit that marker from the env-presence command;
+  - regenerated `docs/deployment/remote-elasticsearch-hybrid-config-plan.json`;
+  - local related local-embedding plus ES setup/config/verifier regression returned `60 passed`;
+  - local and yyf remote `py_compile` passed for ES config scripts;
+  - yyf ES config verifier returned `status=passed`, `step_count=9`;
+  - yyf focused ES config builder/verifier tests returned `39 passed`;
+  - no proxy URL/token, rawchat API key, production `.env` write, API restart, Docker pull, Elasticsearch/embedding container start, RAG rebuild, production task creation, strict smoke, model generation, workflow rerun, or ObserveRepair rerun was performed.
+- Aligned setup-step expected-success markers with actual stdout:
+  - the local embedding and Elasticsearch setup commands now echo every `expected_success` marker they advertise in the handoff plan;
+  - the ES config plan verifier rejects either setup step when an advertised success marker is not emitted by command stdout;
+  - regenerated `docs/deployment/remote-elasticsearch-hybrid-config-plan.json`;
+  - local related local-embedding plus ES setup/config/verifier regression returned `62 passed`;
+  - local and yyf remote `py_compile` passed for ES config scripts;
+  - yyf ES config verifier returned `status=passed`, `step_count=9`;
+  - yyf focused ES config builder/verifier tests returned `41 passed`;
+  - no proxy URL/token, rawchat API key, production `.env` write, API restart, Docker pull, Elasticsearch/embedding container start, RAG rebuild, production task creation, strict smoke, model generation, workflow rerun, or ObserveRepair rerun was performed.
+- Tightened the Elasticsearch config restart health evidence gate:
+  - the ES config plan verifier now rejects `restart_api_from_release_overlay` if it drops `restart_preflight:ok`, `health.app=image_agent`, or `release_overlay_serving=true`;
+  - RED/GREEN restart-evidence tests passed, then related local embedding plus ES setup/config/verifier regression returned `65 passed`;
+  - local and yyf remote `py_compile` passed for the ES config verifier;
+  - yyf ES config verifier returned `status=passed`, `step_count=9`;
+  - yyf focused ES config verifier tests returned `41 passed`;
+  - no proxy URL/token, rawchat API key, production `.env` write, API restart, Docker pull, Elasticsearch/embedding container start, RAG rebuild, production task creation, strict smoke, model generation, workflow rerun, or ObserveRepair rerun was performed.
+- Tightened the Elasticsearch hybrid RAG rebuild evidence gate:
+  - `rebuild_elasticsearch_hybrid_rag` now self-checks rebuild and status evidence before printing fixed success markers, instead of printing raw Python dictionaries;
+  - the ES config plan verifier rejects rebuild steps that drop or stop printing `configured=true`, `mode=connected`, `persisted=true`, positive indexed chunk count, production-ready embedding, and absent error markers;
+  - regenerated `docs/deployment/remote-elasticsearch-hybrid-config-plan.json`;
+  - RED/GREEN rebuild builder/verifier tests passed, then related local embedding plus ES setup/config/verifier regression returned `72 passed`;
+  - local and yyf remote `py_compile` passed for ES config scripts;
+  - yyf ES config verifier returned `status=passed`, `step_count=9`;
+  - yyf focused ES config builder/verifier tests returned `51 passed`;
+  - no proxy URL/token, rawchat API key, production `.env` write, API restart, Docker pull, Elasticsearch/embedding container start, RAG rebuild, production task creation, strict smoke, model generation, workflow rerun, or ObserveRepair rerun was performed.
+- Tightened the final ES config to strict-smoke handoff evidence gate:
+  - `continue_release_gate_strict_smoke` now echoes `remote-release-gate-command-plan.json status=passed` and `strict_smoke_next_step_unblocked=true` after the release-gate verifier succeeds;
+  - the ES config plan verifier rejects handoff plans that drop or stop echoing either marker;
+  - regenerated `docs/deployment/remote-elasticsearch-hybrid-config-plan.json`;
+  - RED/GREEN strict-smoke handoff builder/verifier tests passed, then related local embedding plus ES setup/config/verifier regression returned `74 passed`;
+  - local and yyf remote `py_compile` passed for ES config scripts;
+  - yyf ES config verifier returned `status=passed`, `step_count=9`;
+  - yyf focused ES config builder/verifier tests returned `53 passed`;
+  - no proxy URL/token, rawchat API key, production `.env` write, API restart, Docker pull, Elasticsearch/embedding container start, RAG rebuild, production task creation, strict smoke, model generation, workflow rerun, or ObserveRepair rerun was performed.
+- Tightened frontend participation in the fixed workflow metadata contract:
+  - `WorkflowsPage` now renders workflow family, normalized role, report-only/full-processing boundary, pipeline stages, and limitations from backend registry metadata while keeping stable workflow IDs visible;
+  - frontend tests now require those fields for structured BOLD workflow display and still verify Agent-confirmation launch rather than direct series run;
+  - RED/GREEN focused frontend test passed, related workflow helper/page regression returned `17 passed`, and frontend `tsc -b --noEmit` passed;
+  - backend workflow registry/API metadata regression returned `14 passed, 3 warnings`;
+  - synced the updated console route/test to yyf overlay and confirmed the new metadata strings are present there; remote npm tests were not run because the overlay has no `apps/console/node_modules`;
+  - no proxy URL/token, rawchat API key, production `.env` write, API restart, Docker pull, production task creation, strict smoke, model generation, workflow rerun, or ObserveRepair rerun was performed.
+- Rechecked the yyf rawchat direct-transport boundary:
+  - the active public API process does not expose `HTTP_PROXY`, `HTTPS_PROXY`, or `ALL_PROXY`, while `/agent/model/status` reports `provider_profile=rawchat`, `wire_api=responses`, `model=gpt-5.5`, `base_url_host=rawchat.cn`, `trust_env_proxy=false`, and `model_gateway_access=direct`;
+  - a remote no-proxy probe with proxy env unset reached `rawchat.cn` directly and returned an HTTP response with exit code 0;
+  - rawchat model/embedding calls remain explicitly separated from temporary proxy use for remote Docker/container pulls, and no proxy URL/token, rawchat API key, production `.env` write, API restart, Docker pull, production task creation, strict smoke, model generation, workflow rerun, or ObserveRepair rerun was performed.
+- Tightened ObserveRepair no-mutation evidence:
+  - `observe_repair_task`, dispatcher passthrough, live strict smoke JSON, saved acceptance verification, release-gate expected-success, and stale-task follow-up expected-success now carry `task_creation_allowed=false` plus `forbidden_actions` covering `auto_retry`, `auto_rerun`, and `task_creation`;
+  - RED/GREEN focused ObserveRepair/smoke/verifier tests passed, then local related ObserveRepair/smoke/verifier regression returned `280 passed` and release/stale gate regression returned `213 passed`;
+  - local and yyf remote `py_compile` passed for touched scripts, yyf static release-gate verifier returned `status=passed`, `step_count=14`, and yyf focused pytest returned `493 passed`;
+  - no proxy URL/token, rawchat API key, production `.env` write, API restart, Docker pull, Elasticsearch/embedding container start, RAG rebuild, production task creation, strict smoke, model generation, workflow rerun, or ObserveRepair rerun was performed.
+- Tightened unknown-workflow incubation no-production evidence:
+  - LangGraph incubation results, normalized proposals, and persisted `IncubationLedger` proposals now carry `task_creation_allowed=false` plus `forbidden_actions` covering `confirmation_creation`, `production_task_creation`, and `pipeline_runner_launch`;
+  - live strict smoke, saved acceptance verification, release-gate expected-success, stale-task apply expected-success, production runbook, and acceptance template now require those proposal-only fields;
+  - RED/GREEN focused unknown-workflow/smoke/release-stale tests passed, then broader local incubation/LangGraph/smoke/verifier/doc regression returned `293 passed` and release/stale gate regression returned `217 passed`;
+  - local and yyf remote `py_compile` passed for touched agent and acceptance scripts, yyf static release-gate verifier returned `status=passed`, `step_count=14`, and yyf focused pytest returned `510 passed`;
+  - no proxy URL/token, rawchat API key, production `.env` write, API restart, Docker pull, Elasticsearch/embedding container start, RAG rebuild, production task creation, strict smoke, model generation, workflow rerun, or ObserveRepair rerun was performed.
+- Tightened the ES prerequisite runtime-probe command before final strict smoke:
+  - yyf production `8000` currently reports connected Elasticsearch hybrid RAG with RRF, production-ready embeddings, and rawchat direct model access, but `/deployment.fast_launch_readiness` is still blocked by missing strict remote acceptance evidence plus production HTTPS/CORS readiness not being enabled;
+  - the release-gate ES prerequisite command previously generated runtime probe JSON without loading the deployment `.env`, so the CLI probe could not see the deployed ES/runtime settings that the live API already had;
+  - `remote-release-gate-command-plan.json`, `verify_release_gate_command_plan.py`, stale-task follow-up generation, stale-task verification, and the production runbook now require loading `/home/yyf/project/image_agent/.env`, setting `IMAGE_AGENT_ROOT`/`IMAGE_AGENT_ENV_FILE`, and running `-m app.scripts.probe_runtime_environment` before `verify_elasticsearch_hybrid_prerequisites.py`;
+  - RED/GREEN release/stale tests passed, local release/stale regression returned `219 passed`, static release-gate verifier returned `status=passed`, `step_count=14`, and the runbook doc-contract test passed;
+  - synced the release/stale scripts, tests, and static release-gate plan to yyf rootfix10; remote `py_compile`, static release-gate verifier, and focused release/stale pytest returned `219 passed`;
+  - after the command fix, the remaining yyf ES prerequisite blocker is Docker permission: `yyf` is not in the `docker` group, `/var/run/docker.sock` is `root:docker`, and `sudo -n docker` requires a password, so deployment-server-local Docker discovery cannot pass yet;
+  - next strict-smoke prerequisites are host Docker access through group membership or operator-managed `IMAGE_AGENT_DOCKER_COMMAND`, plus production HTTPS/CORS readiness env applied through the Git bootstrap with concrete public origins;
+  - no proxy URL/token, rawchat API key, production `.env` write, API restart, Docker pull, Elasticsearch/embedding container start, RAG rebuild, production task creation, strict smoke, model generation, workflow rerun, or ObserveRepair rerun was performed.
+- Hardened ES prerequisite Docker-access diagnostics:
+  - failed `verify_elasticsearch_hybrid_prerequisites.py` CLI runs now print safe JSON with `status=failed`, `checked.runtime_probe_docker_accessible`, `checked.runtime_probe_docker_requires_sudo`, `checked.runtime_probe_blocking_codes`, and a safe `failures` list before exiting non-zero;
+  - release-gate and stale-task expected-success lists now require `runtime_probe_docker_accessible=true` and `runtime_probe_docker_requires_sudo=false` before strict smoke can be accepted;
+  - local focused ES prerequisite tests returned `28 passed`, related ES prerequisite plus release/stale gate regression returned `259 passed`, static release-gate verifier returned `status=passed`, `step_count=14`, and touched scripts compile;
+  - synced the updated verifier/release/stale scripts, tests, and static release-gate plan to yyf rootfix10; remote `py_compile`, static release-gate verifier, and focused pytest returned `249 passed`;
+  - real read-only yyf evidence `/tmp/image_agent_es_prereq_readonly_current.json` exits `1` and reports `status=failed`, `runtime_probe_docker_accessible=false`, `runtime_probe_docker_requires_sudo=true`, and `runtime_probe_blocking_codes=["docker_requires_sudo","elasticsearch_not_reachable"]`, while RAG remains `elasticsearch_hybrid`/`connected`/`rrf`;
+  - no proxy URL/token, rawchat API key, production `.env` write, API restart, Docker pull, Elasticsearch/embedding container start, RAG rebuild, production task creation, strict smoke, model generation, workflow rerun, or ObserveRepair rerun was performed.
+- Added Git-managed Docker command configuration to bootstrap:
+  - `scripts/bootstrap_image_agent.py --docker-command` can now write `IMAGE_AGENT_DOCKER_COMMAND` through the same env bootstrap path used for production readiness and strict acceptance summary;
+  - accepted commands are limited to `docker` and `sudo -n docker`, while `sudo -S docker`, shell wrappers, empty values, and non-Docker commands are rejected;
+  - README and the production runbook document that this is an operator-managed non-interactive path and still requires host group membership or a narrow NOPASSWD sudo rule, with no passwords in Git/logs/scripts/env files;
+  - RED/GREEN bootstrap tests passed, local focused bootstrap/doc tests returned `7 passed`, broader bootstrap plus ES prerequisite/release/stale regression returned `284 passed`, and static release-gate verifier returned `status=passed`, `step_count=14`;
+  - synced bootstrap script, README, production runbook, and focused tests to yyf rootfix10; remote `py_compile` passed and focused bootstrap/doc tests returned `7 passed`;
+  - yyf dry-run `/tmp/image_agent_bootstrap_docker_command_dry_run_current.json` shows a planned `configure_docker_command` env write only; no apply was run and the server still needs a host policy change before `sudo -n docker` can pass;
+  - no proxy URL/token, rawchat API key, production `.env` write, API restart, Docker pull, Elasticsearch/embedding container start, RAG rebuild, production task creation, strict smoke, model generation, workflow rerun, or ObserveRepair rerun was performed.
+- Extended bootstrap for rawchat direct model configuration and Docker command verification:
+  - `scripts/bootstrap_image_agent.py` now supports Git-managed non-secret model gateway configuration with `--model-provider`, `--model-name`, `--model-review-name`, `--model-base-url`, `--model-wire-api`, and always writes `IMAGE_AGENT_MODEL_TRUST_ENV_PROXY=0` unless a non-rawchat operator explicitly requests proxy trust;
+  - rawchat targets are rejected if `--model-trust-env-proxy` is supplied, so deployment-server traffic to `https://rawchat.cn/codex` remains direct even when Docker/image-pull proxy env exists for other operations;
+  - `--verify-docker-command` adds a non-mutating `docker version --format {{.Server.Version}}` step after the configured Docker command, so installer dry-runs can prove the selected Docker access path before ES/runtime prerequisites;
+  - README and the production runbook now document bootstrap-driven rawchat config, `IMAGE_AGENT_MODEL_API_KEY` as secret-manager/environment-only material, and the separation between rawchat direct transport and temporary Docker/download proxy use;
+  - RED/GREEN local bootstrap tests returned `40 passed`, local rawchat/direct model-gateway plus smoke/verifier slice returned `328 passed, 3 warnings`, local release/stale gate regression returned `221 passed`, and `py_compile` passed for `scripts/bootstrap_image_agent.py`;
+  - synced bootstrap script, README, production runbook, and focused tests to yyf rootfix10; remote bootstrap tests returned `40 passed`, remote rawchat/direct model-gateway slice returned `288 passed, 2 warnings`, and remote release/stale regression returned `221 passed`;
+  - yyf running `/agent/model/status` reports `provider_profile=rawchat`, `base_url=https://rawchat.cn/codex`, `wire_api=responses`, `trust_env_proxy=false`, and `model_gateway_access=direct`;
+  - yyf dry-runs were saved at `/tmp/image_agent_bootstrap_rawchat_direct_dry_run_current.json` and `/tmp/image_agent_bootstrap_docker_command_verify_dry_run_current.json`; no `--apply` was run;
+  - no proxy URL/token, rawchat API key, production `.env` write, API restart, Docker pull, Elasticsearch/embedding container start, RAG rebuild, production task creation, strict smoke, model generation, workflow rerun, or ObserveRepair rerun was performed.
+- Promoted rawchat direct bootstrap config into the release-gate install contract:
+  - `apply_production_readiness_env` in `docs/deployment/remote-release-gate-command-plan.json` now writes production CORS/public URL and non-secret rawchat model gateway settings through the same Git-managed bootstrap command;
+  - `verify_release_gate_command_plan.py` now rejects release plans that omit `--model-provider rawchat`, `--model-name gpt-5.5`, `--model-review-name gpt-5.5`, `--model-base-url https://rawchat.cn/codex`, `--model-wire-api responses`, or expected `IMAGE_AGENT_MODEL_TRUST_ENV_PROXY=0`;
+  - `build_stale_task_apply_request.py` and `verify_stale_task_apply_request.py` now generate and enforce the same rawchat direct bootstrap fields for materialized stale-task follow-up plans;
+  - RED/GREEN local focused tests first failed on missing rawchat bootstrap args/verifier checks, then passed; local release/stale regression returned `223 passed`, static release-gate verifier returned `status=passed`, and touched release/stale scripts compiled;
+  - synced release/stale scripts, tests, and static release-gate plan to yyf rootfix10; remote static verifier returned `status=passed`, remote release/stale pytest returned `223 passed`, and remote compile passed;
+  - yyf dry-run `/tmp/image_agent_bootstrap_production_rawchat_direct_dry_run_current.json` shows planned writes for `IMAGE_AGENT_ENV=production`, public CORS/API origins, `IMAGE_AGENT_MODEL_PROVIDER=rawchat`, `IMAGE_AGENT_MODEL_BASE_URL=https://rawchat.cn/codex`, `IMAGE_AGENT_MODEL_WIRE_API=responses`, and `IMAGE_AGENT_MODEL_TRUST_ENV_PROXY=0`;
+  - no proxy URL/token, rawchat API key, production `.env` write, API restart, Docker pull, Elasticsearch/embedding container start, RAG rebuild, production task creation, strict smoke, model generation, workflow rerun, or ObserveRepair rerun was performed.
+- Promoted Docker command verification into the release-gate install contract:
+  - `apply_production_readiness_env` now includes `--docker-command "sudo -n docker" --verify-docker-command` before restart or strict smoke, so the deployment-local Docker access path is checked at install/config time instead of being discovered later by ES prerequisite or workflow launch;
+  - `verify_release_gate_command_plan.py` and `verify_stale_task_apply_request.py` accept only `docker` or `sudo -n docker` as the configured Docker command and require expected-success evidence for `IMAGE_AGENT_DOCKER_COMMAND` plus `verify_docker_command completed`;
+  - `build_stale_task_apply_request.py` now materializes the same Docker command verification in stale-task follow-up plans;
+  - RED/GREEN local focused tests first failed on missing Docker verification, then passed; local release/stale regression returned `225 passed`, static release-gate verifier returned `status=passed`, and touched release/stale scripts compiled;
+  - synced release/stale scripts, tests, and static release-gate plan to yyf rootfix10; remote static verifier returned `status=passed`, remote release/stale pytest returned `225 passed`, and remote compile passed;
+  - yyf dry-run `/tmp/image_agent_bootstrap_production_rawchat_docker_verify_dry_run_current.json` shows planned `configure_docker_command` and non-mutating `verify_docker_command` using `sudo -n docker version --format {{.Server.Version}}`;
+  - no `--apply` was run, so no production `.env` write, API restart, Docker pull, Elasticsearch/embedding container start, RAG rebuild, production task creation, strict smoke, model generation, workflow rerun, ObserveRepair rerun, proxy URL/token use, or rawchat API key handling occurred.
+- Moved Docker command verification to the front of bootstrap apply:
+  - `verify_docker_command` is now planned before any `write_env` step, so a failing deployment-local Docker access path stops the install/config apply before changing `.env`;
+  - bootstrap tests now assert the first two steps are `verify_docker_command` and `configure_image_agent_root`, and that a failed verification does not create the env file;
+  - local bootstrap tests returned `41 passed`, local release/stale regression returned `225 passed`, static release-gate verifier returned `status=passed`, and touched scripts compiled;
+  - synced the bootstrap script and focused tests to yyf rootfix10; remote bootstrap tests returned `41 passed` and remote compile passed;
+  - yyf dry-run `/tmp/image_agent_bootstrap_preflight_order_dry_run_current.json` shows `verify_docker_command` as the first step and rawchat direct model settings including `IMAGE_AGENT_MODEL_TRUST_ENV_PROXY=0`;
+  - yyf direct rawchat network probe used `curl --noproxy '*'` and reached `rawchat.cn` directly, returning an application-level HTTP response without proxy use;
+  - yyf apply-path safety check with a temporary `/tmp` env file failed at `sudo -n docker version --format {{.Server.Version}}` and confirmed `env_file_not_written`;
+  - no production `.env` write, API restart, Docker pull, Elasticsearch/embedding container start, RAG rebuild, production task creation, strict smoke, model generation, workflow rerun, ObserveRepair rerun, proxy URL/token use, or rawchat API key handling occurred.
+- Added a Git-managed Docker host-policy script for portable installs:
+  - `scripts/configure_docker_access.py` now produces a default dry-run plan for a narrow sudoers rule allowing the deployment user to run only `/usr/bin/docker` through `sudo -n docker`;
+  - the script validates safe user names, absolute POSIX Docker binary paths, and safe sudoers rule names; it rejects password prompts, shell metacharacters, proxy/socket workarounds, and non-absolute Docker commands;
+  - explicit root/operator `--apply` writes `/etc/sudoers.d/image-agent-docker`, sets it read-only, validates with `visudo -cf`, then verifies non-mutating `sudo -n docker version --format {{.Server.Version}}`;
+  - README and the production runbook now document the script as the Git-managed way to make the host policy reproducible, while preserving rawchat direct transport through `IMAGE_AGENT_MODEL_TRUST_ENV_PROXY=0`;
+  - RED/GREEN local tests first failed because the script was missing, then passed; focused local configure/bootstrap regression returned `48 passed`, release/stale gate regression returned `225 passed`, and touched scripts compiled;
+  - synced the script, focused test, README, and runbook to yyf rootfix10; remote `py_compile` passed and remote focused tests returned `7 passed`;
+  - yyf dry-run `/tmp/image_agent_docker_access_policy_dry_run_current.json` shows the planned sudoers file `/etc/sudoers.d/image-agent-docker`, redacted write step, `visudo -cf` validation, and `sudo -n docker version --format {{.Server.Version}}` verification;
+  - yyf read-only checks confirm `/etc/sudoers.d/image-agent-docker` is still absent and current `sudo -n docker` exits `1` with "a password is required", so the Docker host-policy blocker remains until an operator applies the script as root;
+  - no sudoers write, production `.env` write, API restart, Docker pull, Elasticsearch/embedding container start, RAG rebuild, production task creation, strict smoke, model generation, workflow rerun, ObserveRepair rerun, proxy URL/token use, or rawchat API key handling occurred.
+- Promoted Docker host-policy dry-run into release-gate and stale-task follow-up contracts:
+  - `remote-release-gate-command-plan.json` now has 15 steps and includes `verify_docker_host_policy_dry_run` before `apply_production_readiness_env`;
+  - the new release-gate step runs `scripts/configure_docker_access.py --user yyf --docker-bin /usr/bin/docker` without `--apply`, saves `/tmp/image_agent_docker_access_policy_dry_run_<timestamp>.json`, and prints fixed evidence markers for plan id, dry-run mode, sudoers file, and `sudo -n docker version`;
+  - the release-gate verifier now requires `scripts/configure_docker_access.py` in the release overlay, rejects Docker host-policy commands with `--apply`, and checks the dry-run expected-success markers;
+  - `build_stale_task_apply_request.py` now materializes the same dry-run follow-up step with a concrete timestamp, and `verify_stale_task_apply_request.py` rejects follow-up plans that omit it or accidentally add `--apply`;
+  - RED/GREEN local tests first failed on the missing release/stale step, then passed; local release/stale/configure regression returned `236 passed`, static release-gate verifier returned `status=passed`, `step_count=15`, and touched scripts compiled;
+  - synced the static plan, release/stale verifiers, stale-task builder, Docker access script, and focused tests to yyf rootfix10; remote `py_compile` passed, focused remote pytest returned `236 passed`, and remote static verifier returned `status=passed`, `step_count=15`;
+  - yyf materialized dry-run evidence `/tmp/image_agent_docker_access_policy_dry_run_release_gate_current.json` passed marker checks, and `/etc/sudoers.d/image-agent-docker` remains absent;
+  - no sudoers write, production `.env` write, API restart, Docker pull, Elasticsearch/embedding container start, RAG rebuild, production task creation, strict smoke, model generation, workflow rerun, ObserveRepair rerun, proxy URL/token use, or rawchat API key handling occurred.
+- Added Git-managed repository hygiene scanning to the release gate:
+  - `scripts/check_repository_hygiene.py` scans release-critical text files for conflict markers, API-key-shaped secrets, and forbidden runtime proxy markers without printing matched secret/proxy values;
+  - the scanner allows explicit fake secret fixtures in tests while still failing on high-entropy `sk-...` values in operational code/docs/scripts;
+  - `verify_release_overlay_contents` now requires `scripts/check_repository_hygiene.py`, runs it over `README.md`, `scripts`, `apps/api/scripts`, `docs/deployment`, `docs/rag`, and `docs/skills`, and requires `repository_hygiene_status=passed`;
+  - RED/GREEN local tests first failed because the scanner and release-gate wiring were missing, then passed; local hygiene/release/stale/configure regression returned `238 passed`, static release-gate verifier returned `status=passed`, `step_count=15`, and touched scripts compiled;
+  - local release-gate hygiene scan checked 175 files with 0 findings;
+  - synced the hygiene script/test plus static release-gate plan/verifier/test to yyf rootfix10; remote `py_compile` passed, remote focused pytest returned `157 passed`, remote static verifier returned `status=passed`, and remote hygiene scan checked 175 files with 0 findings;
+  - no sudoers write, production `.env` write, API restart, Docker pull, Elasticsearch/embedding container start, RAG rebuild, production task creation, strict smoke, model generation, workflow rerun, ObserveRepair rerun, proxy URL/token use, or rawchat API key handling occurred.
+- Confirmed rawchat model traffic remains direct and tightened release-overlay sync coverage:
+  - yyf running `/agent/model/status` reports `provider_profile=rawchat`, `wire_api=responses`, `trust_env_proxy=false`, and `model_gateway_access=direct`;
+  - yyf direct network probe unset proxy environment variables, used `curl --noproxy rawchat.cn`, reached `rawchat.cn` directly, and returned HTTP `404` from the endpoint path with a real remote IP, proving connection-level direct reachability without proxy use;
+  - `apps/api/scripts/build_release_overlay_sync_plan.py` now includes `scripts/check_repository_hygiene.py` and `scripts/configure_docker_access.py` in `REQUIRED_OVERLAY_FILES`, so incoming and promoted release overlays verify both new Git-managed deployment-safety scripts before use;
+  - the overlay sync local preflight now directly runs `python scripts/check_repository_hygiene.py --paths README.md scripts apps/api/scripts docs/deployment docs/rag docs/skills` before verifying the release-gate command plan;
+  - regenerated `docs/deployment/remote-release-overlay-sync-plan.json` with the same hygiene preflight and required-file checks;
+  - RED/GREEN local overlay-sync tests first failed on the missing required scripts, then passed; local focused tests returned `13 passed`, py_compile passed, repository hygiene checked 175 files with 0 findings, and a local archive dry-run reported `required_gate_files_present=true` with no missing required files;
+  - synced the overlay sync generator/test/static plan plus hygiene and Docker-access scripts to yyf rootfix10; remote py_compile passed, remote focused tests returned `13 passed`, remote hygiene checked 175 files with 0 findings, and remote static plan checks confirmed the hygiene script, Docker-access script, and `repository_hygiene_status=passed` marker are present;
+  - remote archive creation was intentionally not accepted as a release-overlay test because rootfix10 is not a git worktree and `--write-archive` is designed to run from the local git workspace before upload;
+  - no sudoers write, production `.env` write, API restart, Docker pull, Elasticsearch/embedding container start, RAG rebuild, production task creation, strict smoke, model generation, workflow rerun, ObserveRepair rerun, proxy URL/token use, or rawchat API key handling occurred.
+- Promoted rawchat direct network reachability into the release gate:
+  - added `scripts/verify_rawchat_direct_connectivity.py`, a no-key connectivity probe that targets only HTTPS rawchat hosts and uses `ProxyHandler({})` so Docker/image-pull proxy environment variables are not trusted;
+  - the probe reports only privacy-safe fields such as host, HTTP status, `direct_transport`, `proxy_env_present`, `proxy_env_trusted=false`, and `proxy_handler=disabled`; it never prints proxy values, API keys, request bodies, or model responses;
+  - `docs/deployment/remote-release-gate-command-plan.json` now has 16 steps, inserting `verify_rawchat_direct_connectivity` after the Docker host-policy dry-run and before `apply_production_readiness_env`;
+  - `verify_release_overlay_contents` and the overlay-sync builder now require `scripts/verify_rawchat_direct_connectivity.py`, so stale overlays missing the direct-connectivity probe fail before apply/restart/smoke;
+  - `apps/api/scripts/verify_release_gate_command_plan.py` now enforces the new step, its `--url https://rawchat.cn/codex` target, `/tmp/image_agent_rawchat_direct_connectivity_<timestamp>.json` evidence output, and expected markers `rawchat_direct_connectivity_status=passed`, `rawchat_direct_proxy_env_trusted=false`, and `rawchat_direct_transport=direct`;
+  - RED/GREEN local tests first failed because the script and release-gate step were missing, then passed; local release/overlay regression returned `176 passed`, static release-gate verifier returned `status=passed`, `step_count=16`, and local direct probe returned HTTP `404` with `proxy_env_trusted=false` and `direct_transport=true`;
+  - synced the new script/test, release-gate verifier/tests, overlay-sync builder/tests, and static release/overlay plans to yyf rootfix10; remote py_compile passed, remote focused pytest returned `164 passed`, remote static release-gate verifier returned `status=passed`, `step_count=16`, and yyf direct probe saved `/tmp/image_agent_rawchat_direct_connectivity_current.json` with `status=passed`, `http_status=404`, `proxy_env_trusted=false`, and `direct_transport=true`;
+  - no sudoers write, production `.env` write, API restart, Docker pull, Elasticsearch/embedding container start, RAG rebuild, production task creation, strict smoke, model generation, workflow rerun, ObserveRepair rerun, proxy URL/token use, or rawchat API key handling occurred.
+- Propagated the rawchat direct gate into stale-task follow-up plans:
+  - `build_release_gate_command_plan.py` already materializes the new static release-gate step from `remote-release-gate-command-plan.json`, so reviewed operator plans inherit `verify_rawchat_direct_connectivity` with timestamped `/tmp/image_agent_rawchat_direct_connectivity_<timestamp>.json` evidence;
+  - `build_stale_task_apply_request.py` now includes the same read-only `verify_rawchat_direct_connectivity` follow-up step after `verify_docker_host_policy_dry_run` and before `apply_production_readiness_env`;
+  - `verify_stale_task_apply_request.py` now requires that step order and checks the command target `https://rawchat.cn/codex`, the `/tmp/image_agent_rawchat_direct_connectivity_*.json` output path, `mutates_remote_state=false`, `requires_operator_authorization=false`, and markers `rawchat_direct_connectivity_status=passed`, `rawchat_direct_proxy_env_trusted=false`, and `rawchat_direct_transport=direct`;
+  - RED/GREEN local tests first failed because stale follow-up generation and verification skipped the rawchat direct step, then passed; local stale/release regression returned `243 passed`, static release-gate verifier returned `status=passed`, `step_count=16`, hygiene checked 176 files with 0 findings, and touched scripts compiled;
+  - synced stale builders/verifiers/tests plus the release-gate materialization test to yyf rootfix10; remote compile passed, remote focused pytest returned `243 passed`, remote static release-gate verifier returned `status=passed`, `step_count=16`, and remote hygiene checked 176 files with 0 findings;
+  - no stale-task apply, sudoers write, production `.env` write, API restart, Docker pull, Elasticsearch/embedding container start, RAG rebuild, production task creation, strict smoke, model generation, workflow rerun, ObserveRepair rerun, proxy URL/token use, or rawchat API key handling occurred.
+- Aligned fixed-workflow RAG metadata with the workflow registry:
+  - `docs/rag/workflows/t1_deepprep_anat_report.md`, `docs/rag/workflows/bold_fmriprep_xcpd_report.md`, and `docs/rag/workflows/dwi_fast_gpu_dti.md` now expose registry-facing public metadata in frontmatter, including stable `workflow_type`, `runtime_workflow_type`, `display_name`, `capability_summary`, `workflow_family`, `workflow_role`, `agent_selectable`, `is_report_only`, `pipeline_stages`, `primary_outputs`, `qc_outputs`, `report_outputs`, and `limitations`;
+  - the docs explicitly keep `workflow_type` as the stable task/confirmation/fingerprint identity and mark these fixed workflows as complete processing workflows rather than report-only workflows;
+  - `apps/api/tests/test_agent_state_and_rag_index.py` now verifies every agent-selectable fixed workflow has a matching RAG doc whose frontmatter mirrors registry metadata for Agent/RAG display without changing task creation IDs;
+  - fixed the stale embedding downgrade test fixture so it accepts the production `http_client` argument used to disable ambient proxies and continues to exercise the SDK error path instead of constructor fallback;
+  - RED/GREEN local metadata test first failed on missing frontmatter fields, then passed after metadata was added; focused local regression returned `2 passed`, RAG/registry/skills regression returned `126 passed`, repository hygiene checked 176 files with 0 findings, and `git diff --check` reported only the existing CRLF normalization warning for the touched DWI workflow doc;
+  - synced the metadata docs/test, current ES hybrid `rag_index.py`, locked QSI 26.0.0 RAG/skill docs, and logs to yyf rootfix10; remote focused regression returned `15 passed`, remote `py_compile` passed for `rag_index.py`, remote RAG/registry/skills regression returned `126 passed`, remote hygiene checked 176 files with 0 findings, and remote log markers were present;
+  - no production `.env` write, API restart, Docker pull, Elasticsearch/embedding container start, RAG rebuild, production task creation, strict smoke, model generation, workflow rerun, ObserveRepair rerun, proxy URL/token use, or rawchat API key handling occurred.
+- Hardened the release overlay gate for Elasticsearch hybrid config portability:
+  - `verify_release_overlay_contents` in `docs/deployment/remote-release-gate-command-plan.json` now runs `apps/api/scripts/verify_elasticsearch_hybrid_config_plan.py docs/deployment/remote-elasticsearch-hybrid-config-plan.json`, not just `test -f`, before any stale-task apply, production env write, restart, ES prerequisite check, or strict smoke;
+  - `apps/api/scripts/verify_release_gate_command_plan.py` now rejects release-gate plans whose overlay check does not execute the ES config plan verifier or emit `elasticsearch_hybrid_config_plan_status=passed`;
+  - added a release-gate regression test that first failed because the ES config plan verifier was absent from the overlay gate, then passed after wiring the command and expected marker;
+  - local release/ES config regression returned `222 passed`; local static release-gate verifier returned `status=passed`, `step_count=16`; local ES config plan verifier returned `status=passed`, `step_count=9`; touched verifiers compiled;
+  - synced the updated release-gate verifier/test/static plan to yyf rootfix10; remote release/config verifier regression returned `207 passed`; remote static release-gate verifier returned `status=passed`, `step_count=16`; remote ES config plan verifier returned `status=passed`, `step_count=9`; executing the actual read-only `verify_release_overlay_contents` command on yyf printed `repository_hygiene_status=passed` and `elasticsearch_hybrid_config_plan_status=passed`;
+  - no production `.env` write, stale-task apply, API restart, Docker pull, Elasticsearch/embedding container start, RAG rebuild, production task creation, strict smoke, model generation, workflow rerun, ObserveRepair rerun, proxy URL/token use, or rawchat API key handling occurred.
+- Hardened strict smoke evidence for Agent rawchat direct transport:
+  - `smoke_remote_agent.py` now records `agent_model_transport_access` from `/agent/model/status.deployment.model_gateway_access` and `agent_model_trust_env_proxy` from `/agent/model/status.trust_env_proxy`, keeping this network-transport evidence separate from the existing `agent_model_gateway_access=openai_sdk_gateway` SDK implementation marker;
+  - `verify_remote_smoke_acceptance.py` now rejects rawchat strict acceptance unless Agent transport evidence is `direct` and `agent_model_trust_env_proxy=false`;
+  - updated smoke/acceptance tests so rawchat strict evidence cannot pass when Agent transport drifts to a reverse tunnel/proxy path, and tightened strict fixtures for unknown-workflow incubation and ObserveRepair read-only boundaries;
+  - local smoke/acceptance regression returned `470 passed`, and touched smoke/acceptance scripts compiled;
+  - synced the updated smoke/acceptance scripts and tests to yyf rootfix10; remote smoke/acceptance regression returned `470 passed`, and remote py_compile passed;
+  - no production `.env` write, stale-task apply, API restart, Docker pull, Elasticsearch/embedding container start, RAG rebuild, production task creation, strict smoke, model generation, workflow rerun, ObserveRepair rerun, proxy URL/token use, rawchat proxy routing, or rawchat API key handling occurred.
+- Hardened release-overlay coverage for Git-managed Elasticsearch hybrid installation scripts:
+  - `verify_release_overlay_contents` now requires `apps/api/scripts/setup_elasticsearch_hybrid_rag.py` and `apps/api/scripts/setup_local_embedding_service.py`, not only the ES config-plan builder/verifier and prerequisite verifier;
+  - `verify_release_gate_command_plan.py` now rejects release-gate plans whose overlay check omits either setup script;
+  - `build_release_overlay_sync_plan.py` now includes both setup scripts in `REQUIRED_OVERLAY_FILES`, so generated archives and incoming/promoted overlay checks prove the Git-managed ES and local embedding installers are present before deployment use;
+  - updated `remote-release-gate-command-plan.json` and `remote-release-overlay-sync-plan.json` so the static operator plans perform the same checks;
+  - RED/GREEN local tests first failed because the setup scripts were not required, then passed after adding them; local release/overlay/ES setup regression returned `237 passed`; static release-gate verifier returned `status=passed`, `step_count=16`; static ES config-plan verifier returned `status=passed`, `step_count=9`; touched scripts compiled;
+  - synced the release/overlay verifier, generator, tests, and static plans to yyf rootfix10; remote focused regression returned `237 passed`; remote py_compile passed; remote static verifiers returned `status=passed`; executing the read-only `verify_release_overlay_contents` command on yyf printed `repository_hygiene_status=passed` and `elasticsearch_hybrid_config_plan_status=passed`;
+  - no production `.env` write, stale-task apply, API restart, Docker pull, Elasticsearch/embedding container start, RAG rebuild, production task creation, strict smoke, model generation, workflow rerun, ObserveRepair rerun, proxy URL/token use, rawchat API key handling, or ES/embedding install action occurred.
+- Hardened the frontend API/workflow contract gate before release acceptance:
+  - added `scripts/run_frontend_contract_tests.py`, a portable wrapper that selects `npm.cmd` on Windows or `npm` on Unix, can run `npm ci --include=dev` from the Git-managed lockfile, runs the console API/workflow/Agent/workflow-selection/result-summary Vitest contract files, prints `frontend_api_contract_tests=passed`, and fails with an explicit timeout instead of hanging indefinitely;
+  - `remote-release-gate-command-plan.json` now has 17 steps, inserting `verify_frontend_api_contract_tests` immediately after release-overlay content verification and before stale-task approval/apply, production env writes, API restarts, Docker checks, ES prerequisite checks, or strict smoke;
+  - `verify_release_overlay_contents` and `build_release_overlay_sync_plan.py` now require the frontend wrapper, console `package.json`/`package-lock.json`, and the selected console contract test files so stale overlays missing frontend contract evidence fail before use;
+  - overlay sync local preflight now runs the same frontend contract wrapper before verifying the release-gate plan, keeping frontend testing inside the Git-managed packaging path without changing backend API contracts;
+  - RED/GREEN local tests first failed because the frontend contract step and overlay preflight were missing, then passed; local frontend wrapper returned 5 files / 56 tests passed; local release/overlay regression returned `163 passed`; static release-gate verifier returned `status=passed`, `step_count=17`; touched scripts compiled;
+  - synced the wrapper, release/overlay verifier/generator/tests, and static plans to yyf rootfix10; remote py_compile passed; remote release/overlay regression returned `163 passed`; remote static release-gate verifier returned `status=passed`, `step_count=17`;
+  - remote frontend contract execution is not accepted as passed yet because remote npm dependency installation timed out before `vitest` was installed; direct official npm registry probing timed out, the incomplete overlay `node_modules` directory was removed, and no lingering `npm ci` process remained;
+  - no production `.env` write, stale-task apply, API restart, Docker pull, Elasticsearch/embedding container start, RAG rebuild, production task creation, strict smoke, model generation, workflow rerun, ObserveRepair rerun, rawchat proxy routing, rawchat API key handling, or production task mutation occurred.
+- Hardened frontend contract dependency installation diagnostics:
+  - `scripts/run_frontend_contract_tests.py` now accepts an explicit safe HTTPS npm registry, `--fetch-timeout-ms`, `--fetch-retries`, and per-command `--timeout-seconds`; it rejects registry URLs with credentials, query strings, or fragments so one-off proxy credentials cannot be printed or exposed through the wrapper command;
+  - npm timeout and non-zero exit paths now raise one-line `SystemExit` messages with URL token redaction instead of Python tracebacks;
+  - `remote-release-gate-command-plan.json` now pins the frontend contract step to `--registry https://registry.npmjs.org/ --fetch-timeout-ms 20000 --fetch-retries 0 --timeout-seconds 120`, so it does not inherit an arbitrary remote npm registry configuration;
+  - local RED/GREEN tests first failed because registry/fetch parameters and non-zero-exit redaction were missing, then passed; local wrapper/release/overlay regression returned `166 passed`, local frontend wrapper returned 5 files / 56 Vitest tests passed, static release-gate verifier returned `status=passed`, `step_count=17`, and touched scripts compiled;
+  - synced the wrapper, verifier/test, new wrapper test, and release-gate JSON to yyf rootfix10; remote py_compile passed, remote static release-gate verifier returned `status=passed`, `step_count=17`, and remote wrapper/release tests returned `162 passed`;
+  - remote short-install probe against the official npm registry failed quickly with npm `FETCH_ERROR` for registry package download, printed no Python traceback, removed the incomplete overlay `node_modules`, and left no new `npm ci` process; therefore remote frontend contract execution remains blocked by npm network/package download, not by code contract failure;
+  - no production `.env` write, stale-task apply, API restart, Docker pull, Elasticsearch/embedding container start, RAG rebuild, production task creation, strict smoke, model generation, workflow rerun, ObserveRepair rerun, rawchat proxy routing, rawchat API key handling, or production task mutation occurred.
+- Completed the yyf frontend contract gate through an offline npm cache path:
+  - root-cause checks showed yyf official npm registry and npmmirror metadata requests timed out, yyf cache was incomplete for the console lockfile, and ambient npm proxy/registry state must not be trusted for release acceptance;
+  - `run_frontend_contract_tests.py` now strips ambient proxy variables by default, exposes `--trust-env-proxy` for explicit one-off proxy use, supports `--cache-dir`, and supports `--offline`;
+  - local RED/GREEN tests first failed because proxy isolation and cache/offline flags were missing, then passed; local wrapper/release/overlay regression returned `168 passed`;
+  - local real frontend contract generated a target npm cache and proved both online cache fill and offline cache install paths with 5 files / 56 Vitest tests passed; the portable cache was about 28 MB after adding Linux optional native packages needed by Rollup/esbuild;
+  - fixed the console API contract test to assert stable artifact response semantics (`size` and `type`) instead of cross-runtime `Blob` constructor identity, after yyf revealed Node/jsdom Blob realm differences;
+  - synced the wrapper, release-gate verifier/tests, static release plan, and console API test to yyf rootfix10; remote static verifier returned `status=passed`, `step_count=17`, and remote wrapper/release tests returned `164 passed`;
+  - yyf release-overlay frontend contract now passed using `/tmp/image_agent_console_npm_cache_20260621T160312Z` with `--offline`: 5 files / 56 Vitest tests passed and `frontend_api_contract_tests=passed`; the command removed overlay `apps/console/node_modules` afterward;
+  - `remote-release-gate-command-plan.json` now requires the frontend contract step to use `--cache-dir /tmp/image_agent_console_npm_cache_<timestamp> --offline`, so release acceptance no longer depends on live npm registry reachability;
+  - no production `.env` write, stale-task apply, API restart, Docker pull, Elasticsearch/embedding container start, RAG rebuild, production task creation, strict smoke, model generation, workflow rerun, ObserveRepair rerun, rawchat proxy routing, rawchat API key handling, or production task mutation occurred.
+- Unblocked yyf non-interactive Docker access while preserving rawchat direct transport:
+  - wrote a narrow root-owned sudoers rule on yyf for `yyf ALL=(root) NOPASSWD: /usr/bin/docker`, validated it with `visudo`, and verified `sudo -n docker version` reports Docker `27.5.1`;
+  - verified `sudo -n docker ps` can see the existing `image-agent-es` and `image-agent-embeddings` containers without an interactive password;
+  - applied Git-managed bootstrap config so `/home/yyf/project/image_agent/.env` now has `IMAGE_AGENT_DOCKER_COMMAND=sudo -n docker`;
+  - re-verified rawchat endpoint connectivity with proxy handling disabled: `rawchat_direct_connectivity_status=passed`, `rawchat_direct_proxy_env_trusted=false`, and `rawchat_direct_transport=direct`;
+  - added shared Docker command parsing so `pipeline`, `recovery`, and `dwi_fast_gpu_dti` honor `IMAGE_AGENT_DOCKER_COMMAND=sudo -n docker` without reading `IMAGE_AGENT_SUDO_PASSWORD`, while keeping the legacy `sudo -S docker` password path covered by tests;
+  - local focused verification returned `63 passed` for runtime/bootstrap/Docker-access tests, `32 passed` for API-flow/release/prerequisite checks, and `15 passed` for runtime probe/image-preparation isolation;
+  - synced the Docker-command runtime fix to yyf rootfix10 and live root; yyf rootfix10 focused tests returned `15 passed`, and both rootfix10 CLI runtime probe and live-root function probe now report `docker_requires_sudo=false`, `docker_accessible=true`;
+  - remaining runtime probe blocker is now `elasticsearch_not_reachable`; Docker permission is no longer listed as a blocker;
+  - no proxy URL/token, rawchat API key, sudo password, or Docker socket override was written into git-managed code or logs; no API restart, Docker pull, RAG rebuild, production task creation, workflow rerun, ObserveRepair rerun, or model generation was performed.
+- Cleared the yyf Elasticsearch runtime-probe blocker and verified ES hybrid prerequisites:
+  - root cause: yyf ES container and `http://127.0.0.1:9200` were reachable, but `app.agent.runtime._elasticsearch_probe()` reported `reachable=false` unconditionally;
+  - added RED/GREEN tests for safe ES endpoint probing, API-key header use, proxy-disabled transport evidence, and secret/error redaction;
+  - runtime probe now uses a direct `ProxyHandler({})` opener, returns only privacy-safe `endpoint_probe` fields, and does not serialize ES URL credentials, API keys, or error strings;
+  - local runtime/release/prerequisite regression returned `204 passed`, and touched runtime/workflow modules compiled;
+  - synced the runtime probe fix to yyf rootfix10 and live root;
+  - yyf rootfix10 runtime/image tests returned `17 passed`;
+  - yyf rootfix10 CLI runtime probe and yyf live-root function probe both report `probe_status=ready`, no `blocking_codes`, `docker_requires_sudo=false`, `docker_accessible=true`, `elasticsearch_reachable=true`, `elasticsearch_http_status=200`, and `elasticsearch_proxy_env_trusted=false`;
+  - yyf ES hybrid prerequisite verifier returned `status=passed`; checked evidence includes `rag_status_engine=elasticsearch_hybrid`, `rag_status_hybrid_mode=connected`, `rag_status_hybrid_fusion=rrf`, `rag_status_hybrid_lexical_retriever=standard`, `rag_status_hybrid_vector_retriever=knn`, `rag_status_hybrid_indexed_chunk_count=340`, `rag_status_hybrid_official_rrf_source_present=true`, `rag_embedding_provider_production_configured=true`, and `secrets_redacted=true`;
+  - yyf `/deployment` now reports `fast_launch_readiness.checks.rag_elasticsearch_hybrid.status=passed` and `model_gateway_target.status=passed`;
+  - remaining fast-launch blockers are `production_readiness.required=false` (public HTTPS API/CORS production readiness not yet enabled through Git-managed config) and missing strict remote acceptance evidence for the upload-agent-workflow-result chain;
+  - no proxy URL/token, rawchat API key, ES API key, sudo password, or Docker socket override was written into git-managed code or logs; no API restart, Docker pull, RAG rebuild, production task creation, workflow rerun, ObserveRepair rerun, or model generation was performed.
+- Continued yyf pre-acceptance real-chain smoke:
+  - fixed Git-managed bootstrap env quoting so `IMAGE_AGENT_DOCKER_COMMAND='sudo -n docker'` is shell-source safe; local bootstrap/runtime tests returned `42 passed` and `17 passed`;
+  - reapplied yyf config with `--skip-elasticsearch-hybrid --skip-workflow-images --config-only --docker-command 'sudo -n docker' --verify-docker-command --apply`;
+  - restart preflight returned `active_task_drain:ok` and `restart_preflight:ok`, then yyf API restarted from old PID `3146076` to new PID `3418831`;
+  - running `/runtime/probe` now reports `status=ready`, empty blockers, Docker accessible without interactive sudo, and Elasticsearch reachable with HTTP `200`;
+  - created yyf project `28`, uploaded a real T1 NIfTI from `/home/yyf/mdd_upload/MDD_nii/_probe`, and Agent confirmation/resume created fixed-workflow production task `137` for series `50` with `workflow_type=t1_deepprep_anat_report`;
+  - fingerprint-negative resume stayed blocked before task creation, while valid confirmation created the task through the fixed workflow lane;
+  - task `137` launched `pbfslab/deepprep:25.1.0` via `sudo -n docker run` and is currently running at API progress `20`; logs show active DeepPrep/FreeSurfer work rather than a deadlock;
+  - unknown-workflow strict smoke exposed an API response-contract gap: runtime behavior kept unknown workflow in `toolchain_incubation` with no task/confirmation and `production_task_created=false`, but top-level `task_creation_allowed=false` and `forbidden_actions` were missing from `/agent/runs`;
+  - `apps/api/app/agent/contracts.py` now exposes the LangGraph/proposal gate fields at top level, and local targeted tests plus yyf rootfix10 targeted tests passed (`2 passed`, `1 passed`, remote `3 passed`);
+  - task `137` completed successfully, exposing result summary, task events, container-native QC artifacts, derived scientific report artifacts, and ObserveRepair read-only evidence;
+  - after active-task drain, restarted yyf API from PID `3418831` to `3517001` so the response-contract fix is live;
+  - yyf pre-acceptance smoke saved `/tmp/image_agent_preacceptance_upload_agent_result_20260622.json` and passed `runtime_toolchain_status`, Agent confirmation/fingerprint-negative/resume, unknown-workflow incubation, uploaded-series, launched-task, completed-task, task-events, ObserveRepair, Elasticsearch hybrid RAG, launchability query, container-native QC, and scientific-report artifact gates;
+  - evidence binds project `28`, series `50`, task `137`, stable `workflow_type=t1_deepprep_anat_report`, `runtime_workflow_type=t1_deepprep`, `3` native QC image previews, and `2` scientific report PNG figures;
+  - `/deployment.fast_launch_readiness` remains blocked only by Git-managed production public HTTPS/CORS readiness not being enabled (`production_readiness.required=false`) and missing strict remote acceptance env evidence; production readiness was not faked.
+- Prepared the formal release gate to reuse the completed yyf fixed-workflow evidence without rerunning DeepPrep:
+  - `build_release_gate_command_plan.py` now accepts explicit `--acceptance-task-id` and `--agent-state-db` arguments alongside `--uploaded-series-id`;
+  - materialized strict smoke commands can now add `--reuse-persisted-agent-launch-evidence`, `--agent-state-db`, `--task-id`, and `--launch-series-id`, preserving the existing registry/preflight/human-confirmation/fingerprint evidence instead of creating a second production task;
+  - `verify_release_gate_command_plan.py` rejects unsafe reuse unless the plan is materialized, the task id is positive, the agent DB is an absolute remote `.db`, and launch-series id matches uploaded-series id;
+  - local and yyf rootfix10 release-gate materializer/verifier regression returned `174 passed`.
+- Updated the formal deployment gate to match the clarified product-usable launch target:
+  - "launch" for this milestone no longer requires public internet exposure; it can mean private/server-local installation that is complete and usable;
+  - added `IMAGE_AGENT_DEPLOYMENT_SCOPE`, defaulting to `public_internet` and allowing explicit `private_network`;
+  - `/deployment.production_readiness` now reports `deployment_scope`, accepts private loopback/private HTTP(S) API and console origins only when scope is `private_network`, and keeps public HTTPS requirements for `public_internet`;
+  - `scripts/bootstrap_image_agent.py`, `build_release_gate_command_plan.py`, `verify_release_gate_command_plan.py`, the static release-gate plan, docs, and console types now carry the scope;
+  - local focused regression returned private readiness targeted pass, bootstrap `50 passed`, and release-gate materializer/verifier `175 passed`;
+  - the remaining step for a formal strict gate is now to apply Git-managed private readiness config on yyf, reuse completed task `137` where appropriate, run strict smoke with production readiness enabled, verify the saved JSON, and emit fast-launch acceptance env evidence.
+- Completed the private product-usable launch gate on yyf:
+  - strict smoke evidence is `/tmp/image_agent_private_launch_acceptance_task137_final_20260622.json`;
+  - offline verifier evidence is `/tmp/image_agent_private_launch_acceptance_task137_final_verify_20260622.json` with `status=passed`;
+  - evidence id is `codex-private-launch-task137-20260622`;
+  - the gate reuses the completed real chain: project `28`, upload session `11`, uploaded series `50`, and fixed workflow task `137` for `workflow_type=t1_deepprep_anat_report`;
+  - yyf API was restarted through the Git-managed restart script after active-task drain, from PID `3528840` to PID `3538435`;
+  - `/deployment` now reports `production_readiness.status=ready`, `production_readiness.deployment_scope=private_network`, `fast_launch_readiness.status=ready`, no blocking reasons, strict remote acceptance `passed`, Elasticsearch hybrid RAG `passed`, and rawchat model gateway target `passed` with `trust_env_proxy=false`;
+  - final deployment readiness snapshot is saved at `/tmp/image_agent_private_launch_deployment_ready_20260622.json`;
+  - this is a private/local product-usable milestone, not public internet exposure.

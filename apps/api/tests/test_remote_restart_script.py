@@ -40,6 +40,21 @@ def test_remote_restart_script_supports_release_overlay_without_dirty_worktree()
         assert phrase in script
 
 
+def test_remote_restart_script_accepts_env_file_argument_and_inferrs_overlay_cwd():
+    script = (REPO_ROOT / "tools" / "restart_remote_image_agent_api.sh").read_text(encoding="utf-8")
+
+    for phrase in (
+        'ENV_FILE="${1:-${IMAGE_AGENT_ENV_FILE:-$ROOT/.env}}"',
+        "infer_release_root_from_cwd",
+        "pwd -P",
+        '*/apps/api)',
+        '*/apps/api/)',
+        'RELEASE_ROOT="${IMAGE_AGENT_RELEASE_ROOT:-$(infer_release_root_from_cwd)}"',
+        'API_DIR="${IMAGE_AGENT_API_DIR:-$RELEASE_ROOT/apps/api}"',
+    ):
+        assert phrase in script
+
+
 def test_remote_restart_script_supports_non_destructive_preflight_only_mode():
     script = (REPO_ROOT / "tools" / "restart_remote_image_agent_api.sh").read_text(encoding="utf-8")
 
@@ -94,6 +109,8 @@ def test_release_overlay_restart_is_documented_for_agent_use():
         "`IMAGE_AGENT_API_DIR`",
         "`IMAGE_AGENT_ENV_FILE`",
         "`IMAGE_AGENT_SHARED_VENV_BIN`",
+        "or pass the env file as the first positional argument",
+        "When launched from the release overlay root or its `apps/api` directory",
         "keeps the dirty remote main worktree out of the serving path",
     ):
         assert phrase in production_doc

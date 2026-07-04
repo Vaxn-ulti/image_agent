@@ -12,7 +12,7 @@
 
 #### C1. `.env` secrets exposed in repo root
 - **File:** `.env` (root), `.gitignore`
-- **Finding:** `.env` contains `IMAGE_AGENT_SUDO_PASSWORD=yyf123` and `DEEPSEEK_API_KEY=sk-...` in plaintext. The `.gitignore` file exists but does NOT list `.env`.
+- **Finding:** `.env` contained `IMAGE_AGENT_SUDO_PASSWORD=<redacted>` and `DEEPSEEK_API_KEY=sk-...` in plaintext. The `.gitignore` file exists but does NOT list `.env`.
 - **Fix:** Add `.env` to `.gitignore` immediately. Rotate the exposed API key. Never commit secrets.
 
 #### C2. Frontend `latestBoldPreprocTask` checks wrong workflow types

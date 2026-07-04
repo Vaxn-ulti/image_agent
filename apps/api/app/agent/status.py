@@ -33,6 +33,7 @@ def public_model_status() -> dict[str, Any]:
             "metadata_enabled",
             "context_window",
             "auto_compact_token_limit",
+            "trust_env_proxy",
             "capabilities",
             "gateway_diagnostics",
         }

@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from app.workflows.registry import get_workflow
+from app.workflows.registry import get_workflow, workflow_public_metadata
 
 
 PRODUCTION_WORKFLOW_TYPES = [
@@ -29,6 +29,7 @@ def build_workflow_eligibility(series: dict[str, Any]) -> dict[str, Any]:
             "modality": workflow.get("modality"),
             "required_inputs": workflow.get("input_requirements", []),
             "expected_outputs": workflow.get("expected_outputs", []),
+            "workflow_metadata": workflow_public_metadata(workflow_type),
             "blocking_reasons": blocking_reasons,
             "warnings": [],
             "evidence": evidence,

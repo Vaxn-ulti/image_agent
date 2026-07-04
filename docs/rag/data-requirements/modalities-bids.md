@@ -82,6 +82,8 @@ Use for:
 - DWI tensor workflows.
 - QSIPrep/QSIRecon-like workflows when supported.
 
+A complete DWI sidecar set means a DWI NIfTI plus matching JSON sidecar, bval, and bvec files. The fast GPU DTI workflow also needs phase-encoding/readout metadata in the JSON sidecar.
+
 ## Source Priority For Metadata
 
 Recommended priority:

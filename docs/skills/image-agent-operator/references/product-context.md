@@ -72,7 +72,7 @@ Each workflow may have a validate-only variant that resolves Docker image availa
 Production fast DTI is intentionally lightweight:
 
 - use host FSL from `/home/yyf/project/MCI_project/tools/fsl` for GPU `eddy_cuda` and FSL registration utilities;
-- use `pennlinc/qsiprep:latest` only as an MRtrix toolbox image;
+- use `pennlinc/qsiprep:26.0.0` only as an MRtrix toolbox image;
 - do not run full QSIPrep or full QSIRecon;
 - target DTI metric generation within 35 minutes / `2100` seconds;
 - if a real run exceeds that target, report the exact bottleneck from task logs rather than recommending the legacy full QSI path.
@@ -90,7 +90,7 @@ Legacy/experimental QSIPrep remains CUDA-oriented:
 - Command passes `--eddy-config /eddy_cuda_config.json`.
 - Config contains `use_cuda: true`, `num_threads >= 4`, `dont_peas: true`, `cnr_maps: true`, default `niter: 3`, and an auto-inferred `is_shelled` value from b-values.
 
-`pennlinc/qsiprep:latest` exposes `eddy_cuda11.0` at `/app/.pixi/envs/qsiprep/bin/`. Detection uses `eddy_cuda*` glob to accept versioned binaries for legacy QSIPrep validation. Production fast DTI probes host FSL GPU `eddy_cuda` instead.
+`pennlinc/qsiprep:26.0.0` exposes `eddy_cuda11.0` at `/app/.pixi/envs/qsiprep/bin/`. Detection uses `eddy_cuda*` glob to accept versioned binaries for legacy QSIPrep validation. Production fast DTI probes host FSL GPU `eddy_cuda` instead.
 
 For legacy QSIRecon, current docs do not confirm a CUDA-only CLI flag. The product uses `docker run --gpus all` and records whether GPU is visible inside the container. QSIRecon requires `--recon-spec` to select the reconstruction pipeline.
 

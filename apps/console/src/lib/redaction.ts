@@ -4,6 +4,7 @@ export function redactEvidenceText(value: string) {
     .replace(/\/(?:home|Users|mnt|data|tmp|var)\/[^\s"']+/g, '[redacted-host-path]')
     .replace(/(^|[\s`"'([{])data[\\/]+projects[\\/]+[^\s`"',)\]}]+/g, '$1[redacted-host-path]')
     .replace(/sk-[A-Za-z0-9._-]+/g, '[redacted-secret]')
+    .replace(/([A-Z0-9_]*(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD|LICENSE)[A-Z0-9_]*\s*[:=]\s*)[^\s"',}]+/gi, '$1[redacted-secret]')
     .replace(/((?:OPENAI|DEEPSEEK|IMAGE_AGENT_SUDO)_?[A-Z_]*\s*[:=]\s*)[^\s"',}]+/gi, '$1[redacted-secret]');
 }
 

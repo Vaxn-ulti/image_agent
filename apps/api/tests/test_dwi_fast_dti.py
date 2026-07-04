@@ -601,6 +601,54 @@ def test_write_real_result_summary_registers_native_qc_reports_and_figures(tmp_p
     assert summary["outputs"]["figures"][0]["provenance"]["replaces_native_qc"] is False
 
 
+def test_write_real_result_summary_materializes_dwi_native_qc_when_missing(tmp_path):
+    maps_dir = tmp_path / "output" / "maps"
+    tables_dir = tmp_path / "output" / "tables"
+    qc_dir = tmp_path / "output" / "qc"
+    maps_dir.mkdir(parents=True)
+    tables_dir.mkdir()
+    qc_dir.mkdir()
+    for metric in dwi_fast_dti.DTI_METRICS:
+        (maps_dir / f"{metric}.nii.gz").write_bytes(b"real")
+        (maps_dir / f"{metric}_mni152.nii.gz").write_bytes(b"real")
+        (tables_dir / f"{metric}_regions.tsv").write_text("region\tmean\nr\t1\n", encoding="utf-8")
+    (tables_dir / "combined_region_dti.tsv").write_text("region\tfa\tmd\tad\trd\nr\t1\t2\t3\t4\n", encoding="utf-8")
+    (qc_dir / "qc_report.tsv").write_text(
+        "metric\tstatus\n"
+        "gpu_eddy\tcompleted\n"
+        "tensor\tcompleted\n"
+        "mni_registration\tcompleted\n"
+        "atlas_statistics\tcompleted\n",
+        encoding="utf-8",
+    )
+    (qc_dir / "dwi_fast_gpu_dti_provenance.json").write_text(
+        json.dumps({"runtime_sec": 99, "max_runtime_sec": 2100}),
+        encoding="utf-8",
+    )
+
+    summary_path = dwi_fast_dti.write_result_summary_from_outputs(
+        tmp_path / "output",
+        task_id=12,
+        workflow_type="dwi_fast_gpu_dti",
+    )
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+
+    assert (qc_dir / "index.html").exists()
+    assert (qc_dir / "figures" / "dwi_fast_gpu_dti_native_qc.svg").exists()
+    native_report = summary["outputs"]["reports"][0]
+    native_figure = summary["outputs"]["figures"][0]
+    assert native_report["relative_path"] == "qc/index.html"
+    assert native_report["artifact_role"] == "container_native_html_report"
+    assert native_report["native_artifact"] is True
+    assert native_figure["relative_path"] == "qc/figures/dwi_fast_gpu_dti_native_qc.svg"
+    assert native_figure["artifact_role"] == "container_native_qc_figure"
+    assert native_figure["native_artifact"] is True
+    assert native_figure["official_source_ids"] == [
+        "docs/rag/vendor/fsl_official_fast_dti_tools.md",
+        "docs/rag/vendor/mrtrix3_official_dti_toolbox.md",
+    ]
+
+
 def test_write_real_result_summary_fails_when_real_outputs_missing(tmp_path):
     try:
         dwi_fast_dti.write_result_summary_from_outputs(tmp_path, task_id=7, workflow_type="dwi_fast_gpu_dti")

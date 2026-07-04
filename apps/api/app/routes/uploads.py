@@ -40,3 +40,13 @@ def ingest_dataset(project_id: int, upload_session_id: int, archive: UploadFile 
 @router.get("/projects/{project_id}/datasets/{upload_session_id}/inventory")
 def get_inventory(project_id: int, upload_session_id: int):
     return upload_service.get_inventory(project_id, upload_session_id)
+
+
+@router.get("/projects/{project_id}/files")
+def list_project_files(project_id: int):
+    return upload_service.list_project_files(project_id)
+
+
+@router.delete("/projects/{project_id}/files/{file_id}")
+def delete_project_file(project_id: int, file_id: int):
+    return upload_service.delete_project_file(project_id, file_id)

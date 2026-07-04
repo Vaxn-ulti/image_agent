@@ -184,6 +184,10 @@ def _normalize_report_item(out_dir: Path, item: dict[str, Any]) -> dict[str, Any
     return normalized
 
 
+def _is_downloadable_output_item(item: dict[str, Any]) -> bool:
+    return item.get("exists") is True and isinstance(item.get("size_bytes"), int) and item["size_bytes"] > 0
+
+
 def build_scientific_report_summary(
     out_dir: Path,
     task_id: int,
@@ -235,7 +239,11 @@ def build_result_summary(
     name = summary_name or f"{modality.lower()}_result_summary.json"
     summary_path = summary_dir / name
     normalized_outputs = {
-        section: [_normalize_output_item(out_dir, item) for item in items]
+        section: [
+            normalized
+            for item in items
+            if _is_downloadable_output_item(normalized := _normalize_output_item(out_dir, item))
+        ]
         for section, items in outputs.items()
     }
     for items in normalized_outputs.values():

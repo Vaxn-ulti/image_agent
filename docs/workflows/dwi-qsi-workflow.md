@@ -38,14 +38,14 @@ Use symlinks where possible.
 
 Image:
 
-`pennlinc/qsiprep:latest`
+`pennlinc/qsiprep:26.0.0`
 
 This image exposes `eddy_cuda11.0` at `/app/.pixi/envs/qsiprep/bin/eddy_cuda11.0`. Detection uses `eddy_cuda*` glob to accept versioned binaries (`eddy_cuda11.0`, `eddy_cuda10.2`, etc.), not only an exact `eddy_cuda` name. If the image changes and no `eddy_cuda*` exists, validation fails fast with a clear requirement for a CUDA-enabled QSIPrep/FSL image.
 
 Command pattern:
 
 ```text
-docker run --rm --gpus all -v {bids}:/data:ro -v {output}:/output -v {work}:/work -v {fs_license}:/opt/freesurfer/license.txt:ro -v {eddy_cuda_config}:/eddy_cuda_config.json:ro pennlinc/qsiprep:latest /data /output participant --eddy-config /eddy_cuda_config.json
+docker run --rm --gpus all -v {bids}:/data:ro -v {output}:/output -v {work}:/work -v {fs_license}:/opt/freesurfer/license.txt:ro -v {eddy_cuda_config}:/eddy_cuda_config.json:ro pennlinc/qsiprep:26.0.0 /data /output participant --eddy-config /eddy_cuda_config.json
 ```
 
 `eddy_cuda_config.json` must contain `use_cuda: true`, `num_threads >= 4`, `dont_peas: true`, `cnr_maps: true`, and `niter: 3` by default. `dont_peas` skips post-eddy alignment QC estimation — this does not affect core eddy correction quality and is a well-established production speed optimization. This QSIPrep version requires `cnr_maps: true` during config validation. QSIPrep source forces CUDA eddy to 1 thread regardless of the config `num_threads`; the config floor serves as a safety backstop should a future image change this behavior. The backend must infer `is_shelled` from `.bval`: standard few-shell DWI can use `is_shelled: true`, but q-space/many-b-value data must use `is_shelled: false` so eddy does not receive `--data_is_shelled`.
@@ -69,12 +69,12 @@ Do not run QSIRecon directly on raw DWI.
 
 Image:
 
-`pennlinc/qsirecon:latest`
+`pennlinc/qsirecon:26.0.0`
 
 Command pattern:
 
 ```text
-docker run --rm --gpus all -v {qsiprep_output}:/data:ro -v {output}:/output -v {work}:/work -v {fs_license}:/opt/freesurfer/license.txt:ro pennlinc/qsirecon:latest /data /output participant --recon-spec {recon_spec}
+docker run --rm --gpus all -v {qsiprep_output}:/data:ro -v {output}:/output -v {work}:/work -v {fs_license}:/opt/freesurfer/license.txt:ro pennlinc/qsirecon:26.0.0 /data /output participant --recon-spec {recon_spec}
 ```
 
 `--recon-spec` is the required flag that selects which reconstruction pipeline(s) to run. Official built-in values include QSIRecon workflow names; official custom workflows are YAML specs. Validation must fail fast when `--recon-spec` is missing, undefined, or references an unsupported pipeline.
@@ -169,7 +169,7 @@ Task 65 (129 bvals, ~87 MB DWI) ran eddy_cuda10.2 for >3.5 hours at 100% CPU wit
 
 ## 2026-05-15 Controller Finding: CUDA Eddy Forced Single-Thread
 
-- `pennlinc/qsiprep:latest` source (`qsiprep/workflows/dwi/fsl.py`) forces CUDA eddy to 1 thread:
+- `pennlinc/qsiprep:26.0.0` source (`qsiprep/workflows/dwi/fsl.py`) forces CUDA eddy to 1 thread:
   ```python
   if eddy_args['use_cuda']:
       eddy_args['num_threads'] = 1

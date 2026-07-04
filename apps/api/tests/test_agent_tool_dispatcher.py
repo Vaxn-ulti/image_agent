@@ -83,6 +83,54 @@ def test_dispatcher_executes_read_tools_with_rows_fn_and_remote_log_context(tmp_
     assert "remote fmriprep progress" in result["result"]["remote_logs"][0]["tail"]
 
 
+def test_dispatcher_observe_repair_task_is_read_only_and_suggests_confirmed_repair(tmp_path):
+    projects_root = tmp_path / "projects"
+    log_dir = projects_root / "7" / "derivatives" / "118" / "output" / "logs"
+    main_log = tmp_path / "task.log"
+    main_log.write_text("container exited with missing license\n", encoding="utf-8")
+    log_dir.mkdir(parents=True)
+    (log_dir / "fmriprep.log").write_text("license file missing\n", encoding="utf-8")
+
+    def fake_rows(sql, params=()):
+        if "FROM tasks" in sql:
+            return [
+                {
+                    "id": 118,
+                    "project_id": 7,
+                    "series_id": 11,
+                    "workflow_type": "bold_fmriprep_xcpd_report",
+                    "status": "failed",
+                    "progress": 80,
+                    "error_message": "container exited",
+                    "log_path": str(main_log),
+                    "created_at": "now",
+                    "started_at": "now",
+                    "finished_at": "later",
+                }
+            ]
+        return []
+
+    result = dispatch_tool_call(
+        "observe_repair_task",
+        {"task_id": 118},
+        rows_fn=fake_rows,
+        projects_root=projects_root,
+    )
+
+    assert result["status"] == "ok"
+    assert result["production_task_created"] is False
+    assert result["result"]["policy"] == "read_only_observe_repair"
+    assert result["result"]["auto_rerun_allowed"] is False
+    assert result["result"]["task_creation_allowed"] is False
+    assert result["result"]["forbidden_actions"] == ["auto_retry", "auto_rerun", "task_creation"]
+    assert result["result"]["requires_preflight_before_retry"] is True
+    assert result["result"]["requires_human_confirmation_before_retry"] is True
+    assert result["result"]["task"]["status"] == "failed"
+    assert result["result"]["repair_suggestions"]
+    assert "rerun" not in json.dumps(result["result"]["repair_suggestions"]).lower()
+    assert str(main_log) not in json.dumps(result["result"])
+
+
 def test_dispatcher_lists_and_selects_data_candidates_with_rows_fn(tmp_path):
     project_root = tmp_path / "projects"
     storage = project_root / "7" / "raw" / "bold.nii.gz"

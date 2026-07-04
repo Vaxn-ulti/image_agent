@@ -14,11 +14,11 @@ import {
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Button } from '../components/ui/Button';
 import { api } from '../lib/api';
+import { formatAgentText } from '../lib/agentText';
 import { queryKeys } from '../lib/query';
 import { safeEvidenceJson } from '../lib/redaction';
-import type { AgentConfirmation, AgentRunResponse, RagStatus } from '../lib/types';
+import type { AgentConfirmation, AgentRunResponse, RagStatus, WorkflowCatalogItem } from '../lib/types';
 
 type Message = {
   role: 'user' | 'agent';
@@ -50,13 +50,23 @@ function formatEngine(engine: string | null | undefined) {
 }
 
 function agentMessageContent(data: AgentRunResponse) {
+  let message: string;
   if (data.status === 'task_created' && data.task?.id) {
-    return `Task ${data.task.id} created for ${data.task.workflow_type}.`;
+    message = `Task ${data.task.id} created for ${data.task.workflow_type}.`;
+  } else if (data.status === 'confirmation_required' && data.confirmation?.workflow_type) {
+    message = data.answer || `Approval required for ${data.confirmation.workflow_type}.`;
+  } else {
+    message = data.answer || data.message || 'Agent run completed.';
   }
-  if (data.status === 'confirmation_required' && data.confirmation?.workflow_type) {
-    return data.answer || `Approval required for ${data.confirmation.workflow_type}.`;
+  return formatAgentText(message);
+}
+
+function workflowMetadataFromConfirmation(confirmation: AgentConfirmation | undefined): Partial<WorkflowCatalogItem> {
+  const value = confirmation?.workflow_metadata;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
   }
-  return data.answer || data.message || 'Agent run completed.';
+  return value as Partial<WorkflowCatalogItem>;
 }
 
 export function AgentPage() {
@@ -64,6 +74,7 @@ export function AgentPage() {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
+  const [selectedAgentRunId, setSelectedAgentRunId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const { data: status } = useQuery({
@@ -78,6 +89,18 @@ export function AgentPage() {
     enabled: Boolean(projectId),
     queryFn: () => api.listSeries(projectId),
     queryKey: queryKeys.series(projectId),
+    retry: false,
+  });
+  const agentRunHistoryQuery = useQuery({
+    enabled: Boolean(projectId),
+    queryFn: () => api.listProjectAgentRuns(projectId),
+    queryKey: queryKeys.agentRuns(projectId),
+    retry: false,
+  });
+  const selectedAgentRunQuery = useQuery({
+    enabled: Boolean(selectedAgentRunId),
+    queryFn: () => api.getAgentRun(selectedAgentRunId!),
+    queryKey: selectedAgentRunId ? queryKeys.agentRun(selectedAgentRunId) : ['agent-run', 'none'],
     retry: false,
   });
 
@@ -97,6 +120,7 @@ export function AgentPage() {
           queryClient.invalidateQueries({ queryKey: queryKeys.task(data.task.id) });
         }
       }
+      queryClient.invalidateQueries({ queryKey: queryKeys.agentRuns(projectId) });
     },
     onError: (error) => {
       const message = error instanceof Error ? error.message : 'Agent run failed.';
@@ -116,6 +140,7 @@ export function AgentPage() {
       };
       setMessages(prev => [...prev, agentMsg]);
       queryClient.invalidateQueries({ queryKey: queryKeys.tasks(projectId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.agentRuns(projectId) });
       if (data.status === 'task_created' && data.task?.id) {
         queryClient.invalidateQueries({ queryKey: queryKeys.task(data.task.id) });
       }
@@ -147,10 +172,14 @@ export function AgentPage() {
     setQuery('');
   }
 
-  const lastResponse = [...messages].reverse().find(m => m.response)?.response;
+  const latestMessage = messages[messages.length - 1];
+  const lastResponse = latestMessage?.role === 'agent' ? latestMessage.response : undefined;
   const pendingConfirmation = lastResponse?.status === 'confirmation_required' && lastResponse.thread_id && lastResponse.confirmation
     ? { confirmation: lastResponse.confirmation, threadId: lastResponse.thread_id }
     : null;
+  const pendingConfirmationMetadata = workflowMetadataFromConfirmation(pendingConfirmation?.confirmation);
+  const pendingConfirmationWorkflowType = String(pendingConfirmation?.confirmation.workflow_type || 'unknown');
+  const pendingConfirmationDisplayName = pendingConfirmationMetadata.display_name || pendingConfirmationWorkflowType;
   const semanticIndexReady = Boolean(status?.index?.semantic_index);
   const llamaIndexAvailable = dependencyAvailable(status, 'llama_index');
   const groundingLabel = semanticIndexReady ? 'Grounding Enabled' : 'Grounding Fallback';
@@ -167,6 +196,8 @@ export function AgentPage() {
   const sdkRoute = gatewayDiagnostics?.sdk_method || 'Not reported';
   const toolLoop = gatewayDiagnostics?.model_tool_loop || 'Not reported';
   const projectErrorMessage = projectQuery.error instanceof Error ? projectQuery.error.message : 'Project data could not be loaded.';
+  const agentRunHistory = agentRunHistoryQuery.data?.agent_runs || [];
+  const selectedAgentRun = selectedAgentRunQuery.data;
 
   if (projectQuery.isError) {
     return (
@@ -252,7 +283,7 @@ export function AgentPage() {
                   }`}>
                     {m.role === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
                   </div>
-                  <div className={`p-4 rounded-2xl text-sm leading-relaxed ${
+                  <div className={`p-4 rounded-2xl text-sm leading-relaxed whitespace-pre-line ${
                     m.role === 'user'
                       ? 'bg-[#065F46] text-white rounded-tr-none'
                       : 'bg-gray-50 text-gray-800 border border-gray-100 rounded-tl-none shadow-sm'
@@ -353,6 +384,103 @@ export function AgentPage() {
             </div>
           </div>
 
+          {/* Run History */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div className="flex items-center gap-2 font-bold text-gray-800 text-xs uppercase tracking-wider">
+                <History className="w-4 h-4 text-[#065F46]" /> Run History
+              </div>
+              <span className="text-[10px] font-semibold text-gray-400">{agentRunHistory.length} runs</span>
+            </div>
+            <div className="max-h-48 overflow-y-auto p-4 space-y-3">
+              {agentRunHistoryQuery.isLoading ? (
+                <div className="text-[10px] text-gray-400">Loading run history...</div>
+              ) : agentRunHistory.length > 0 ? (
+                agentRunHistory.slice(0, 5).map((run) => (
+                  <button
+                    key={run.agent_run_id}
+                    type="button"
+                    aria-label={`Inspect ${run.agent_run_id}`}
+                    onClick={() => setSelectedAgentRunId(run.agent_run_id)}
+                    className={`w-full rounded-lg border p-3 text-left text-xs transition-colors ${
+                      selectedAgentRunId === run.agent_run_id
+                        ? 'border-[#065F46]/40 bg-[#ECFDF5]'
+                        : 'border-gray-100 bg-gray-50 hover:bg-gray-100'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate font-mono text-[10px] font-semibold text-gray-700">{run.agent_run_id}</span>
+                      <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-gray-600 ring-1 ring-gray-200">{run.status || 'unknown'}</span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] text-gray-500">
+                      {run.request_type && <span>{run.request_type}</span>}
+                      {run.selected_skill && <span>{run.selected_skill}</span>}
+                      {typeof run.event_count === 'number' && <span>{run.event_count} events</span>}
+                    </div>
+                  </button>
+                ))
+              ) : (
+                <div className="text-[10px] text-gray-400">No Agent runs recorded for this project yet.</div>
+              )}
+            </div>
+          </div>
+
+          {selectedAgentRunId ? (
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                <div className="flex items-center gap-2 font-bold text-gray-800 text-xs uppercase tracking-wider">
+                  <History className="w-4 h-4 text-[#065F46]" /> Run Detail
+                </div>
+                <span className="text-[10px] font-semibold text-gray-400">{selectedAgentRun?.status || 'loading'}</span>
+              </div>
+              <div className="max-h-56 overflow-y-auto p-4 space-y-3 text-xs">
+                {selectedAgentRunQuery.isLoading ? (
+                  <div className="text-[10px] text-gray-400">Loading selected run...</div>
+                ) : selectedAgentRun ? (
+                  <>
+                    <div>
+                      <div className="truncate font-mono text-[10px] font-semibold text-gray-700">{selectedAgentRun.agent_run_id}</div>
+                      <div className="mt-1 flex flex-wrap gap-1.5 text-[10px] text-gray-500">
+                        {selectedAgentRun.request_type && <span>{selectedAgentRun.request_type}</span>}
+                        {selectedAgentRun.selected_skill && <span>{selectedAgentRun.selected_skill}</span>}
+                        {selectedAgentRun.model_gateway_access && <span>{selectedAgentRun.model_gateway_access}</span>}
+                      </div>
+                    </div>
+                    {selectedAgentRun.answer ? (
+                      <div className="whitespace-pre-line rounded-lg border border-gray-100 bg-gray-50 p-3 text-[11px] leading-5 text-gray-600">
+                        {formatAgentText(selectedAgentRun.answer)}
+                      </div>
+                    ) : null}
+                    <div>
+                      <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Events</div>
+                      {selectedAgentRun.events?.length ? (
+                        <div className="space-y-2">
+                          {selectedAgentRun.events.slice(0, 5).map((event, index) => (
+                            <div key={`${event.event_type || event.type || 'event'}-${index}`} className="rounded-lg border border-gray-100 bg-gray-50 p-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-semibold text-gray-700">{event.event_type || event.type || 'agent.event'}</span>
+                                {event.status && <span className="text-[10px] text-gray-500">{event.status}</span>}
+                              </div>
+                              {Object.keys(event.metadata || {}).length ? (
+                                <pre className="mt-2 max-h-24 overflow-auto rounded bg-white p-2 text-[10px] text-gray-500">
+                                  {safeEvidenceJson(event.metadata)}
+                                </pre>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-[10px] text-gray-400">No run events recorded.</div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-[10px] text-gray-400">Selected run detail unavailable.</div>
+                )}
+              </div>
+            </div>
+          ) : null}
+
           {/* Evidence Review */}
           <div className="flex-1 bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
             <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2 font-bold text-gray-800 text-xs uppercase tracking-wider">
@@ -379,9 +507,15 @@ export function AgentPage() {
                     <div>
                       <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Approval required</div>
                       <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                        <div>
+                          <div className="font-semibold leading-5 text-amber-950">{pendingConfirmationDisplayName}</div>
+                          {pendingConfirmationMetadata.capability_summary ? (
+                            <div className="mt-1 leading-5 text-amber-800">{pendingConfirmationMetadata.capability_summary}</div>
+                          ) : null}
+                        </div>
                         <div className="grid grid-cols-2 gap-2">
-                          <span className="text-amber-700">Workflow</span>
-                          <span className="truncate font-semibold text-right">{String(pendingConfirmation.confirmation.workflow_type || 'unknown')}</span>
+                          <span className="text-amber-700">Stable workflow ID</span>
+                          <span className="truncate font-semibold text-right">{pendingConfirmationWorkflowType}</span>
                           <span className="text-amber-700">Series</span>
                           <span className="font-semibold text-right">#{String(pendingConfirmation.confirmation.series_id || 'unknown')}</span>
                         </div>
@@ -415,6 +549,32 @@ export function AgentPage() {
                             Cancel
                           </button>
                         </div>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {(lastResponse.events || []).length > 0 ? (
+                    <div>
+                      <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Agent Progress</div>
+                      <div className="space-y-2">
+                        {(lastResponse.events || []).slice(0, 8).map((event, index) => {
+                          const eventName = event.event_type || event.type || 'agent.event';
+                          return (
+                            <div key={`${eventName}-${index}`} className="rounded-lg border border-gray-100 bg-gray-50 p-2 text-[11px]">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="truncate font-semibold text-gray-700">{eventName}</span>
+                                {event.status ? (
+                                  <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-gray-500 ring-1 ring-gray-200">
+                                    {event.status}
+                                  </span>
+                                ) : null}
+                              </div>
+                              {event.message ? (
+                                <div className="mt-1 leading-5 text-gray-500">{event.message}</div>
+                              ) : null}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   ) : null}

@@ -143,7 +143,7 @@ b751b0e92d21  pennlinc/qsiprep:latest  Up 6 hours   happy_curie
 
 These used CPU eddy and were intentionally stopped. They can be safely cleaned up before retrying DWI:
 ```bash
-echo "yyf123" | sudo -S docker stop elastic_morse elegant_jackson heuristic_lewin happy_curie
+echo "<sudo-password>" | sudo -S docker stop elastic_morse elegant_jackson heuristic_lewin happy_curie
 ```
 
 ### 5.4 Backend Services

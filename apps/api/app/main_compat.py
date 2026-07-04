@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from types import ModuleType
 
@@ -9,7 +10,7 @@ from app.agent.model_gateway import ModelGateway, ModelGatewayError
 from app.agent.rag_index import build_local_rag_index, local_rag_index_status
 from app.agent.rag_orchestration import build_rag_response
 from app.agent.tools import read_project_context
-from app.core.config import PROJECTS_ROOT
+from app.core.config import PROJECTS_ROOT, ROOT
 from app.db.queries import fetch_rows
 from app.imaging.series_records import parse_series_row
 from app.scripts.verify_scientific_reports import check_output as check_scientific_report_output
@@ -50,6 +51,7 @@ except ImportError:
 
 
 def install_main_compat_exports(module: ModuleType) -> None:
+    repo_root = Path(os.environ.get("IMAGE_AGENT_RELEASE_ROOT") or ROOT)
     exports = {
         "AgentResumeConfirmation": AgentResumeConfirmation,
         "AgentResumeRequest": AgentResumeRequest,
@@ -65,7 +67,7 @@ def install_main_compat_exports(module: ModuleType) -> None:
         "ModelGatewayError": ModelGatewayError,
         "PROJECTS_ROOT": PROJECTS_ROOT,
         "ProjectCreate": ProjectCreate,
-        "REPO_ROOT": Path(__file__).resolve().parents[3],
+        "REPO_ROOT": repo_root,
         "RagQueryRequest": RagQueryRequest,
         "RunRequest": RunRequest,
         "ScientificReportVerifyRequest": ScientificReportVerifyRequest,

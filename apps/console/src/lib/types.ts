@@ -37,6 +37,7 @@ export type Task = {
   project_id: number;
   series_id?: number | null;
   workflow_type: string;
+  workflow_metadata?: WorkflowCatalogItem | null;
   status: TaskStatus;
   progress: number;
   error_message?: string | null;
@@ -46,6 +47,38 @@ export type Task = {
   finished_at?: string | null;
 };
 
+export type ObserveRepairResponse = {
+  status: 'ok' | 'not_found' | string;
+  policy: 'read_only_observe_repair' | string;
+  task_id: number;
+  task?: Task | null;
+  events?: Array<Record<string, unknown>>;
+  remote_logs?: Array<{ name?: string; source_stage?: string; size_bytes?: number; tail?: string }>;
+  main_log?: { tail?: string };
+  result_summary_status?: string;
+  repair_suggestions?: Array<{ kind?: string; message?: string }>;
+  auto_rerun_allowed?: boolean;
+  production_task_created?: boolean;
+  requires_preflight_before_retry?: boolean;
+  requires_human_confirmation_before_retry?: boolean;
+};
+
+export type TaskEventsResponse = {
+  status: 'ok' | string;
+  task?: Task | null;
+  task_id?: number;
+  events?: Array<{
+    name?: string;
+    progress?: number;
+    source_stage?: string;
+    status?: string;
+    type?: string;
+    [key: string]: unknown;
+  }>;
+  remote_logs?: Array<{ name?: string; source_stage?: string; size_bytes?: number; tail?: string }>;
+  main_log?: { tail?: string };
+};
+
 export type WorkflowCatalogItem = {
   type?: string;
   workflow_type?: string;
@@ -53,6 +86,7 @@ export type WorkflowCatalogItem = {
   requires_confirmation?: boolean;
   runtime_workflow_type?: string | null;
   api_runnable?: boolean;
+  agent_selectable?: boolean;
   agent_selection_aliases?: string[];
   capability_summary?: string;
   display_name?: string;
@@ -72,6 +106,7 @@ export type WorkflowCatalogResponse = {
 
 export type WorkflowEligibilityItem = {
   workflow_type: string;
+  workflow_metadata?: WorkflowCatalogItem | null;
   blocking_reasons?: string[];
   reason?: string;
 };
@@ -100,12 +135,24 @@ export type FastLaunchReadiness = {
     };
     model_gateway_target?: {
       actual_model?: string;
+      actual_model_gateway_access?: string;
       actual_provider_profile?: string;
+      actual_trust_env_proxy?: boolean;
       actual_wire_api?: string;
       expected_model?: string;
+      expected_model_gateway_access?: string;
       expected_provider_profile?: string;
+      expected_trust_env_proxy?: boolean;
       expected_wire_api?: string;
+      direct_transport?: boolean;
       model_tool_loop?: boolean;
+      status?: 'passed' | 'blocked' | 'missing' | string;
+    };
+    production_deployment?: {
+      blocking_reasons?: string[];
+      readiness_status?: 'ready' | 'blocked' | string;
+      ready?: boolean;
+      required?: boolean;
       status?: 'passed' | 'blocked' | 'missing' | string;
     };
     strict_remote_acceptance?: {
@@ -113,6 +160,27 @@ export type FastLaunchReadiness = {
       reason?: string;
       required_evidence?: string;
       status?: 'passed' | 'blocked' | 'missing' | string;
+    };
+    rag_elasticsearch_hybrid?: {
+      blocking_codes?: string[];
+      configured?: boolean;
+      dense_vector_dims?: number | null;
+      dense_vector_field?: string | null;
+      embedding_endpoint_configured?: boolean;
+      embedding_model?: string | null;
+      embedding_production_ready?: boolean;
+      embedding_provider?: string | null;
+      embedding_transport?: string | null;
+      engine?: string | null;
+      fusion?: string | null;
+      index?: string | null;
+      indexed_chunk_count?: number | null;
+      lexical_retriever?: string | null;
+      mode?: string | null;
+      official_rrf_source_present?: boolean;
+      persisted?: boolean;
+      status?: 'passed' | 'blocked' | 'missing' | string;
+      vector_retriever?: string | null;
     };
     upload_workflow_result_contract?: {
       result_endpoints?: string[];
@@ -143,6 +211,7 @@ export type DeploymentResponse = {
   };
   production_readiness?: {
     blocking_reasons?: string[];
+    deployment_scope?: 'public_internet' | 'private_network' | string;
     ready?: boolean;
     required?: boolean;
     status?: 'ready' | 'blocked' | string;
@@ -155,6 +224,13 @@ export type Inventory = {
   bids_dataset_root?: string;
   inventory_status?: TaskStatus;
   error_message?: string;
+  attachments?: Array<{
+    file_id?: number;
+    original_name?: string;
+    file_type?: string;
+    size?: number;
+    sha256?: string;
+  }>;
   dicom?: {
     failures?: Array<Record<string, unknown>>;
     found_files?: number;
@@ -166,6 +242,36 @@ export type Inventory = {
   };
   recognized_unsupported_sequences?: Array<{ sequence: string; count: number; message: string }>;
   series?: Array<Record<string, unknown>>;
+};
+
+export type ProjectFile = {
+  id: number;
+  project_id?: number;
+  original_name: string;
+  file_type?: string;
+  size?: number;
+  sha256?: string;
+  created_at?: string;
+  json_summary?: Record<string, unknown>;
+  linked_series?: Array<{
+    id: number;
+    modality?: string;
+    sequence_label?: string;
+    format?: string;
+    confidence?: number;
+    status?: string;
+  }>;
+};
+
+export type DeleteProjectFileResponse = {
+  deleted_file?: {
+    id?: number;
+    original_name?: string;
+    file_type?: string;
+  };
+  deleted_series_ids?: number[];
+  updated_series_ids?: number[];
+  status: 'deleted' | string;
 };
 
 export type OutputItem = {
@@ -194,6 +300,9 @@ export type OutputItem = {
 export type ArtifactManifest = {
   contract_version: 'artifact_manifest_v1' | string;
   task_id: number;
+  workflow_type?: string;
+  runtime_workflow_type?: string | null;
+  workflow_metadata?: WorkflowCatalogItem | null;
   artifacts: OutputItem[];
   omitted_artifacts?: Array<Record<string, unknown>>;
 };
@@ -203,6 +312,7 @@ export type ResultSummary = {
   project_id: number;
   task_id: number;
   workflow_type: string;
+  workflow_metadata?: WorkflowCatalogItem | null;
   modality: 'T1' | 'BOLD' | 'DWI' | string;
   spaces: string[];
   feature_groups: string[];
@@ -238,12 +348,68 @@ export type AgentConfirmation = {
 
 export type AgentRunResponse = RagResponse & {
   agent_run_id?: string;
+  action_lane?: string | null;
+  backend_tool?: string | null;
   confirmation?: AgentConfirmation;
+  contract_version?: 'agent_run.v1' | string;
+  events?: Array<{
+    event_type?: string;
+    type?: string;
+    status?: string;
+    message?: string;
+    task_id?: number;
+    workflow_type?: string;
+    runtime_workflow_type?: string;
+    metadata?: Record<string, unknown>;
+    created_at?: string;
+  }>;
   message?: string;
+  model_gateway_access?: string | null;
+  production_task_created?: boolean | null;
+  project_id?: number | null;
+  request_type?: string | null;
+  retrieved_sources?: Array<Record<string, unknown>>;
+  runtime_workflow_type?: string | null;
+  safe_metadata?: Record<string, unknown>;
   selected_skill?: string;
+  series_id?: number | null;
   status?: string;
   task?: Task;
+  task_id?: number | null;
   thread_id?: string;
+  tool_input?: Record<string, unknown> | null;
+  workflow_type?: string | null;
+};
+
+export type AgentRunHistoryItem = {
+  agent_run_id: string;
+  created_at?: string;
+  event_count?: number;
+  finished_at?: string | null;
+  model_gateway_access?: string;
+  project_id?: number;
+  request_type?: 'run' | 'resume' | string;
+  safe_metadata?: Record<string, unknown>;
+  selected_skill?: string | null;
+  status?: string;
+  thread_id?: string | null;
+  updated_at?: string;
+};
+
+export type ProjectAgentRunHistoryResponse = {
+  agent_runs: AgentRunHistoryItem[];
+  contract_version: 'project_agent_run_history.v1' | string;
+  project_id: number;
+};
+
+export type AgentRunLookupResponse = AgentRunResponse & {
+  contract_version?: 'agent_run_lookup.v1' | string;
+  created_at?: string;
+  error_message?: string | null;
+  finished_at?: string | null;
+  message_sha256?: string;
+  request_type?: string;
+  updated_at?: string;
 };
 
 export type RagStatus = {

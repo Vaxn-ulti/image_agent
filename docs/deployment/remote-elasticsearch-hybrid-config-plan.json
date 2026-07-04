@@ -1,0 +1,222 @@
+{
+  "env_template": [
+    "IMAGE_AGENT_ELASTICSEARCH_URL=<operator-managed-elasticsearch-url>",
+    "IMAGE_AGENT_ELASTICSEARCH_INDEX=image_agent_rag_codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z",
+    "IMAGE_AGENT_ELASTICSEARCH_API_KEY=<optional-operator-managed-secret>",
+    "IMAGE_AGENT_RAG_EMBEDDING_PROVIDER=openai_compatible",
+    "IMAGE_AGENT_RAG_EMBEDDING_MODEL=<operator-approved-embedding-model>",
+    "IMAGE_AGENT_RAG_EMBEDDING_BASE_URL=<operator-managed-openai-compatible-embedding-endpoint>",
+    "IMAGE_AGENT_RAG_EMBEDDING_API_KEY=<operator-managed-secret-or-reused-model-key>"
+  ],
+  "missing_env_keys": [
+    "IMAGE_AGENT_ELASTICSEARCH_URL",
+    "IMAGE_AGENT_ELASTICSEARCH_INDEX",
+    "IMAGE_AGENT_ELASTICSEARCH_API_KEY",
+    "IMAGE_AGENT_RAG_EMBEDDING_PROVIDER",
+    "IMAGE_AGENT_RAG_EMBEDDING_MODEL",
+    "IMAGE_AGENT_RAG_EMBEDDING_BASE_URL",
+    "IMAGE_AGENT_RAG_EMBEDDING_API_KEY"
+  ],
+  "observed_blockers": [
+    "remote_port_9200_not_listening",
+    "docker_socket_requires_operator_or_sudo",
+    "live_rag_engine_not_elasticsearch_hybrid",
+    "missing_required_elasticsearch_or_embedding_env"
+  ],
+  "official_runtime_sources": [
+    "https://www.elastic.co/docs/deploy-manage/deploy/self-managed/install-elasticsearch-with-docker",
+    "https://www.elastic.co/docs/deploy-manage/deploy/self-managed/install-elasticsearch-docker-basic",
+    "https://www.elastic.co/docs/deploy-manage/deploy/self-managed/install-elasticsearch-docker-prod",
+    "https://www.elastic.co/docs/api/doc/elasticsearch/operation/operation-license-post-start-trial",
+    "https://huggingface.co/docs/text-embeddings-inference/en/quick_tour",
+    "https://huggingface.co/docs/text-embeddings-inference/en/basic_tutorials/using_cli"
+  ],
+  "plan_id": "remote_elasticsearch_hybrid_config_plan_v1",
+  "release_overlay": "/home/yyf/project/image_agent_releases/codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z",
+  "remote_env_file": "/home/yyf/project/image_agent/.env",
+  "remote_host": "yyf@10.2.32.14",
+  "safety_invariants": [
+    "do_not_print_secret_values",
+    "do_not_commit_env_files",
+    "do_not_mutate_live_tree_before_release_overlay_restart",
+    "do_not_run_strict_smoke_before_es_prerequisite_passes"
+  ],
+  "schema_version": 1,
+  "status": "operator_configuration_required",
+  "steps": [
+    {
+      "command": "ssh yyf@10.2.32.14 'cd /home/yyf/project/image_agent_releases/codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z/apps/api && PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python -m app.scripts.probe_runtime_environment --json > /tmp/image_agent_runtime_probe_codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z.json && grep -q schema_version /tmp/image_agent_runtime_probe_codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z.json && grep -q runtime_discovered /tmp/image_agent_runtime_probe_codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z.json && grep -q runtime_discovery /tmp/image_agent_runtime_probe_codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z.json && echo runtime_probe.schema_version=1 && echo runtime_probe.machine_binding=runtime_discovered && echo elasticsearch.runtime_discovery_present=true && echo secret_values_not_printed=true'",
+      "expected_success": [
+        "runtime_probe.schema_version=1",
+        "runtime_probe.machine_binding=runtime_discovered",
+        "elasticsearch.runtime_discovery_present=true",
+        "secret_values_not_printed=true"
+      ],
+      "id": "inspect_local_elasticsearch_runtime",
+      "mutates_remote_state": false,
+      "purpose": "Discover whether this deployment server already has a local Elasticsearch container or endpoint candidate before applying secrets.",
+      "requires_operator_authorization": false,
+      "runs_on": "remote"
+    },
+    {
+      "command": "ssh yyf@10.2.32.14 'cd /home/yyf/project/image_agent_releases/codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z/apps/api && IMAGE_AGENT_ROOT=/home/yyf/project/image_agent PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/setup_local_embedding_service.py --env-file /home/yyf/project/image_agent/.env --embedding-image ghcr.io/huggingface/text-embeddings-inference:cpu-1.9 --network-mode host --model-id sentence-transformers/all-MiniLM-L6-v2 --served-model-name image-agent-minilm-l6-v2 --embedding-base-url http://127.0.0.1:18081/v1 --apply --output-json /tmp/image_agent_local_embedding_setup_codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z.json && grep -q local_embedding_service_setup_v1 /tmp/image_agent_local_embedding_setup_codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z.json && grep -q ghcr.io/huggingface/text-embeddings-inference:cpu-1.9 /tmp/image_agent_local_embedding_setup_codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z.json && grep -q embedding_endpoint_bound_to_loopback /tmp/image_agent_local_embedding_setup_codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z.json && grep -q embedding_endpoint_probe_passed /tmp/image_agent_local_embedding_setup_codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z.json && grep -q no_latest_tags /tmp/image_agent_local_embedding_setup_codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z.json && grep -q env_key_status /tmp/image_agent_local_embedding_setup_codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z.json && grep -q secret_values_not_logged /tmp/image_agent_local_embedding_setup_codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z.json && grep -q secret_values_not_printed /tmp/image_agent_local_embedding_setup_codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z.json && echo local_embedding_service_setup_v1 && echo embedding_image=ghcr.io/huggingface/text-embeddings-inference:cpu-1.9 && echo embedding_model_id=sentence-transformers/all-MiniLM-L6-v2 && echo embedding_served_model=image-agent-minilm-l6-v2 && echo embedding_network_mode=host && echo status=completed && echo embedding_container_name=image-agent-embeddings && echo embedding_base_url=http://127.0.0.1:18081/v1 && echo embedding_endpoint_bound_to_loopback=true && echo embedding_endpoint_probe_passed=true && echo no_latest_tags=true && echo IMAGE_AGENT_RAG_EMBEDDING_PROVIDER=set && echo IMAGE_AGENT_RAG_EMBEDDING_MODEL=set && echo IMAGE_AGENT_RAG_EMBEDDING_BASE_URL=set && echo secret_values_not_logged=true && echo secret_values_not_printed=true'",
+      "expected_success": [
+        "local_embedding_service_setup_v1",
+        "embedding_image=ghcr.io/huggingface/text-embeddings-inference:cpu-1.9",
+        "embedding_model_id=sentence-transformers/all-MiniLM-L6-v2",
+        "embedding_served_model=image-agent-minilm-l6-v2",
+        "embedding_network_mode=host",
+        "status=completed",
+        "embedding_container_name=image-agent-embeddings",
+        "embedding_base_url=http://127.0.0.1:18081/v1",
+        "embedding_endpoint_bound_to_loopback=true",
+        "embedding_endpoint_probe_passed=true",
+        "no_latest_tags=true",
+        "IMAGE_AGENT_RAG_EMBEDDING_PROVIDER=set",
+        "IMAGE_AGENT_RAG_EMBEDDING_MODEL=set",
+        "IMAGE_AGENT_RAG_EMBEDDING_BASE_URL=set",
+        "secret_values_not_logged=true",
+        "secret_values_not_printed=true"
+      ],
+      "id": "setup_local_embedding_service_from_git_script",
+      "mutates_remote_state": true,
+      "purpose": "Start a deployment-local OpenAI-compatible embedding endpoint when no external production embedding endpoint is available. The Git script uses a pinned Hugging Face TEI image, binds only to loopback, and writes only non-secret RAG embedding endpoint metadata to the deployment env.",
+      "requires_operator_authorization": true,
+      "runs_on": "remote"
+    },
+    {
+      "command": "ssh yyf@10.2.32.14 'cd /home/yyf/project/image_agent_releases/codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z/apps/api && set -a; . /home/yyf/project/image_agent/.env; set +a; IMAGE_AGENT_ROOT=/home/yyf/project/image_agent PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/setup_elasticsearch_hybrid_rag.py --env-file /home/yyf/project/image_agent/.env --index-name image_agent_rag_codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z --embedding-provider openai_compatible --derive-embedding-from-env --embedding-api-key-env IMAGE_AGENT_RAG_EMBEDDING_API_KEY --apply --output-json /tmp/image_agent_elasticsearch_hybrid_setup_codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z.json && grep -q elasticsearch_hybrid_rag_setup_v1 /tmp/image_agent_elasticsearch_hybrid_setup_codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z.json && grep -q docker.elastic.co/elasticsearch/elasticsearch:9.4.2 /tmp/image_agent_elasticsearch_hybrid_setup_codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z.json && grep -q start_elasticsearch_trial_license /tmp/image_agent_elasticsearch_hybrid_setup_codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z.json && grep -q elastic_endpoint_bound_to_loopback /tmp/image_agent_elasticsearch_hybrid_setup_codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z.json && grep -q no_latest_tags /tmp/image_agent_elasticsearch_hybrid_setup_codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z.json && grep -q env_key_status /tmp/image_agent_elasticsearch_hybrid_setup_codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z.json && grep -q secret_values_not_logged /tmp/image_agent_elasticsearch_hybrid_setup_codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z.json && grep -q secret_values_not_printed /tmp/image_agent_elasticsearch_hybrid_setup_codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z.json && grep -q secret /tmp/image_agent_elasticsearch_hybrid_setup_codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z.json && echo elasticsearch_hybrid_rag_setup_v1 && echo elasticsearch_image=docker.elastic.co/elasticsearch/elasticsearch:9.4.2 && echo elasticsearch_trial_license_status=started_or_already_started && echo status=completed && echo elastic_container_name=image-agent-es && echo elastic_endpoint_bound_to_loopback=true && echo no_latest_tags=true && echo IMAGE_AGENT_ELASTICSEARCH_URL=set && echo IMAGE_AGENT_RAG_EMBEDDING_PROVIDER=set && echo IMAGE_AGENT_RAG_EMBEDDING_MODEL=set && echo IMAGE_AGENT_RAG_EMBEDDING_BASE_URL=set && echo secret_values_not_logged=true && echo secret_values_not_printed=true'",
+      "expected_success": [
+        "elasticsearch_hybrid_rag_setup_v1",
+        "elasticsearch_image=docker.elastic.co/elasticsearch/elasticsearch:9.4.2",
+        "elasticsearch_trial_license_status=started_or_already_started",
+        "status=completed",
+        "elastic_container_name=image-agent-es",
+        "elastic_endpoint_bound_to_loopback=true",
+        "no_latest_tags=true",
+        "IMAGE_AGENT_ELASTICSEARCH_URL=set",
+        "IMAGE_AGENT_RAG_EMBEDDING_PROVIDER=set",
+        "IMAGE_AGENT_RAG_EMBEDDING_MODEL=set",
+        "IMAGE_AGENT_RAG_EMBEDDING_BASE_URL=set",
+        "secret_values_not_logged=true",
+        "secret_values_not_printed=true"
+      ],
+      "id": "setup_elasticsearch_hybrid_rag_from_git_script",
+      "mutates_remote_state": true,
+      "purpose": "Configure Elasticsearch hybrid RAG by running the repository bootstrap script on the deployment server. The script probes local Docker, pulls the pinned Elasticsearch image when missing, starts a loopback-bound container when missing, writes deployment-local env values, rebuilds curated RAG into Elasticsearch, and runs the prerequisite verifier.",
+      "requires_operator_authorization": true,
+      "runs_on": "remote"
+    },
+    {
+      "command": "ssh yyf@10.2.32.14 \"python3 - <<'PY'\nfrom pathlib import Path\nkeys = ['IMAGE_AGENT_ELASTICSEARCH_URL', 'IMAGE_AGENT_ELASTICSEARCH_INDEX', 'IMAGE_AGENT_ELASTICSEARCH_API_KEY', 'IMAGE_AGENT_RAG_EMBEDDING_PROVIDER', 'IMAGE_AGENT_RAG_EMBEDDING_MODEL', 'IMAGE_AGENT_RAG_EMBEDDING_BASE_URL', 'IMAGE_AGENT_RAG_EMBEDDING_API_KEY']\nenv = Path('/home/yyf/project/image_agent/.env')\nseen = {}\nif env.exists():\n    for raw in env.read_text(errors='replace').splitlines():\n        line = raw.strip()\n        if not line or line.startswith('#') or '=' not in line:\n            continue\n        key, value = line.split('=', 1)\n        if key in keys:\n            seen[key] = bool(value.strip())\nfor key in keys:\n    print(f'{key}=' + ('set' if seen.get(key) else 'missing'))\nprint('secret_values_not_printed=true')\nPY\"",
+      "expected_success": [
+        "IMAGE_AGENT_ELASTICSEARCH_URL=set",
+        "IMAGE_AGENT_RAG_EMBEDDING_PROVIDER=set",
+        "IMAGE_AGENT_RAG_EMBEDDING_MODEL=set",
+        "IMAGE_AGENT_RAG_EMBEDDING_BASE_URL=set",
+        "secret_values_not_printed=true"
+      ],
+      "id": "verify_secret_env_presence_without_values",
+      "mutates_remote_state": false,
+      "purpose": "Confirm only key presence after operator configuration; never print URL or key values.",
+      "requires_operator_authorization": false,
+      "runs_on": "remote"
+    },
+    {
+      "command": "ssh yyf@10.2.32.14 'cd /home/yyf/project/image_agent_releases/codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z && export IMAGE_AGENT_ROOT=/home/yyf/project/image_agent && export IMAGE_AGENT_RELEASE_ROOT=/home/yyf/project/image_agent_releases/codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z && export IMAGE_AGENT_ENV_FILE=/home/yyf/project/image_agent/.env && export IMAGE_AGENT_SHARED_VENV_BIN=/home/yyf/project/image_agent/apps/api/.venv/bin && bash tools/restart_remote_image_agent_api.sh /home/yyf/project/image_agent/.env'",
+      "expected_success": [
+        "restart_preflight:ok",
+        "health.app=image_agent",
+        "release_overlay_serving=true"
+      ],
+      "id": "restart_api_from_release_overlay",
+      "mutates_remote_state": true,
+      "purpose": "Restart the API from the verified release overlay after config is present and restart drain gates pass.",
+      "requires_operator_authorization": true,
+      "runs_on": "remote"
+    },
+    {
+      "command": "ssh yyf@10.2.32.14 'cd /home/yyf/project/image_agent_releases/codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z/apps/api && set -a; . /home/yyf/project/image_agent/.env; set +a; IMAGE_AGENT_ROOT=/home/yyf/project/image_agent IMAGE_AGENT_AUTO_PULL_MISSING_WORKFLOW_IMAGES=1 PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python -m app.scripts.probe_runtime_environment --json --prepare-missing-images > /tmp/image_agent_runtime_probe_codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z.json && grep -q runtime_preparation /tmp/image_agent_runtime_probe_codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z.json && grep -q IMAGE_AGENT_AUTO_PULL_MISSING_WORKFLOW_IMAGES /tmp/image_agent_runtime_probe_codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z.json && grep -q auto_pull_missing_images /tmp/image_agent_runtime_probe_codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z.json && echo workflow_images.prepare_missing_images_setting=IMAGE_AGENT_AUTO_PULL_MISSING_WORKFLOW_IMAGES && echo runtime_preparation.auto_pull_missing_images=true && echo workflow_images_prepare_attempted_evidence=true && echo secret_values_not_printed=true'",
+      "expected_success": [
+        "workflow_images.prepare_missing_images_setting=IMAGE_AGENT_AUTO_PULL_MISSING_WORKFLOW_IMAGES",
+        "runtime_preparation.auto_pull_missing_images=true",
+        "workflow_images_prepare_attempted_evidence=true",
+        "secret_values_not_printed=true"
+      ],
+      "id": "operator_prepare_fixed_workflow_images_if_missing",
+      "mutates_remote_state": true,
+      "purpose": "Prepare fixed-workflow Docker images on the deployment server by pulling missing pinned images only through an explicit operator-authorized runtime preparation setting.",
+      "requires_operator_authorization": true,
+      "runs_on": "remote"
+    },
+    {
+      "command": "ssh yyf@10.2.32.14 'cd /home/yyf/project/image_agent_releases/codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z/apps/api && PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python - <<\"PY\"\nfrom pathlib import Path\nfrom app.agent.status import rebuild_rag_index, rag_status\ndef is_true(value):\n    return value is True or str(value).lower() == \"true\"\ndef positive_int(value):\n    try:\n        return int(value) > 0\n    except (TypeError, ValueError):\n        return False\ndef require(condition, marker):\n    if not condition:\n        raise SystemExit(marker)\nroot = Path(\"/home/yyf/project/image_agent\")\nrebuild = rebuild_rag_index(root).get(\"hybrid_search\") or {}\nstatus = rag_status(root).get(\"index\", {}).get(\"hybrid_search\") or {}\nrequire(is_true(rebuild.get(\"configured\")) and is_true(status.get(\"configured\")), \"configured=true\")\nrequire(rebuild.get(\"mode\") == \"connected\" and status.get(\"mode\") == \"connected\", \"mode=connected\")\nrequire(is_true(rebuild.get(\"persisted\")) and is_true(status.get(\"persisted\")), \"persisted=true\")\nrequire(positive_int(rebuild.get(\"indexed_chunk_count\")) and positive_int(status.get(\"indexed_chunk_count\")), \"indexed_chunk_count>0\")\nrequire(is_true(rebuild.get(\"embedding_production_ready\")) and is_true(status.get(\"embedding_production_ready\")), \"embedding_production_ready=true\")\nrequire(not rebuild.get(\"error\") and not status.get(\"error\"), \"error absent\")\nrequire(not rebuild.get(\"embedding_error\") and not status.get(\"embedding_error\"), \"embedding_error absent\")\nprint(\"configured=true\")\nprint(\"mode=connected\")\nprint(\"persisted=true\")\nprint(\"indexed_chunk_count>0\")\nprint(\"embedding_production_ready=true\")\nprint(\"error absent\")\nprint(\"embedding_error absent\")\nPY'",
+      "expected_success": [
+        "configured=true",
+        "mode=connected",
+        "persisted=true",
+        "indexed_chunk_count>0",
+        "embedding_production_ready=true",
+        "error absent",
+        "embedding_error absent"
+      ],
+      "id": "rebuild_elasticsearch_hybrid_rag",
+      "mutates_remote_state": true,
+      "purpose": "Rebuild curated RAG chunks into the configured Elasticsearch index using production embeddings.",
+      "requires_operator_authorization": true,
+      "runs_on": "remote"
+    },
+    {
+      "command": "ssh yyf@10.2.32.14 'cd /home/yyf/project/image_agent_releases/codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z/apps/api && PYTHONPATH=. /home/yyf/project/image_agent/apps/api/.venv/bin/python scripts/verify_elasticsearch_hybrid_prerequisites.py --env-file /home/yyf/project/image_agent/.env --rag-status-url http://127.0.0.1:8000/agent/rag/status --runtime-probe-json /tmp/image_agent_runtime_probe_codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z.json'",
+      "expected_success": [
+        "status=passed",
+        "rag_status_engine=elasticsearch_hybrid",
+        "rag_status_hybrid_engine=elasticsearch",
+        "rag_status_hybrid_configured=true",
+        "mode=connected",
+        "persisted=true",
+        "indexed_chunk_count>0",
+        "rag_status_hybrid_lexical_retriever=standard",
+        "rag_status_hybrid_vector_retriever=knn",
+        "rag_status_hybrid_dense_vector_field=embedding",
+        "rag_status_hybrid_dense_vector_dims>0",
+        "rag_status_hybrid_fusion=rrf",
+        "rag_status_hybrid_official_rrf_source_present=true",
+        "rag_status_hybrid_error_absent=true",
+        "rag_status_hybrid_embedding_error_absent=true",
+        "rag_status_hybrid_embedding_provider production configured",
+        "rag_status_hybrid_embedding_model present",
+        "rag_status_hybrid_embedding_transport production-safe",
+        "rag_status_hybrid_embedding_endpoint_configured=true",
+        "rag_status_hybrid_embedding_production_ready=true",
+        "dense_vector_field=embedding",
+        "fusion=rrf",
+        "embedding_production_ready=true",
+        "runtime_probe_machine_binding=runtime_discovered",
+        "runtime_probe_workflow_tool_execution=deployment_server_local",
+        "runtime_probe_docker_runtime_host=api_server",
+        "runtime_probe_elasticsearch_discovery_status=available",
+        "runtime_probe_elasticsearch_container_running=true",
+        "runtime_probe_elasticsearch_candidate_endpoint loopback",
+        "secrets_redacted=true"
+      ],
+      "id": "verify_elasticsearch_hybrid_prerequisites",
+      "mutates_remote_state": false,
+      "purpose": "Run the read-only ES hybrid prerequisite gate before strict smoke.",
+      "requires_operator_authorization": false,
+      "runs_on": "remote"
+    },
+    {
+      "command": "cd /home/yyf/project/image_agent_releases/codex-es-hybrid-runtime-probe-rootfix10-20260619T154306Z && PYTHONPATH=apps/api /home/yyf/project/image_agent/apps/api/.venv/bin/python apps/api/scripts/verify_release_gate_command_plan.py docs/deployment/remote-release-gate-command-plan.json && echo remote-release-gate-command-plan.json status=passed && echo strict_smoke_next_step_unblocked=true",
+      "expected_success": [
+        "remote-release-gate-command-plan.json status=passed",
+        "strict_smoke_next_step_unblocked=true"
+      ],
+      "id": "continue_release_gate_strict_smoke",
+      "mutates_remote_state": false,
+      "purpose": "Continue with the existing machine-checkable release gate only after the ES prerequisite passes.",
+      "requires_operator_authorization": false,
+      "runs_on": "remote"
+    }
+  ]
+}

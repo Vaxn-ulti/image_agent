@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import sqlite3
 from pathlib import Path
 from urllib.parse import quote
 
@@ -36,11 +37,132 @@ def _good_remote_smoke_response(url: str):
     return None
 
 
-def _good_workflow_eligibility():
+def test_smoke_remote_agent_runtime_toolchain_help_points_to_runtime_probe(capsys):
+    smoke = _load_smoke_module()
+
+    with pytest.raises(SystemExit):
+        smoke.main(["--help"])
+
+    help_text = capsys.readouterr().out
+    assert "--require-runtime-toolchain" in help_text
+    assert "/runtime/probe" in help_text
+    assert "/runtime/containers" not in help_text
+
+
+def _elasticsearch_hybrid_search(**overrides):
+    payload = {
+        "engine": "elasticsearch",
+        "configured": True,
+        "persisted": True,
+        "mode": "connected",
+        "index": "image_agent_rag",
+        "indexed_chunk_count": 260,
+        "lexical_retriever": "standard",
+        "vector_retriever": "knn",
+        "dense_vector_field": "embedding",
+        "dense_vector_dims": 1536,
+        "embedding_provider": "openai",
+        "embedding_model": "text-embedding-3-small",
+        "embedding_transport": "openai_compatible_http",
+        "embedding_endpoint_configured": True,
+        "embedding_production_ready": True,
+        "fusion": "rrf",
+        "official_sources": [
+            "https://www.elastic.co/docs/reference/elasticsearch/rest-apis/reciprocal-rank-fusion",
+        ],
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _ready_fast_launch_readiness(**hybrid_overrides):
+    hybrid = _elasticsearch_hybrid_search(**hybrid_overrides)
+    return {
+        "blocking_reasons": [],
+        "ready": True,
+        "status": "ready",
+        "checks": {
+            "model_gateway_target": {"status": "passed"},
+            "production_deployment": {
+                "status": "passed",
+                "required": True,
+                "ready": True,
+                "readiness_status": "ready",
+                "blocking_reasons": [],
+            },
+            "agent_task_boundary": {"status": "passed"},
+            "upload_workflow_result_contract": {"status": "passed"},
+            "strict_remote_acceptance": {"status": "passed"},
+            "rag_elasticsearch_hybrid": {
+                "status": "passed",
+                "engine": hybrid["engine"],
+                "configured": hybrid["configured"],
+                "persisted": hybrid["persisted"],
+                "mode": hybrid["mode"],
+                "index": hybrid["index"],
+                "indexed_chunk_count": hybrid["indexed_chunk_count"],
+                "dense_vector_dims": hybrid["dense_vector_dims"],
+                "embedding_provider": hybrid["embedding_provider"],
+                "embedding_model": hybrid["embedding_model"],
+                "embedding_transport": hybrid["embedding_transport"],
+                "embedding_endpoint_configured": hybrid["embedding_endpoint_configured"],
+                "embedding_production_ready": hybrid["embedding_production_ready"],
+                "fusion": hybrid["fusion"],
+            },
+        },
+    }
+
+
+def _pre_acceptance_fast_launch_readiness(**hybrid_overrides):
+    readiness = _ready_fast_launch_readiness(**hybrid_overrides)
+    readiness["ready"] = False
+    readiness["status"] = "blocked"
+    readiness["blocking_reasons"] = [
+        "Strict remote acceptance evidence has not been verified for the upload-agent-workflow-result chain."
+    ]
+    readiness["checks"]["strict_remote_acceptance"] = {"status": "missing"}
+    return readiness
+
+
+def _runtime_toolchain_response(**overrides):
+    payload = {
+        "docker_requires_sudo": True,
+        "fs_license_path": "C:/Users/A/private/license.txt",
+        "fs_license_exists": True,
+        "qsirecon_profile": "dki",
+        "qsirecon_recon_spec": "dipy_dki",
+        "workflows": {
+            "t1_deepprep": {
+                "image": "pbfslab/deepprep:25.1.0",
+                "available": True,
+                "detail_tail": "docker inspect /var/run/docker.sock private detail",
+            },
+            "dwi_fast_gpu_dti": {
+                "image": "pennlinc/qsiprep:26.0.0",
+                "available": True,
+                "detail_tail": "nvidia-smi ok with secret-ish host path C:/Users/A/private",
+            },
+        },
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _good_workflow_eligibility(workflow_type="t1_deepprep_anat_report"):
+    workflow_metadata = _workflow_metadata(workflow_type)
     return {
         "policy_version": "workflow_eligibility_v1",
         "production_task_created": False,
-        "runnable_workflows": [{"workflow_type": "t1_deepprep_anat_report"}],
+        "primary_recommendation": {
+            "workflow_type": workflow_type,
+            "workflow_metadata": workflow_metadata,
+        },
+        "runnable_workflows": [
+            {
+                "workflow_type": workflow_type,
+                "workflow_metadata": workflow_metadata,
+            }
+        ],
         "blocked_workflows": [],
     }
 
@@ -224,6 +346,31 @@ def _artifact_manifest_with_result_summary_output(
     }
 
 
+_DEFAULT_WORKFLOW_METADATA = object()
+
+
+def _workflow_metadata(workflow_type="dwi_fast_gpu_dti", runtime_workflow_type=None):
+    runtime = runtime_workflow_type or ("t1_deepprep" if workflow_type == "t1_deepprep_anat_report" else workflow_type)
+    return {
+        "workflow_type": workflow_type,
+        "runtime_workflow_type": runtime,
+        "display_name": f"{workflow_type} processing, QC, and report",
+        "workflow_family": workflow_type.split("_", 1)[0],
+        "workflow_role": "complete_processing",
+        "capability_summary": "Runs the selected workflow, QC, and report outputs.",
+        "pipeline_stages": [
+            {"name": "Input preparation", "purpose": "Prepare supported imaging input."},
+            {"name": "Pipeline execution", "purpose": "Generate derivatives and QC outputs."},
+        ],
+        "primary_outputs": ["pipeline derivatives", "result-summary.json"],
+        "qc_outputs": ["container-native QC artifacts"],
+        "report_outputs": ["HTML scientific report"],
+        "limitations": ["Requires supported input and configured containers"],
+        "agent_selectable": True,
+        "is_report_only": False,
+    }
+
+
 def _task_result_summary(
     *,
     task_id=114,
@@ -232,8 +379,9 @@ def _task_result_summary(
     output_path="reports/index.html",
     output_content_type="text/html",
     outputs=None,
+    workflow_metadata=_DEFAULT_WORKFLOW_METADATA,
 ):
-    return {
+    summary = {
         "contract_version": "1.0",
         "task_id": task_id,
         "workflow_type": workflow_type,
@@ -253,6 +401,11 @@ def _task_result_summary(
         },
         "provenance": {"generated_from": "workflow"},
     }
+    if workflow_metadata is _DEFAULT_WORKFLOW_METADATA:
+        summary["workflow_metadata"] = _workflow_metadata(workflow_type)
+    elif workflow_metadata is not None:
+        summary["workflow_metadata"] = workflow_metadata
+    return summary
 
 
 def test_smoke_remote_agent_skips_model_run_when_gateway_unconfigured(capsys, monkeypatch):
@@ -284,6 +437,57 @@ def test_smoke_remote_agent_skips_model_run_when_gateway_unconfigured(capsys, mo
     assert all(not call[1].endswith("/agent/runs") for call in calls)
 
 
+def test_smoke_remote_agent_can_skip_generic_agent_run_while_requiring_model_status(capsys, monkeypatch):
+    smoke = _load_smoke_module()
+    calls = []
+
+    def fake_request(method, url, payload=None):
+        calls.append((method, url, payload))
+        if url.endswith("/health"):
+            return {"status": "ok", "app": "image_agent", "version": "0.2.0"}
+        if url.endswith("/agent/model/status"):
+            return {
+                "configured": True,
+                "provider": "rawchat",
+                "provider_profile": "rawchat",
+                "wire_api": "responses",
+                "trust_env_proxy": False,
+                "capabilities": {"model_tool_loop": True},
+                "deployment": {"model_gateway_access": "direct"},
+            }
+        if url.endswith("/agent/rag/status"):
+            return {"index": {"document_count": 70, "chunk_count": 250, "engine": "llama_index"}}
+        if url.endswith("/agent/rag/rebuild"):
+            return {"document_count": 70, "chunk_count": 250, "semantic_index": True}
+        if url.endswith("/agent/runs"):
+            raise AssertionError("generic agent run should be skipped")
+        raise AssertionError(f"unexpected request: {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    smoke.main(
+        [
+            "--api-base",
+            "http://api.local",
+            "--require-model",
+            "--expected-model-wire-api",
+            "responses",
+            "--expected-model-provider-profile",
+            "rawchat",
+            "--require-model-tool-loop",
+            "--skip-agent-run-smoke",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["model_status"]["configured"] is True
+    assert payload["model_smoke_status"] == "skipped_by_option"
+    assert payload["agent_run_status"] == "skipped"
+    assert payload["agent_model_gateway_status"] == "skipped"
+    assert payload["smoke_gate"]["skip_agent_run_smoke"] is True
+    assert all(not call[1].endswith("/agent/runs") for call in calls)
+
+
 def test_smoke_remote_agent_preserves_safe_gateway_diagnostics(monkeypatch, capsys):
     smoke = _load_smoke_module()
 
@@ -307,7 +511,24 @@ def test_smoke_remote_agent_preserves_safe_gateway_diagnostics(monkeypatch, caps
         if url.endswith("/agent/rag/status"):
             return {"index": {"document_count": 72, "chunk_count": 260, "engine": "llama_index"}}
         if url.endswith("/agent/rag/rebuild"):
-            return {"document_count": 72, "chunk_count": 260, "semantic_index": True}
+            return {
+                "document_count": 72,
+                "chunk_count": 260,
+                "semantic_index": True,
+                "hybrid_search": {
+                    "engine": "elasticsearch",
+                    "persisted": True,
+                    "mode": "connected",
+                    "indexed_chunk_count": 260,
+                    "lexical_retriever": "standard",
+                    "vector_retriever": "knn",
+                    "dense_vector_field": "embedding",
+                    "fusion": "rrf",
+                    "official_sources": [
+                        "https://www.elastic.co/docs/reference/elasticsearch/rest-apis/reciprocal-rank-fusion",
+                    ],
+                },
+            }
         raise AssertionError(f"unexpected request: {url}")
 
     monkeypatch.setattr(smoke, "_request", fake_request)
@@ -324,6 +545,27 @@ def test_smoke_remote_agent_preserves_safe_gateway_diagnostics(monkeypatch, caps
     }
     assert "secret-value" not in json.dumps(payload)
     assert "authorization" not in json.dumps(payload)
+
+
+def test_smoke_remote_agent_model_status_omits_runtime_capacity_fields():
+    smoke = _load_smoke_module()
+
+    safe = smoke._safe_model_status(
+        {
+            "configured": True,
+            "provider_profile": "rawchat",
+            "model": "gpt-5.5",
+            "wire_api": "responses",
+            "context_window": 1000000,
+            "auto_compact_token_limit": 900000,
+            "capabilities": {"model_tool_loop": True},
+        }
+    )
+
+    assert safe["configured"] is True
+    assert safe["provider_profile"] == "rawchat"
+    assert "context_window" not in safe
+    assert "auto_compact_token_limit" not in safe
 
 
 def test_smoke_remote_agent_checks_health_identity_before_smoke(monkeypatch):
@@ -436,7 +678,8 @@ def test_smoke_remote_agent_records_production_readiness_when_required(capsys, m
                     "ready": True,
                     "required": True,
                     "status": "ready",
-                }
+                },
+                "fast_launch_readiness": _pre_acceptance_fast_launch_readiness(),
             }
         if url.endswith("/agent/model/status"):
             return {"configured": False, "provider": "OpenAI"}
@@ -458,6 +701,31 @@ def test_smoke_remote_agent_records_production_readiness_when_required(capsys, m
         "ready": True,
         "required": True,
         "status": "ready",
+    }
+    assert payload["fast_launch_readiness_status"] == "pre_acceptance"
+    assert payload["fast_launch_readiness"]["checks"]["production_deployment"] == {
+        "status": "passed",
+        "required": True,
+        "ready": True,
+        "readiness_status": "ready",
+        "blocking_reasons": [],
+    }
+    assert payload["fast_launch_readiness"]["checks"]["strict_remote_acceptance"]["status"] == "missing"
+    assert payload["fast_launch_readiness"]["checks"]["rag_elasticsearch_hybrid"] == {
+        "status": "passed",
+        "engine": "elasticsearch",
+        "configured": True,
+        "persisted": True,
+        "mode": "connected",
+        "index": "image_agent_rag",
+        "indexed_chunk_count": 260,
+        "dense_vector_dims": 1536,
+        "embedding_provider": "openai",
+        "embedding_model": "text-embedding-3-small",
+        "embedding_transport": "openai_compatible_http",
+        "embedding_endpoint_configured": True,
+        "embedding_production_ready": True,
+        "fusion": "rrf",
     }
 
 
@@ -941,9 +1209,10 @@ def test_smoke_remote_agent_strict_gate_reports_successful_run(capsys, monkeypat
                 },
                 "base_url": "https://sk-test-secret@example.invalid/v1",
                 "api_key": "sk-test-secret",
+                "trust_env_proxy": False,
                 "deployment": {
                     "backend_runtime_mode": "remote",
-                    "model_gateway_access": "ssh_reverse_tunnel",
+                    "model_gateway_access": "direct",
                     "reverse_tunnel_command": "ssh -N -R 18080:127.0.0.1:8080 user@remote",
                 },
             }
@@ -998,6 +1267,7 @@ def test_smoke_remote_agent_strict_gate_reports_successful_run(capsys, monkeypat
     assert payload["model_status"]["provider_profile"] == "rawchat"
     assert payload["model_status"]["model"] == "gpt-5.5"
     assert payload["model_status"]["wire_api"] == "responses"
+    assert payload["model_status"]["trust_env_proxy"] is False
     assert payload["model_status"]["capabilities"]["model_tool_loop"] is True
     assert payload["smoke_gate"]["expected_model_wire_api"] == "responses"
     assert payload["smoke_gate"]["expected_model_provider_profile"] == "rawchat"
@@ -1007,18 +1277,65 @@ def test_smoke_remote_agent_strict_gate_reports_successful_run(capsys, monkeypat
     assert payload["model_status"]["base_url"] == "https://example.invalid/v1"
     assert payload["model_status"]["deployment"] == {
         "backend_runtime_mode": "remote",
-        "model_gateway_access": "ssh_reverse_tunnel",
+        "model_gateway_access": "direct",
     }
     assert "reverse_tunnel_command" not in json.dumps(payload["model_status"])
     assert payload["agent_run_id"] == "agent_run_123"
     assert payload["agent_run_status"] == "answered"
     assert payload["agent_model_gateway_status"] == "passed"
     assert payload["agent_model_gateway_access"] == "openai_sdk_gateway"
+    assert payload["agent_model_transport_access"] == "direct"
+    assert payload["agent_model_trust_env_proxy"] is False
     assert payload["intent"] == "answer_question"
     assert payload["agent_intent"] == "answer_question"
     assert payload["selected_skill"] == "image-agent-operator"
     assert payload["rag_vendor_pointer_integrity_status"] == "passed"
     assert calls[0][1].endswith("/health")
+
+
+def test_smoke_remote_agent_rawchat_requires_direct_model_gateway(monkeypatch):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        if url.endswith("/health"):
+            return {"status": "ok", "app": "image_agent", "version": "0.2.0"}
+        if url.endswith("/agent/model/status"):
+            return {
+                "configured": True,
+                "provider": "rawchat",
+                "provider_profile": "rawchat",
+                "model": "gpt-5.5",
+                "wire_api": "responses",
+                "trust_env_proxy": False,
+                "capabilities": {
+                    "text": True,
+                    "structured_json": True,
+                    "model_tool_loop": True,
+                },
+                "deployment": {
+                    "backend_runtime_mode": "remote",
+                    "model_gateway_access": "ssh_reverse_tunnel",
+                },
+            }
+        raise AssertionError(f"unexpected request after rawchat direct mismatch: {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(
+            [
+                "--api-base",
+                "http://api.local",
+                "--require-model",
+                "--expected-model-wire-api",
+                "responses",
+                "--expected-model-provider-profile",
+                "rawchat",
+                "--require-model-tool-loop",
+            ]
+        )
+
+    assert "rawchat model gateway access ssh_reverse_tunnel did not match direct" in str(exc.value)
 
 
 def test_smoke_remote_agent_require_project_agent_context_requires_project_id(monkeypatch):
@@ -1115,10 +1432,41 @@ def test_smoke_remote_agent_requires_agent_workflow_confirmation(capsys, monkeyp
                     "project_id": 7,
                     "series_id": 1,
                     "workflow_type": "t1_deepprep_anat_report",
+                    "workflow_metadata": {
+                        "workflow_type": "t1_deepprep_anat_report",
+                        "runtime_workflow_type": "t1_deepprep",
+                        "display_name": "T1 DeepPrep anatomical processing, QC, and report",
+                        "workflow_family": "t1",
+                        "workflow_role": "anat_processing",
+                        "capability_summary": "Runs anatomical T1 processing, QC, and report outputs.",
+                        "pipeline_stages": [
+                            {"name": "BIDS preparation", "purpose": "Prepare supported T1 input."},
+                            {"name": "DeepPrep anatomical processing", "purpose": "Generate anatomical derivatives."},
+                        ],
+                        "primary_outputs": ["anatomical derivatives", "result-summary.json"],
+                        "qc_outputs": ["DeepPrep QC artifacts"],
+                        "report_outputs": ["HTML scientific report"],
+                        "limitations": ["Requires supported T1 input"],
+                        "agent_selectable": True,
+                        "is_report_only": False,
+                    },
                 },
                 "production_task_created": False,
             }
         if url.endswith("/agent/runs/agent_thread_confirm/resume"):
+            if payload and payload.get("approved") is True and isinstance(payload.get("confirmation"), dict):
+                if payload["confirmation"].get("series_id") != 1:
+                    return {
+                        "agent_run_id": "agent_run_fingerprint_negative",
+                        "thread_id": "agent_thread_confirm",
+                        "status": "blocked",
+                        "production_task_created": False,
+                        "safe_metadata": {
+                            "confirmation_gate": "fingerprint_mismatch",
+                            "production_task_created": False,
+                            "task_created": False,
+                        },
+                    }
             return {
                 "agent_run_id": "agent_run_resume",
                 "thread_id": "agent_thread_confirm",
@@ -1132,7 +1480,8 @@ def test_smoke_remote_agent_requires_agent_workflow_confirmation(capsys, monkeyp
                     "id": 114,
                     "project_id": 7,
                     "series_id": 1,
-                    "workflow_type": "bold_fmriprep_xcpd",
+                    "workflow_type": "t1_deepprep_anat_report",
+                    "runtime_workflow_type": "t1_deepprep",
                     "status": "queued",
                 },
             }
@@ -1178,6 +1527,25 @@ def test_smoke_remote_agent_requires_agent_workflow_confirmation(capsys, monkeyp
         "project_id": 7,
         "series_id": 1,
         "workflow_type": "t1_deepprep_anat_report",
+        "runtime_workflow_type": "t1_deepprep",
+        "workflow_metadata": {
+            "workflow_type": "t1_deepprep_anat_report",
+            "runtime_workflow_type": "t1_deepprep",
+            "display_name": "T1 DeepPrep anatomical processing, QC, and report",
+            "workflow_family": "t1",
+            "workflow_role": "anat_processing",
+            "capability_summary": "Runs anatomical T1 processing, QC, and report outputs.",
+            "pipeline_stages": [
+                {"name": "BIDS preparation", "purpose": "Prepare supported T1 input."},
+                {"name": "DeepPrep anatomical processing", "purpose": "Generate anatomical derivatives."},
+            ],
+            "primary_outputs": ["anatomical derivatives", "result-summary.json"],
+            "qc_outputs": ["DeepPrep QC artifacts"],
+            "report_outputs": ["HTML scientific report"],
+            "limitations": ["Requires supported T1 input"],
+            "agent_selectable": True,
+            "is_report_only": False,
+        },
         "selected_skill": "image-agent-workflow-runner",
         "production_task_created": False,
     }
@@ -1199,13 +1567,80 @@ def test_smoke_remote_agent_requires_agent_workflow_confirmation(capsys, monkeyp
     ]
 
 
+@pytest.mark.parametrize("metadata_case", ["missing_metadata", "missing_agent_selectable", "false_agent_selectable"])
+def test_smoke_remote_agent_rejects_agent_workflow_confirmation_without_agent_selectable_metadata(
+    metadata_case,
+    monkeypatch,
+):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        base_response = _good_remote_smoke_response(url)
+        if base_response is not None:
+            return base_response
+        if url.endswith("/agent/runs") and "Prepare a workflow confirmation" in payload["message"]:
+            confirmation = {
+                "project_id": 7,
+                "series_id": 1,
+                "workflow_type": "t1_deepprep_anat_report",
+            }
+            if metadata_case != "missing_metadata":
+                workflow_metadata = _workflow_metadata("t1_deepprep_anat_report")
+                if metadata_case == "missing_agent_selectable":
+                    workflow_metadata.pop("agent_selectable", None)
+                elif metadata_case == "false_agent_selectable":
+                    workflow_metadata["agent_selectable"] = False
+                confirmation["workflow_metadata"] = workflow_metadata
+            return {
+                "agent_run_id": "agent_run_confirm",
+                "thread_id": "agent_thread_confirm",
+                "status": "confirmation_required",
+                "intent": "run_workflow",
+                "selected_skill": "image-agent-workflow-runner",
+                "project_id": 7,
+                "confirmation": confirmation,
+                "production_task_created": False,
+            }
+        if url.endswith("/projects/7/series"):
+            return [{"id": 1, "modality": "T1", "workflow_eligibility": _good_workflow_eligibility()}]
+        raise AssertionError(f"unexpected request: {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(
+            [
+                "--api-base",
+                "http://api.local",
+                "--project-id",
+                "7",
+                "--require-agent-workflow-confirmation",
+                "--launch-series-id",
+                "1",
+                "--launch-workflow-type",
+                "t1_deepprep_anat_report",
+            ]
+        )
+
+    if metadata_case == "missing_metadata":
+        assert "agent workflow confirmation failed: workflow_metadata missing" in str(exc.value)
+    else:
+        assert "agent workflow confirmation failed: workflow_metadata agent_selectable invalid" in str(exc.value)
+
+
 def test_smoke_remote_agent_requires_agent_workflow_resume(capsys, monkeypatch):
     smoke = _load_smoke_module()
     calls = []
+    confirmation_request_count = 0
     confirmation = {
         "project_id": 7,
         "series_id": 1,
         "workflow_type": "t1_deepprep_anat_report",
+        "workflow_metadata": _workflow_metadata("t1_deepprep_anat_report"),
+    }
+    tampered_confirmation = {
+        **confirmation,
+        "series_id": 999,
     }
 
     def fake_request(method, url, payload=None):
@@ -1223,15 +1658,30 @@ def test_smoke_remote_agent_requires_agent_workflow_resume(capsys, monkeypatch):
         if url.endswith("/agent/rag/rebuild"):
             return {"document_count": 70, "chunk_count": 250, "semantic_index": True}
         if url.endswith("/agent/runs") and "Prepare a workflow confirmation" in payload["message"]:
+            nonlocal confirmation_request_count
+            confirmation_request_count += 1
+            thread_id = "agent_thread_confirm" if confirmation_request_count == 1 else "agent_thread_negative"
             return {
                 "agent_run_id": "agent_run_confirm",
-                "thread_id": "agent_thread_confirm",
+                "thread_id": thread_id,
                 "status": "confirmation_required",
                 "intent": "run_workflow",
                 "selected_skill": "image-agent-workflow-runner",
                 "project_id": 7,
                 "confirmation": confirmation,
                 "production_task_created": False,
+            }
+        if url.endswith("/agent/runs/agent_thread_negative/resume"):
+            return {
+                "agent_run_id": "agent_run_tampered",
+                "thread_id": "agent_thread_negative",
+                "status": "blocked",
+                "intent": "run_workflow",
+                "selected_skill": "image-agent-workflow-runner",
+                "project_id": 7,
+                "production_task_created": False,
+                "safe_metadata": {"confirmation_gate": "fingerprint_mismatch"},
+                "events": [{"type": "agent.confirmation_mismatch", "message": "Payload did not match."}],
             }
         if url.endswith("/agent/runs/agent_thread_confirm/resume"):
             return {
@@ -1248,6 +1698,7 @@ def test_smoke_remote_agent_requires_agent_workflow_resume(capsys, monkeypatch):
                     "project_id": 7,
                     "series_id": 1,
                     "workflow_type": "t1_deepprep_anat_report",
+                    "runtime_workflow_type": "t1_deepprep",
                     "status": "queued",
                 },
             }
@@ -1276,6 +1727,7 @@ def test_smoke_remote_agent_requires_agent_workflow_resume(capsys, monkeypatch):
             "7",
             "--require-agent-workflow-confirmation",
             "--require-agent-workflow-resume",
+            "--require-agent-workflow-fingerprint-negative",
             "--launch-series-id",
             "1",
             "--launch-workflow-type",
@@ -1285,6 +1737,16 @@ def test_smoke_remote_agent_requires_agent_workflow_resume(capsys, monkeypatch):
 
     payload = json.loads(capsys.readouterr().out)
     assert payload["smoke_gate"]["require_agent_workflow_resume"] is True
+    assert payload["smoke_gate"]["require_agent_workflow_fingerprint_negative"] is True
+    assert payload["agent_workflow_fingerprint_negative_status"] == "passed"
+    assert payload["agent_workflow_fingerprint_negative"] == {
+        "agent_run_id": "agent_run_tampered",
+        "thread_id": "agent_thread_negative",
+        "status": "blocked",
+        "production_task_created": False,
+        "confirmation_gate": "fingerprint_mismatch",
+        "task_created": False,
+    }
     assert payload["agent_workflow_resume_status"] == "passed"
     assert payload["agent_workflow_resume"] == {
         "agent_run_id": "agent_run_resume",
@@ -1293,16 +1755,114 @@ def test_smoke_remote_agent_requires_agent_workflow_resume(capsys, monkeypatch):
         "project_id": 7,
         "series_id": 1,
         "workflow_type": "t1_deepprep_anat_report",
+        "runtime_workflow_type": "t1_deepprep",
         "task_id": 114,
         "initial_status": "queued",
         "production_task_created": True,
         "confirmation_gate": "fingerprint_verified",
     }
-    assert (
-        "POST",
-        "http://api.local/agent/runs/agent_thread_confirm/resume",
-        {"approved": True, "confirmation": confirmation},
-    ) in calls
+    resume_calls = [
+        call
+        for call in calls
+        if call[0] == "POST" and call[1].startswith("http://api.local/agent/runs/agent_thread_")
+    ]
+    assert resume_calls == [
+        (
+            "POST",
+            "http://api.local/agent/runs/agent_thread_negative/resume",
+            {"approved": True, "confirmation": tampered_confirmation},
+        ),
+        (
+            "POST",
+            "http://api.local/agent/runs/agent_thread_confirm/resume",
+            {"approved": True, "confirmation": confirmation},
+        ),
+    ]
+
+
+def test_smoke_remote_agent_requires_agent_workflow_resume_rejects_missing_runtime_workflow_type(monkeypatch):
+    smoke = _load_smoke_module()
+    confirmation = {
+        "project_id": 7,
+        "series_id": 1,
+        "workflow_type": "t1_deepprep_anat_report",
+        "workflow_metadata": _workflow_metadata("t1_deepprep_anat_report"),
+    }
+
+    def fake_request(method, url, payload=None):
+        if url.endswith("/health"):
+            return {"status": "ok", "app": "image_agent", "version": "0.2.0"}
+        if url.endswith("/agent/model/status"):
+            return {"configured": True, "provider": "OpenAI"}
+        if url.endswith("/agent/rag/status"):
+            return {
+                "index": {"document_count": 70, "chunk_count": 250, "engine": "llama_index"},
+                "vendor_raw_sources": _complete_vendor_raw_sources(),
+                "vendor_pointer_integrity": _complete_vendor_pointer_integrity(),
+            }
+        if url.endswith("/agent/rag/rebuild"):
+            return {"document_count": 70, "chunk_count": 250, "semantic_index": True}
+        if url.endswith("/agent/runs") and "Prepare a workflow confirmation" in payload["message"]:
+            return {
+                "agent_run_id": "agent_run_confirm",
+                "thread_id": "agent_thread_confirm",
+                "status": "confirmation_required",
+                "intent": "run_workflow",
+                "selected_skill": "image-agent-workflow-runner",
+                "project_id": 7,
+                "confirmation": confirmation,
+                "production_task_created": False,
+            }
+        if url.endswith("/agent/runs"):
+            return {
+                "agent_run_id": "agent_run_789",
+                "status": "answered",
+                "intent": "answer_question",
+                "selected_skill": "image-agent-operator",
+                "model_gateway_access": "openai_sdk_gateway",
+                "safe_metadata": {},
+                "project_id": 7,
+            }
+        if url.endswith("/agent/runs/agent_thread_confirm/resume"):
+            return {
+                "agent_run_id": "agent_run_resume",
+                "thread_id": "agent_thread_confirm",
+                "status": "task_created",
+                "intent": "run_workflow",
+                "selected_skill": "image-agent-workflow-runner",
+                "project_id": 7,
+                "production_task_created": True,
+                "safe_metadata": {"confirmation_gate": "fingerprint_verified"},
+                "task": {
+                    "id": 114,
+                    "project_id": 7,
+                    "series_id": 1,
+                    "workflow_type": "t1_deepprep_anat_report",
+                    "status": "queued",
+                },
+            }
+        raise AssertionError(f"unexpected request: {method} {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(
+            [
+                "--api-base",
+                "http://api.local",
+                "--require-model",
+                "--project-id",
+                "7",
+                "--require-agent-workflow-confirmation",
+                "--require-agent-workflow-resume",
+                "--launch-series-id",
+                "1",
+                "--launch-workflow-type",
+                "t1_deepprep_anat_report",
+            ]
+        )
+
+    assert "agent workflow resume failed: runtime_workflow_type missing" in str(exc.value)
 
 
 def test_smoke_remote_agent_require_project_agent_context_rejects_unscoped_agent_run(monkeypatch):
@@ -1372,10 +1932,7 @@ def test_smoke_remote_agent_require_real_evidence_ids_reports_supplied_ids(capsy
                 {
                     "id": 1,
                     "modality": "BOLD",
-                    "workflow_eligibility": {
-                        **_good_workflow_eligibility(),
-                        "runnable_workflows": [{"workflow_type": "bold_fmriprep_xcpd"}],
-                    },
+                    "workflow_eligibility": _good_workflow_eligibility("bold_fmriprep_xcpd"),
                 }
             ]
         if url.endswith("/projects/7/datasets/22/inventory"):
@@ -1388,10 +1945,7 @@ def test_smoke_remote_agent_require_real_evidence_ids_reports_supplied_ids(capsy
                         {
                             "series_id": 1,
                             "modality": "BOLD",
-                            "workflow_eligibility": {
-                                **_good_workflow_eligibility(),
-                                "runnable_workflows": [{"workflow_type": "bold_fmriprep_xcpd"}],
-                            },
+                            "workflow_eligibility": _good_workflow_eligibility("bold_fmriprep_xcpd"),
                         }
                     ],
                 },
@@ -1454,6 +2008,13 @@ def test_smoke_remote_agent_require_completed_task_rejects_running_task(monkeypa
         base_response = _good_remote_smoke_response(url)
         if base_response is not None:
             return base_response
+        if url.endswith("/projects/7/series"):
+            return [
+                {
+                    "id": 1,
+                    "workflow_eligibility": _good_workflow_eligibility("t1_deepprep_anat_report"),
+                }
+            ]
         if url.endswith("/tasks/114"):
             return {
                 "id": 114,
@@ -1479,12 +2040,20 @@ def test_smoke_remote_agent_require_completed_task_records_safe_task_status(caps
         base_response = _good_remote_smoke_response(url)
         if base_response is not None:
             return base_response
+        if url.endswith("/projects/7/series"):
+            return [
+                {
+                    "id": 1,
+                    "workflow_eligibility": _good_workflow_eligibility("t1_deepprep_anat_report"),
+                }
+            ]
         if url.endswith("/tasks/114"):
             return {
                 "id": 114,
                 "project_id": 7,
                 "series_id": 1,
                 "workflow_type": "t1_deepprep_anat_report",
+                "runtime_workflow_type": "t1_deepprep",
                 "status": "completed",
                 "log_path": "/home/yyf/project/image_agent/data/projects/7/logs/114.log",
             }
@@ -1527,6 +2096,7 @@ def test_smoke_remote_agent_require_completed_task_records_safe_task_status(caps
         "status": "completed",
         "task_id": 114,
         "workflow_type": "t1_deepprep_anat_report",
+        "runtime_workflow_type": "t1_deepprep",
     }
     assert "log_path" not in json.dumps(payload["task_status"])
 
@@ -1559,6 +2129,153 @@ def test_smoke_remote_agent_require_launched_task_rejects_mock_workflow():
     assert "strict deployment acceptance cannot use debug-only workflow t1_deepprep_mock" in str(exc.value)
 
 
+def test_smoke_remote_agent_production_readiness_requires_agent_resume_launch_source(monkeypatch):
+    smoke = _load_smoke_module()
+    calls = []
+
+    def fake_request(method, url, payload=None):
+        calls.append((method, url, payload))
+        base_response = _good_remote_smoke_response(url)
+        if base_response is not None:
+            return base_response
+        if url.endswith("/deployment"):
+            return {
+                "production_readiness": {"required": True, "ready": True, "status": "ready", "blocking_reasons": []},
+                "fast_launch_readiness": _ready_fast_launch_readiness(),
+            }
+        if method == "POST" and url.endswith("/series/1/run"):
+            return {
+                "id": 114,
+                "project_id": 7,
+                "series_id": 1,
+                "workflow_type": "t1_deepprep_anat_report",
+                "runtime_workflow_type": "t1_deepprep",
+                "status": "queued",
+            }
+        if url.endswith("/tasks/114/artifact-manifest"):
+            return _artifact_manifest_with_result_summary_output("reports/index.html")
+        if url.endswith("/tasks/114/result-summary"):
+            return _task_result_summary(workflow_type="t1_deepprep_anat_report", modality="T1")
+        raise AssertionError(f"unexpected request: {method} {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(
+            [
+                "--api-base",
+                "http://api.local",
+                "--require-production-readiness",
+                "--require-launched-task",
+                "--launch-series-id",
+                "1",
+                "--launch-workflow-type",
+                "t1_deepprep_anat_report",
+            ]
+        )
+
+    assert "--require-production-readiness with --require-launched-task requires --require-agent-workflow-resume" in str(
+        exc.value
+    )
+    assert not any(call[1].endswith("/series/1/run") for call in calls)
+
+
+def test_smoke_remote_agent_deployment_identity_requires_agent_resume_launch_source(monkeypatch):
+    smoke = _load_smoke_module()
+    calls = []
+
+    def fake_request(method, url, payload=None):
+        calls.append((method, url, payload))
+        base_response = _good_remote_smoke_response(url)
+        if base_response is not None:
+            return base_response
+        if method == "POST" and url.endswith("/series/1/run"):
+            return {
+                "id": 114,
+                "project_id": 7,
+                "series_id": 1,
+                "workflow_type": "t1_deepprep_anat_report",
+                "runtime_workflow_type": "t1_deepprep",
+                "status": "queued",
+            }
+        if url.endswith("/tasks/114/artifact-manifest"):
+            return _artifact_manifest_with_result_summary_output("reports/index.html")
+        if url.endswith("/tasks/114/result-summary"):
+            return _task_result_summary(workflow_type="t1_deepprep_anat_report", modality="T1")
+        raise AssertionError(f"unexpected request: {method} {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(
+            [
+                "--api-base",
+                "http://api.local",
+                "--require-deployment-identity",
+                "--deployment-id",
+                "codex-f57a2ea-20260611T023456",
+                "--require-launched-task",
+                "--launch-series-id",
+                "1",
+                "--launch-workflow-type",
+                "t1_deepprep_anat_report",
+            ]
+        )
+
+    assert "--require-deployment-identity with --require-launched-task requires --require-agent-workflow-resume" in str(
+        exc.value
+    )
+    assert not any(call[1].endswith("/series/1/run") for call in calls)
+
+
+def test_smoke_remote_agent_runtime_toolchain_requires_agent_resume_launch_source(monkeypatch):
+    smoke = _load_smoke_module()
+    calls = []
+
+    def fake_request(method, url, payload=None):
+        calls.append((method, url, payload))
+        base_response = _good_remote_smoke_response(url)
+        if base_response is not None:
+            return base_response
+        if url.endswith("/runtime/containers"):
+            return _runtime_toolchain_response()
+        if method == "POST" and url.endswith("/series/1/run"):
+            return {
+                "id": 114,
+                "project_id": 7,
+                "series_id": 1,
+                "workflow_type": "dwi_fast_gpu_dti",
+                "runtime_workflow_type": "dwi_fast_gpu_dti",
+                "status": "queued",
+            }
+        if url.endswith("/tasks/114/artifact-manifest"):
+            return _artifact_manifest_with_result_summary_output("reports/index.html")
+        if url.endswith("/tasks/114/result-summary"):
+            return _task_result_summary(workflow_type="dwi_fast_gpu_dti", modality="DWI")
+        raise AssertionError(f"unexpected request: {method} {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(
+            [
+                "--api-base",
+                "http://api.local",
+                "--require-runtime-toolchain",
+                "--require-launched-task",
+                "--launch-series-id",
+                "1",
+                "--launch-workflow-type",
+                "dwi_fast_gpu_dti",
+            ]
+        )
+
+    assert "--require-runtime-toolchain with --require-launched-task requires --require-agent-workflow-resume" in str(
+        exc.value
+    )
+    assert not any(call[1].endswith("/series/1/run") for call in calls)
+
+
 def test_smoke_remote_agent_uploads_nifti_and_uses_uploaded_series_for_launch(tmp_path, capsys, monkeypatch):
     smoke = _load_smoke_module()
     upload_file = tmp_path / "sub-01_T1w.nii.gz"
@@ -1568,6 +2285,7 @@ def test_smoke_remote_agent_uploads_nifti_and_uses_uploaded_series_for_launch(tm
     def fake_upload_nifti(base, project_id, path):
         calls.append(("UPLOAD", base, project_id, path))
         return {
+            "upload_session_id": 22,
             "series": {
                 "id": 5,
                 "project_id": 7,
@@ -1588,6 +2306,7 @@ def test_smoke_remote_agent_uploads_nifti_and_uses_uploaded_series_for_launch(tm
                 "project_id": 7,
                 "series_id": 5,
                 "workflow_type": "t1_deepprep_anat_report",
+                "runtime_workflow_type": "t1_deepprep",
                 "status": "queued",
             }
         if url.endswith("/projects/7/series"):
@@ -1598,12 +2317,28 @@ def test_smoke_remote_agent_uploads_nifti_and_uses_uploaded_series_for_launch(tm
                     "workflow_eligibility": _good_workflow_eligibility(),
                 }
             ]
+        if url.endswith("/projects/7/datasets/22/inventory"):
+            return {
+                "upload_session_id": 22,
+                "status": "completed",
+                "inventory": {
+                    "inventory_status": "completed",
+                    "series": [
+                        {
+                            "series_id": 5,
+                            "modality": "T1",
+                            "workflow_eligibility": _good_workflow_eligibility(),
+                        }
+                    ],
+                },
+            }
         if url.endswith("/tasks/114"):
             return {
                 "id": 114,
                 "project_id": 7,
                 "series_id": 5,
                 "workflow_type": "t1_deepprep_anat_report",
+                "runtime_workflow_type": "t1_deepprep",
                 "status": "completed",
             }
         if url.endswith("/tasks/114/artifact-manifest"):
@@ -1624,6 +2359,7 @@ def test_smoke_remote_agent_uploads_nifti_and_uses_uploaded_series_for_launch(tm
             "--require-uploaded-series",
             "--upload-nifti-file",
             str(upload_file),
+            "--require-completed-upload",
             "--require-launched-task",
             "--launch-workflow-type",
             "t1_deepprep_anat_report",
@@ -1633,17 +2369,97 @@ def test_smoke_remote_agent_uploads_nifti_and_uses_uploaded_series_for_launch(tm
 
     payload = json.loads(capsys.readouterr().out)
     assert payload["smoke_gate"]["require_uploaded_series"] is True
+    assert payload["smoke_gate"]["require_completed_upload"] is True
+    assert payload["smoke_gate"]["upload_session_id"] == 22
     assert payload["smoke_gate"]["uploaded_series_id"] == 5
     assert payload["smoke_gate"]["launch_series_id"] == 5
+    assert payload["upload_inventory_completion_status"] == "passed"
     assert payload["uploaded_series_status"] == "passed"
     assert payload["uploaded_series"] == {
         "project_id": 7,
         "series_id": 5,
+        "upload_session_id": 22,
         "modality": "T1",
         "sequence_label": "T1w",
     }
     assert ("UPLOAD", "http://api.local", 7, upload_file) in calls
     assert ("POST", "http://api.local/series/5/run", {"workflow_type": "t1_deepprep_anat_report"}) in calls
+
+
+def test_smoke_remote_agent_can_validate_existing_uploaded_series(capsys, monkeypatch):
+    smoke = _load_smoke_module()
+    calls = []
+
+    def fail_upload_nifti(base, project_id, path):
+        raise AssertionError("existing uploaded-series evidence must not upload a file")
+
+    def fake_request(method, url, payload=None):
+        calls.append((method, url, payload))
+        base_response = _good_remote_smoke_response(url)
+        if base_response is not None:
+            return base_response
+        if url.endswith("/projects/7/series"):
+            return [
+                {
+                    "id": 5,
+                    "project_id": 7,
+                    "upload_session_id": 22,
+                    "modality": "T1",
+                    "sequence_label": "T1w",
+                    "workflow_eligibility": _good_workflow_eligibility(),
+                }
+            ]
+        if url.endswith("/projects/7/datasets/22/inventory"):
+            return {
+                "upload_session_id": 22,
+                "status": "completed",
+                "inventory": {
+                    "inventory_status": "completed",
+                    "series": [
+                        {
+                            "series_id": 5,
+                            "modality": "T1",
+                            "workflow_eligibility": _good_workflow_eligibility(),
+                        }
+                    ],
+                },
+            }
+        raise AssertionError(f"unexpected request: {method} {url}")
+
+    monkeypatch.setattr(smoke, "_upload_nifti", fail_upload_nifti)
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    smoke.main(
+        [
+            "--api-base",
+            "http://api.local",
+            "--project-id",
+            "7",
+            "--require-uploaded-series",
+            "--uploaded-series-id",
+            "5",
+            "--upload-session-id",
+            "22",
+            "--require-completed-upload",
+            "--launch-workflow-type",
+            "t1_deepprep_anat_report",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["uploaded_series_status"] == "passed"
+    assert payload["smoke_gate"]["uploaded_series_id"] == 5
+    assert payload["smoke_gate"]["upload_session_id"] == 22
+    assert payload["smoke_gate"]["launch_series_id"] == 5
+    assert payload["upload_inventory_completion_status"] == "passed"
+    assert payload["uploaded_series"] == {
+        "project_id": 7,
+        "series_id": 5,
+        "upload_session_id": 22,
+        "modality": "T1",
+        "sequence_label": "T1w",
+    }
+    assert not any(call[0] == "UPLOAD" for call in calls)
 
 
 def test_smoke_remote_agent_rejects_launch_series_id_that_differs_from_uploaded_series(tmp_path, monkeypatch):
@@ -1727,6 +2543,7 @@ def test_smoke_remote_agent_require_launched_task_records_deterministic_run_evid
                 "project_id": 7,
                 "series_id": 1,
                 "workflow_type": "t1_deepprep_anat_report",
+                "runtime_workflow_type": "t1_deepprep",
                 "status": "queued",
             }
         if url.endswith("/tasks/114"):
@@ -1735,6 +2552,7 @@ def test_smoke_remote_agent_require_launched_task_records_deterministic_run_evid
                 "project_id": 7,
                 "series_id": 1,
                 "workflow_type": "t1_deepprep_anat_report",
+                "runtime_workflow_type": "t1_deepprep",
                 "status": "completed",
             }
         if url.endswith("/tasks/114/artifact-manifest"):
@@ -1768,9 +2586,52 @@ def test_smoke_remote_agent_require_launched_task_records_deterministic_run_evid
         "project_id": 7,
         "series_id": 1,
         "workflow_type": "t1_deepprep_anat_report",
+        "runtime_workflow_type": "t1_deepprep",
+        "launch_source": "direct_series_run",
         "initial_status": "queued",
     }
     assert ("POST", "http://api.local/series/1/run", {"workflow_type": "t1_deepprep_anat_report"}) in calls
+
+
+def test_smoke_remote_agent_require_launched_task_rejects_missing_runtime_workflow_type(monkeypatch):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        base_response = _good_remote_smoke_response(url)
+        if base_response is not None:
+            return base_response
+        if method == "POST" and url.endswith("/series/1/run"):
+            return {
+                "id": 114,
+                "project_id": 7,
+                "series_id": 1,
+                "workflow_type": "t1_deepprep_anat_report",
+                "status": "queued",
+            }
+        if url.endswith("/tasks/114/artifact-manifest"):
+            return _artifact_manifest_with_result_summary_output("reports/index.html")
+        if url.endswith("/tasks/114/result-summary"):
+            return _task_result_summary(workflow_type="t1_deepprep_anat_report", modality="T1")
+        raise AssertionError(f"unexpected request: {method} {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(
+            [
+                "--api-base",
+                "http://api.local",
+                "--require-launched-task",
+                "--launch-series-id",
+                "1",
+                "--launch-workflow-type",
+                "t1_deepprep_anat_report",
+                "--task-id",
+                "114",
+            ]
+        )
+
+    assert "launched task check failed: runtime_workflow_type missing" in str(exc.value)
 
 
 def test_smoke_remote_agent_require_launched_task_uses_backend_task_id(capsys, monkeypatch):
@@ -1786,6 +2647,7 @@ def test_smoke_remote_agent_require_launched_task_uses_backend_task_id(capsys, m
                 "project_id": 7,
                 "series_id": 1,
                 "workflow_type": "t1_deepprep_anat_report",
+                "runtime_workflow_type": "t1_deepprep",
                 "status": "queued",
             }
         if url.endswith("/tasks/114"):
@@ -1794,6 +2656,7 @@ def test_smoke_remote_agent_require_launched_task_uses_backend_task_id(capsys, m
                 "project_id": 7,
                 "series_id": 1,
                 "workflow_type": "t1_deepprep_anat_report",
+                "runtime_workflow_type": "t1_deepprep",
                 "status": "completed",
             }
         if url.endswith("/tasks/114/artifact-manifest"):
@@ -1823,6 +2686,235 @@ def test_smoke_remote_agent_require_launched_task_uses_backend_task_id(capsys, m
     assert payload["task_status"]["task_id"] == 114
 
 
+def test_smoke_remote_agent_reuses_persisted_agent_launch_evidence(capsys, monkeypatch, tmp_path):
+    smoke = _load_smoke_module()
+    state_db = tmp_path / "app.db"
+    conn = sqlite3.connect(state_db)
+    conn.executescript(
+        """
+        create table agent_runs (
+          agent_run_id text primary key,
+          request_type text,
+          thread_id text,
+          project_id integer,
+          series_id integer,
+          task_id integer,
+          workflow_type text,
+          status text,
+          intent text,
+          action_lane text,
+          selected_skill text,
+          approved integer,
+          model_gateway_access text,
+          safe_metadata_json text,
+          created_at text,
+          finished_at text
+        );
+        create table agent_confirmations (
+          thread_id text primary key,
+          status text,
+          project_id integer,
+          series_id integer,
+          workflow_type text,
+          action_lane text,
+          selected_skill text,
+          confirmation_json text,
+          consumed_at text,
+          created_at text
+        );
+        """
+    )
+    workflow_metadata = _workflow_metadata("bold_fmriprep_xcpd_report")
+    workflow_metadata["runtime_workflow_type"] = "bold_fmriprep_xcpd_report"
+    confirmation_json = {
+        "project_id": 24,
+        "series_id": 45,
+        "workflow_type": "bold_fmriprep_xcpd_report",
+        "runtime_workflow_type": "bold_fmriprep_xcpd_report",
+        "workflow_metadata": workflow_metadata,
+    }
+    conn.execute(
+        """
+        insert into agent_runs values
+        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "agent_run_prepare",
+            "run",
+            "agent_thread_valid",
+            24,
+            45,
+            None,
+            "bold_fmriprep_xcpd_report",
+            "confirmation_required",
+            "run_workflow",
+            "fixed_workflow",
+            "image-agent-workflow-runner",
+            None,
+            "direct",
+            json.dumps({"production_task_created": False}),
+            "2026-06-20T22:16:02+00:00",
+            "2026-06-20T22:16:03+00:00",
+        ),
+    )
+    conn.execute(
+        """
+        insert into agent_confirmations values
+        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "agent_thread_valid",
+            "task_created",
+            24,
+            45,
+            "bold_fmriprep_xcpd_report",
+            "fixed_workflow",
+            "image-agent-workflow-runner",
+            json.dumps(confirmation_json),
+            "2026-06-20T22:17:17+00:00",
+            "2026-06-20T22:16:02+00:00",
+        ),
+    )
+    conn.execute(
+        """
+        insert into agent_runs values
+        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "agent_run_resume",
+            "resume",
+            "agent_thread_valid",
+            24,
+            45,
+            135,
+            "bold_fmriprep_xcpd_report",
+            "task_created",
+            None,
+            None,
+            None,
+            1,
+            "direct",
+            json.dumps({"production_task_created": True, "confirmation_gate": "fingerprint_verified"}),
+            "2026-06-20T22:17:17+00:00",
+            "2026-06-20T22:17:18+00:00",
+        ),
+    )
+    conn.execute(
+        """
+        insert into agent_runs values
+        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "agent_run_negative",
+            "resume",
+            "agent_thread_negative",
+            24,
+            1043,
+            None,
+            "bold_fmriprep_xcpd_report",
+            "blocked",
+            None,
+            None,
+            None,
+            1,
+            "direct",
+            json.dumps({"production_task_created": False, "confirmation_gate": "fingerprint_mismatch"}),
+            "2026-06-20T22:17:17+00:00",
+            "2026-06-20T22:17:18+00:00",
+        ),
+    )
+    conn.commit()
+    calls = []
+
+    def fake_request(method, url, payload=None):
+        calls.append((method, url, payload))
+        base_response = _good_remote_smoke_response(url)
+        if base_response is not None:
+            return base_response
+        if url.endswith("/tasks/135"):
+            return {
+                "id": 135,
+                "project_id": 24,
+                "series_id": 45,
+                "workflow_type": "bold_fmriprep_xcpd_report",
+                "runtime_workflow_type": "bold_fmriprep_xcpd_report",
+                "status": "completed",
+            }
+        if url.endswith("/projects/24/series"):
+            return [
+                {
+                    "id": 45,
+                    "modality": "BOLD",
+                    "workflow_eligibility": _good_workflow_eligibility("bold_fmriprep_xcpd_report"),
+                }
+            ]
+        if url.endswith("/tasks/135/artifact-manifest"):
+            manifest = _artifact_manifest_with_result_summary_output("reports/index.html")
+            manifest["task_id"] = 135
+            manifest["workflow_type"] = "bold_fmriprep_xcpd_report"
+            manifest["modality"] = "BOLD"
+            manifest["artifacts"][0]["download_url"] = "/tasks/135/artifacts/reports/index.html"
+            return manifest
+        if url.endswith("/tasks/135/result-summary"):
+            return _task_result_summary(
+                task_id=135,
+                workflow_type="bold_fmriprep_xcpd_report",
+                modality="BOLD",
+                outputs={
+                    "bold_reports": [
+                        {
+                            "relative_path": "reports/index.html",
+                            "download_url": "/tasks/135/artifacts/reports/index.html",
+                            "content_type": "text/html",
+                        }
+                    ]
+                },
+            )
+        raise AssertionError(f"unexpected request: {method} {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    smoke.main(
+        [
+            "--api-base",
+            "http://api.local",
+            "--skip-agent-run-smoke",
+            "--project-id",
+            "24",
+            "--launch-series-id",
+            "45",
+            "--launch-workflow-type",
+            "bold_fmriprep_xcpd_report",
+            "--task-id",
+            "135",
+            "--require-agent-workflow-confirmation",
+            "--require-agent-workflow-resume",
+            "--require-agent-workflow-fingerprint-negative",
+            "--require-launched-task",
+            "--require-completed-task",
+            "--reuse-persisted-agent-launch-evidence",
+            "--agent-state-db",
+            str(state_db),
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["agent_workflow_confirmation_status"] == "passed"
+    assert payload["agent_workflow_resume_status"] == "passed"
+    assert payload["agent_workflow_fingerprint_negative_status"] == "passed"
+    assert payload["launched_task"] == {
+        "task_id": 135,
+        "project_id": 24,
+        "series_id": 45,
+        "workflow_type": "bold_fmriprep_xcpd_report",
+        "runtime_workflow_type": "bold_fmriprep_xcpd_report",
+        "launch_source": "agent_workflow_resume",
+        "initial_status": "completed",
+    }
+    assert not any(method == "POST" and "/agent/runs" in url for method, url, _ in calls)
+    assert not any(method == "POST" and url.endswith("/series/45/run") for method, url, _ in calls)
+
+
 def test_smoke_remote_agent_waits_for_launched_task_completion(capsys, monkeypatch):
     smoke = _load_smoke_module()
     task_statuses = iter(["running", "completed"])
@@ -1838,6 +2930,7 @@ def test_smoke_remote_agent_waits_for_launched_task_completion(capsys, monkeypat
                 "project_id": 7,
                 "series_id": 1,
                 "workflow_type": "t1_deepprep_anat_report",
+                "runtime_workflow_type": "t1_deepprep",
                 "status": "queued",
             }
         if url.endswith("/tasks/114"):
@@ -1846,6 +2939,7 @@ def test_smoke_remote_agent_waits_for_launched_task_completion(capsys, monkeypat
                 "project_id": 7,
                 "series_id": 1,
                 "workflow_type": "t1_deepprep_anat_report",
+                "runtime_workflow_type": "t1_deepprep",
                 "status": next(task_statuses),
             }
         if url.endswith("/tasks/114/artifact-manifest"):
@@ -1879,6 +2973,43 @@ def test_smoke_remote_agent_waits_for_launched_task_completion(capsys, monkeypat
     assert sleeps == [5]
 
 
+def test_smoke_remote_agent_require_completed_task_rejects_missing_runtime_workflow_type(monkeypatch):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        base_response = _good_remote_smoke_response(url)
+        if base_response is not None:
+            return base_response
+        if url.endswith("/tasks/114"):
+            return {
+                "id": 114,
+                "project_id": 7,
+                "series_id": 1,
+                "workflow_type": "t1_deepprep_anat_report",
+                "status": "completed",
+            }
+        if url.endswith("/projects/7/series"):
+            return [{"id": 1, "modality": "T1", "workflow_eligibility": _good_workflow_eligibility()}]
+        raise AssertionError(f"unexpected request: {method} {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(
+            [
+                "--api-base",
+                "http://api.local",
+                "--project-id",
+                "7",
+                "--task-id",
+                "114",
+                "--require-completed-task",
+            ]
+        )
+
+    assert "completed task check failed: runtime_workflow_type missing" in str(exc.value)
+
+
 def test_smoke_remote_agent_require_completed_task_records_workflow_selection(capsys, monkeypatch):
     smoke = _load_smoke_module()
 
@@ -1891,10 +3022,7 @@ def test_smoke_remote_agent_require_completed_task_records_workflow_selection(ca
                 {
                     "id": 1,
                     "modality": "T1",
-                    "workflow_eligibility": {
-                        **_good_workflow_eligibility(),
-                        "runnable_workflows": [{"workflow_type": "t1_deepprep_anat_report"}],
-                    },
+                    "workflow_eligibility": _good_workflow_eligibility("t1_deepprep_anat_report"),
                 }
             ]
         if url.endswith("/tasks/114"):
@@ -1903,6 +3031,7 @@ def test_smoke_remote_agent_require_completed_task_records_workflow_selection(ca
                 "project_id": 7,
                 "series_id": 1,
                 "workflow_type": "t1_deepprep_anat_report",
+                "runtime_workflow_type": "t1_deepprep",
                 "status": "completed",
             }
         if url.endswith("/tasks/114/artifact-manifest"):
@@ -1966,10 +3095,7 @@ def test_smoke_remote_agent_require_completed_task_rejects_task_not_in_runnable_
                 {
                     "id": 1,
                     "modality": "T1",
-                    "workflow_eligibility": {
-                        **_good_workflow_eligibility(),
-                        "runnable_workflows": [{"workflow_type": "t1_deepprep_anat_report"}],
-                    },
+                    "workflow_eligibility": _good_workflow_eligibility("t1_deepprep_anat_report"),
                 }
             ]
         if url.endswith("/tasks/114"):
@@ -1978,7 +3104,33 @@ def test_smoke_remote_agent_require_completed_task_rejects_task_not_in_runnable_
                 "project_id": 7,
                 "series_id": 1,
                 "workflow_type": "bold_fmriprep_xcpd",
+                "runtime_workflow_type": "bold_fmriprep_xcpd",
                 "status": "completed",
+            }
+        if url.endswith("/tasks/114/events"):
+            return {
+                "status": "ok",
+                "task": {
+                    "id": 114,
+                    "project_id": 7,
+                    "series_id": 1,
+                    "workflow_type": "bold_fmriprep_xcpd",
+                    "status": "completed",
+                    "progress": 100,
+                },
+                "main_log": {"tail": "pipeline runner completed"},
+                "remote_logs": [
+                    {
+                        "name": "fmriprep.log",
+                        "source_stage": "fmriprep",
+                        "size_bytes": 48,
+                        "tail": "fMRIPrep completed",
+                    }
+                ],
+                "events": [
+                    {"type": "task.status", "status": "completed", "progress": 100},
+                    {"type": "task.remote_log", "name": "fmriprep.log", "source_stage": "fmriprep", "size_bytes": 48},
+                ],
             }
         if url.endswith("/tasks/114/artifact-manifest"):
             return {
@@ -2083,10 +3235,7 @@ def test_smoke_remote_agent_require_completed_upload_records_completion(capsys, 
                 {
                     "id": 1,
                     "modality": "BOLD",
-                    "workflow_eligibility": {
-                        **_good_workflow_eligibility(),
-                        "runnable_workflows": [{"workflow_type": "bold_fmriprep_xcpd"}],
-                    },
+                    "workflow_eligibility": _good_workflow_eligibility("bold_fmriprep_xcpd"),
                 }
             ]
         if url.endswith("/projects/7/datasets/22/inventory"):
@@ -2099,10 +3248,7 @@ def test_smoke_remote_agent_require_completed_upload_records_completion(capsys, 
                         {
                             "series_id": 1,
                             "modality": "BOLD",
-                            "workflow_eligibility": {
-                                **_good_workflow_eligibility(),
-                                "runnable_workflows": [{"workflow_type": "bold_fmriprep_xcpd"}],
-                            },
+                            "workflow_eligibility": _good_workflow_eligibility("bold_fmriprep_xcpd"),
                         }
                     ],
                 },
@@ -2947,15 +4093,43 @@ def test_smoke_remote_agent_require_launchability_matrix_reports_source(capsys, 
     def fake_request(method, url, payload=None):
         calls.append((method, url, payload))
         if url.endswith("/agent/rag/status"):
-            return {
-                "index": {
-                    "document_count": 72,
-                    "chunk_count": 260,
-                    "engine": "llama_index",
-                    "indexed_sources": ["docs/rag/workflows/workflow_launchability_matrix.md"],
-                },
+                return {
+                    "index": {
+                        "document_count": 72,
+                        "chunk_count": 260,
+                        "engine": "elasticsearch_hybrid",
+                        "hybrid_search": {
+                            "engine": "elasticsearch",
+                            "persisted": True,
+                            "mode": "connected",
+                            "indexed_chunk_count": 260,
+                            "lexical_retriever": "standard",
+                            "vector_retriever": "knn",
+                            "dense_vector_field": "embedding",
+                            "fusion": "rrf",
+                            "official_sources": [
+                                "https://www.elastic.co/docs/reference/elasticsearch/rest-apis/reciprocal-rank-fusion",
+                            ],
+                        },
+                        "indexed_sources": ["docs/rag/workflows/workflow_launchability_matrix.md"],
+                    },
             }
         if url.endswith("/agent/rag/query"):
+            if payload and "Elasticsearch hybrid" in payload.get("query", ""):
+                return {
+                    "retrieval_mode": "elasticsearch_hybrid",
+                    "retrieval_source": "elasticsearch_hybrid",
+                    "citations": [{"path": "docs/rag/contracts/elasticsearch-hybrid-search.md", "score": 12.5}],
+                    "elasticsearch_hybrid_query": {
+                        "index": "image_agent_rag",
+                        "dense_vector_dims": 1536,
+                        "embedding_provider": "openai",
+                        "embedding_model": "text-embedding-3-small",
+                        "embedding_transport": "openai_compatible_http",
+                        "embedding_endpoint_configured": True,
+                        "embedding_production_ready": True,
+                    },
+                }
             return {
                 "intent": "launchability",
                 "answer": "workflow_eligibility remains authoritative for launchability.",
@@ -3011,7 +4185,28 @@ def test_smoke_remote_agent_require_launchability_matrix_rejects_missing_query_c
                 "index": {
                     "document_count": 72,
                     "chunk_count": 260,
-                    "engine": "llama_index",
+                    "engine": "elasticsearch_hybrid",
+                    "hybrid_search": {
+                        "engine": "elasticsearch",
+                        "configured": True,
+                        "persisted": True,
+                        "mode": "connected",
+                        "index": "image_agent_rag",
+                        "indexed_chunk_count": 260,
+                        "lexical_retriever": "standard",
+                        "vector_retriever": "knn",
+                        "dense_vector_field": "embedding",
+                        "dense_vector_dims": 1536,
+                        "embedding_provider": "openai",
+                        "embedding_model": "text-embedding-3-small",
+                        "embedding_transport": "openai_compatible_http",
+                        "embedding_endpoint_configured": True,
+                        "embedding_production_ready": True,
+                        "fusion": "rrf",
+                        "official_sources": [
+                            "https://www.elastic.co/docs/reference/elasticsearch/rest-apis/reciprocal-rank-fusion",
+                        ],
+                    },
                     "indexed_sources": ["docs/rag/workflows/workflow_launchability_matrix.md"],
                 },
             }
@@ -3089,6 +4284,668 @@ def test_smoke_remote_agent_require_launchability_matrix_rejects_wrong_query_int
     assert "RAG launchability query intent failed" in str(exc.value)
 
 
+def test_smoke_remote_agent_require_elasticsearch_hybrid_rag_rejects_non_elasticsearch_index(monkeypatch):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        if url.endswith("/agent/rag/status"):
+            return {
+                "index": {
+                    "document_count": 72,
+                    "chunk_count": 260,
+                    "engine": "llama_index",
+                    "semantic_index": True,
+                    "hybrid_search": {"engine": "elasticsearch", "persisted": False, "fusion": "rrf"},
+                },
+            }
+        return _good_remote_smoke_response(url)
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(["--api-base", "http://api.local", "--require-elasticsearch-hybrid-rag"])
+
+    assert "RAG Elasticsearch hybrid search is not active" in str(exc.value)
+
+
+def test_smoke_remote_agent_require_elasticsearch_hybrid_rag_records_acceptance_evidence(capsys, monkeypatch):
+    smoke = _load_smoke_module()
+    calls = []
+    official_sources = [
+        "https://www.elastic.co/docs/reference/elasticsearch/rest-apis/reciprocal-rank-fusion",
+        "https://internal.example.local/private-rag-notes",
+        "C:/srv/image_agent/private-source.md",
+    ]
+
+    def fake_request(method, url, payload=None):
+        calls.append((method, url, payload))
+        if url.endswith("/agent/rag/status"):
+            return {
+                "index": {
+                    "document_count": 72,
+                    "chunk_count": 260,
+                    "engine": "elasticsearch_hybrid",
+                    "semantic_index": True,
+                    "hybrid_search": _elasticsearch_hybrid_search(official_sources=official_sources),
+                },
+            }
+        if url.endswith("/agent/rag/rebuild"):
+            return {
+                "document_count": 72,
+                "chunk_count": 260,
+                "semantic_index": True,
+                "hybrid_search": _elasticsearch_hybrid_search(),
+            }
+        if url.endswith("/agent/rag/query"):
+            return {
+                "retrieval_mode": "elasticsearch_hybrid",
+                "retrieval_source": "elasticsearch_hybrid",
+                "elasticsearch_hybrid_query": {
+                    "index": "image_agent_rag",
+                    "lexical_retriever": "standard",
+                    "vector_retriever": "knn",
+                    "dense_vector_field": "embedding",
+                    "fusion": "rrf",
+                    "dense_vector_dims": 1536,
+                    "embedding_provider": "openai",
+                    "embedding_model": "text-embedding-3-small",
+                    "embedding_transport": "openai_compatible_http",
+                    "embedding_endpoint_configured": True,
+                    "embedding_production_ready": True,
+                },
+                "citations": [
+                    {
+                        "source": "docs/rag/contracts/elasticsearch-hybrid-search.md",
+                        "snippet": "Elasticsearch hybrid search uses BM25, dense vector kNN, and RRF.",
+                        "score": 12.5,
+                    }
+                ],
+            }
+        return _good_remote_smoke_response(url)
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    smoke.main(["--api-base", "http://api.local", "--require-elasticsearch-hybrid-rag"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["smoke_gate"]["require_elasticsearch_hybrid_rag"] is True
+    assert payload["rag_elasticsearch_hybrid_status"] == "passed"
+    assert payload["rag_elasticsearch_hybrid"]["engine"] == "elasticsearch"
+    assert payload["rag_elasticsearch_hybrid"]["configured"] is True
+    assert payload["rag_elasticsearch_hybrid"]["index"] == "image_agent_rag"
+    assert payload["rag_elasticsearch_hybrid"]["fusion"] == "rrf"
+    assert payload["rag_elasticsearch_hybrid"]["dense_vector_dims"] == 1536
+    assert payload["rag_elasticsearch_hybrid"]["embedding_provider"] == "openai"
+    assert payload["rag_elasticsearch_hybrid"]["embedding_model"] == "text-embedding-3-small"
+    assert payload["rag_elasticsearch_hybrid"]["embedding_transport"] == "openai_compatible_http"
+    assert payload["rag_elasticsearch_hybrid"]["embedding_endpoint_configured"] is True
+    assert payload["rag_elasticsearch_hybrid"]["embedding_production_ready"] is True
+    assert payload["rag_elasticsearch_hybrid"]["official_rrf_source_present"] is True
+    assert "official_sources" not in payload["rag_elasticsearch_hybrid"]
+    serialized_payload = json.dumps(payload)
+    assert "internal.example.local" not in serialized_payload
+    assert "C:/srv/image_agent/private-source.md" not in serialized_payload
+    assert payload["rag_rebuild_elasticsearch_hybrid"]["mode"] == "connected"
+    assert payload["rag_rebuild_elasticsearch_hybrid"]["configured"] is True
+    assert payload["rag_rebuild_elasticsearch_hybrid"]["index"] == "image_agent_rag"
+    assert payload["rag_rebuild_elasticsearch_hybrid"]["indexed_chunk_count"] == 260
+    assert payload["rag_rebuild_elasticsearch_hybrid"]["lexical_retriever"] == "standard"
+    assert payload["rag_rebuild_elasticsearch_hybrid"]["vector_retriever"] == "knn"
+    assert payload["rag_rebuild_elasticsearch_hybrid"]["dense_vector_field"] == "embedding"
+    assert payload["rag_rebuild_elasticsearch_hybrid"]["dense_vector_dims"] == 1536
+    assert payload["rag_rebuild_elasticsearch_hybrid"]["embedding_model"] == "text-embedding-3-small"
+    assert payload["rag_rebuild_elasticsearch_hybrid"]["embedding_transport"] == "openai_compatible_http"
+    assert payload["rag_rebuild_elasticsearch_hybrid"]["embedding_endpoint_configured"] is True
+    assert payload["rag_rebuild_elasticsearch_hybrid"]["fusion"] == "rrf"
+    assert payload["rag_elasticsearch_hybrid_query_status"] == "passed"
+    assert payload["rag_elasticsearch_hybrid_query_mode"] == "elasticsearch_hybrid"
+    assert payload["rag_elasticsearch_hybrid_query_retrieval_source"] == "elasticsearch_hybrid"
+    assert payload["rag_elasticsearch_hybrid_query_source"] == "docs/rag/contracts/elasticsearch-hybrid-search.md"
+    assert payload["rag_elasticsearch_hybrid_query_citation_count"] == 1
+    assert payload["rag_elasticsearch_hybrid_query_top_score"] == 12.5
+    assert payload["rag_elasticsearch_hybrid_query_index"] == "image_agent_rag"
+    assert payload["rag_elasticsearch_hybrid_query_lexical_retriever"] == "standard"
+    assert payload["rag_elasticsearch_hybrid_query_vector_retriever"] == "knn"
+    assert payload["rag_elasticsearch_hybrid_query_dense_vector_field"] == "embedding"
+    assert payload["rag_elasticsearch_hybrid_query_fusion"] == "rrf"
+    assert payload["rag_elasticsearch_hybrid_query_dense_vector_dims"] == 1536
+    assert payload["rag_elasticsearch_hybrid_query_embedding_provider"] == "openai"
+    assert payload["rag_elasticsearch_hybrid_query_embedding_model"] == "text-embedding-3-small"
+    assert payload["rag_elasticsearch_hybrid_query_embedding_transport"] == "openai_compatible_http"
+    assert payload["rag_elasticsearch_hybrid_query_embedding_endpoint_configured"] is True
+    assert payload["rag_elasticsearch_hybrid_query_embedding_production_ready"] is True
+    assert any(call[1].endswith("/agent/rag/query") for call in calls)
+
+
+def test_smoke_remote_agent_require_elasticsearch_hybrid_rag_rejects_query_embedding_drift(monkeypatch):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        if url.endswith("/agent/rag/status"):
+            return {
+                "index": {
+                    "document_count": 72,
+                    "chunk_count": 260,
+                    "engine": "elasticsearch_hybrid",
+                    "semantic_index": True,
+                    "hybrid_search": _elasticsearch_hybrid_search(),
+                },
+            }
+        if url.endswith("/agent/rag/rebuild"):
+            return {
+                "document_count": 72,
+                "chunk_count": 260,
+                "semantic_index": True,
+                "hybrid_search": _elasticsearch_hybrid_search(),
+            }
+        if url.endswith("/agent/rag/query"):
+            return {
+                "retrieval_mode": "elasticsearch_hybrid",
+                "retrieval_source": "elasticsearch_hybrid",
+                "elasticsearch_hybrid_query": {
+                    "index": "image_agent_rag",
+                    "lexical_retriever": "standard",
+                    "vector_retriever": "knn",
+                    "dense_vector_field": "embedding",
+                    "fusion": "rrf",
+                    "dense_vector_dims": 1536,
+                    "embedding_provider": "openai",
+                    "embedding_model": "text-embedding-3-large",
+                    "embedding_transport": "openai_compatible_http",
+                    "embedding_endpoint_configured": True,
+                    "embedding_production_ready": True,
+                },
+                "citations": [
+                    {
+                        "source": "docs/rag/contracts/elasticsearch-hybrid-search.md",
+                        "score": 12.5,
+                    }
+                ],
+            }
+        return _good_remote_smoke_response(url)
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(["--api-base", "http://api.local", "--require-elasticsearch-hybrid-rag"])
+
+    assert "RAG Elasticsearch hybrid query evidence mismatch: embedding_model must match status" in str(exc.value)
+
+
+def test_smoke_remote_agent_require_elasticsearch_hybrid_rag_rejects_query_without_hybrid_components(monkeypatch):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        if url.endswith("/agent/rag/status"):
+            return {
+                "index": {
+                    "document_count": 72,
+                    "chunk_count": 260,
+                    "engine": "elasticsearch_hybrid",
+                    "semantic_index": True,
+                    "hybrid_search": _elasticsearch_hybrid_search(),
+                },
+            }
+        if url.endswith("/agent/rag/rebuild"):
+            return {
+                "document_count": 72,
+                "chunk_count": 260,
+                "semantic_index": True,
+                "hybrid_search": _elasticsearch_hybrid_search(),
+            }
+        if url.endswith("/agent/rag/query"):
+            return {
+                "retrieval_mode": "elasticsearch_hybrid",
+                "retrieval_source": "elasticsearch_hybrid",
+                "elasticsearch_hybrid_query": {
+                    "index": "image_agent_rag",
+                    "dense_vector_dims": 1536,
+                    "embedding_provider": "openai",
+                    "embedding_model": "text-embedding-3-small",
+                    "embedding_transport": "openai_compatible_http",
+                    "embedding_endpoint_configured": True,
+                    "embedding_production_ready": True,
+                },
+                "citations": [
+                    {
+                        "source": "docs/rag/contracts/elasticsearch-hybrid-search.md",
+                        "score": 12.5,
+                    }
+                ],
+            }
+        return _good_remote_smoke_response(url)
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(["--api-base", "http://api.local", "--require-elasticsearch-hybrid-rag"])
+
+    assert "RAG Elasticsearch hybrid query evidence missing: lexical_retriever must be standard" in str(exc.value)
+
+
+def test_smoke_remote_agent_require_elasticsearch_hybrid_rag_rejects_unscored_query_evidence(monkeypatch):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        if url.endswith("/agent/rag/status"):
+            return {
+                "index": {
+                    "document_count": 72,
+                    "chunk_count": 260,
+                    "engine": "elasticsearch_hybrid",
+                    "semantic_index": True,
+                    "hybrid_search": _elasticsearch_hybrid_search(),
+                },
+            }
+        if url.endswith("/agent/rag/rebuild"):
+            return {
+                "document_count": 72,
+                "chunk_count": 260,
+                "semantic_index": True,
+                "hybrid_search": _elasticsearch_hybrid_search(),
+            }
+        if url.endswith("/agent/rag/query"):
+            return {
+                "retrieval_mode": "elasticsearch_hybrid",
+                "retrieval_source": "elasticsearch_hybrid",
+                "citations": [{"source": "docs/rag/contracts/elasticsearch-hybrid-search.md"}],
+            }
+        return _good_remote_smoke_response(url)
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(["--api-base", "http://api.local", "--require-elasticsearch-hybrid-rag"])
+
+    assert "RAG Elasticsearch hybrid query evidence missing positive score" in str(exc.value)
+
+
+def test_smoke_remote_agent_require_elasticsearch_hybrid_rag_rejects_local_hash_embeddings(monkeypatch):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        if url.endswith("/agent/rag/status"):
+            return {
+                "index": {
+                    "document_count": 72,
+                    "chunk_count": 260,
+                    "engine": "elasticsearch_hybrid",
+                    "semantic_index": True,
+                    "hybrid_search": _elasticsearch_hybrid_search(
+                        dense_vector_dims=64,
+                        embedding_provider="local_hashing",
+                        embedding_model="local-token-hash-v1",
+                        embedding_production_ready=False,
+                    ),
+                },
+            }
+        if url.endswith("/agent/rag/rebuild"):
+            return {
+                "document_count": 72,
+                "chunk_count": 260,
+                "semantic_index": True,
+                "hybrid_search": _elasticsearch_hybrid_search(
+                    dense_vector_dims=64,
+                    embedding_provider="local_hashing",
+                    embedding_model="local-token-hash-v1",
+                    embedding_production_ready=False,
+                ),
+            }
+        return _good_remote_smoke_response(url)
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(["--api-base", "http://api.local", "--require-elasticsearch-hybrid-rag"])
+
+    assert "embedding_provider must be production configured" in str(exc.value)
+
+
+def test_smoke_remote_agent_require_elasticsearch_hybrid_rag_rejects_local_token_hash_embeddings(monkeypatch):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        if url.endswith("/agent/rag/status"):
+            return {
+                "index": {
+                    "document_count": 72,
+                    "chunk_count": 260,
+                    "engine": "elasticsearch_hybrid",
+                    "semantic_index": True,
+                    "hybrid_search": _elasticsearch_hybrid_search(
+                        embedding_provider="local-token-hash-v1",
+                        embedding_model="local-token-hash-v1",
+                    ),
+                },
+            }
+        if url.endswith("/agent/rag/rebuild"):
+            return {
+                "document_count": 72,
+                "chunk_count": 260,
+                "semantic_index": True,
+                "hybrid_search": _elasticsearch_hybrid_search(
+                    embedding_provider="local-token-hash-v1",
+                    embedding_model="local-token-hash-v1",
+                ),
+            }
+        return _good_remote_smoke_response(url)
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(["--api-base", "http://api.local", "--require-elasticsearch-hybrid-rag"])
+
+    assert "embedding_provider must be production configured" in str(exc.value)
+
+
+@pytest.mark.parametrize("endpoint_value", [None, False, "true"])
+def test_smoke_remote_agent_require_elasticsearch_hybrid_rag_rejects_unverified_embedding_endpoint(
+    monkeypatch,
+    endpoint_value,
+):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        if url.endswith("/agent/rag/status"):
+            hybrid = _elasticsearch_hybrid_search()
+            if endpoint_value is None:
+                hybrid.pop("embedding_endpoint_configured")
+            else:
+                hybrid["embedding_endpoint_configured"] = endpoint_value
+            return {
+                "index": {
+                    "document_count": 72,
+                    "chunk_count": 260,
+                    "engine": "elasticsearch_hybrid",
+                    "semantic_index": True,
+                    "hybrid_search": hybrid,
+                },
+            }
+        if url.endswith("/agent/rag/rebuild"):
+            hybrid = _elasticsearch_hybrid_search()
+            if endpoint_value is None:
+                hybrid.pop("embedding_endpoint_configured")
+            else:
+                hybrid["embedding_endpoint_configured"] = endpoint_value
+            return {
+                "document_count": 72,
+                "chunk_count": 260,
+                "semantic_index": True,
+                "hybrid_search": hybrid,
+            }
+        return _good_remote_smoke_response(url)
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(["--api-base", "http://api.local", "--require-elasticsearch-hybrid-rag"])
+
+    assert "embedding_endpoint_configured must be true" in str(exc.value)
+
+
+def test_smoke_remote_agent_require_elasticsearch_hybrid_rag_rejects_embedding_error(monkeypatch):
+    smoke = _load_smoke_module()
+
+    def hybrid_payload():
+        return _elasticsearch_hybrid_search(
+            embedding_error="[redacted-secret]",
+        )
+
+    def fake_request(method, url, payload=None):
+        if url.endswith("/agent/rag/status"):
+            return {
+                "index": {
+                    "document_count": 72,
+                    "chunk_count": 260,
+                    "engine": "elasticsearch_hybrid",
+                    "semantic_index": True,
+                    "hybrid_search": hybrid_payload(),
+                },
+            }
+        if url.endswith("/agent/rag/rebuild"):
+            return {
+                "document_count": 72,
+                "chunk_count": 260,
+                "semantic_index": True,
+                "hybrid_search": hybrid_payload(),
+            }
+        if url.endswith("/agent/rag/query"):
+            return {
+                "retrieval_mode": "elasticsearch_hybrid",
+                "retrieval_source": "elasticsearch_hybrid",
+                "citations": [{"source": "docs/rag/contracts/elasticsearch-hybrid-search.md"}],
+            }
+        return _good_remote_smoke_response(url)
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(["--api-base", "http://api.local", "--require-elasticsearch-hybrid-rag"])
+
+    assert "embedding_error must be absent" in str(exc.value)
+
+
+def test_smoke_remote_agent_require_elasticsearch_hybrid_rag_rejects_fallback_query(monkeypatch):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        if url.endswith("/agent/rag/status"):
+            return {
+                "index": {
+                    "document_count": 72,
+                    "chunk_count": 260,
+                    "engine": "elasticsearch_hybrid",
+                    "semantic_index": True,
+                    "hybrid_search": _elasticsearch_hybrid_search(),
+                },
+            }
+        if url.endswith("/agent/rag/rebuild"):
+            return {
+                "document_count": 72,
+                "chunk_count": 260,
+                "semantic_index": True,
+                "hybrid_search": _elasticsearch_hybrid_search(),
+            }
+        if url.endswith("/agent/rag/query"):
+            return {"retrieval_mode": "elasticsearch_hybrid_fallback", "citations": []}
+        return _good_remote_smoke_response(url)
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(["--api-base", "http://api.local", "--require-elasticsearch-hybrid-rag"])
+
+    assert "RAG Elasticsearch hybrid query did not use Elasticsearch retrieval" in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    ("hybrid_override", "expected_message"),
+    [
+        ({"mode": "local_contract"}, "hybrid_search.mode must be connected"),
+        ({"indexed_chunk_count": 0}, "indexed_chunk_count must be greater than zero"),
+        ({"dense_vector_dims": 0}, "dense_vector_dims must be greater than zero"),
+        ({"embedding_model": ""}, "embedding_model must be present"),
+        ({"embedding_transport": ""}, "embedding_transport must be present"),
+        ({"embedding_transport": "local"}, "embedding_transport must be production-safe"),
+        ({"error": "[redacted-secret] connection refused"}, "hybrid_search.error must be absent"),
+    ],
+)
+def test_smoke_remote_agent_require_elasticsearch_hybrid_rag_rejects_weak_connected_evidence(
+    monkeypatch,
+    hybrid_override,
+    expected_message,
+):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        if url.endswith("/agent/rag/status"):
+            return {
+                "index": {
+                    "document_count": 72,
+                    "chunk_count": 260,
+                    "engine": "elasticsearch_hybrid",
+                    "semantic_index": True,
+                    "hybrid_search": _elasticsearch_hybrid_search(**hybrid_override),
+                },
+            }
+        if url.endswith("/agent/rag/query"):
+            return {
+                "retrieval_mode": "elasticsearch_hybrid",
+                "retrieval_source": "elasticsearch_hybrid",
+                "citations": [{"source": "docs/rag/contracts/elasticsearch-hybrid-search.md"}],
+            }
+        return _good_remote_smoke_response(url)
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(["--api-base", "http://api.local", "--require-elasticsearch-hybrid-rag"])
+
+    assert expected_message in str(exc.value)
+
+
+def test_smoke_remote_agent_require_runtime_toolchain_records_safe_deployment_local_evidence(capsys, monkeypatch):
+    smoke = _load_smoke_module()
+    calls = []
+
+    def fake_request(method, url, payload=None):
+        calls.append(url)
+        if url.endswith("/runtime/containers"):
+            return _runtime_toolchain_response()
+        return _good_remote_smoke_response(url)
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    smoke.main(
+        [
+            "--api-base",
+            "http://api.local",
+            "--require-runtime-toolchain",
+            "--launch-workflow-type",
+            "dwi_fast_gpu_dti",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert any(url.endswith("/runtime/containers") for url in calls)
+    assert payload["smoke_gate"]["require_runtime_toolchain"] is True
+    assert payload["runtime_toolchain_status"] == "passed"
+    assert payload["runtime_toolchain"] == {
+        "workflow_tool_execution": "deployment_server_local",
+        "docker_runtime_host": "api_server",
+        "docker_requires_sudo": True,
+        "fs_license_exists": True,
+        "workflow_count": 2,
+        "available_workflow_count": 2,
+        "required_workflow_type": "dwi_fast_gpu_dti",
+        "required_workflow_available": True,
+        "unavailable_workflows": [],
+        "workflow_types": ["dwi_fast_gpu_dti", "t1_deepprep"],
+    }
+    serialized = json.dumps(payload, sort_keys=True)
+    assert "C:/Users/A/private" not in serialized
+    assert "detail_tail" not in serialized
+    assert "fs_license_path" not in serialized
+
+
+def test_smoke_remote_agent_runtime_toolchain_resolves_stable_workflow_to_runtime_workflow(capsys, monkeypatch):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        if url.endswith("/runtime/containers"):
+            return _runtime_toolchain_response(workflows={"t1_deepprep": {"available": True}})
+        return _good_remote_smoke_response(url)
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    smoke.main(
+        [
+            "--api-base",
+            "http://api.local",
+            "--require-runtime-toolchain",
+            "--launch-workflow-type",
+            "t1_deepprep_anat_report",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["runtime_toolchain_status"] == "passed"
+    assert payload["runtime_toolchain"]["required_workflow_type"] == "t1_deepprep_anat_report"
+    assert payload["runtime_toolchain"]["required_runtime_workflow_type"] == "t1_deepprep"
+    assert payload["runtime_toolchain"]["required_workflow_available"] is True
+    assert payload["runtime_toolchain"]["workflow_types"] == ["t1_deepprep"]
+
+
+def test_smoke_remote_agent_prefers_runtime_probe_for_toolchain_evidence(capsys, monkeypatch):
+    smoke = _load_smoke_module()
+    calls = []
+
+    def fake_request(method, url, payload=None):
+        calls.append(url)
+        if url.endswith("/runtime/probe"):
+            return {
+                "schema_version": 1,
+                "status": "blocked",
+                "workflow_tool_execution": "deployment_server_local",
+                "docker_runtime_host": "api_server",
+                "docker": {"requires_sudo": True},
+                "resources": {"fs_license_exists": True},
+                "workflow_count": 2,
+                "available_workflow_count": 2,
+                "workflows": {
+                    "bold_fmriprep_xcpd_report": {"available": True},
+                    "t1_deepprep_anat_report": {"available": True},
+                },
+            }
+        if url.endswith("/runtime/containers"):
+            raise AssertionError("runtime/containers should be fallback-only when runtime/probe is available")
+        return _good_remote_smoke_response(url)
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    smoke.main(
+        [
+            "--api-base",
+            "http://api.local",
+            "--require-runtime-toolchain",
+            "--launch-workflow-type",
+            "bold_fmriprep_xcpd_report",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert any(url.endswith("/runtime/probe") for url in calls)
+    assert payload["runtime_toolchain_status"] == "passed"
+    assert payload["runtime_toolchain"]["workflow_tool_execution"] == "deployment_server_local"
+    assert payload["runtime_toolchain"]["docker_runtime_host"] == "api_server"
+    assert payload["runtime_toolchain"]["docker_requires_sudo"] is True
+    assert payload["runtime_toolchain"]["required_workflow_available"] is True
+
+
+def test_smoke_remote_agent_require_runtime_toolchain_rejects_missing_launch_workflow(monkeypatch):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        if url.endswith("/runtime/containers"):
+            return _runtime_toolchain_response(workflows={"t1_deepprep": {"available": True}})
+        return _good_remote_smoke_response(url)
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(
+            [
+                "--api-base",
+                "http://api.local",
+                "--require-runtime-toolchain",
+                "--launch-workflow-type",
+                "dwi_fast_gpu_dti",
+            ]
+        )
+
+    assert "runtime toolchain missing required workflow dwi_fast_gpu_dti" in str(exc.value)
+
+
 def test_smoke_remote_agent_writes_acceptance_json_artifact(capsys, monkeypatch, tmp_path):
     smoke = _load_smoke_module()
 
@@ -3145,33 +5002,40 @@ def test_smoke_remote_agent_writes_acceptance_json_artifact(capsys, monkeypatch,
     assert artifact_payload == stdout_payload
     assert artifact_payload["smoke_gate"] == {
         "api_base": "http://api.local",
-            "require_model": True,
-            "require_project_agent_context": False,
-            "require_agent_workflow_confirmation": False,
-            "require_agent_workflow_resume": False,
-            "require_deployment_identity": True,
+        "require_model": True,
+        "skip_agent_run_smoke": False,
+        "require_project_agent_context": False,
+        "require_agent_workflow_confirmation": False,
+        "require_agent_workflow_resume": False,
+        "require_agent_workflow_fingerprint_negative": False,
+        "require_unknown_workflow_incubation": False,
+        "require_deployment_identity": True,
         "require_production_readiness": False,
+        "require_runtime_toolchain": False,
         "deployment_id": "codex-f57a2ea-20260611T023456",
         "min_documents": 60,
         "min_chunks": 200,
-            "require_raw_source_policy": True,
-            "require_vendor_pointer_integrity": True,
-            "require_real_evidence_ids": False,
-            "require_completed_upload": False,
-            "require_uploaded_series": False,
-            "require_completed_task": False,
-            "require_launched_task": False,
-            "require_launchability_matrix": False,
-            "require_container_native_qc": False,
-            "min_native_qc_images": 0,
-            "require_scientific_report_artifacts": False,
-            "min_scientific_report_images": 0,
-            "project_id": None,
-            "task_id": None,
-            "upload_session_id": None,
-            "uploaded_series_id": None,
-            "launch_series_id": None,
-        }
+        "require_raw_source_policy": True,
+        "require_vendor_pointer_integrity": True,
+        "require_elasticsearch_hybrid_rag": False,
+        "require_real_evidence_ids": False,
+        "require_completed_upload": False,
+        "require_uploaded_series": False,
+        "require_completed_task": False,
+        "require_task_events": False,
+        "require_observe_repair": False,
+        "require_launched_task": False,
+        "require_launchability_matrix": False,
+        "require_container_native_qc": False,
+        "min_native_qc_images": 0,
+        "require_scientific_report_artifacts": False,
+        "min_scientific_report_images": 0,
+        "project_id": None,
+        "task_id": None,
+        "upload_session_id": None,
+        "uploaded_series_id": None,
+        "launch_series_id": None,
+    }
     assert artifact_payload["deployment_identity_status"] == "passed"
     assert artifact_payload["deployment_identity"] == {
         "deployment_id": "codex-f57a2ea-20260611T023456",
@@ -3237,11 +5101,43 @@ def test_smoke_remote_agent_rejects_vendor_coverage_catalog_curated_source_drift
                 "confirmation": {
                     "project_id": 7,
                     "series_id": 1,
-                    "workflow_type": "bold_fmriprep_xcpd",
+                        "workflow_type": "bold_fmriprep_xcpd",
+                        "workflow_metadata": {
+                            "workflow_type": "bold_fmriprep_xcpd",
+                            "runtime_workflow_type": "bold_fmriprep_xcpd",
+                            "display_name": "BOLD fMRIPrep + XCP-D processing, metrics, QC, and report",
+                        "workflow_family": "bold",
+                        "workflow_role": "complete_processing",
+                        "capability_summary": "Runs BOLD preprocessing, XCP-D metrics, QC, and report outputs.",
+                        "pipeline_stages": [
+                            {"name": "BIDS preparation", "purpose": "Prepare supported BOLD input."},
+                            {"name": "fMRIPrep preprocessing", "purpose": "Generate preprocessed BOLD derivatives."},
+                            {"name": "XCP-D postprocessing", "purpose": "Generate metrics and QC outputs."},
+                        ],
+                        "primary_outputs": ["preprocessed BOLD derivatives", "ALFF/fALFF/ReHo metrics"],
+                        "qc_outputs": ["container-native fMRIPrep and XCP-D QC artifacts"],
+                        "report_outputs": ["HTML scientific report"],
+                        "limitations": ["Requires BOLD-compatible input and configured containers"],
+                        "agent_selectable": True,
+                        "is_report_only": False,
+                    },
                 },
                 "production_task_created": False,
             }
         if url.endswith("/agent/runs/agent_thread_confirm/resume"):
+            if payload and payload.get("approved") is True and isinstance(payload.get("confirmation"), dict):
+                if payload["confirmation"].get("series_id") != 1:
+                    return {
+                        "agent_run_id": "agent_run_fingerprint_negative",
+                        "thread_id": "agent_thread_confirm",
+                        "status": "blocked",
+                        "production_task_created": False,
+                        "safe_metadata": {
+                            "confirmation_gate": "fingerprint_mismatch",
+                            "production_task_created": False,
+                            "task_created": False,
+                        },
+                    }
             return {
                 "agent_run_id": "agent_run_resume",
                 "thread_id": "agent_thread_confirm",
@@ -3251,15 +5147,42 @@ def test_smoke_remote_agent_rejects_vendor_coverage_catalog_curated_source_drift
                 "project_id": 7,
                 "production_task_created": True,
                 "safe_metadata": {"confirmation_gate": "fingerprint_verified"},
-                "task": {
-                    "id": 114,
-                    "project_id": 7,
-                    "series_id": 1,
-                    "workflow_type": "bold_fmriprep_xcpd",
-                    "status": "queued",
-                },
-            }
+                    "task": {
+                        "id": 114,
+                        "project_id": 7,
+                        "series_id": 1,
+                        "workflow_type": "bold_fmriprep_xcpd",
+                        "runtime_workflow_type": "bold_fmriprep_xcpd",
+                        "status": "queued",
+                    },
+                }
         if url.endswith("/agent/runs"):
+            message = payload.get("message", "") if isinstance(payload, dict) else ""
+            if "codex_unknown_workflow_smoke" in message:
+                return {
+                    "agent_run_id": "agent_run_unknown",
+                    "thread_id": "agent_thread_unknown",
+                    "status": "toolchain_proposed",
+                    "intent": "toolchain_incubation",
+                    "selected_skill": "image-agent-toolchain-incubator",
+                    "action_lane": "toolchain_incubation",
+                    "workflow_type": "codex_unknown_workflow_smoke",
+                    "proposed_toolchain": {
+                        "proposal_id": "inc_codex_unknown",
+                        "workflow_type": "codex_unknown_workflow_smoke",
+                        "action_lane": "toolchain_incubation",
+                        "production_task_created": False,
+                    },
+                    "production_task_created": False,
+                    "task_created": False,
+                    "confirmation_created": False,
+                    "task_creation_allowed": False,
+                    "forbidden_actions": [
+                        "confirmation_creation",
+                        "production_task_creation",
+                        "pipeline_runner_launch",
+                    ],
+                }
             return {
                 "agent_run_id": "agent_run_456",
                 "status": "answered",
@@ -3343,8 +5266,16 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
                     "ready": True,
                     "status": "ready",
                     "blocking_reasons": [],
-                }
+                },
+                    "fast_launch_readiness": _pre_acceptance_fast_launch_readiness(),
             }
+        if url.endswith("/runtime/containers"):
+            return _runtime_toolchain_response(
+                workflows={
+                    "bold_fmriprep_xcpd": {"available": True},
+                    "t1_deepprep_anat_report": {"available": True},
+                }
+            )
         if url.endswith("/agent/model/status"):
             return {
                 "configured": True,
@@ -3352,6 +5283,7 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
                 "provider_profile": "rawchat",
                 "model": "gpt-5.5",
                 "wire_api": "responses",
+                "trust_env_proxy": False,
                 "capabilities": {
                     "text": True,
                     "structured_json": True,
@@ -3359,8 +5291,7 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
                 },
                 "deployment": {
                     "backend_runtime_mode": "remote",
-                    "model_gateway_access": "ssh_reverse_tunnel",
-                    "reverse_tunnel_command": "ssh -N -R 18080:127.0.0.1:8080 user@remote",
+                    "model_gateway_access": "direct",
                 },
             }
         if url.endswith("/agent/rag/status"):
@@ -3368,7 +5299,28 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
                 "index": {
                     "document_count": 72,
                     "chunk_count": 260,
-                    "engine": "llama_index",
+                    "engine": "elasticsearch_hybrid",
+                    "hybrid_search": {
+                        "engine": "elasticsearch",
+                        "configured": True,
+                        "persisted": True,
+                        "mode": "connected",
+                        "index": "image_agent_rag",
+                        "indexed_chunk_count": 260,
+                        "lexical_retriever": "standard",
+                        "vector_retriever": "knn",
+                        "dense_vector_field": "embedding",
+                        "dense_vector_dims": 1536,
+                        "embedding_provider": "openai",
+                        "embedding_model": "text-embedding-3-small",
+                        "embedding_transport": "openai_compatible_http",
+                        "embedding_endpoint_configured": True,
+                        "embedding_production_ready": True,
+                        "fusion": "rrf",
+                        "official_sources": [
+                            "https://www.elastic.co/docs/reference/elasticsearch/rest-apis/reciprocal-rank-fusion",
+                        ],
+                    },
                     "indexed_sources": ["docs/rag/workflows/workflow_launchability_matrix.md"],
                 },
                 "vendor_raw_sources": _complete_vendor_raw_sources(),
@@ -3376,8 +5328,52 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
                 "vendor_coverage_catalog": _complete_vendor_coverage_catalog(),
             }
         if url.endswith("/agent/rag/rebuild"):
-            return {"document_count": 72, "chunk_count": 260, "semantic_index": True}
+            return {
+                "document_count": 72,
+                "chunk_count": 260,
+                "semantic_index": True,
+                "hybrid_search": {
+                    "engine": "elasticsearch",
+                    "configured": True,
+                    "persisted": True,
+                    "mode": "connected",
+                    "index": "image_agent_rag",
+                    "indexed_chunk_count": 260,
+                    "lexical_retriever": "standard",
+                    "vector_retriever": "knn",
+                    "dense_vector_field": "embedding",
+                    "dense_vector_dims": 1536,
+                    "embedding_provider": "openai",
+                    "embedding_model": "text-embedding-3-small",
+                    "embedding_transport": "openai_compatible_http",
+                    "embedding_endpoint_configured": True,
+                    "embedding_production_ready": True,
+                    "fusion": "rrf",
+                    "official_sources": [
+                        "https://www.elastic.co/docs/reference/elasticsearch/rest-apis/reciprocal-rank-fusion",
+                    ],
+                },
+            }
         if url.endswith("/agent/rag/query"):
+            if payload and "Elasticsearch hybrid" in payload.get("query", ""):
+                return {
+                    "retrieval_mode": "elasticsearch_hybrid",
+                    "retrieval_source": "elasticsearch_hybrid",
+                    "citations": [{"path": "docs/rag/contracts/elasticsearch-hybrid-search.md", "score": 12.5}],
+                    "elasticsearch_hybrid_query": {
+                        "index": "image_agent_rag",
+                        "lexical_retriever": "standard",
+                        "vector_retriever": "knn",
+                        "dense_vector_field": "embedding",
+                        "fusion": "rrf",
+                        "dense_vector_dims": 1536,
+                        "embedding_provider": "openai",
+                        "embedding_model": "text-embedding-3-small",
+                        "embedding_transport": "openai_compatible_http",
+                        "embedding_endpoint_configured": True,
+                        "embedding_production_ready": True,
+                    },
+                }
             return {
                 "intent": "launchability",
                 "answer": "workflow_eligibility remains authoritative for launchability.",
@@ -3395,10 +5391,42 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
                     "project_id": 7,
                     "series_id": 1,
                     "workflow_type": "bold_fmriprep_xcpd",
+                    "workflow_metadata": {
+                        "workflow_type": "bold_fmriprep_xcpd",
+                        "runtime_workflow_type": "bold_fmriprep_xcpd",
+                        "display_name": "BOLD fMRIPrep + XCP-D processing, metrics, QC, and report",
+                        "workflow_family": "bold",
+                        "workflow_role": "complete_processing",
+                        "capability_summary": "Runs BOLD preprocessing, XCP-D metrics, QC, and report outputs.",
+                        "pipeline_stages": [
+                            {"name": "BIDS preparation", "purpose": "Prepare supported BOLD input."},
+                            {"name": "fMRIPrep preprocessing", "purpose": "Generate preprocessed BOLD derivatives."},
+                            {"name": "XCP-D postprocessing", "purpose": "Generate metrics and QC outputs."},
+                        ],
+                        "primary_outputs": ["preprocessed BOLD derivatives", "ALFF/fALFF/ReHo metrics"],
+                        "qc_outputs": ["container-native fMRIPrep and XCP-D QC artifacts"],
+                        "report_outputs": ["HTML scientific report"],
+                        "limitations": ["Requires BOLD-compatible input and configured containers"],
+                        "agent_selectable": True,
+                        "is_report_only": False,
+                    },
                 },
                 "production_task_created": False,
             }
         if url.endswith("/agent/runs/agent_thread_confirm/resume"):
+            if payload and payload.get("approved") is True and isinstance(payload.get("confirmation"), dict):
+                if payload["confirmation"].get("series_id") != 1:
+                    return {
+                        "agent_run_id": "agent_run_fingerprint_negative",
+                        "thread_id": "agent_thread_confirm",
+                        "status": "blocked",
+                        "production_task_created": False,
+                        "safe_metadata": {
+                            "confirmation_gate": "fingerprint_mismatch",
+                            "production_task_created": False,
+                            "task_created": False,
+                        },
+                    }
             return {
                 "agent_run_id": "agent_run_resume",
                 "thread_id": "agent_thread_confirm",
@@ -3413,10 +5441,37 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
                     "project_id": 7,
                     "series_id": 1,
                     "workflow_type": "bold_fmriprep_xcpd",
+                    "runtime_workflow_type": "bold_fmriprep_xcpd",
                     "status": "queued",
                 },
             }
         if url.endswith("/agent/runs"):
+            message = payload.get("message", "") if isinstance(payload, dict) else ""
+            if "codex_unknown_workflow_smoke" in message:
+                return {
+                    "agent_run_id": "agent_run_unknown",
+                    "thread_id": "agent_thread_unknown",
+                    "status": "toolchain_proposed",
+                    "intent": "toolchain_incubation",
+                    "selected_skill": "image-agent-toolchain-incubator",
+                    "action_lane": "toolchain_incubation",
+                    "workflow_type": "codex_unknown_workflow_smoke",
+                    "proposed_toolchain": {
+                        "proposal_id": "inc_codex_unknown",
+                        "workflow_type": "codex_unknown_workflow_smoke",
+                        "action_lane": "toolchain_incubation",
+                        "production_task_created": False,
+                    },
+                    "production_task_created": False,
+                    "task_created": False,
+                    "confirmation_created": False,
+                    "task_creation_allowed": False,
+                    "forbidden_actions": [
+                        "confirmation_creation",
+                        "production_task_creation",
+                        "pipeline_runner_launch",
+                    ],
+                }
             return {
                 "agent_run_id": "agent_run_456",
                 "status": "answered",
@@ -3431,10 +5486,7 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
                 {
                     "id": 1,
                     "modality": "BOLD",
-                    "workflow_eligibility": {
-                        **_good_workflow_eligibility(),
-                        "runnable_workflows": [{"workflow_type": "bold_fmriprep_xcpd"}],
-                    },
+                    "workflow_eligibility": _good_workflow_eligibility("bold_fmriprep_xcpd"),
                 }
             ]
         if url.endswith("/projects/7/datasets/22/inventory"):
@@ -3447,10 +5499,7 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
                         {
                             "series_id": 1,
                             "modality": "BOLD",
-                            "workflow_eligibility": {
-                                **_good_workflow_eligibility(),
-                                "runnable_workflows": [{"workflow_type": "bold_fmriprep_xcpd"}],
-                            },
+                            "workflow_eligibility": _good_workflow_eligibility("bold_fmriprep_xcpd"),
                         }
                     ],
                 },
@@ -3461,7 +5510,49 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
                 "project_id": 7,
                 "series_id": 1,
                 "workflow_type": "bold_fmriprep_xcpd",
+                "runtime_workflow_type": "bold_fmriprep_xcpd",
                 "status": "completed",
+            }
+        if url.endswith("/tasks/114/events"):
+            return {
+                "status": "ok",
+                "task": {
+                    "id": 114,
+                    "project_id": 7,
+                    "series_id": 1,
+                    "workflow_type": "bold_fmriprep_xcpd",
+                    "status": "completed",
+                    "progress": 100,
+                },
+                "main_log": {"tail": "pipeline runner completed"},
+                "remote_logs": [
+                    {
+                        "name": "fmriprep.log",
+                        "source_stage": "fmriprep",
+                        "size_bytes": 48,
+                        "tail": "fMRIPrep completed",
+                    }
+                ],
+                "events": [
+                    {"type": "task.status", "status": "completed", "progress": 100},
+                    {"type": "task.remote_log", "name": "fmriprep.log", "source_stage": "fmriprep", "size_bytes": 48},
+                ],
+            }
+        if url.endswith("/tasks/114/observe-repair"):
+                return {
+                    "status": "ok",
+                    "task_id": 114,
+                    "policy": "read_only_observe_repair",
+                    "auto_rerun_allowed": False,
+                    "task_creation_allowed": False,
+                    "production_task_created": False,
+                    "forbidden_actions": ["auto_retry", "auto_rerun", "task_creation"],
+                    "requires_preflight_before_retry": True,
+                    "requires_human_confirmation_before_retry": True,
+                "remote_logs": [
+                    {"name": "fmriprep.log", "source_stage": "fmriprep", "size_bytes": 48},
+                ],
+                "repair_suggestions": [{"action": "review_remote_logs"}],
             }
         if url.endswith("/tasks/114/artifact-manifest"):
             return {
@@ -3485,10 +5576,7 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
                 "project_id": 7,
                 "modality": "BOLD",
                 "sequence_label": "BOLD",
-                "workflow_eligibility": {
-                    **_good_workflow_eligibility(),
-                    "runnable_workflows": [{"workflow_type": "bold_fmriprep_xcpd"}],
-                },
+                "workflow_eligibility": _good_workflow_eligibility("bold_fmriprep_xcpd"),
             }
         }
 
@@ -3518,23 +5606,29 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
                     "--require-project-agent-context",
             "--require-agent-workflow-confirmation",
             "--require-agent-workflow-resume",
+            "--require-agent-workflow-fingerprint-negative",
+            "--require-unknown-workflow-incubation",
             "--require-deployment-identity",
             "--require-production-readiness",
+            "--require-runtime-toolchain",
             "--deployment-id",
             "codex-f57a2ea-20260611T023456",
             "--min-documents",
             "60",
             "--min-chunks",
             "200",
-            "--require-raw-source-policy",
-            "--require-vendor-pointer-integrity",
-            "--require-real-evidence-ids",
+                "--require-raw-source-policy",
+                "--require-vendor-pointer-integrity",
+                "--require-elasticsearch-hybrid-rag",
+                "--require-real-evidence-ids",
             "--require-completed-upload",
             "--require-uploaded-series",
             "--upload-nifti-file",
             str(upload_file),
             "--require-completed-task",
             "--require-launched-task",
+            "--require-task-events",
+            "--require-observe-repair",
             "--launch-series-id",
             "1",
             "--launch-workflow-type",
@@ -3556,14 +5650,239 @@ def test_smoke_remote_agent_strict_output_passes_offline_acceptance_verifier(cap
     )
 
     payload = json.loads(capsys.readouterr().out)
+    assert payload["task_events_status"] == "passed"
+    assert payload["task_events_event_types"] == ["task.remote_log", "task.status"]
+    assert payload["task_events_remote_log_count"] == 1
+    assert payload["task_events_remote_log_source_stages"] == ["fmriprep"]
     report = verifier.verify_acceptance_payload(payload)
 
     assert report["status"] == "passed"
     assert report["checked"]["launched_task_status"] == "passed"
+    assert report["checked"]["task_events_status"] == "passed"
     assert report["checked"]["agent_workflow_confirmation_status"] == "passed"
     assert report["checked"]["agent_workflow_resume_status"] == "passed"
     assert report["checked"]["container_native_qc_status"] == "passed"
     assert report["checked"]["scientific_report_artifacts_status"] == "passed"
+
+
+def test_smoke_remote_agent_require_task_events_rejects_unredacted_log_tail(monkeypatch):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        base_response = _good_remote_smoke_response(url)
+        if base_response is not None:
+            return base_response
+        if url.endswith("/projects/7/series"):
+            return [
+                {
+                    "id": 1,
+                    "workflow_eligibility": _good_workflow_eligibility("t1_deepprep_anat_report"),
+                }
+            ]
+        if url.endswith("/tasks/114"):
+            return {
+                "id": 114,
+                "project_id": 7,
+                "series_id": 1,
+                "workflow_type": "t1_deepprep_anat_report",
+                "runtime_workflow_type": "t1_deepprep",
+                "status": "completed",
+            }
+        if url.endswith("/tasks/114/events"):
+            return {
+                "status": "ok",
+                "task": {
+                    "id": 114,
+                    "project_id": 7,
+                    "series_id": 1,
+                    "workflow_type": "t1_deepprep_anat_report",
+                    "status": "completed",
+                    "progress": 100,
+                },
+                "main_log": {"tail": r"completed under C:\srv\image_agent\projects\7"},
+                "remote_logs": [
+                    {"name": "deepprep.log", "source_stage": "deepprep", "size_bytes": 48, "tail": "completed"},
+                ],
+                "events": [
+                    {"type": "task.status", "status": "completed", "progress": 100},
+                    {"type": "task.remote_log", "name": "deepprep.log", "source_stage": "deepprep", "size_bytes": 48},
+                ],
+            }
+        raise AssertionError(f"unexpected request: {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(
+            [
+                "--api-base",
+                "http://api.local",
+                "--project-id",
+                "7",
+                "--task-id",
+                "114",
+                "--require-completed-task",
+                "--require-task-events",
+            ]
+        )
+
+    assert "task events main_log.tail leaked unsafe text" in str(exc.value)
+
+
+def test_smoke_remote_agent_requires_observe_repair_read_only_evidence(monkeypatch, capsys):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        base_response = _good_remote_smoke_response(url)
+        if base_response is not None:
+            return base_response
+        if url.endswith("/tasks/114"):
+            return {
+                "id": 114,
+                "project_id": 7,
+                "series_id": 1,
+                "workflow_type": "t1_deepprep_anat_report",
+                "runtime_workflow_type": "t1_deepprep",
+                "status": "completed",
+                "progress": 100,
+            }
+        if url.endswith("/tasks/114/observe-repair"):
+            return {
+                "status": "ok",
+                "policy": "read_only_observe_repair",
+                "task_id": 114,
+                "task": {"id": 114, "status": "completed", "workflow_type": "t1_deepprep_anat_report"},
+                "events": [{"type": "task.status", "status": "completed"}],
+                "remote_logs": [{"name": "deepprep.log", "source_stage": "deepprep", "size_bytes": 48}],
+                "main_log": {"tail": "redacted failure"},
+                "result_summary_status": "ok",
+                "repair_suggestions": [{"kind": "observe", "message": "Continue read-only observation."}],
+                "auto_rerun_allowed": False,
+                "task_creation_allowed": False,
+                "forbidden_actions": ["auto_retry", "auto_rerun", "task_creation"],
+                "production_task_created": False,
+                "requires_preflight_before_retry": True,
+                "requires_human_confirmation_before_retry": True,
+            }
+        if url.endswith("/tasks/114/artifact-manifest"):
+            return _artifact_manifest_with_result_summary_output("reports/index.html")
+        if url.endswith("/tasks/114/result-summary"):
+            return _task_result_summary(workflow_type="t1_deepprep_anat_report", modality="T1")
+        raise AssertionError(f"unexpected request: {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    smoke.main(
+        [
+            "--api-base",
+            "http://api.local",
+            "--min-documents",
+            "60",
+            "--min-chunks",
+            "200",
+            "--require-completed-task",
+            "--require-observe-repair",
+            "--task-id",
+            "114",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["smoke_gate"]["require_observe_repair"] is True
+    assert payload["observe_repair_status"] == "passed"
+    assert payload["observe_repair_task_id"] == 114
+    assert payload["observe_repair_policy"] == "read_only_observe_repair"
+    assert payload["observe_repair_auto_rerun_allowed"] is False
+    assert payload["observe_repair_task_creation_allowed"] is False
+    assert payload["observe_repair_forbidden_actions"] == ["auto_retry", "auto_rerun", "task_creation"]
+    assert payload["observe_repair_production_task_created"] is False
+    assert payload["observe_repair_requires_preflight_before_retry"] is True
+    assert payload["observe_repair_requires_human_confirmation_before_retry"] is True
+    assert payload["observe_repair_repair_suggestion_count"] == 1
+
+
+def test_smoke_remote_agent_requires_unknown_workflow_incubation_evidence(monkeypatch, capsys):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        base_response = _good_remote_smoke_response(url)
+        if url.endswith("/agent/model/status"):
+            return {
+                "configured": True,
+                "provider": "rawchat",
+                "provider_profile": "rawchat",
+                "model": "gpt-5.5",
+                "wire_api": "responses",
+                "trust_env_proxy": False,
+                "capabilities": {"model_tool_loop": True},
+                "deployment": {"model_gateway_access": "direct"},
+            }
+        if base_response is not None:
+            return base_response
+        if url.endswith("/agent/runs"):
+            message = payload.get("message") if isinstance(payload, dict) else ""
+            if "codex_unknown_workflow_smoke" in message:
+                return {
+                    "agent_run_id": "agent_run_unknown",
+                    "thread_id": None,
+                    "status": "toolchain_proposed",
+                    "action_lane": "toolchain_incubation",
+                    "task_creation_allowed": False,
+                    "forbidden_actions": ["confirmation_creation", "production_task_creation", "pipeline_runner_launch"],
+                    "production_task_created": False,
+                    "proposed_toolchain": {
+                        "proposal_id": "inc_codex_unknown",
+                        "contract_version": "toolchain_proposal.v1",
+                        "status": "draft",
+                        "promotion_status": "blocked_by_gaps",
+                        "task_creation_allowed": False,
+                        "forbidden_actions": ["confirmation_creation", "production_task_creation", "pipeline_runner_launch"],
+                        "production_task_created": False,
+                    },
+                }
+            return {
+                "agent_run_id": "agent_run_123",
+                "status": "answered",
+                "intent": "answer_question",
+                "selected_skill": "image-agent-operator",
+                "model_gateway_access": "openai_sdk_gateway",
+                "project_id": 7,
+            }
+        if url.endswith("/projects/7/series"):
+            return [{"id": 1, "modality": "T1", "workflow_eligibility": _good_workflow_eligibility()}]
+        raise AssertionError(f"unexpected request: {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    smoke.main(
+        [
+            "--api-base",
+            "http://api.local",
+            "--project-id",
+            "7",
+            "--require-model",
+            "--require-project-agent-context",
+            "--require-unknown-workflow-incubation",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["smoke_gate"]["require_unknown_workflow_incubation"] is True
+    assert payload["unknown_workflow_incubation_status"] == "passed"
+    assert payload["unknown_workflow_incubation"]["status"] == "toolchain_proposed"
+    assert payload["unknown_workflow_incubation"]["action_lane"] == "toolchain_incubation"
+    assert payload["unknown_workflow_incubation"]["proposal_id"] == "inc_codex_unknown"
+    assert payload["unknown_workflow_incubation"]["thread_id"] is None
+    assert payload["unknown_workflow_incubation"]["task_created"] is False
+    assert payload["unknown_workflow_incubation"]["confirmation_created"] is False
+    assert payload["unknown_workflow_incubation"]["task_creation_allowed"] is False
+    assert payload["unknown_workflow_incubation"]["forbidden_actions"] == [
+        "confirmation_creation",
+        "production_task_creation",
+        "pipeline_runner_launch",
+    ]
+    assert payload["unknown_workflow_incubation"]["production_task_created"] is False
+    assert payload["unknown_workflow_incubation"]["proposal_production_task_created"] is False
 
 
 def test_smoke_remote_agent_validates_project_series_and_task_artifact_contracts(capsys, monkeypatch):
@@ -3594,12 +5913,7 @@ def test_smoke_remote_agent_validates_project_series_and_task_artifact_contracts
                 {
                     "id": 3,
                     "modality": "DWI",
-                    "workflow_eligibility": {
-                        "policy_version": "workflow_eligibility_v1",
-                        "production_task_created": False,
-                        "runnable_workflows": [{"workflow_type": "dwi_fast_gpu_dti"}],
-                        "blocked_workflows": [],
-                    },
+                    "workflow_eligibility": _good_workflow_eligibility("dwi_fast_gpu_dti"),
                 }
             ]
         if url.endswith("/tasks/114/artifact-manifest"):
@@ -3636,6 +5950,7 @@ def test_smoke_remote_agent_validates_project_series_and_task_artifact_contracts
         "contract_version": "1.0",
         "task_id": 114,
         "workflow_type": "dwi_fast_gpu_dti",
+        "workflow_metadata": _workflow_metadata("dwi_fast_gpu_dti"),
         "modality": "DWI",
         "feature_groups": ["dti_metrics"],
         "output_group_count": 1,
@@ -3671,6 +5986,50 @@ def test_smoke_remote_agent_rejects_result_summary_output_missing_from_artifact_
         smoke.main(["--api-base", "http://api.local", "--task-id", "114"])
 
     assert "task result summary output missing from artifact manifest" in str(exc.value)
+
+
+def test_smoke_remote_agent_rejects_result_summary_missing_workflow_metadata(monkeypatch):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        base_response = _good_remote_smoke_response(url)
+        if base_response is not None:
+            return base_response
+        if url.endswith("/tasks/114/artifact-manifest"):
+            return _artifact_manifest_with_result_summary_output("reports/index.html")
+        if url.endswith("/tasks/114/result-summary"):
+            return _task_result_summary(workflow_metadata=None)
+        raise AssertionError(f"unexpected request: {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(["--api-base", "http://api.local", "--task-id", "114"])
+
+    assert "task result summary workflow_metadata missing" in str(exc.value)
+
+
+def test_smoke_remote_agent_rejects_result_summary_non_agent_selectable_workflow_metadata(monkeypatch):
+    smoke = _load_smoke_module()
+
+    def fake_request(method, url, payload=None):
+        base_response = _good_remote_smoke_response(url)
+        if base_response is not None:
+            return base_response
+        if url.endswith("/tasks/114/artifact-manifest"):
+            return _artifact_manifest_with_result_summary_output("reports/index.html")
+        if url.endswith("/tasks/114/result-summary"):
+            metadata = _workflow_metadata()
+            metadata["agent_selectable"] = False
+            return _task_result_summary(workflow_metadata=metadata)
+        raise AssertionError(f"unexpected request: {url}")
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke.main(["--api-base", "http://api.local", "--task-id", "114"])
+
+    assert "task result summary workflow_metadata agent_selectable invalid" in str(exc.value)
 
 
 def test_smoke_remote_agent_rejects_empty_task_artifact_manifest(monkeypatch):
@@ -3722,12 +6081,7 @@ def test_smoke_remote_agent_validates_dataset_inventory_workflow_eligibility(cap
                 {
                     "id": 5,
                     "modality": "T1",
-                    "workflow_eligibility": {
-                        "policy_version": "workflow_eligibility_v1",
-                        "production_task_created": False,
-                        "runnable_workflows": [{"workflow_type": "t1_deepprep_anat_report"}],
-                        "blocked_workflows": [],
-                    },
+                    "workflow_eligibility": _good_workflow_eligibility("t1_deepprep_anat_report"),
                 }
             ]
         if url.endswith("/projects/7/datasets/22/inventory"):
@@ -3741,12 +6095,7 @@ def test_smoke_remote_agent_validates_dataset_inventory_workflow_eligibility(cap
                         {
                             "series_id": 5,
                             "modality": "T1",
-                            "workflow_eligibility": {
-                                "policy_version": "workflow_eligibility_v1",
-                                "production_task_created": False,
-                                "runnable_workflows": [{"workflow_type": "t1_deepprep_anat_report"}],
-                                "blocked_workflows": [],
-                            },
+                            "workflow_eligibility": _good_workflow_eligibility("t1_deepprep_anat_report"),
                         }
                     ],
                 },
@@ -3772,6 +6121,27 @@ def test_smoke_remote_agent_validates_dataset_inventory_workflow_eligibility(cap
     assert payload["upload_inventory_series_with_workflow_eligibility"] == 1
     assert payload["upload_inventory_series_ids"] == [5]
     assert payload["upload_inventory_modalities"] == ["T1"]
+    required_fields = [
+        "display_name",
+        "capability_summary",
+        "workflow_family",
+        "workflow_role",
+        "pipeline_stages",
+        "primary_outputs",
+        "qc_outputs",
+        "report_outputs",
+        "limitations",
+        "agent_selectable",
+        "is_report_only",
+    ]
+    assert payload["project_workflow_eligibility_metadata_status"] == "passed"
+    assert payload["project_workflow_eligibility_metadata_workflow_types"] == ["t1_deepprep_anat_report"]
+    assert payload["project_workflow_eligibility_metadata_required_fields"] == required_fields
+    assert payload["project_workflow_eligibility_metadata_item_count"] == 2
+    assert payload["upload_inventory_workflow_eligibility_metadata_status"] == "passed"
+    assert payload["upload_inventory_workflow_eligibility_metadata_workflow_types"] == ["t1_deepprep_anat_report"]
+    assert payload["upload_inventory_workflow_eligibility_metadata_required_fields"] == required_fields
+    assert payload["upload_inventory_workflow_eligibility_metadata_item_count"] == 2
     assert any(call[1].endswith("/projects/7/datasets/22/inventory") for call in calls)
 
 
@@ -3803,6 +6173,90 @@ def test_smoke_remote_agent_rejects_malformed_workflow_eligibility():
         )
 
     assert "workflow_eligibility policy_version failed" in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    ("workflow_entry", "expected_message"),
+    [
+        (
+            {"workflow_type": "t1_deepprep_anat_report"},
+            "runnable_workflows[0] workflow_metadata missing",
+        ),
+        (
+            {
+                "workflow_type": "t1_deepprep_anat_report",
+                "workflow_metadata": _workflow_metadata("bold_fmriprep_xcpd_report"),
+            },
+            "runnable_workflows[0] workflow_metadata missing",
+        ),
+    ],
+)
+def test_smoke_remote_agent_rejects_workflow_eligibility_item_without_matching_metadata(
+    workflow_entry,
+    expected_message,
+):
+    smoke = _load_smoke_module()
+
+    with pytest.raises(SystemExit) as exc:
+        smoke._validate_project_series_contract(
+            [
+                {
+                    "id": 3,
+                    "modality": "T1",
+                    "workflow_eligibility": {
+                        "policy_version": "workflow_eligibility_v1",
+                        "production_task_created": False,
+                        "runnable_workflows": [workflow_entry],
+                        "blocked_workflows": [],
+                    },
+                }
+            ]
+        )
+
+    assert expected_message in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    ("metadata_override", "expected_message"),
+    [
+        ({"display_name": None}, "runnable_workflows[0] workflow_metadata display_name missing"),
+        ({"capability_summary": None}, "runnable_workflows[0] workflow_metadata capability_summary missing"),
+        ({"pipeline_stages": []}, "runnable_workflows[0] workflow_metadata pipeline_stages missing"),
+        ({"primary_outputs": []}, "runnable_workflows[0] workflow_metadata primary_outputs missing"),
+        ({"qc_outputs": []}, "runnable_workflows[0] workflow_metadata qc_outputs missing"),
+        ({"report_outputs": []}, "runnable_workflows[0] workflow_metadata report_outputs missing"),
+        ({"limitations": []}, "runnable_workflows[0] workflow_metadata limitations missing"),
+        ({"is_report_only": True}, "runnable_workflows[0] workflow_metadata is_report_only invalid"),
+        ({"agent_selectable": False}, "runnable_workflows[0] workflow_metadata agent_selectable invalid"),
+    ],
+)
+def test_smoke_remote_agent_rejects_weak_workflow_eligibility_metadata(metadata_override, expected_message):
+    smoke = _load_smoke_module()
+    metadata = _workflow_metadata("t1_deepprep_anat_report")
+    metadata.update(metadata_override)
+
+    with pytest.raises(SystemExit) as exc:
+        smoke._validate_project_series_contract(
+            [
+                {
+                    "id": 3,
+                    "modality": "T1",
+                    "workflow_eligibility": {
+                        "policy_version": "workflow_eligibility_v1",
+                        "production_task_created": False,
+                        "runnable_workflows": [
+                            {
+                                "workflow_type": "t1_deepprep_anat_report",
+                                "workflow_metadata": metadata,
+                            }
+                        ],
+                        "blocked_workflows": [],
+                    },
+                }
+            ]
+        )
+
+    assert expected_message in str(exc.value)
 
 
 def test_smoke_remote_agent_rejects_windows_style_unsafe_artifact_paths():
@@ -4043,3 +6497,11 @@ def test_smoke_remote_agent_accepts_quoted_artifact_download_url():
     )
 
     assert summary["artifact_count"] == 1
+
+
+def test_smoke_remote_agent_unsafe_text_check_does_not_flag_bids_task_or_mask_tokens():
+    smoke = _load_smoke_module()
+
+    assert smoke._contains_unredacted_unsafe_text("sub-01_task-rest_desc-summary_bold.html") is False
+    assert smoke._contains_unredacted_unsafe_text("sub-01_desc-brain_mask.nii.gz") is False
+    assert smoke._contains_unredacted_unsafe_text("Authorization: Bearer sk-real-secret-token") is True

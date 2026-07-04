@@ -31,6 +31,10 @@ def init_db() -> None:
             conn.execute("ALTER TABLE tasks ADD COLUMN qsiprep_task_id INTEGER")
         except Exception:
             pass
+        try:
+            conn.execute("ALTER TABLE tasks ADD COLUMN runtime_workflow_type TEXT")
+        except Exception:
+            pass
         for column, ddl in {
             "upload_session_id": "ALTER TABLE imaging_series ADD COLUMN upload_session_id INTEGER",
             "bids_path": "ALTER TABLE imaging_series ADD COLUMN bids_path TEXT",

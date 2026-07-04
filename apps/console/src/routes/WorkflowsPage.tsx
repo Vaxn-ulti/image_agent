@@ -7,6 +7,7 @@ import {
   Info,
   Layers,
   Play,
+  ShieldCheck,
   Zap
 } from 'lucide-react';
 import { useState } from 'react';
@@ -15,13 +16,48 @@ import { Button } from '../components/ui/Button';
 import { PageHeader } from '../components/ui/PageHeader';
 import { api } from '../lib/api';
 import { queryKeys } from '../lib/query';
-import type { Task } from '../lib/types';
+import type { AgentConfirmation, AgentRunResponse, Task, WorkflowCatalogItem } from '../lib/types';
 import { getWorkflowEligibility, groupWorkflows, normalizeWorkflowCatalog, selectQsiprepTaskId } from '../lib/workflows';
+
+type PendingWorkflowApproval = {
+  confirmation: AgentConfirmation;
+  threadId: string;
+  workflowType: string;
+};
+
+function workflowMetadataFromConfirmation(confirmation: AgentConfirmation): Partial<WorkflowCatalogItem> {
+  const value = confirmation.workflow_metadata;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+  return value as Partial<WorkflowCatalogItem>;
+}
+
+function workflowOutputLabels(metadata: Partial<WorkflowCatalogItem>) {
+  return [
+    ...(metadata.primary_outputs || []),
+    ...(metadata.qc_outputs || []),
+    ...(metadata.report_outputs || []),
+  ].slice(0, 4);
+}
+
+function workflowRoleLabel(value?: string) {
+  return value ? value.replace(/_/g, ' ') : '';
+}
+
+function workflowCapabilityBadges(metadata: Partial<WorkflowCatalogItem>) {
+  return [
+    metadata.workflow_family,
+    workflowRoleLabel(metadata.workflow_role),
+    metadata.is_report_only === true ? 'Report only' : 'Full processing',
+  ].filter(Boolean);
+}
 
 export function WorkflowsPage() {
   const projectId = Number(useParams().projectId);
   const queryClient = useQueryClient();
   const [lastStartedTask, setLastStartedTask] = useState<Task | null>(null);
+  const [pendingApproval, setPendingApproval] = useState<PendingWorkflowApproval | null>(null);
   const [launchError, setLaunchError] = useState('');
   const { data: workflowPayload } = useQuery({ queryFn: api.listWorkflows, queryKey: queryKeys.workflows });
   const seriesQuery = useQuery({ enabled: Boolean(projectId), queryFn: () => api.listSeries(projectId), queryKey: queryKeys.series(projectId), retry: false });
@@ -29,23 +65,77 @@ export function WorkflowsPage() {
   const series = seriesQuery.data || [];
   const tasks = tasksQuery.data || [];
 
-  const runWorkflow = useMutation({
-    mutationFn: ({ qsiprepTaskId, seriesId, workflowType }: { qsiprepTaskId?: number | null; seriesId: number; workflowType: string }) =>
-      qsiprepTaskId == null ? api.runSeries(seriesId, workflowType) : api.runSeries(seriesId, workflowType, qsiprepTaskId),
-    onSuccess: (task) => {
+  function taskFromAgentResponse(data: AgentRunResponse) {
+    if (data.status === 'task_created' && data.task?.id) {
+      return data.task;
+    }
+    return null;
+  }
+
+  const prepareWorkflow = useMutation({
+    mutationFn: ({ qsiprepTaskId, seriesId, workflowType }: { qsiprepTaskId?: number | null; seriesId: number; workflowType: string }) => {
+      const dependencyNote = qsiprepTaskId == null ? '' : ` Use completed QSIPrep task ${qsiprepTaskId} as the QSIRecon prerequisite.`;
+      return api.runAgent(
+        projectId,
+        `Prepare workflow ${workflowType} for series ${seriesId}. Return confirmation only and do not create a task yet.${dependencyNote}`,
+      );
+    },
+    onSuccess: (data, variables) => {
       setLaunchError('');
+      setLastStartedTask(null);
+      const task = taskFromAgentResponse(data);
+      if (task) {
+        setPendingApproval(null);
+        setLastStartedTask(task);
+        queryClient.invalidateQueries({ queryKey: queryKeys.tasks(projectId) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.task(task.id) });
+        return;
+      }
+      if (data.status === 'confirmation_required' && data.thread_id && data.confirmation) {
+        setPendingApproval({
+          confirmation: data.confirmation,
+          threadId: data.thread_id,
+          workflowType: String(data.confirmation.workflow_type || variables.workflowType),
+        });
+        return;
+      }
+      setLaunchError(data.answer || data.message || 'Agent did not return a workflow confirmation.');
+    },
+    onError: (error) => {
+      setPendingApproval(null);
+      setLastStartedTask(null);
+      setLaunchError(error instanceof Error ? error.message : 'Workflow preparation failed.');
+    },
+  });
+
+  const approveWorkflow = useMutation({
+    mutationFn: ({ approved, confirmation, threadId }: { approved: boolean; confirmation: AgentConfirmation; threadId: string }) =>
+      api.resumeAgent(threadId, approved, confirmation),
+    onSuccess: (data) => {
+      setLaunchError('');
+      setPendingApproval(null);
+      const task = taskFromAgentResponse(data);
+      if (!task) {
+        setLastStartedTask(null);
+        setLaunchError(data.answer || data.message || 'Workflow approval did not create a task.');
+        return;
+      }
       setLastStartedTask(task);
       queryClient.invalidateQueries({ queryKey: queryKeys.tasks(projectId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.task(task.id) });
     },
     onError: (error) => {
       setLastStartedTask(null);
-      setLaunchError(error instanceof Error ? error.message : 'Workflow launch failed.');
+      setLaunchError(error instanceof Error ? error.message : 'Workflow approval failed.');
     },
   });
 
   const workflowCatalog = normalizeWorkflowCatalog(workflowPayload);
   const grouped = groupWorkflows(workflowCatalog.workflows);
+  const workflowDisplayName = (workflowType: string | null | undefined) => {
+    if (!workflowType) return '';
+    return workflowCatalog.items[workflowType]?.display_name || workflowType;
+  };
   const projectDataError = seriesQuery.error || tasksQuery.error;
   const projectDataErrorMessage = projectDataError instanceof Error ? projectDataError.message : 'Project data could not be loaded.';
 
@@ -106,8 +196,9 @@ export function WorkflowsPage() {
             <CheckCircle2 className="h-4 w-4 shrink-0" /> Task #{lastStartedTask.id} started
           </div>
           <p className="mt-1 text-xs leading-5 text-emerald-700">
-            The backend created a deterministic {lastStartedTask.workflow_type} task. Track queue, runtime, logs, and completion from the task page.
+            The backend created a deterministic {workflowDisplayName(lastStartedTask.workflow_type)} task. Track queue, runtime, logs, and completion from the task page.
           </p>
+          <p className="mt-1 text-[11px] font-medium text-emerald-700/80">Stable workflow ID: {lastStartedTask.workflow_type}</p>
           <Link
             className="mt-3 inline-flex items-center gap-2 rounded-md bg-white px-3 py-2 text-xs font-semibold text-emerald-800 shadow-sm ring-1 ring-emerald-200 hover:bg-emerald-100"
             to={`/projects/${projectId}/tasks`}
@@ -116,6 +207,65 @@ export function WorkflowsPage() {
           </Link>
         </div>
       ) : null}
+
+      {pendingApproval ? (() => {
+        const metadata = workflowMetadataFromConfirmation(pendingApproval.confirmation);
+        const displayName = metadata.display_name || pendingApproval.workflowType;
+        const outputs = workflowOutputLabels(metadata);
+        return (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            <div className="flex items-center gap-2 font-semibold">
+              <ShieldCheck className="h-4 w-4 shrink-0" /> Approval required
+            </div>
+            <p className="mt-1 text-sm font-semibold leading-5 text-amber-950">{displayName}</p>
+            <p className="mt-1 text-xs leading-5 text-amber-700">
+              The Agent prepared this fixed workflow. The backend task is not created until you approve this confirmation.
+            </p>
+            <p className="mt-1 text-[11px] font-medium text-amber-700">Stable workflow ID: {pendingApproval.workflowType}</p>
+            {metadata.capability_summary ? (
+              <p className="mt-2 max-w-3xl text-xs leading-5 text-amber-800">{metadata.capability_summary}</p>
+            ) : null}
+            {outputs.length > 0 ? (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {outputs.map((output) => (
+                  <span key={output} className="rounded-full border border-amber-200 bg-white px-2 py-0.5 text-[10px] font-medium text-amber-900">
+                    {output}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={approveWorkflow.isPending}
+                onClick={() => approveWorkflow.mutate({
+                  approved: true,
+                  confirmation: pendingApproval.confirmation,
+                  threadId: pendingApproval.threadId,
+                })}
+                className="rounded-md bg-[#065F46] px-3 py-2 text-xs font-semibold text-white hover:bg-[#044E3A] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Approve workflow
+              </button>
+              <button
+                type="button"
+                disabled={approveWorkflow.isPending}
+                onClick={() => {
+                  setPendingApproval(null);
+                  approveWorkflow.mutate({
+                    approved: false,
+                    confirmation: pendingApproval.confirmation,
+                    threadId: pendingApproval.threadId,
+                  });
+                }}
+                className="rounded-md border border-amber-200 bg-white px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        );
+      })() : null}
 
       <div className="space-y-12">
         {Object.entries(grouped).map(([group, workflows]) => workflows.length > 0 && (
@@ -136,6 +286,9 @@ export function WorkflowsPage() {
                   ...(catalogItem?.qc_outputs || []),
                   ...(catalogItem?.report_outputs || []),
                 ].slice(0, 4);
+                const capabilityBadges = workflowCapabilityBadges(catalogItem || {});
+                const pipelineStages = (catalogItem?.pipeline_stages || []).slice(0, 3);
+                const limitations = (catalogItem?.limitations || []).slice(0, 2);
                 return (
                 <div key={workflow} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden transition-all hover:shadow-md">
                   <div className="px-5 py-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
@@ -147,6 +300,15 @@ export function WorkflowsPage() {
                       {catalogItem?.capability_summary ? (
                         <p className="mt-1 max-w-3xl text-xs leading-5 text-gray-500">{catalogItem.capability_summary}</p>
                       ) : null}
+                      {capabilityBadges.length > 0 ? (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {capabilityBadges.map((badge) => (
+                            <span key={badge} className="rounded border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-gray-500">
+                              {badge}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
                       {outputs.length > 0 ? (
                         <div className="mt-2 flex flex-wrap gap-1.5">
                           {outputs.map((output) => (
@@ -156,9 +318,21 @@ export function WorkflowsPage() {
                           ))}
                         </div>
                       ) : null}
-                      <span className="px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-400 text-[10px] font-bold uppercase">
-                        Standard Pipeline
-                      </span>
+                      {pipelineStages.length > 0 ? (
+                        <div className="mt-3 grid gap-1.5">
+                          {pipelineStages.map((stage) => (
+                            <div key={`${workflow}-${stage.name}`} className="text-[11px] leading-4 text-gray-500">
+                              <span className="font-semibold text-gray-700">{stage.name}</span>
+                              {stage.purpose ? <span className="ml-1">{stage.purpose}</span> : null}
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                      {limitations.length > 0 ? (
+                        <div className="mt-2 text-[11px] leading-4 text-amber-700">
+                          {limitations.join(' ')}
+                        </div>
+                      ) : null}
                     </div>
                     <button className="text-gray-400 hover:text-gray-600 transition-colors">
                       <Info className="w-4 h-4" />
@@ -196,8 +370,8 @@ export function WorkflowsPage() {
                               </div>
                               <Button
                                 size="sm"
-                                disabled={!eligibility.runnable || runWorkflow.isPending}
-                                onClick={() => runWorkflow.mutate({
+                                disabled={!eligibility.runnable || prepareWorkflow.isPending || approveWorkflow.isPending}
+                                onClick={() => prepareWorkflow.mutate({
                                   qsiprepTaskId: workflow.startsWith('dwi_qsirecon') ? selectQsiprepTaskId(tasks, item.id) : null,
                                   seriesId: item.id,
                                   workflowType: workflow,
@@ -208,7 +382,7 @@ export function WorkflowsPage() {
                                     : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                                 } px-4 shadow-sm group-hover:scale-105 transition-transform`}
                               >
-                                {runWorkflow.isPending ? (
+                                {prepareWorkflow.isPending ? (
                                   <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
                                 ) : (
                                   <Play className="w-3.5 h-3.5 mr-1.5 fill-current" />

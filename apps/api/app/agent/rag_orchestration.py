@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import re
+import time
 from pathlib import Path
 from typing import Any, TypedDict
 
@@ -72,6 +73,29 @@ def _excerpt(text: str, query_terms: set[str], max_chars: int = 360) -> str:
     start = max(0, min(positions) - 80) if positions else 0
     snippet = text[start : start + max_chars].replace("\n", " ").strip()
     return snippet
+
+
+def _supporting_excerpt(text: str, required_terms: set[str], max_chars: int = 700) -> str:
+    normalized_text = re.sub(r"\s+", " ", text).strip()
+    lowered = normalized_text.lower()
+    if not required_terms:
+        return normalized_text[:max_chars].strip()
+    window = max(100, max_chars // max(1, len(required_terms)) - 20)
+    snippets: list[str] = []
+    seen: set[str] = set()
+    for term in sorted(required_terms):
+        position = lowered.find(term.lower())
+        if position < 0:
+            continue
+        start = max(0, position - 70)
+        end = min(len(normalized_text), position + len(term) + window)
+        snippet = normalized_text[start:end].strip()
+        if snippet and snippet not in seen:
+            snippets.append(snippet)
+            seen.add(snippet)
+    if not snippets:
+        return normalized_text[:max_chars].strip()
+    return " ... ".join(snippets)[:max_chars].strip()
 
 
 def _parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
@@ -239,7 +263,8 @@ def query_local_knowledge(query: str, root: Path | str | None = None, limit: int
     return sorted(hits, key=lambda item: (-item["score"], item["path"]))[:limit]
 
 
-def _citation_hits(query: str, root: Path | str | None = None, limit: int = 5) -> list[dict[str, Any]]:
+def _citation_context(query: str, root: Path | str | None = None, limit: int = 5) -> dict[str, Any]:
+    started = time.perf_counter()
     context = retrieve_reference_context(query, root=root, limit=limit)
     normalized = []
     for hit in context.get("results") or []:
@@ -255,11 +280,133 @@ def _citation_hits(query: str, root: Path | str | None = None, limit: int = 5) -
             }
         )
     if normalized:
-        return normalized[:limit]
-    return [
+        normalized = _filter_policy_citations(query, normalized)
+        normalized = _enrich_policy_citation_snippets(query, normalized, root=root)
+        mode = str(context.get("mode") or "persistent_index")
+        output = {
+            "citations": normalized[:limit],
+            "retrieval_mode": mode,
+            "retrieval_source": "elasticsearch_hybrid" if mode == "elasticsearch_hybrid" else "persistent_index",
+        }
+        if mode == "elasticsearch_hybrid":
+            evidence = _safe_elasticsearch_hybrid_query_evidence(context.get("elasticsearch_hybrid_query"))
+            if evidence:
+                output["elasticsearch_hybrid_query"] = evidence
+        output["retrieval_latency_ms"] = round((time.perf_counter() - started) * 1000.0, 3)
+        return output
+    local_hits = [
         {**hit, "source": str(hit.get("path") or ""), "snippet": str(hit.get("excerpt") or "")}
         for hit in query_local_knowledge(query, root=root, limit=limit)
     ]
+    local_hits = _filter_policy_citations(query, local_hits)
+    local_hits = _enrich_policy_citation_snippets(query, local_hits, root=root)
+    return {
+        "citations": local_hits,
+        "retrieval_mode": "local_scan",
+        "retrieval_source": "local_scan",
+        "retrieval_latency_ms": round((time.perf_counter() - started) * 1000.0, 3),
+    }
+
+
+def _safe_elasticsearch_hybrid_query_evidence(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    safe: dict[str, Any] = {}
+    for key in (
+        "index",
+        "lexical_retriever",
+        "vector_retriever",
+        "dense_vector_field",
+        "fusion",
+        "rrf_unavailable_reason",
+        "embedding_provider",
+        "embedding_model",
+        "embedding_transport",
+    ):
+        field = value.get(key)
+        if isinstance(field, str) and field and len(field) <= 140 and all(char.isalnum() or char in "_.-" for char in field):
+            safe[key] = field
+    dense_vector_dims = value.get("dense_vector_dims")
+    if isinstance(dense_vector_dims, int) and not isinstance(dense_vector_dims, bool) and dense_vector_dims > 0:
+        safe["dense_vector_dims"] = dense_vector_dims
+    for key in ("embedding_endpoint_configured", "embedding_production_ready"):
+        if isinstance(value.get(key), bool):
+            safe[key] = value[key]
+    return safe
+
+
+def _filter_policy_citations(query: str, citations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    lowered = query.lower()
+    preferred: tuple[str, ...] = ()
+    if any(term in lowered for term in ("mriqc", "dpabi", "qsiprep")) and _is_launchability_query(query):
+        preferred = (LAUNCHABILITY_MATRIX_SOURCE,)
+    elif "elasticsearch" in lowered and "hybrid" in lowered:
+        preferred = (
+            "docs/rag/contracts/elasticsearch-hybrid-search.md",
+            "docs/rag/vendor/elastic_official_hybrid_search.md",
+        )
+    elif "fixed workflow" in lowered and ("production task" in lowered or "create" in lowered):
+        preferred = (
+            "docs/skills/image-agent-workflow-runner/references/registry-and-preflight.md",
+            LAUNCHABILITY_MATRIX_SOURCE,
+        )
+    elif "dwi" in lowered and any(term in lowered for term in ("produce", "output", "workflow", "dti", "fast gpu")):
+        preferred = ("docs/rag/workflows/dwi_fast_gpu_dti.md",)
+    elif any(term in lowered for term in ("upload", "sidecar", "bval", "bvec", "nifti", "dicom")):
+        preferred = ("docs/rag/data-requirements/modalities-bids.md",)
+    elif any(term in lowered for term in ("diagnose", "diagnosis", "dementia", "tumor", "stroke", "normal", "abnormal", "clinical interpretation")):
+        preferred = ("docs/rag/safety/non-diagnostic.md",)
+    if not preferred:
+        return citations
+    filtered = [
+        hit
+        for hit in citations
+        if str(hit.get("source") or hit.get("path") or "").replace("\\", "/") in preferred
+    ]
+    return filtered or citations
+
+
+def _policy_excerpt_terms(query: str) -> set[str]:
+    lowered = query.lower()
+    if any(term in lowered for term in ("mriqc", "dpabi", "qsiprep")) and _is_launchability_query(query):
+        return {"incubation_reference", "unsupported_external", "workflow_eligibility", "production tasks"}
+    if "elasticsearch" in lowered and "hybrid" in lowered:
+        return {"elasticsearch", "bm25", "dense vector", "rrf"}
+    if "fixed workflow" in lowered and ("production task" in lowered or "create" in lowered):
+        return {"registry", "preflight", "human confirmation", "fingerprint", "task_service.create_series_task"}
+    if "dwi" in lowered and any(term in lowered for term in ("produce", "output", "workflow", "dti", "fast gpu")):
+        return {"fa/md/ad/rd", "atlas regional tsv tables", "qc/provenance", "not full qsiprep"}
+    if any(term in lowered for term in ("upload", "sidecar", "bval", "bvec", "nifti", "dicom")):
+        return {"dwi", "nifti", "bval", "bvec", "json"}
+    if any(term in lowered for term in ("diagnose", "diagnosis", "dementia", "tumor", "stroke", "normal", "abnormal", "clinical interpretation")):
+        return {"must not diagnose", "qualified radiologist", "not a diagnosis"}
+    return set()
+
+
+def _enrich_policy_citation_snippets(
+    query: str,
+    citations: list[dict[str, Any]],
+    *,
+    root: Path | str | None,
+) -> list[dict[str, Any]]:
+    terms = _policy_excerpt_terms(query)
+    if not terms:
+        return citations
+    root_path = Path(root or Path.cwd())
+    enriched = []
+    for hit in citations:
+        source = str(hit.get("source") or hit.get("path") or "").replace("\\", "/")
+        path = root_path / source
+        if path.exists() and path.is_file():
+            text = path.read_text(encoding="utf-8", errors="ignore")
+            snippet = _supporting_excerpt(text, terms, max_chars=1200)
+            hit = {**hit, "snippet": snippet, "excerpt": snippet}
+        enriched.append(hit)
+    return enriched
+
+
+def _citation_hits(query: str, root: Path | str | None = None, limit: int = 5) -> list[dict[str, Any]]:
+    return _citation_context(query, root=root, limit=limit)["citations"]
 
 
 def _raw_source_evidence_for_citations(citations: list[dict[str, Any]], root: Path | str | None = None) -> dict[str, Any]:
@@ -357,10 +504,18 @@ def _backend_context_answer(backend_context: dict | None) -> str:
     if tasks:
         task_bits = []
         for task in tasks[:5]:
+            workflow_type = task.get("workflow_type", "unknown_workflow")
+            runtime_workflow_type = task.get("runtime_workflow_type")
+            runtime_note = (
+                f" via runtime runner {runtime_workflow_type}"
+                if runtime_workflow_type and runtime_workflow_type != workflow_type
+                else ""
+            )
             task_bits.append(
-                "task {id}: {workflow_type} is {status} ({progress}%){error}".format(
+                "task {id}: {workflow_type}{runtime_note} is {status} ({progress}%){error}".format(
                     id=task.get("id", "unknown"),
-                    workflow_type=task.get("workflow_type", "unknown_workflow"),
+                    workflow_type=workflow_type,
+                    runtime_note=runtime_note,
                     status=task.get("status", "unknown"),
                     progress=task.get("progress", 0),
                     error=f", error={task.get('error_message')}" if task.get("error_message") else "",
@@ -381,6 +536,59 @@ def _backend_context_answer(backend_context: dict | None) -> str:
                 )
             )
         parts.append("Registered outputs: " + "; ".join(output_bits) + ".")
+    result_summaries = backend_context.get("result_summaries") or []
+    if result_summaries:
+        summary_bits = []
+        for summary in result_summaries[:5]:
+            workflow_type = summary.get("workflow_type", "unknown_workflow")
+            workflow_metadata = summary.get("workflow_metadata") or {}
+            metadata_workflow_type = workflow_metadata.get("workflow_type")
+            display_name = workflow_metadata.get("display_name") or workflow_type
+            report_only_note = ""
+            if workflow_metadata.get("is_report_only") is False:
+                report_only_note = " not report-only"
+            elif workflow_metadata.get("is_report_only") is True:
+                report_only_note = " report-only"
+            metadata_note = (
+                f"; public workflow metadata {metadata_workflow_type}{report_only_note}"
+                if metadata_workflow_type and metadata_workflow_type != workflow_type
+                else report_only_note
+            )
+            summary_bits.append(
+                "task {task_id}: {display_name} for {modality} with stable workflow id {workflow_type}{metadata_note}".format(
+                    task_id=summary.get("task_id", "unknown"),
+                    display_name=display_name,
+                    modality=summary.get("modality", "unknown modality"),
+                    workflow_type=workflow_type,
+                    metadata_note=metadata_note,
+                )
+            )
+        parts.append("Result summaries: " + "; ".join(summary_bits) + ".")
+    supported_workflows = backend_context.get("supported_workflows") or []
+    if supported_workflows:
+        workflow_bits = []
+        for workflow in supported_workflows[:5]:
+            workflow_type = workflow.get("workflow_type", "unknown_workflow")
+            runtime_workflow_type = workflow.get("runtime_workflow_type")
+            lane = workflow.get("lane", "unknown_lane")
+            display_name = workflow.get("display_name", workflow_type)
+            capability_summary = workflow.get("capability_summary", "")
+            alias_note = (
+                f" runtime runner {runtime_workflow_type}"
+                if runtime_workflow_type and runtime_workflow_type != workflow_type
+                else ""
+            )
+            report_only_note = ""
+            if workflow.get("is_report_only") is False:
+                report_only_note = " not report-only"
+            elif workflow.get("is_report_only") is True:
+                report_only_note = " report-only"
+            confirmation_note = " requires human confirmation" if workflow.get("requires_confirmation") else ""
+            capability_note = f" Capability: {capability_summary}" if capability_summary else ""
+            workflow_bits.append(
+                f"{workflow_type} is {lane}: {display_name}{alias_note}{report_only_note}{confirmation_note}.{capability_note}"
+            )
+        parts.append("Supported workflow capabilities: " + " ".join(workflow_bits) + ".")
     return " ".join(parts)
 
 
@@ -393,6 +601,8 @@ class RAGState(TypedDict, total=False):
     dependencies: dict
     grounding_policy: dict
     mode: str
+    retrieval_mode: str
+    retrieval_source: str
     intent: str
     recommended_next_step: str
     tool_chain_hint: str
@@ -424,6 +634,58 @@ def _tool_chain_hint(intent: str) -> str:
     return "Answer from backend state first, then supplement with local knowledge if needed."
 
 
+def _query_has_all(query: str, terms: tuple[str, ...]) -> bool:
+    lowered = query.lower()
+    return all(term in lowered for term in terms)
+
+
+def _policy_answer(query: str, intent: str, citations: list[dict[str, Any]]) -> str:
+    lowered = query.lower()
+    if intent == "launchability" and any(term in lowered for term in ("mriqc", "dpabi", "qsiprep")):
+        return (
+            "Do not create production tasks from this matrix. "
+            "workflow_eligibility remains authoritative for launchability on a specific uploaded series. "
+            "MRIQC and QSIPrep-related lanes are incubation_reference unless the backend registry promotes them, "
+            "and DPABI is unsupported_external in the current Image Agent product. "
+            "Use backend registry, preflight, task records, result-summary, and artifact-manifest evidence before making success claims."
+        )
+    if "elasticsearch" in lowered and "hybrid" in lowered:
+        return (
+            "Elasticsearch hybrid RAG retrieves curated Image Agent context with BM25 lexical retrieval, "
+            "dense vector kNN over the embedding field, and RRF fusion of ranked results. "
+            "It cites safe repo-relative docs/rag or docs/skills Markdown sources only; raw official snapshots are provenance evidence and are not indexed wholesale."
+        )
+    if "fixed workflow" in lowered and ("production task" in lowered or "create" in lowered):
+        return (
+            "Before a fixed workflow creates a production task, Image Agent must pass the workflow registry, "
+            "run preflight checks, obtain human confirmation, verify the confirmation fingerprint, call "
+            "task_service.create_series_task(), and then execute through the pipeline runner."
+        )
+    if "dwi" in lowered and any(term in lowered for term in ("produce", "output", "workflow", "dti", "fast gpu")):
+        return (
+            "The dwi_fast_gpu_dti workflow produces FA/MD/AD/RD maps, MNI152 maps when registration succeeds, "
+            "atlas regional TSV tables, QC/provenance files, result-summary JSON, and an HTML scientific report. "
+            "It is not full QSIPrep and not full QSIRecon; fixed execution still requires registry, preflight, "
+            "human confirmation, confirmation fingerprint, task_service.create_series_task(), and the pipeline runner."
+        )
+    if any(term in lowered for term in ("upload", "sidecar", "bval", "bvec", "nifti", "dicom")):
+        return (
+            "For a complete DWI sidecar set, upload the DWI NIfTI plus matching JSON sidecar, bval, and bvec files. "
+            "Fast GPU DTI also needs phase-encoding/readout metadata in the JSON sidecar. T1 uses T1w NIfTI plus JSON, "
+            "BOLD uses BOLD NIfTI plus task/timing JSON, and DICOM archives should be converted or staged before production launch."
+        )
+    if any(term in lowered for term in ("diagnose", "diagnosis", "dementia", "tumor", "stroke", "normal", "abnormal", "clinical interpretation")):
+        return (
+            "Image Agent must not diagnose from workflow outputs. It can explain preprocessing, derived features, QC, "
+            "and registered artifacts, but clinical interpretation should come from a qualified radiologist or clinician."
+        )
+    if _query_has_all(lowered, ("registry", "preflight")):
+        return (
+            "The registry defines stable workflow_type capability and requirements, while preflight resolves series identity, inputs, sidecars, Docker or host tools, GPU capability, mounts, and output writeability before confirmation."
+        )
+    return ""
+
+
 def _launchability_boundary_note(intent: str) -> str:
     if intent != "launchability":
         return ""
@@ -432,6 +694,15 @@ def _launchability_boundary_note(intent: str) -> str:
         "workflow_eligibility remains authoritative for launchability. "
         "/tasks/{task_id}/result-summary remains authoritative for completed outputs."
     )
+
+
+def _should_prepend_launchability_boundary(query: str, intent: str) -> bool:
+    if intent != "launchability":
+        return False
+    lowered = query.lower()
+    if "fixed workflow" in lowered and ("production task" in lowered or "create" in lowered):
+        return False
+    return True
 
 
 def _tool_invocation(name: str, status: str, result: dict[str, Any]) -> dict[str, Any]:
@@ -544,18 +815,27 @@ def _recommend_next_action(intent: str, tool_results: list[dict[str, Any]]) -> d
     if task_result.get("running_task_ids"):
         action = "Monitor running tasks and read logs before launching new work."
     elif task_result.get("failed_task_ids"):
-        action = "Open failed task logs, identify the first concrete runtime error, then choose a targeted retry or code fix."
+        action = (
+            "Open failed task logs, identify the first concrete runtime error, then draft a repair plan. "
+            "Any retry requires a new registry preflight and human confirmation before task creation."
+        )
     elif output_result.get("result_summary_tasks") and not report_result.get("scientific_report_summary_count") and not report_result.get("result_summary_reports"):
-        action = "Generate scientific report summaries for completed result-summary tasks."
+        action = (
+            "Draft a report-registration repair plan for the completed result-summary task. "
+            "Generating or rerunning report artifacts requires human confirmation before task creation."
+        )
     elif report_result.get("missing_paths"):
-        action = "Repair missing scientific report summary registrations or rerun the report generator."
+        action = (
+            "Draft a repair plan for missing scientific report registrations and verify artifact paths. "
+            "Any report generation rerun requires a new preflight and human confirmation."
+        )
     elif report_result.get("result_summary_reports"):
         action = "Review the result-summary report figures in the frontend and use the registered HTML/PNG artifacts for scientific interpretation."
     elif intent == "next_step":
         action = "Pick the most recent completed task, inspect its result-summary and report bundle, then suggest the next workflow gate."
     else:
         action = _tool_chain_hint(intent)
-    return {"recommended_action": action, "policy": "read-only agent tool chain; no long workflow is launched from chat"}
+    return {"recommended_action": action, "policy": "read-only ObserveRepair agent tool chain; no retry, rerun, or long workflow is launched from chat"}
 
 
 def run_agent_tool_chain(query: str, backend_context: dict | None = None) -> list[dict]:
@@ -572,15 +852,19 @@ def run_agent_tool_chain(query: str, backend_context: dict | None = None) -> lis
 
 
 def _fallback_rag_response(query: str, root: Path | str | None = None, backend_context: dict | None = None, limit: int = 5) -> dict:
-    citations = _citation_hits(query, root=root, limit=limit)
-    cited_text = " ".join(hit["excerpt"] for hit in citations[:2])
+    citation_context = _citation_context(query, root=root, limit=limit)
+    citations = citation_context["citations"]
+    cited_text = " ".join(hit["excerpt"] for hit in citations[:3])
     backend_answer = _backend_context_answer(backend_context)
     intent = _classify_intent(query)
-    launchability_note = _launchability_boundary_note(intent)
+    launchability_note = _launchability_boundary_note(intent) if _should_prepend_launchability_boundary(query, intent) else ""
+    policy_answer = _policy_answer(query, intent, citations)
     if backend_answer and cited_text:
         answer = f"{backend_answer} Relevant local docs: {cited_text}"
     elif backend_answer:
         answer = backend_answer
+    elif policy_answer:
+        answer = policy_answer
     else:
         answer = cited_text or "No backend records or local planning/skill documents matched the query."
     if launchability_note:
@@ -588,6 +872,14 @@ def _fallback_rag_response(query: str, root: Path | str | None = None, backend_c
     return {
         "answer": answer,
         "citations": citations,
+        "retrieval_mode": citation_context["retrieval_mode"],
+        "retrieval_source": citation_context["retrieval_source"],
+        "retrieval_latency_ms": citation_context.get("retrieval_latency_ms", 0.0),
+        **(
+            {"elasticsearch_hybrid_query": citation_context["elasticsearch_hybrid_query"]}
+            if citation_context.get("elasticsearch_hybrid_query")
+            else {}
+        ),
         "raw_source_evidence": _raw_source_evidence_for_citations(citations, root=root),
         "backend_context": backend_context or {},
         "grounding_policy": grounding_policy(),
@@ -624,18 +916,35 @@ def _langgraph_app():
         return {"tool_invocations": run_agent_tool_chain(state.get("query", ""), backend_context=state.get("backend_context"))}
 
     def retrieve_docs(state: RAGState) -> dict[str, Any]:
-        citations = _citation_hits(state.get("query", ""), root=state.get("root"), limit=5)
-        return {"citations": citations}
+        citation_context = _citation_context(state.get("query", ""), root=state.get("root"), limit=5)
+        return {
+            "citations": citation_context["citations"],
+            "retrieval_mode": citation_context["retrieval_mode"],
+            "retrieval_source": citation_context["retrieval_source"],
+            "retrieval_latency_ms": citation_context["retrieval_latency_ms"],
+            **(
+                {"elasticsearch_hybrid_query": citation_context["elasticsearch_hybrid_query"]}
+                if citation_context.get("elasticsearch_hybrid_query")
+                else {}
+            ),
+        }
 
     def synthesize(state: RAGState) -> dict[str, Any]:
         backend_answer = state.get("answer", "")
         citations = state.get("citations") or []
-        cited_text = " ".join(hit["excerpt"] for hit in citations[:2])
+        cited_text = " ".join(hit["excerpt"] for hit in citations[:3])
         intent = _classify_intent(state.get("query", ""))
-        launchability_note = _launchability_boundary_note(intent)
+        launchability_note = (
+            _launchability_boundary_note(intent)
+            if _should_prepend_launchability_boundary(state.get("query", ""), intent)
+            else ""
+        )
+        policy_answer = _policy_answer(state.get("query", ""), intent, citations)
         answer = backend_answer
         if backend_answer and cited_text:
             answer = f"{backend_answer} Relevant local docs: {cited_text}"
+        elif policy_answer:
+            answer = policy_answer
         elif cited_text and not backend_answer:
             answer = cited_text
         elif not answer:
@@ -645,6 +954,10 @@ def _langgraph_app():
         return {
             "answer": answer,
             "intent": intent,
+            "retrieval_mode": state.get("retrieval_mode"),
+            "retrieval_source": state.get("retrieval_source"),
+            "retrieval_latency_ms": state.get("retrieval_latency_ms"),
+            "elasticsearch_hybrid_query": state.get("elasticsearch_hybrid_query"),
             "recommended_next_step": _tool_chain_hint(intent),
             "tool_chain_hint": _tool_chain_hint(intent),
             "tool_invocations": state.get("tool_invocations") or [],
@@ -675,11 +988,24 @@ def build_rag_response(query: str, root: Path | str | None = None, backend_conte
     if app is not None:
         try:
             result = app.invoke(base_state)
+            citation_context = _citation_context(query, root=root, limit=limit)
             result["dependencies"] = dependency_status()
             result["grounding_policy"] = grounding_policy()
             result["backend_context"] = backend_context or {}
             result["mode"] = "langgraph"
-            result.setdefault("citations", _citation_hits(query, root=root, limit=limit))
+            result.setdefault("citations", citation_context["citations"])
+            result.setdefault("retrieval_mode", citation_context["retrieval_mode"])
+            result.setdefault("retrieval_source", citation_context["retrieval_source"])
+            result.setdefault("retrieval_latency_ms", citation_context.get("retrieval_latency_ms", 0.0))
+            if citation_context.get("elasticsearch_hybrid_query"):
+                result.setdefault("elasticsearch_hybrid_query", citation_context["elasticsearch_hybrid_query"])
+            safe_query_evidence = _safe_elasticsearch_hybrid_query_evidence(
+                result.get("elasticsearch_hybrid_query")
+            )
+            if safe_query_evidence:
+                result["elasticsearch_hybrid_query"] = safe_query_evidence
+            else:
+                result.pop("elasticsearch_hybrid_query", None)
             result["raw_source_evidence"] = _raw_source_evidence_for_citations(result.get("citations") or [], root=root)
             result.setdefault("tool_chain_hint", _tool_chain_hint(result.get("intent", _classify_intent(query))))
             result.setdefault("recommended_next_step", result.get("tool_chain_hint"))

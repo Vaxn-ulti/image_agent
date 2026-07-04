@@ -33,17 +33,32 @@ def agent_model_status():
     return agent_service.agent_model_status()
 
 
-@router.post("/agent/runs", response_model=AgentRunResponse, responses=AGENT_RUN_ERROR_RESPONSES)
+@router.post(
+    "/agent/runs",
+    response_model=AgentRunResponse,
+    response_model_exclude_none=True,
+    responses=AGENT_RUN_ERROR_RESPONSES,
+)
 def agent_run(req: AgentRunRequest):
     return agent_service.agent_run(req)
 
 
-@router.get("/agent/runs/{agent_run_id}", response_model=AgentRunLookupResponse, responses=AGENT_RUN_ERROR_RESPONSES)
+@router.get(
+    "/agent/runs/{agent_run_id}",
+    response_model=AgentRunLookupResponse,
+    response_model_exclude_none=True,
+    responses=AGENT_RUN_ERROR_RESPONSES,
+)
 def agent_run_lookup(agent_run_id: str):
     return agent_service.agent_run_lookup(agent_run_id)
 
 
-@router.post("/agent/runs/{thread_id}/resume", response_model=AgentRunResponse, responses=AGENT_RUN_ERROR_RESPONSES)
+@router.post(
+    "/agent/runs/{thread_id}/resume",
+    response_model=AgentRunResponse,
+    response_model_exclude_none=True,
+    responses=AGENT_RUN_ERROR_RESPONSES,
+)
 def agent_resume(thread_id: str, req: AgentResumeRequest):
     return agent_service.agent_resume(thread_id, req)
 

@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
+import re
+import sqlite3
 import time
 import urllib.error
 import urllib.request
@@ -15,6 +17,36 @@ from uuid import uuid4
 
 LAUNCHABILITY_MATRIX_SOURCE = "docs/rag/workflows/workflow_launchability_matrix.md"
 LAUNCHABILITY_SMOKE_QUERY = "Use the workflow launchability matrix to explain which workflows are launchable and cite the matrix."
+ELASTICSEARCH_HYBRID_CONTRACT_SOURCE = "docs/rag/contracts/elasticsearch-hybrid-search.md"
+ELASTICSEARCH_HYBRID_SMOKE_QUERY = "Use the Elasticsearch hybrid search contract to explain the BM25 dense-vector kNN RRF retrieval boundary."
+UNKNOWN_WORKFLOW_INCUBATION_WORKFLOW_TYPE = "codex_unknown_workflow_smoke"
+UNKNOWN_WORKFLOW_INCUBATION_SMOKE_QUERY = (
+    "Try to run the unregistered workflow codex_unknown_workflow_smoke. "
+    "It is not in the fixed workflow registry; propose incubation only and do not create a production task."
+)
+ELASTICSEARCH_RRF_SOURCE_URL = "https://www.elastic.co/docs/reference/elasticsearch/rest-apis/reciprocal-rank-fusion"
+ELASTICSEARCH_ACCEPTED_FUSION_FALLBACK_REASON = "license_non_compliant"
+LOCAL_EMBEDDING_PROVIDERS = {
+    "",
+    "local_hashing",
+    "deterministic_local_hashing",
+    "local-token-hash-v1",
+    "mock",
+    "mock_embedding",
+}
+WORKFLOW_ELIGIBILITY_METADATA_REQUIRED_FIELDS = [
+    "display_name",
+    "capability_summary",
+    "workflow_family",
+    "workflow_role",
+    "pipeline_stages",
+    "primary_outputs",
+    "qc_outputs",
+    "report_outputs",
+    "limitations",
+    "agent_selectable",
+    "is_report_only",
+]
 CONTAINER_NATIVE_QC_OFFICIAL_SOURCE_IDS = frozenset(
     {
         "docs/rag/vendor/deepprep_official_container_usage.md",
@@ -28,6 +60,25 @@ CONTAINER_NATIVE_QC_OFFICIAL_SOURCE_IDS = frozenset(
     }
 )
 DEBUG_ONLY_WORKFLOWS = frozenset({"t1_deepprep_mock"})
+RUNTIME_WORKFLOW_ALIASES = {
+    "t1_deepprep_anat_report": "t1_deepprep",
+}
+
+
+def _rrf_unavailable_reason(metadata: dict) -> str:
+    return str(metadata.get("rrf_unavailable_reason") or "").strip()
+
+
+def _validate_elasticsearch_fusion(metadata: dict, *, context: str) -> tuple[str, str | None]:
+    fusion = str(metadata.get("fusion") or "").strip()
+    reason = _rrf_unavailable_reason(metadata)
+    if fusion == "rrf":
+        return fusion, None
+    _require(
+        fusion == "query_plus_knn" and reason == ELASTICSEARCH_ACCEPTED_FUSION_FALLBACK_REASON,
+        f"{context}: fusion must be rrf or query_plus_knn with rrf_unavailable_reason=license_non_compliant",
+    )
+    return fusion, reason
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SOURCE_MARKER_KEYS = frozenset(
     {
@@ -136,11 +187,8 @@ def _safe_model_status(status: dict) -> dict:
             if parsed.port is not None:
                 host = f"{host}:{parsed.port}"
             safe["base_url"] = urlunsplit((parsed.scheme, host, parsed.path, parsed.query, parsed.fragment))
-    for key in ("store", "metadata_enabled"):
+    for key in ("store", "metadata_enabled", "trust_env_proxy"):
         if isinstance(status.get(key), bool):
-            safe[key] = status[key]
-    for key in ("context_window", "auto_compact_token_limit"):
-        if isinstance(status.get(key), int) and not isinstance(status.get(key), bool):
             safe[key] = status[key]
     capabilities = status.get("capabilities")
     if isinstance(capabilities, dict):
@@ -194,6 +242,206 @@ def _safe_production_readiness(deployment: dict) -> dict:
     return safe
 
 
+def _requires_direct_model_gateway(status: dict, expected_provider_profile: str | None) -> bool:
+    provider_profile = str(status.get("provider_profile") or "").strip().lower()
+    if provider_profile == "rawchat" or expected_provider_profile == "rawchat":
+        return True
+    base_url = status.get("base_url")
+    if not isinstance(base_url, str) or not base_url:
+        return False
+    host = (urlsplit(base_url).hostname or "").lower()
+    return host == "rawchat.cn" or host.endswith(".rawchat.cn")
+
+
+def _validate_direct_model_gateway(status: dict, expected_provider_profile: str | None) -> None:
+    if not _requires_direct_model_gateway(status, expected_provider_profile):
+        return
+    _require(
+        status.get("trust_env_proxy") is False,
+        "rawchat model trust_env_proxy must be false",
+    )
+    deployment = status.get("deployment") if isinstance(status.get("deployment"), dict) else {}
+    access = deployment.get("model_gateway_access")
+    _require(
+        access == "direct",
+        f"rawchat model gateway access {access or 'missing'} did not match direct",
+    )
+
+
+STRICT_REMOTE_ACCEPTANCE_MISSING_REASON = (
+    "Strict remote acceptance evidence has not been verified for the upload-agent-workflow-result chain."
+)
+
+
+def _safe_fast_launch_readiness(deployment: dict) -> dict:
+    readiness = deployment.get("fast_launch_readiness")
+    _require(isinstance(readiness, dict), "fast launch readiness is missing from /deployment")
+    blocking_reasons = readiness.get("blocking_reasons")
+    if not isinstance(blocking_reasons, list):
+        blocking_reasons = []
+    safe_reasons = [reason for reason in blocking_reasons if isinstance(reason, str) and reason]
+    checks = readiness.get("checks") if isinstance(readiness.get("checks"), dict) else {}
+    safe_checks: dict = {}
+    production_deployment = checks.get("production_deployment")
+    if isinstance(production_deployment, dict):
+        production_blockers = production_deployment.get("blocking_reasons")
+        if not isinstance(production_blockers, list):
+            production_blockers = []
+        safe_checks["production_deployment"] = {
+            "status": production_deployment.get("status")
+            if isinstance(production_deployment.get("status"), str)
+            and _is_privacy_safe_symbol(production_deployment.get("status"))
+            else "",
+            "required": production_deployment.get("required") is True,
+            "ready": production_deployment.get("ready") is True,
+            "readiness_status": production_deployment.get("readiness_status")
+            if isinstance(production_deployment.get("readiness_status"), str)
+            and _is_privacy_safe_symbol(production_deployment.get("readiness_status"))
+            else "",
+            "blocking_reasons": [reason for reason in production_blockers if isinstance(reason, str) and reason],
+        }
+    for check_name in (
+        "model_gateway_target",
+        "agent_task_boundary",
+        "upload_workflow_result_contract",
+        "strict_remote_acceptance",
+    ):
+        check = checks.get(check_name)
+        if isinstance(check, dict):
+            status = check.get("status")
+            safe_checks[check_name] = {"status": status if isinstance(status, str) and _is_privacy_safe_symbol(status) else ""}
+    rag_check = checks.get("rag_elasticsearch_hybrid")
+    if isinstance(rag_check, dict):
+        safe_rag = {}
+        for key in ("status", "engine", "mode", "index", "embedding_provider", "embedding_model", "embedding_transport", "fusion"):
+            value = rag_check.get(key)
+            safe_rag[key] = value if isinstance(value, str) and _is_privacy_safe_symbol(value) else None
+        for key in ("configured", "persisted", "embedding_endpoint_configured", "embedding_production_ready"):
+            safe_rag[key] = rag_check.get(key) is True
+        for key in ("indexed_chunk_count", "dense_vector_dims"):
+            value = _int_metric(rag_check.get(key))
+            safe_rag[key] = value if value > 0 else 0
+        official_sources = rag_check.get("official_sources")
+        if isinstance(official_sources, list):
+            safe_rag["official_rrf_source_present"] = ELASTICSEARCH_RRF_SOURCE_URL in official_sources
+        safe_checks["rag_elasticsearch_hybrid"] = safe_rag
+    safe = {
+        "ready": readiness.get("ready") is True,
+        "status": readiness.get("status") if isinstance(readiness.get("status"), str) else "",
+        "blocking_reasons": safe_reasons,
+        "checks": safe_checks,
+    }
+    rag_status = safe_checks.get("rag_elasticsearch_hybrid", {}).get("status")
+    if rag_status != "passed":
+        raise SystemExit("fast launch readiness check rag_elasticsearch_hybrid is not passed")
+    production_status = safe_checks.get("production_deployment", {}).get("status")
+    if production_status != "passed":
+        raise SystemExit("fast launch readiness check production_deployment is not passed")
+    if (
+        safe_checks.get("production_deployment", {}).get("required") is not True
+        or safe_checks.get("production_deployment", {}).get("ready") is not True
+        or safe_checks.get("production_deployment", {}).get("readiness_status") != "ready"
+        or safe_checks.get("production_deployment", {}).get("blocking_reasons")
+    ):
+        raise SystemExit("fast launch readiness production_deployment must prove production readiness")
+    for check_name in (
+        "model_gateway_target",
+        "agent_task_boundary",
+        "upload_workflow_result_contract",
+    ):
+        if safe_checks.get(check_name, {}).get("status") != "passed":
+            raise SystemExit(f"fast launch readiness check {check_name} is not passed")
+    strict_status = safe_checks.get("strict_remote_acceptance", {}).get("status")
+    if strict_status == "passed":
+        if safe["ready"] is not True or safe["status"] != "ready" or safe_reasons:
+            reason_text = "; ".join(safe_reasons) if safe_reasons else "fast launch readiness is not ready"
+            raise SystemExit(f"fast launch readiness is blocked: {reason_text}")
+        safe["_acceptance_status"] = "passed"
+        return safe
+    if strict_status == "missing":
+        if (
+            safe["ready"] is not False
+            or safe["status"] != "blocked"
+            or safe_reasons != [STRICT_REMOTE_ACCEPTANCE_MISSING_REASON]
+        ):
+            raise SystemExit(
+                "fast launch readiness pre_acceptance must only be blocked by missing strict remote acceptance evidence"
+            )
+        safe["_acceptance_status"] = "pre_acceptance"
+        return safe
+    raise SystemExit("fast launch readiness check strict_remote_acceptance is not passed or missing")
+    return safe
+
+
+def _safe_runtime_toolchain(runtime_status: dict, *, required_workflow_type: str | None = None) -> dict:
+    _require(isinstance(runtime_status, dict), "runtime toolchain response must be an object")
+    workflows = runtime_status.get("workflows")
+    _require(isinstance(workflows, dict) and workflows, "runtime toolchain workflows must be present")
+    workflow_types: list[str] = []
+    available_workflows: list[str] = []
+    unavailable_workflows: list[str] = []
+    for workflow_type, workflow in workflows.items():
+        _require(_is_privacy_safe_symbol(workflow_type), "runtime toolchain workflow_type must be privacy-safe")
+        workflow_types.append(workflow_type)
+        available = isinstance(workflow, dict) and workflow.get("available") is True
+        if available:
+            available_workflows.append(workflow_type)
+        else:
+            unavailable_workflows.append(workflow_type)
+    required_available = None
+    required_runtime_workflow_type = None
+    if required_workflow_type:
+        _require(
+            _is_privacy_safe_symbol(required_workflow_type),
+            "runtime toolchain required workflow_type must be privacy-safe",
+        )
+        required_runtime_workflow_type = required_workflow_type
+        if required_runtime_workflow_type not in workflows:
+            alias = RUNTIME_WORKFLOW_ALIASES.get(required_workflow_type)
+            if alias in workflows:
+                required_runtime_workflow_type = alias
+            else:
+                raise SystemExit(f"runtime toolchain missing required workflow {required_workflow_type}")
+        required_available = (
+            isinstance(workflows.get(required_runtime_workflow_type), dict)
+            and workflows[required_runtime_workflow_type].get("available") is True
+        )
+        _require(required_available, f"runtime toolchain required workflow {required_workflow_type} is not available")
+    resources = runtime_status.get("resources") if isinstance(runtime_status.get("resources"), dict) else {}
+    _require(
+        runtime_status.get("fs_license_exists") is True or resources.get("fs_license_exists") is True,
+        "runtime toolchain FreeSurfer license is missing",
+    )
+    safe = {
+        "workflow_tool_execution": "deployment_server_local",
+        "docker_runtime_host": "api_server",
+        "docker_requires_sudo": (
+            runtime_status.get("docker_requires_sudo") is True
+            or (isinstance(runtime_status.get("docker"), dict) and runtime_status["docker"].get("requires_sudo") is True)
+        ),
+        "fs_license_exists": True,
+        "workflow_count": int(runtime_status.get("workflow_count") or len(workflow_types)),
+        "available_workflow_count": int(runtime_status.get("available_workflow_count") or len(available_workflows)),
+        "required_workflow_type": required_workflow_type,
+        "required_workflow_available": required_available,
+        "unavailable_workflows": sorted(unavailable_workflows),
+        "workflow_types": sorted(workflow_types),
+    }
+    if required_runtime_workflow_type and required_runtime_workflow_type != required_workflow_type:
+        safe["required_runtime_workflow_type"] = required_runtime_workflow_type
+    return safe
+
+
+def _runtime_toolchain_status(base: str) -> dict:
+    try:
+        probe = _request("GET", f"{base}/runtime/probe")
+        if isinstance(probe, dict) and isinstance(probe.get("workflows"), dict):
+            return probe
+    except Exception:
+        pass
+    return _request("GET", f"{base}/runtime/containers")
+
+
 def _int_metric(*values: object) -> int:
     for value in values:
         try:
@@ -224,6 +472,55 @@ def _validate_rag_thresholds(*, rag: dict, rag_after: dict, min_documents: int, 
         chunk_count >= min_chunks,
         f"RAG chunk_count {chunk_count} below minimum {min_chunks}",
     )
+
+
+def _safe_rag_index_summary(index: object) -> dict | None:
+    if not isinstance(index, dict):
+        return None
+    safe: dict = {}
+    for key in ("engine",):
+        value = index.get(key)
+        if isinstance(value, str) and _is_privacy_safe_symbol(value):
+            safe[key] = value
+    for key in ("semantic_index",):
+        if isinstance(index.get(key), bool):
+            safe[key] = index[key]
+    for key in ("document_count", "chunk_count"):
+        value = _int_metric(index.get(key))
+        if value >= 0:
+            safe[key] = value
+
+    hybrid = index.get("hybrid_search")
+    if isinstance(hybrid, dict):
+        safe_hybrid: dict = {}
+        for key in (
+            "engine",
+            "mode",
+            "index",
+            "lexical_retriever",
+            "vector_retriever",
+            "dense_vector_field",
+            "embedding_provider",
+            "embedding_model",
+            "embedding_transport",
+            "fusion",
+        ):
+            value = hybrid.get(key)
+            if isinstance(value, str) and _is_privacy_safe_symbol(value):
+                safe_hybrid[key] = value
+        for key in ("configured", "persisted", "embedding_endpoint_configured", "embedding_production_ready"):
+            if isinstance(hybrid.get(key), bool):
+                safe_hybrid[key] = hybrid[key]
+        for key in ("indexed_chunk_count", "dense_vector_dims"):
+            value = _int_metric(hybrid.get(key))
+            if value >= 0:
+                safe_hybrid[key] = value
+        official_sources = hybrid.get("official_sources")
+        if isinstance(official_sources, list):
+            safe_hybrid["official_rrf_source_present"] = ELASTICSEARCH_RRF_SOURCE_URL in official_sources
+        if safe_hybrid:
+            safe["hybrid_search"] = safe_hybrid
+    return safe
 
 
 def _validate_raw_source_policy(rag_after: dict) -> None:
@@ -311,6 +608,412 @@ def _validate_vendor_pointer_integrity(rag_after: dict) -> dict:
         "issue_count": issue_count,
         "referenced_vendor_docs": referenced_vendor_docs,
         "pointers_by_doc": pointers_by_doc,
+    }
+
+
+def _validate_elasticsearch_hybrid_rag(rag_after: dict) -> dict:
+    index = rag_after.get("index") if isinstance(rag_after.get("index"), dict) else {}
+    hybrid = index.get("hybrid_search") if isinstance(index.get("hybrid_search"), dict) else {}
+    _require(
+        index.get("engine") == "elasticsearch_hybrid",
+        "RAG Elasticsearch hybrid search is not active: index.engine must be elasticsearch_hybrid",
+    )
+    _require(
+        hybrid.get("engine") == "elasticsearch",
+        "RAG Elasticsearch hybrid search is not active: hybrid_search.engine must be elasticsearch",
+    )
+    _require(
+        hybrid.get("persisted") is True,
+        "RAG Elasticsearch hybrid search is not active: hybrid_search.persisted must be true",
+    )
+    _require(
+        hybrid.get("configured") is True,
+        "RAG Elasticsearch hybrid search is not active: hybrid_search.configured must be true",
+    )
+    _require(
+        hybrid.get("mode") == "connected",
+        "RAG Elasticsearch hybrid search is not active: hybrid_search.mode must be connected",
+    )
+    index_name = hybrid.get("index")
+    _require(
+        _is_privacy_safe_symbol(index_name),
+        "RAG Elasticsearch hybrid search is not active: hybrid_search.index must be privacy-safe",
+    )
+    indexed_chunk_count = hybrid.get("indexed_chunk_count")
+    _require(
+        isinstance(indexed_chunk_count, int) and not isinstance(indexed_chunk_count, bool) and indexed_chunk_count > 0,
+        "RAG Elasticsearch hybrid search is not active: indexed_chunk_count must be greater than zero",
+    )
+    _require(
+        not hybrid.get("error"),
+        "RAG Elasticsearch hybrid search is not active: hybrid_search.error must be absent",
+    )
+    _require(
+        not hybrid.get("embedding_error"),
+        "RAG Elasticsearch hybrid search is not active: embedding_error must be absent",
+    )
+    _require(
+        hybrid.get("lexical_retriever") == "standard",
+        "RAG Elasticsearch hybrid search is not active: lexical_retriever must be standard",
+    )
+    _require(
+        hybrid.get("vector_retriever") == "knn",
+        "RAG Elasticsearch hybrid search is not active: vector_retriever must be knn",
+    )
+    _require(
+        hybrid.get("dense_vector_field") == "embedding",
+        "RAG Elasticsearch hybrid search is not active: dense_vector_field must be embedding",
+    )
+    dense_vector_dims = hybrid.get("dense_vector_dims")
+    _require(
+        isinstance(dense_vector_dims, int) and not isinstance(dense_vector_dims, bool) and dense_vector_dims > 0,
+        "RAG Elasticsearch hybrid search is not active: dense_vector_dims must be greater than zero",
+    )
+    embedding_provider = str(hybrid.get("embedding_provider") or "").strip()
+    _require(
+        embedding_provider and embedding_provider.lower() not in LOCAL_EMBEDDING_PROVIDERS,
+        "RAG Elasticsearch hybrid search is not active: embedding_provider must be production configured",
+    )
+    embedding_model = str(hybrid.get("embedding_model") or "").strip()
+    _require(
+        embedding_model,
+        "RAG Elasticsearch hybrid search is not active: embedding_model must be present",
+    )
+    embedding_transport = str(hybrid.get("embedding_transport") or "").strip()
+    _require(
+        embedding_transport,
+        "RAG Elasticsearch hybrid search is not active: embedding_transport must be present",
+    )
+    _require(
+        embedding_transport in {"sdk", "openai_compatible_http"},
+        "RAG Elasticsearch hybrid search is not active: embedding_transport must be production-safe",
+    )
+    _require(
+        hybrid.get("embedding_endpoint_configured") is True,
+        "RAG Elasticsearch hybrid search is not active: embedding_endpoint_configured must be true",
+    )
+    _require(
+        hybrid.get("embedding_production_ready") is True,
+        "RAG Elasticsearch hybrid search is not active: embedding_production_ready must be true",
+    )
+    fusion, rrf_unavailable_reason = _validate_elasticsearch_fusion(
+        hybrid,
+        context="RAG Elasticsearch hybrid search is not active",
+    )
+    official_sources = hybrid.get("official_sources")
+    _require(
+        isinstance(official_sources, list) and ELASTICSEARCH_RRF_SOURCE_URL in official_sources,
+        "RAG Elasticsearch hybrid search is not active: official_sources must include Elasticsearch RRF documentation",
+    )
+    return {
+        "engine": hybrid.get("engine"),
+        "configured": hybrid.get("configured"),
+        "persisted": hybrid.get("persisted"),
+        "mode": hybrid.get("mode"),
+        "index": index_name,
+        "indexed_chunk_count": indexed_chunk_count,
+        "lexical_retriever": hybrid.get("lexical_retriever"),
+        "vector_retriever": hybrid.get("vector_retriever"),
+        "dense_vector_field": hybrid.get("dense_vector_field"),
+        "dense_vector_dims": dense_vector_dims,
+        "embedding_provider": embedding_provider,
+        "embedding_model": embedding_model,
+        "embedding_transport": embedding_transport,
+        "embedding_endpoint_configured": hybrid.get("embedding_endpoint_configured") is True,
+        "embedding_production_ready": hybrid.get("embedding_production_ready"),
+        "fusion": fusion,
+        "rrf_unavailable_reason": rrf_unavailable_reason,
+        "official_rrf_source_present": True,
+    }
+
+
+def _validate_elasticsearch_hybrid_rebuild(rag_rebuild: dict, *, status_evidence: dict) -> dict:
+    hybrid = rag_rebuild.get("hybrid_search") if isinstance(rag_rebuild.get("hybrid_search"), dict) else {}
+    _require(
+        hybrid.get("engine") == "elasticsearch",
+        "RAG Elasticsearch hybrid rebuild evidence missing: hybrid_search.engine must be elasticsearch",
+    )
+    _require(
+        hybrid.get("persisted") is True,
+        "RAG Elasticsearch hybrid rebuild evidence missing: hybrid_search.persisted must be true",
+    )
+    _require(
+        hybrid.get("configured") is True,
+        "RAG Elasticsearch hybrid rebuild evidence missing: hybrid_search.configured must be true",
+    )
+    _require(
+        hybrid.get("mode") == "connected",
+        "RAG Elasticsearch hybrid rebuild evidence missing: hybrid_search.mode must be connected",
+    )
+    index_name = hybrid.get("index")
+    _require(
+        index_name == status_evidence.get("index"),
+        "RAG Elasticsearch hybrid rebuild evidence mismatch: hybrid_search.index must match status",
+    )
+    indexed_chunk_count = hybrid.get("indexed_chunk_count")
+    _require(
+        isinstance(indexed_chunk_count, int) and not isinstance(indexed_chunk_count, bool) and indexed_chunk_count > 0,
+        "RAG Elasticsearch hybrid rebuild evidence missing: indexed_chunk_count must be greater than zero",
+    )
+    _require(
+        indexed_chunk_count == status_evidence.get("indexed_chunk_count"),
+        "RAG Elasticsearch hybrid rebuild evidence mismatch: indexed_chunk_count must match status",
+    )
+    dense_vector_dims = hybrid.get("dense_vector_dims")
+    _require(
+        isinstance(dense_vector_dims, int) and not isinstance(dense_vector_dims, bool) and dense_vector_dims > 0,
+        "RAG Elasticsearch hybrid rebuild evidence missing: dense_vector_dims must be greater than zero",
+    )
+    _require(
+        dense_vector_dims == status_evidence.get("dense_vector_dims"),
+        "RAG Elasticsearch hybrid rebuild evidence mismatch: dense_vector_dims must match status",
+    )
+    _require(
+        hybrid.get("lexical_retriever") == status_evidence.get("lexical_retriever"),
+        "RAG Elasticsearch hybrid rebuild evidence mismatch: lexical_retriever must match status",
+    )
+    _require(
+        hybrid.get("vector_retriever") == status_evidence.get("vector_retriever"),
+        "RAG Elasticsearch hybrid rebuild evidence mismatch: vector_retriever must match status",
+    )
+    _require(
+        hybrid.get("dense_vector_field") == status_evidence.get("dense_vector_field"),
+        "RAG Elasticsearch hybrid rebuild evidence mismatch: dense_vector_field must match status",
+    )
+    _require(
+        not hybrid.get("error"),
+        "RAG Elasticsearch hybrid rebuild evidence missing: hybrid_search.error must be absent",
+    )
+    _require(
+        not hybrid.get("embedding_error"),
+        "RAG Elasticsearch hybrid rebuild evidence missing: embedding_error must be absent",
+    )
+    _require(
+        hybrid.get("embedding_provider") == status_evidence.get("embedding_provider"),
+        "RAG Elasticsearch hybrid rebuild evidence mismatch: embedding_provider must match status",
+    )
+    embedding_model = str(hybrid.get("embedding_model") or "").strip()
+    _require(
+        embedding_model,
+        "RAG Elasticsearch hybrid rebuild evidence missing: embedding_model must be present",
+    )
+    _require(
+        embedding_model == status_evidence.get("embedding_model"),
+        "RAG Elasticsearch hybrid rebuild evidence mismatch: embedding_model must match status",
+    )
+    embedding_transport = str(hybrid.get("embedding_transport") or "").strip()
+    _require(
+        embedding_transport,
+        "RAG Elasticsearch hybrid rebuild evidence missing: embedding_transport must be present",
+    )
+    _require(
+        embedding_transport == status_evidence.get("embedding_transport"),
+        "RAG Elasticsearch hybrid rebuild evidence mismatch: embedding_transport must match status",
+    )
+    _require(
+        embedding_transport in {"sdk", "openai_compatible_http"},
+        "RAG Elasticsearch hybrid rebuild evidence missing: embedding_transport must be production-safe",
+    )
+    _require(
+        hybrid.get("embedding_endpoint_configured") is True,
+        "RAG Elasticsearch hybrid rebuild evidence missing: embedding_endpoint_configured must be true",
+    )
+    _require(
+        status_evidence.get("embedding_endpoint_configured") is True,
+        "RAG Elasticsearch hybrid rebuild evidence mismatch: status embedding_endpoint_configured must be true",
+    )
+    _require(
+        (hybrid.get("embedding_endpoint_configured") is True)
+        == (status_evidence.get("embedding_endpoint_configured") is True),
+        "RAG Elasticsearch hybrid rebuild evidence mismatch: embedding_endpoint_configured must match status",
+    )
+    _require(
+        hybrid.get("embedding_production_ready") is True,
+        "RAG Elasticsearch hybrid rebuild evidence missing: embedding_production_ready must be true",
+    )
+    _require(
+        hybrid.get("fusion") == status_evidence.get("fusion"),
+        "RAG Elasticsearch hybrid rebuild evidence mismatch: fusion must match status",
+    )
+    _require(
+        _rrf_unavailable_reason(hybrid) == (status_evidence.get("rrf_unavailable_reason") or ""),
+        "RAG Elasticsearch hybrid rebuild evidence mismatch: rrf_unavailable_reason must match status",
+    )
+    return {
+        "engine": hybrid.get("engine"),
+        "configured": hybrid.get("configured"),
+        "persisted": hybrid.get("persisted"),
+        "mode": hybrid.get("mode"),
+        "index": index_name,
+        "indexed_chunk_count": indexed_chunk_count,
+        "lexical_retriever": hybrid.get("lexical_retriever"),
+        "vector_retriever": hybrid.get("vector_retriever"),
+        "dense_vector_field": hybrid.get("dense_vector_field"),
+        "dense_vector_dims": dense_vector_dims,
+        "embedding_provider": hybrid.get("embedding_provider"),
+        "embedding_model": embedding_model,
+        "embedding_transport": embedding_transport,
+        "embedding_endpoint_configured": hybrid.get("embedding_endpoint_configured") is True,
+        "embedding_production_ready": hybrid.get("embedding_production_ready"),
+        "fusion": hybrid.get("fusion"),
+        "rrf_unavailable_reason": status_evidence.get("rrf_unavailable_reason"),
+    }
+
+
+def _validate_elasticsearch_hybrid_query_evidence(response: dict, *, status_evidence: dict) -> dict:
+    mode = response.get("retrieval_mode")
+    _require(
+        mode == "elasticsearch_hybrid",
+        "RAG Elasticsearch hybrid query did not use Elasticsearch retrieval: retrieval_mode must be elasticsearch_hybrid",
+    )
+    retrieval_source = response.get("retrieval_source")
+    _require(
+        retrieval_source == "elasticsearch_hybrid",
+        "RAG Elasticsearch hybrid query did not use Elasticsearch retrieval: retrieval_source must be elasticsearch_hybrid",
+    )
+    citations = response.get("citations") if isinstance(response.get("citations"), list) else []
+    sources = [
+        str(item.get("source") or item.get("path") or "")
+        for item in citations
+        if isinstance(item, dict)
+    ]
+    _require(
+        ELASTICSEARCH_HYBRID_CONTRACT_SOURCE in sources,
+        "RAG Elasticsearch hybrid query did not cite the Elasticsearch hybrid contract",
+    )
+    scores = []
+    for item in citations:
+        if not isinstance(item, dict):
+            continue
+        try:
+            scores.append(float(item.get("score")))
+        except (TypeError, ValueError):
+            continue
+    top_score = max(scores) if scores else 0.0
+    _require(
+        top_score > 0,
+        "RAG Elasticsearch hybrid query evidence missing positive score",
+    )
+    query_evidence = (
+        response.get("elasticsearch_hybrid_query")
+        if isinstance(response.get("elasticsearch_hybrid_query"), dict)
+        else {}
+    )
+    index_name = query_evidence.get("index")
+    _require(
+        _is_privacy_safe_symbol(index_name),
+        "RAG Elasticsearch hybrid query evidence missing: index must be privacy-safe",
+    )
+    _require(
+        index_name == status_evidence.get("index"),
+        "RAG Elasticsearch hybrid query evidence mismatch: index must match status",
+    )
+    lexical_retriever = str(query_evidence.get("lexical_retriever") or "").strip()
+    _require(
+        lexical_retriever == "standard",
+        "RAG Elasticsearch hybrid query evidence missing: lexical_retriever must be standard",
+    )
+    _require(
+        lexical_retriever == status_evidence.get("lexical_retriever"),
+        "RAG Elasticsearch hybrid query evidence mismatch: lexical_retriever must match status",
+    )
+    vector_retriever = str(query_evidence.get("vector_retriever") or "").strip()
+    _require(
+        vector_retriever == "knn",
+        "RAG Elasticsearch hybrid query evidence missing: vector_retriever must be knn",
+    )
+    _require(
+        vector_retriever == status_evidence.get("vector_retriever"),
+        "RAG Elasticsearch hybrid query evidence mismatch: vector_retriever must match status",
+    )
+    dense_vector_field = str(query_evidence.get("dense_vector_field") or "").strip()
+    _require(
+        dense_vector_field == "embedding",
+        "RAG Elasticsearch hybrid query evidence missing: dense_vector_field must be embedding",
+    )
+    _require(
+        dense_vector_field == status_evidence.get("dense_vector_field"),
+        "RAG Elasticsearch hybrid query evidence mismatch: dense_vector_field must match status",
+    )
+    fusion, rrf_unavailable_reason = _validate_elasticsearch_fusion(
+        query_evidence,
+        context="RAG Elasticsearch hybrid query evidence missing",
+    )
+    _require(
+        fusion == status_evidence.get("fusion"),
+        "RAG Elasticsearch hybrid query evidence mismatch: fusion must match status",
+    )
+    _require(
+        (rrf_unavailable_reason or "") == (status_evidence.get("rrf_unavailable_reason") or ""),
+        "RAG Elasticsearch hybrid query evidence mismatch: rrf_unavailable_reason must match status",
+    )
+    dense_vector_dims = query_evidence.get("dense_vector_dims")
+    _require(
+        isinstance(dense_vector_dims, int) and not isinstance(dense_vector_dims, bool) and dense_vector_dims > 0,
+        "RAG Elasticsearch hybrid query evidence missing: dense_vector_dims must be greater than zero",
+    )
+    _require(
+        dense_vector_dims == status_evidence.get("dense_vector_dims"),
+        "RAG Elasticsearch hybrid query evidence mismatch: dense_vector_dims must match status",
+    )
+    embedding_provider = str(query_evidence.get("embedding_provider") or "").strip()
+    _require(
+        embedding_provider and _is_privacy_safe_symbol(embedding_provider),
+        "RAG Elasticsearch hybrid query evidence missing: embedding_provider must be privacy-safe",
+    )
+    _require(
+        embedding_provider == status_evidence.get("embedding_provider"),
+        "RAG Elasticsearch hybrid query evidence mismatch: embedding_provider must match status",
+    )
+    embedding_model = str(query_evidence.get("embedding_model") or "").strip()
+    _require(
+        embedding_model and _is_privacy_safe_symbol(embedding_model),
+        "RAG Elasticsearch hybrid query evidence missing: embedding_model must be privacy-safe",
+    )
+    _require(
+        embedding_model == status_evidence.get("embedding_model"),
+        "RAG Elasticsearch hybrid query evidence mismatch: embedding_model must match status",
+    )
+    embedding_transport = str(query_evidence.get("embedding_transport") or "").strip()
+    _require(
+        embedding_transport and _is_privacy_safe_symbol(embedding_transport),
+        "RAG Elasticsearch hybrid query evidence missing: embedding_transport must be privacy-safe",
+    )
+    _require(
+        embedding_transport == status_evidence.get("embedding_transport"),
+        "RAG Elasticsearch hybrid query evidence mismatch: embedding_transport must match status",
+    )
+    _require(
+        query_evidence.get("embedding_endpoint_configured") is True,
+        "RAG Elasticsearch hybrid query evidence missing: embedding_endpoint_configured must be true",
+    )
+    _require(
+        status_evidence.get("embedding_endpoint_configured") is True,
+        "RAG Elasticsearch hybrid query evidence mismatch: status embedding_endpoint_configured must be true",
+    )
+    _require(
+        query_evidence.get("embedding_production_ready") is True,
+        "RAG Elasticsearch hybrid query evidence missing: embedding_production_ready must be true",
+    )
+    return {
+        "status": "passed",
+        "mode": mode,
+        "retrieval_source": retrieval_source,
+        "source": ELASTICSEARCH_HYBRID_CONTRACT_SOURCE,
+        "citation_count": len(citations),
+        "top_score": top_score,
+        "index": index_name,
+        "lexical_retriever": lexical_retriever,
+        "vector_retriever": vector_retriever,
+        "dense_vector_field": dense_vector_field,
+        "fusion": fusion,
+        "rrf_unavailable_reason": rrf_unavailable_reason,
+        "dense_vector_dims": dense_vector_dims,
+        "embedding_provider": embedding_provider,
+        "embedding_model": embedding_model,
+        "embedding_transport": embedding_transport,
+        "embedding_endpoint_configured": query_evidence.get("embedding_endpoint_configured") is True,
+        "embedding_production_ready": query_evidence.get("embedding_production_ready") is True,
     }
 
 
@@ -442,6 +1145,75 @@ def _safe_agent_metadata(run: dict | None) -> dict:
     return safe
 
 
+def _safe_workflow_metadata(metadata: object, *, workflow_type: str) -> dict | None:
+    if not isinstance(metadata, dict):
+        return None
+    metadata_workflow_type = metadata.get("workflow_type")
+    if metadata_workflow_type != workflow_type or not _is_privacy_safe_symbol(metadata_workflow_type):
+        return None
+    safe: dict = {"workflow_type": metadata_workflow_type}
+    runtime_workflow_type = metadata.get("runtime_workflow_type")
+    if isinstance(runtime_workflow_type, str) and _is_privacy_safe_symbol(runtime_workflow_type):
+        safe["runtime_workflow_type"] = runtime_workflow_type
+    for key in ("workflow_family", "workflow_role"):
+        value = metadata.get(key)
+        if isinstance(value, str) and _is_privacy_safe_symbol(value):
+            safe[key] = value
+    display_name = metadata.get("display_name")
+    if isinstance(display_name, str) and 0 < len(display_name) <= 160 and display_name != workflow_type:
+        safe["display_name"] = display_name
+    capability_summary = metadata.get("capability_summary")
+    if isinstance(capability_summary, str) and _safe_human_text(capability_summary, max_len=320):
+        safe["capability_summary"] = capability_summary
+    for key in ("primary_outputs", "qc_outputs", "report_outputs", "limitations"):
+        values = _safe_text_list(metadata.get(key), max_items=8, max_len=160)
+        if values is not None:
+            safe[key] = values
+    stages = _safe_pipeline_stages(metadata.get("pipeline_stages"))
+    if stages is not None:
+        safe["pipeline_stages"] = stages
+    is_report_only = metadata.get("is_report_only")
+    if isinstance(is_report_only, bool):
+        safe["is_report_only"] = is_report_only
+    agent_selectable = metadata.get("agent_selectable")
+    if isinstance(agent_selectable, bool):
+        safe["agent_selectable"] = agent_selectable
+    return safe
+
+
+def _safe_human_text(value: str, *, max_len: int) -> bool:
+    if not value or len(value) > max_len:
+        return False
+    lowered = value.lower()
+    if "://" in value or "\\" in value or any(token in lowered for token in ("/home/", "/users/", "/tmp/", "/var/")):
+        return False
+    return True
+
+
+def _safe_text_list(value: object, *, max_items: int, max_len: int) -> list[str] | None:
+    if not isinstance(value, list):
+        return None
+    safe_items: list[str] = []
+    for item in value[:max_items]:
+        if isinstance(item, str) and _safe_human_text(item, max_len=max_len):
+            safe_items.append(item)
+    return safe_items
+
+
+def _safe_pipeline_stages(value: object) -> list[dict] | None:
+    if not isinstance(value, list):
+        return None
+    stages: list[dict] = []
+    for item in value[:8]:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name")
+        purpose = item.get("purpose")
+        if isinstance(name, str) and isinstance(purpose, str) and _safe_human_text(name, max_len=80) and _safe_human_text(purpose, max_len=220):
+            stages.append({"name": name, "purpose": purpose})
+    return stages
+
+
 def _validate_agent_project_context(run: dict, project_id: int) -> None:
     _require(
         _int_metric(run.get("project_id")) == project_id,
@@ -488,6 +1260,19 @@ def _validate_agent_workflow_confirmation(
         production_task_created is False,
         "agent workflow confirmation failed: production_task_created must be false",
     )
+    workflow_metadata = _safe_workflow_metadata(
+        confirmation.get("workflow_metadata"),
+        workflow_type=confirmed_workflow_type,
+    )
+    _require(
+        workflow_metadata is not None,
+        "agent workflow confirmation failed: workflow_metadata missing",
+    )
+    _require(
+        workflow_metadata.get("agent_selectable") is True,
+        "agent workflow confirmation failed: workflow_metadata agent_selectable invalid",
+    )
+    runtime_workflow_type = workflow_metadata.get("runtime_workflow_type") if workflow_metadata else None
     return {
         "agent_run_id": run["agent_run_id"],
         "status": "confirmation_required",
@@ -495,6 +1280,8 @@ def _validate_agent_workflow_confirmation(
         "project_id": confirmed_project_id,
         "series_id": confirmed_series_id,
         "workflow_type": confirmed_workflow_type,
+        **({"runtime_workflow_type": runtime_workflow_type} if runtime_workflow_type else {}),
+        **({"workflow_metadata": workflow_metadata} if workflow_metadata else {}),
         "selected_skill": run.get("selected_skill"),
         "production_task_created": False,
     }
@@ -517,11 +1304,20 @@ def _validate_agent_workflow_resume(
     task_project_id = _int_metric(task.get("project_id"), resume.get("project_id"))
     task_series_id = _int_metric(task.get("series_id"))
     task_workflow_type = task.get("workflow_type")
+    runtime_workflow_type = task.get("runtime_workflow_type")
     _require(task_project_id == project_id, "agent workflow resume failed: project_id mismatch")
     _require(task_series_id == series_id, "agent workflow resume failed: series_id mismatch")
     _require(
         task_workflow_type == workflow_type and _is_privacy_safe_symbol(task_workflow_type),
         "agent workflow resume failed: workflow_type mismatch",
+    )
+    _require(
+        isinstance(runtime_workflow_type, str) and bool(runtime_workflow_type),
+        "agent workflow resume failed: runtime_workflow_type missing",
+    )
+    _require(
+        _is_privacy_safe_symbol(runtime_workflow_type),
+        "agent workflow resume failed: runtime_workflow_type invalid",
     )
     initial_status = task.get("status")
     _require(
@@ -545,10 +1341,301 @@ def _validate_agent_workflow_resume(
         "project_id": task_project_id,
         "series_id": task_series_id,
         "workflow_type": task_workflow_type,
+        **({"runtime_workflow_type": runtime_workflow_type} if runtime_workflow_type else {}),
         "task_id": task_id,
         "initial_status": initial_status,
         "production_task_created": True,
         "confirmation_gate": confirmation_gate,
+    }
+
+
+def _tampered_confirmation_payload(confirmation: dict, *, original_series_id: int) -> dict:
+    tampered = dict(confirmation)
+    tampered["series_id"] = original_series_id + 998 if original_series_id > 0 else 999
+    return tampered
+
+
+def _validate_agent_workflow_fingerprint_negative(
+    resume: dict,
+    *,
+    thread_id: str,
+) -> dict:
+    _require(bool(resume.get("agent_run_id")), "agent workflow fingerprint negative failed: missing agent_run_id")
+    _require(resume.get("thread_id") == thread_id, "agent workflow fingerprint negative failed: thread_id mismatch")
+    _require(
+        resume.get("status") == "blocked",
+        f"agent workflow fingerprint negative failed: status={resume.get('status')}",
+    )
+    production_task_created = resume.get("production_task_created")
+    if production_task_created is None and isinstance(resume.get("safe_metadata"), dict):
+        production_task_created = resume["safe_metadata"].get("production_task_created")
+    _require(
+        production_task_created is False,
+        "agent workflow fingerprint negative failed: production_task_created must be false",
+    )
+    safe_metadata = resume.get("safe_metadata") if isinstance(resume.get("safe_metadata"), dict) else {}
+    confirmation_gate = safe_metadata.get("confirmation_gate")
+    _require(
+        confirmation_gate == "fingerprint_mismatch",
+        "agent workflow fingerprint negative failed: confirmation_gate must be fingerprint_mismatch",
+    )
+    task = resume.get("task") if isinstance(resume.get("task"), dict) else {}
+    _require(not task.get("id") and not task.get("task_id"), "agent workflow fingerprint negative failed: task must not be created")
+    return {
+        "agent_run_id": resume["agent_run_id"],
+        "thread_id": thread_id,
+        "status": "blocked",
+        "production_task_created": False,
+        "confirmation_gate": confirmation_gate,
+        "task_created": False,
+    }
+
+
+def _json_object(value: object) -> dict:
+    if not isinstance(value, str) or not value.strip():
+        return {}
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _load_persisted_agent_launch_evidence(
+    db_path: Path,
+    *,
+    task: dict,
+    task_id: int,
+    project_id: int,
+    series_id: int,
+    workflow_type: str,
+) -> dict:
+    if not db_path.exists():
+        raise SystemExit(f"persisted agent launch evidence db not found: {db_path}")
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    resume_row = conn.execute(
+        """
+        select agent_run_id, thread_id, project_id, series_id, task_id, workflow_type, status, safe_metadata_json
+        from agent_runs
+        where request_type = 'resume'
+          and task_id = ?
+          and project_id = ?
+          and series_id = ?
+          and workflow_type = ?
+          and status = 'task_created'
+        order by created_at desc
+        limit 1
+        """,
+        (task_id, project_id, series_id, workflow_type),
+    ).fetchone()
+    _require(resume_row is not None, "persisted agent launch evidence missing task_created resume run")
+    thread_id = resume_row["thread_id"]
+    _require(isinstance(thread_id, str) and bool(thread_id), "persisted agent launch evidence missing thread_id")
+    confirmation_row = conn.execute(
+        """
+        select thread_id, project_id, series_id, workflow_type, selected_skill, confirmation_json
+        from agent_confirmations
+        where thread_id = ?
+          and project_id = ?
+          and series_id = ?
+          and workflow_type = ?
+          and consumed_at is not null
+        order by consumed_at desc
+        limit 1
+        """,
+        (thread_id, project_id, series_id, workflow_type),
+    ).fetchone()
+    _require(confirmation_row is not None, "persisted agent launch evidence missing consumed confirmation")
+    prepare_row = conn.execute(
+        """
+        select agent_run_id, intent, selected_skill, safe_metadata_json
+        from agent_runs
+        where request_type = 'run'
+          and thread_id = ?
+          and project_id = ?
+          and series_id = ?
+          and workflow_type = ?
+          and status = 'confirmation_required'
+        order by created_at desc
+        limit 1
+        """,
+        (thread_id, project_id, series_id, workflow_type),
+    ).fetchone()
+    _require(prepare_row is not None, "persisted agent launch evidence missing confirmation run")
+    negative_row = conn.execute(
+        """
+        select agent_run_id, thread_id, status, safe_metadata_json
+        from agent_runs
+        where request_type = 'resume'
+          and project_id = ?
+          and workflow_type = ?
+          and status = 'blocked'
+        order by created_at desc
+        limit 1
+        """,
+        (project_id, workflow_type),
+    ).fetchone()
+    _require(negative_row is not None, "persisted agent launch evidence missing fingerprint mismatch resume")
+
+    confirmation_payload = _json_object(confirmation_row["confirmation_json"])
+    confirmation_run = {
+        "agent_run_id": prepare_row["agent_run_id"],
+        "status": "confirmation_required",
+        "intent": prepare_row["intent"] or "run_workflow",
+        "project_id": confirmation_row["project_id"],
+        "series_id": confirmation_row["series_id"],
+        "workflow_type": confirmation_row["workflow_type"],
+        "selected_skill": confirmation_row["selected_skill"] or prepare_row["selected_skill"],
+        "production_task_created": False,
+        "confirmation": confirmation_payload,
+    }
+    resume_metadata = _json_object(resume_row["safe_metadata_json"])
+    resume_payload = {
+        "agent_run_id": resume_row["agent_run_id"],
+        "thread_id": thread_id,
+        "status": "task_created",
+        "project_id": resume_row["project_id"],
+        "production_task_created": bool(resume_metadata.get("production_task_created")),
+        "safe_metadata": resume_metadata,
+        "task": task,
+    }
+    negative_metadata = _json_object(negative_row["safe_metadata_json"])
+    negative_payload = {
+        "agent_run_id": negative_row["agent_run_id"],
+        "thread_id": negative_row["thread_id"],
+        "status": negative_row["status"],
+        "production_task_created": bool(negative_metadata.get("production_task_created")),
+        "safe_metadata": negative_metadata,
+        "task": {},
+    }
+    agent_workflow_confirmation = _validate_agent_workflow_confirmation(
+        confirmation_run,
+        project_id=project_id,
+        series_id=series_id,
+        workflow_type=workflow_type,
+    )
+    agent_workflow_resume = _validate_agent_workflow_resume(
+        resume_payload,
+        thread_id=thread_id,
+        project_id=project_id,
+        series_id=series_id,
+        workflow_type=workflow_type,
+    )
+    agent_workflow_fingerprint_negative = _validate_agent_workflow_fingerprint_negative(
+        negative_payload,
+        thread_id=negative_row["thread_id"],
+    )
+    launched_task = {
+        "task_id": agent_workflow_resume["task_id"],
+        "project_id": agent_workflow_resume["project_id"],
+        "series_id": agent_workflow_resume["series_id"],
+        "workflow_type": agent_workflow_resume["workflow_type"],
+        **(
+            {"runtime_workflow_type": agent_workflow_resume["runtime_workflow_type"]}
+            if agent_workflow_resume.get("runtime_workflow_type")
+            else {}
+        ),
+        "launch_source": "agent_workflow_resume",
+        "initial_status": task.get("status") or agent_workflow_resume["initial_status"],
+    }
+    return {
+        "agent_workflow_confirmation": agent_workflow_confirmation,
+        "agent_workflow_resume": agent_workflow_resume,
+        "agent_workflow_fingerprint_negative": agent_workflow_fingerprint_negative,
+        "launched_task": launched_task,
+    }
+
+
+def _validate_unknown_workflow_incubation(run: dict) -> dict:
+    _require(isinstance(run, dict), "unknown workflow incubation failed: response must be an object")
+    _require(bool(run.get("agent_run_id")), "unknown workflow incubation failed: missing agent_run_id")
+    _require(_is_privacy_safe_symbol(run.get("agent_run_id")), "unknown workflow incubation failed: agent_run_id invalid")
+    thread_id = run.get("thread_id")
+    _require(
+        thread_id is None or (isinstance(thread_id, str) and _is_privacy_safe_symbol(thread_id)),
+        "unknown workflow incubation failed: thread_id invalid",
+    )
+    _require(
+        run.get("status") == "toolchain_proposed",
+        f"unknown workflow incubation failed: status={run.get('status')}",
+    )
+    action_lane = run.get("action_lane")
+    if action_lane is None and isinstance(run.get("safe_metadata"), dict):
+        action_lane = run["safe_metadata"].get("action_lane") or run["safe_metadata"].get("lane")
+    _require(
+        action_lane == "toolchain_incubation",
+        "unknown workflow incubation failed: action_lane must be toolchain_incubation",
+    )
+    _require(run.get("production_task_created") is False, "unknown workflow incubation failed: production_task_created must be false")
+    task = run.get("task") if isinstance(run.get("task"), dict) else {}
+    task_created = bool(run.get("task_created")) or bool(run.get("task_id")) or bool(task.get("id")) or bool(task.get("task_id"))
+    _require(not task_created, "unknown workflow incubation failed: task must not be created")
+    confirmation = run.get("confirmation") if isinstance(run.get("confirmation"), dict) else None
+    _require(confirmation is None, "unknown workflow incubation failed: confirmation must not be created")
+    _require(
+        run.get("task_creation_allowed") is False,
+        "unknown workflow incubation failed: task_creation_allowed must be false",
+    )
+    forbidden_actions = run.get("forbidden_actions")
+    if not isinstance(forbidden_actions, list) and isinstance(run.get("proposed_toolchain"), dict):
+        forbidden_actions = run["proposed_toolchain"].get("forbidden_actions")
+    _require(
+        isinstance(forbidden_actions, list)
+        and {"confirmation_creation", "production_task_creation", "pipeline_runner_launch"}.issubset(
+            set(forbidden_actions)
+        ),
+        "unknown workflow incubation failed: forbidden_actions must include confirmation_creation, production_task_creation, and pipeline_runner_launch",
+    )
+    proposal = run.get("proposed_toolchain") if isinstance(run.get("proposed_toolchain"), dict) else {}
+    proposal_id = proposal.get("proposal_id") or run.get("proposal_id")
+    _require(
+        isinstance(proposal_id, str) and _is_privacy_safe_symbol(proposal_id),
+        "unknown workflow incubation failed: proposal_id missing or invalid",
+    )
+    proposal_status = proposal.get("status")
+    _require(
+        proposal_status is None or _is_privacy_safe_symbol(proposal_status),
+        "unknown workflow incubation failed: proposal status invalid",
+    )
+    proposal_contract_version = proposal.get("contract_version")
+    _require(
+        proposal_contract_version is None or _is_privacy_safe_symbol(proposal_contract_version),
+        "unknown workflow incubation failed: proposal contract_version invalid",
+    )
+    proposal_promotion_status = proposal.get("promotion_status")
+    _require(
+        proposal_promotion_status is None or _is_privacy_safe_symbol(proposal_promotion_status),
+        "unknown workflow incubation failed: proposal promotion_status invalid",
+    )
+    proposal_production_task_created = proposal.get("production_task_created")
+    if proposal_production_task_created is None:
+        proposal_production_task_created = False
+    _require(
+        proposal_production_task_created is False,
+        "unknown workflow incubation failed: proposal production_task_created must be false",
+    )
+    proposal_task_creation_allowed = proposal.get("task_creation_allowed")
+    if proposal_task_creation_allowed is not None:
+        _require(
+            proposal_task_creation_allowed is False,
+            "unknown workflow incubation failed: proposal task_creation_allowed must be false",
+        )
+    return {
+        "agent_run_id": run["agent_run_id"],
+        "thread_id": thread_id,
+        "status": "toolchain_proposed",
+        "action_lane": "toolchain_incubation",
+        "proposal_id": proposal_id,
+        **({"proposal_status": proposal_status} if proposal_status else {}),
+        **({"proposal_contract_version": proposal_contract_version} if proposal_contract_version else {}),
+        **({"proposal_promotion_status": proposal_promotion_status} if proposal_promotion_status else {}),
+        "task_created": False,
+        "confirmation_created": False,
+        "task_creation_allowed": False,
+        "forbidden_actions": ["confirmation_creation", "production_task_creation", "pipeline_runner_launch"],
+        "production_task_created": False,
+        "proposal_production_task_created": False,
     }
 
 
@@ -565,12 +1652,22 @@ def _validate_completed_task(task: dict, task_id: int, project_id: int | None) -
         _require(task_project_id == project_id, "completed task check failed: project_id mismatch")
     series_id = _int_metric(task.get("series_id"))
     _require(series_id > 0, "completed task check failed: series_id missing")
+    runtime_workflow_type = task.get("runtime_workflow_type")
+    _require(
+        isinstance(runtime_workflow_type, str) and bool(runtime_workflow_type),
+        "completed task check failed: runtime_workflow_type missing",
+    )
+    _require(
+        _is_privacy_safe_symbol(runtime_workflow_type),
+        "completed task check failed: runtime_workflow_type invalid",
+    )
     return {
         "project_id": task_project_id,
         "series_id": series_id,
         "status": "completed",
         "task_id": task_id,
         "workflow_type": safe_workflow_type,
+        "runtime_workflow_type": runtime_workflow_type,
     }
 
 
@@ -595,6 +1692,7 @@ def _validate_launched_task(task: dict, *, task_id: int, series_id: int, workflo
     launched_series_id = _int_metric(task.get("series_id"))
     _require(launched_series_id == series_id, "launched task check failed: series_id mismatch")
     launched_workflow_type = task.get("workflow_type")
+    runtime_workflow_type = task.get("runtime_workflow_type")
     _require(
         launched_workflow_type == workflow_type and _is_privacy_safe_symbol(launched_workflow_type),
         "launched task check failed: workflow_type mismatch",
@@ -602,6 +1700,14 @@ def _validate_launched_task(task: dict, *, task_id: int, series_id: int, workflo
     launched_project_id = _int_metric(task.get("project_id"))
     if project_id is not None:
         _require(launched_project_id == project_id, "launched task check failed: project_id mismatch")
+    _require(
+        isinstance(runtime_workflow_type, str) and bool(runtime_workflow_type),
+        "launched task check failed: runtime_workflow_type missing",
+    )
+    _require(
+        _is_privacy_safe_symbol(runtime_workflow_type),
+        "launched task check failed: runtime_workflow_type invalid",
+    )
     initial_status = task.get("status")
     _require(
         isinstance(initial_status, str) and _is_privacy_safe_symbol(initial_status),
@@ -612,6 +1718,8 @@ def _validate_launched_task(task: dict, *, task_id: int, series_id: int, workflo
         "project_id": launched_project_id,
         "series_id": launched_series_id,
         "workflow_type": launched_workflow_type,
+        **({"runtime_workflow_type": runtime_workflow_type} if runtime_workflow_type else {}),
+        "launch_source": "direct_series_run",
         "initial_status": initial_status,
     }
 
@@ -634,22 +1742,50 @@ def _validate_uploaded_series(upload_response: dict, *, project_id: int) -> dict
         "series_id": series_id,
         "modality": modality,
     }
+    upload_session_id = _int_metric(upload_response.get("upload_session_id"))
+    if upload_session_id is not None and upload_session_id > 0:
+        safe["upload_session_id"] = upload_session_id
     sequence_label = series.get("sequence_label")
     if isinstance(sequence_label, str) and _is_privacy_safe_symbol(sequence_label):
         safe["sequence_label"] = sequence_label
     return safe
 
 
+def _select_existing_uploaded_series(series: list[dict], *, project_id: int, series_id: int, upload_session_id: int | None) -> dict:
+    _require(isinstance(series, list), "existing uploaded series check failed: project series response is not a list")
+    match = None
+    for item in series:
+        if _int_metric(item.get("id"), item.get("series_id")) == series_id:
+            match = item
+            break
+    _require(match is not None, "existing uploaded series check failed: series_id not found")
+    response = {"series": match}
+    found_upload_session_id = _int_metric(match.get("upload_session_id"))
+    if found_upload_session_id is not None and found_upload_session_id > 0:
+        response["upload_session_id"] = found_upload_session_id
+    if upload_session_id is not None:
+        _require(
+            found_upload_session_id == upload_session_id,
+            "existing uploaded series check failed: upload_session_id mismatch",
+        )
+        response["upload_session_id"] = upload_session_id
+    return _validate_uploaded_series(response, project_id=project_id)
+
+
 def _validate_project_series_contract(series: list[dict]) -> dict:
     _require(isinstance(series, list), "project series contract failed: response is not a list")
     _require(series, "project series contract failed: no series found")
+    metadata_summary = _empty_workflow_eligibility_metadata_summary()
     for item in series:
-        _validate_workflow_eligibility(item.get("workflow_eligibility"), "project series contract failed")
+        eligibility = item.get("workflow_eligibility")
+        _validate_workflow_eligibility(eligibility, "project series contract failed")
+        _merge_workflow_eligibility_metadata_summary(metadata_summary, eligibility)
     return {
         "status": "passed",
         "series_count": len(series),
         "series_with_workflow_eligibility": len(series),
         "modalities": sorted({str(item.get("modality")) for item in series if item.get("modality")}),
+        **_finalize_workflow_eligibility_metadata_summary(metadata_summary),
     }
 
 
@@ -705,6 +1841,80 @@ def _validate_workflow_eligibility(value: object, context: str) -> None:
         isinstance(value.get("blocked_workflows"), list),
         f"{context}: blocked_workflows missing",
     )
+    primary = value.get("primary_recommendation")
+    if isinstance(primary, dict):
+        _validate_workflow_eligibility_entry(primary, f"{context}: primary_recommendation")
+    for key in ("runnable_workflows", "blocked_workflows"):
+        for index, entry in enumerate(value.get(key) or []):
+            if isinstance(entry, dict):
+                _validate_workflow_eligibility_entry(entry, f"{context}: {key}[{index}]")
+
+
+def _validate_workflow_eligibility_entry(entry: dict, context: str) -> None:
+    workflow_type = entry.get("workflow_type")
+    if not isinstance(workflow_type, str) or not workflow_type:
+        return
+    workflow_metadata = _safe_workflow_metadata(entry.get("workflow_metadata"), workflow_type=workflow_type)
+    _require(workflow_metadata is not None, f"{context} workflow_metadata missing")
+    _validate_workflow_eligibility_metadata(workflow_metadata, context)
+
+
+def _validate_workflow_eligibility_metadata(workflow_metadata: dict, context: str) -> None:
+    for key in ("display_name", "capability_summary", "workflow_family", "workflow_role"):
+        _require(
+            isinstance(workflow_metadata.get(key), str) and bool(workflow_metadata.get(key)),
+            f"{context} workflow_metadata {key} missing",
+        )
+    for key in ("pipeline_stages", "primary_outputs", "qc_outputs", "report_outputs", "limitations"):
+        _require(
+            isinstance(workflow_metadata.get(key), list) and bool(workflow_metadata.get(key)),
+            f"{context} workflow_metadata {key} missing",
+        )
+    _require(
+        workflow_metadata.get("is_report_only") is False,
+        f"{context} workflow_metadata is_report_only invalid",
+    )
+    _require(
+        workflow_metadata.get("agent_selectable") is True,
+        f"{context} workflow_metadata agent_selectable invalid",
+    )
+
+
+def _empty_workflow_eligibility_metadata_summary() -> dict:
+    return {"item_count": 0, "workflow_types": set()}
+
+
+def _merge_workflow_eligibility_metadata_summary(summary: dict, eligibility: object) -> None:
+    if not isinstance(eligibility, dict):
+        return
+    entries: list[object] = []
+    primary = eligibility.get("primary_recommendation")
+    if isinstance(primary, dict):
+        entries.append(primary)
+    for key in ("runnable_workflows", "blocked_workflows"):
+        value = eligibility.get(key)
+        if isinstance(value, list):
+            entries.extend(value)
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        workflow_type = entry.get("workflow_type")
+        if not isinstance(workflow_type, str) or not workflow_type:
+            continue
+        workflow_metadata = _safe_workflow_metadata(entry.get("workflow_metadata"), workflow_type=workflow_type)
+        if workflow_metadata is None:
+            continue
+        summary["item_count"] += 1
+        summary["workflow_types"].add(workflow_type)
+
+
+def _finalize_workflow_eligibility_metadata_summary(summary: dict) -> dict:
+    return {
+        "workflow_metadata_status": "passed",
+        "workflow_metadata_required_fields": WORKFLOW_ELIGIBILITY_METADATA_REQUIRED_FIELDS,
+        "workflow_metadata_workflow_types": sorted(summary["workflow_types"]),
+        "workflow_metadata_item_count": int(summary["item_count"]),
+    }
 
 
 def _validate_upload_inventory_contract(response: dict, upload_session_id: int) -> dict:
@@ -715,11 +1925,11 @@ def _validate_upload_inventory_contract(response: dict, upload_session_id: int) 
     _require(isinstance(series, list), "upload inventory contract failed: series missing")
     _require(bool(series), "upload inventory contract failed: no series found")
     series_ids = []
+    metadata_summary = _empty_workflow_eligibility_metadata_summary()
     for item in series:
-        _validate_workflow_eligibility(
-            item.get("workflow_eligibility"),
-            "upload inventory contract failed",
-        )
+        eligibility = item.get("workflow_eligibility")
+        _validate_workflow_eligibility(eligibility, "upload inventory contract failed")
+        _merge_workflow_eligibility_metadata_summary(metadata_summary, eligibility)
         try:
             series_id = int(item.get("series_id") or item.get("id") or 0)
         except (TypeError, ValueError):
@@ -734,6 +1944,7 @@ def _validate_upload_inventory_contract(response: dict, upload_session_id: int) 
         "series_ids": sorted(series_ids),
         "series_with_workflow_eligibility": len(series),
         "modalities": sorted({str(item.get("modality")) for item in series if item.get("modality")}),
+        **_finalize_workflow_eligibility_metadata_summary(metadata_summary),
     }
 
 
@@ -751,6 +1962,17 @@ def _is_unsafe_path(value: str) -> bool:
         or normalized.startswith("/")
         or (len(normalized) >= 2 and normalized[1] == ":" and normalized[0].isalpha())
         or ".." in path_parts
+    )
+
+
+def _contains_unredacted_unsafe_text(value: object) -> bool:
+    if not isinstance(value, str):
+        return False
+    return bool(
+        re.search(r"[A-Za-z]:[\\/]", value)
+        or re.search(r"/(?:home|Users|mnt|data|tmp|var)/", value)
+        or re.search(r"(?i)(api[_-]?key|token|secret|password|license)\s*=", value)
+        or re.search(r"(?<![A-Za-z0-9])sk-[A-Za-z0-9._-]+", value)
     )
 
 
@@ -979,6 +2201,31 @@ def _validate_task_result_summary(
             workflow_type == completed_task.get("workflow_type"),
             "task result summary workflow_type mismatch",
         )
+    workflow_metadata = _safe_workflow_metadata(
+        summary.get("workflow_metadata"),
+        workflow_type=workflow_type,
+    )
+    _require(workflow_metadata is not None, "task result summary workflow_metadata missing")
+    if completed_task is not None:
+        runtime_workflow_type = completed_task.get("runtime_workflow_type")
+        _require(
+            workflow_metadata.get("runtime_workflow_type") == runtime_workflow_type,
+            "task result summary workflow_metadata runtime_workflow_type mismatch",
+        )
+    _require(
+        workflow_metadata.get("display_name") != workflow_type,
+        "task result summary workflow_metadata display_name invalid",
+    )
+    _require(
+        workflow_metadata.get("is_report_only") is False,
+        "task result summary workflow_metadata is_report_only invalid",
+    )
+    _require(
+        workflow_metadata.get("agent_selectable") is True,
+        "task result summary workflow_metadata agent_selectable invalid",
+    )
+    for key in ("capability_summary", "pipeline_stages", "primary_outputs", "qc_outputs", "report_outputs", "limitations"):
+        _require(workflow_metadata.get(key), f"task result summary workflow_metadata {key} missing")
     modality = summary.get("modality")
     _require(isinstance(modality, str) and _is_privacy_safe_symbol(modality), "task result summary modality invalid")
     feature_groups = summary.get("feature_groups")
@@ -1036,6 +2283,7 @@ def _validate_task_result_summary(
         "contract_version": summary["contract_version"],
         "task_id": task_id,
         "workflow_type": workflow_type,
+        "workflow_metadata": workflow_metadata,
         "modality": modality,
         "feature_groups": feature_groups,
         "output_group_count": len(outputs),
@@ -1044,6 +2292,109 @@ def _validate_task_result_summary(
         "downloadable_output_paths": [item["relative_path"] for item in downloadable_outputs],
         "downloadable_output_urls": [item["download_url"] for item in downloadable_outputs],
         "provenance_keys": sorted(str(key) for key in provenance),
+    }
+
+
+def _validate_task_events(events_payload: dict, task_id: int, completed_task: dict) -> dict:
+    _require(events_payload.get("status") == "ok", "task events status must be ok")
+    task = events_payload.get("task") if isinstance(events_payload.get("task"), dict) else {}
+    _require(int(task.get("id") or task.get("task_id") or 0) == task_id, "task events task_id mismatch")
+    _require(task.get("status") == completed_task.get("status"), "task events task status mismatch")
+    _require(task.get("workflow_type") == completed_task.get("workflow_type"), "task events workflow_type mismatch")
+    for section_name in ("task", "main_log"):
+        section = events_payload.get(section_name)
+        if isinstance(section, dict):
+            _validate_no_artifact_path_leakage(section, f"task events {section_name}", allow_relative_path=False)
+            for key, value in section.items():
+                _require(not _contains_unredacted_unsafe_text(value), f"task events {section_name}.{key} leaked unsafe text")
+    events = events_payload.get("events")
+    _require(isinstance(events, list) and events, "task events list must be non-empty")
+    event_types = sorted({str(event.get("type")) for event in events if isinstance(event, dict) and event.get("type")})
+    _require("task.status" in event_types, "task events must include task.status")
+    _require("task.remote_log" in event_types, "task events must include task.remote_log")
+    status_events = [event for event in events if isinstance(event, dict) and event.get("type") == "task.status"]
+    _require(any(event.get("status") == completed_task.get("status") for event in status_events), "task status event mismatch")
+    remote_logs = events_payload.get("remote_logs")
+    _require(isinstance(remote_logs, list) and remote_logs, "task events remote_logs must be non-empty")
+    source_stages: list[str] = []
+    for item in remote_logs:
+        _require(isinstance(item, dict), "task events remote_log must be an object")
+        _validate_no_artifact_path_leakage(item, "task events remote_log", allow_relative_path=False)
+        for key, value in item.items():
+            _require(not _contains_unredacted_unsafe_text(value), f"task events remote_log.{key} leaked unsafe text")
+        name = str(item.get("name") or "")
+        source_stage = str(item.get("source_stage") or "")
+        _require(name.endswith(".log") and _is_privacy_safe_symbol(name.replace(".", "_")), "task events remote_log name invalid")
+        _require(_is_privacy_safe_symbol(source_stage), "task events remote_log source_stage invalid")
+        _require(int(item.get("size_bytes") or 0) > 0, "task events remote_log size_bytes missing")
+        source_stages.append(source_stage)
+    main_log = events_payload.get("main_log") if isinstance(events_payload.get("main_log"), dict) else {}
+    return {
+        "status": "passed",
+        "task_id": task_id,
+        "event_types": event_types,
+        "status_event_status": completed_task.get("status"),
+        "remote_log_count": len(remote_logs),
+        "remote_log_source_stages": sorted(set(source_stages)),
+        "main_log_tail_present": bool(str(main_log.get("tail") or "")),
+    }
+
+
+def _validate_observe_repair(observe_payload: dict, task_id: int) -> dict:
+    _require(isinstance(observe_payload, dict), "observe-repair response must be an object")
+    _require(observe_payload.get("status") == "ok", "observe-repair status must be ok")
+    _require(
+        observe_payload.get("policy") == "read_only_observe_repair",
+        "observe-repair policy must be read_only_observe_repair",
+    )
+    _require(int(observe_payload.get("task_id") or 0) == task_id, "observe-repair task_id mismatch")
+    task = observe_payload.get("task") if isinstance(observe_payload.get("task"), dict) else {}
+    if task:
+        _validate_no_artifact_path_leakage(task, "observe-repair task", allow_relative_path=False)
+        for key, value in task.items():
+            _require(not _contains_unredacted_unsafe_text(value), f"observe-repair task.{key} leaked unsafe text")
+    main_log = observe_payload.get("main_log")
+    if isinstance(main_log, dict):
+        _validate_no_artifact_path_leakage(main_log, "observe-repair main_log", allow_relative_path=False)
+        for key, value in main_log.items():
+            _require(not _contains_unredacted_unsafe_text(value), f"observe-repair main_log.{key} leaked unsafe text")
+    remote_logs = observe_payload.get("remote_logs")
+    _require(isinstance(remote_logs, list), "observe-repair remote_logs must be a list")
+    for item in remote_logs:
+        _require(isinstance(item, dict), "observe-repair remote_log must be an object")
+        _validate_no_artifact_path_leakage(item, "observe-repair remote_log", allow_relative_path=False)
+        for key, value in item.items():
+            _require(not _contains_unredacted_unsafe_text(value), f"observe-repair remote_log.{key} leaked unsafe text")
+    suggestions = observe_payload.get("repair_suggestions")
+    _require(isinstance(suggestions, list) and suggestions, "observe-repair repair_suggestions must be non-empty")
+    _require(observe_payload.get("auto_rerun_allowed") is False, "observe-repair auto_rerun_allowed must be false")
+    _require(observe_payload.get("task_creation_allowed") is False, "observe-repair task_creation_allowed must be false")
+    forbidden_actions = observe_payload.get("forbidden_actions")
+    _require(
+        isinstance(forbidden_actions, list)
+        and {"auto_retry", "auto_rerun", "task_creation"}.issubset(set(forbidden_actions)),
+        "observe-repair forbidden_actions must include auto_retry, auto_rerun, and task_creation",
+    )
+    _require(observe_payload.get("production_task_created") is False, "observe-repair production_task_created must be false")
+    _require(
+        observe_payload.get("requires_preflight_before_retry") is True,
+        "observe-repair requires_preflight_before_retry must be true",
+    )
+    _require(
+        observe_payload.get("requires_human_confirmation_before_retry") is True,
+        "observe-repair requires_human_confirmation_before_retry must be true",
+    )
+    return {
+        "status": "passed",
+        "task_id": task_id,
+        "policy": observe_payload.get("policy"),
+        "auto_rerun_allowed": False,
+        "task_creation_allowed": False,
+        "forbidden_actions": ["auto_retry", "auto_rerun", "task_creation"],
+        "production_task_created": False,
+        "requires_preflight_before_retry": True,
+        "requires_human_confirmation_before_retry": True,
+        "repair_suggestion_count": len(suggestions),
     }
 
 
@@ -1220,6 +2571,14 @@ def main(argv: Sequence[str] | None = None) -> None:
         help="Fail unless the live /agent/runs smoke is scoped to --project-id.",
     )
     parser.add_argument(
+        "--skip-agent-run-smoke",
+        action="store_true",
+        help=(
+            "Skip the generic /agent/runs question smoke while still validating "
+            "/agent/model/status and any explicit workflow confirmation/resume gates."
+        ),
+    )
+    parser.add_argument(
         "--require-agent-workflow-confirmation",
         action="store_true",
         help="Fail unless /agent/runs can prepare a workflow confirmation without creating a production task.",
@@ -1230,6 +2589,28 @@ def main(argv: Sequence[str] | None = None) -> None:
         help="Fail unless /agent/runs/{thread_id}/resume approves the prepared confirmation and creates a backend task.",
     )
     parser.add_argument(
+        "--require-agent-workflow-fingerprint-negative",
+        action="store_true",
+        help="Fail unless a tampered Agent workflow confirmation is blocked before the valid resume creates a task.",
+    )
+    parser.add_argument(
+        "--reuse-persisted-agent-launch-evidence",
+        action="store_true",
+        help=(
+            "Read prior Agent confirmation/resume/fingerprint evidence for --task-id from the local agent state DB "
+            "instead of creating a new Agent workflow task."
+        ),
+    )
+    parser.add_argument(
+        "--agent-state-db",
+        help="SQLite app.db path used by --reuse-persisted-agent-launch-evidence.",
+    )
+    parser.add_argument(
+        "--require-unknown-workflow-incubation",
+        action="store_true",
+        help="Fail unless an unregistered workflow only creates IncubationLedger/proposal evidence and no task.",
+    )
+    parser.add_argument(
         "--require-deployment-identity",
         action="store_true",
         help="Fail unless --deployment-id names the accepted remote release or commit.",
@@ -1238,6 +2619,11 @@ def main(argv: Sequence[str] | None = None) -> None:
         "--require-production-readiness",
         action="store_true",
         help="Fail unless /deployment.production_readiness reports required=true, ready=true, and status=ready.",
+    )
+    parser.add_argument(
+        "--require-runtime-toolchain",
+        action="store_true",
+        help="Fail unless /runtime/probe proves deployment-server local Docker/toolchain readiness.",
     )
     parser.add_argument(
         "--deployment-id",
@@ -1260,6 +2646,11 @@ def main(argv: Sequence[str] | None = None) -> None:
         help="Fail unless RAG workflow/contract vendor doc pointers have complete raw-source provenance.",
     )
     parser.add_argument(
+        "--require-elasticsearch-hybrid-rag",
+        action="store_true",
+        help="Fail unless RAG status reports a persisted Elasticsearch BM25/dense-vector RRF hybrid index.",
+    )
+    parser.add_argument(
         "--require-real-evidence-ids",
         action="store_true",
         help="Fail unless --project-id, --upload-session-id, and --task-id are all supplied.",
@@ -1275,6 +2666,11 @@ def main(argv: Sequence[str] | None = None) -> None:
         help="Fail unless smoke uploads --upload-nifti-file through /projects/{project_id}/upload and records the returned series.",
     )
     parser.add_argument(
+        "--uploaded-series-id",
+        type=int,
+        help="Existing series id to validate as uploaded-series evidence without uploading another file.",
+    )
+    parser.add_argument(
         "--upload-nifti-file",
         help="Local NIfTI file path on the remote smoke runner to upload via /projects/{project_id}/upload.",
     )
@@ -1287,6 +2683,16 @@ def main(argv: Sequence[str] | None = None) -> None:
         "--require-launched-task",
         action="store_true",
         help="Fail unless smoke launches a workflow through /series/{series_id}/run and the returned task matches --task-id.",
+    )
+    parser.add_argument(
+        "--require-task-events",
+        action="store_true",
+        help="Fail unless /tasks/{task_id}/events exposes read-only task status and remote-log observation evidence.",
+    )
+    parser.add_argument(
+        "--require-observe-repair",
+        action="store_true",
+        help="Fail unless /tasks/{task_id}/observe-repair proves read-only repair suggestions without rerun or task creation.",
     )
     parser.add_argument(
         "--launch-series-id",
@@ -1360,24 +2766,51 @@ def main(argv: Sequence[str] | None = None) -> None:
     args = parser.parse_args(argv)
     if args.upload_session_id is not None and args.project_id is None:
         raise SystemExit("--upload-session-id requires --project-id")
-    if args.require_uploaded_series and (args.project_id is None or not args.upload_nifti_file):
-        raise SystemExit("--require-uploaded-series requires --project-id and --upload-nifti-file")
+    if args.require_uploaded_series and (
+        args.project_id is None or (not args.upload_nifti_file and args.uploaded_series_id is None)
+    ):
+        raise SystemExit("--require-uploaded-series requires --project-id and --upload-nifti-file or --uploaded-series-id")
+    if args.upload_nifti_file and args.uploaded_series_id is not None:
+        raise SystemExit("--upload-nifti-file cannot be combined with --uploaded-series-id")
     if args.require_project_agent_context and args.project_id is None:
         raise SystemExit("--require-project-agent-context requires --project-id")
+    if args.skip_agent_run_smoke and args.require_project_agent_context:
+        raise SystemExit("--skip-agent-run-smoke cannot be combined with --require-project-agent-context")
     if args.require_agent_workflow_confirmation and args.project_id is None:
         raise SystemExit("--require-agent-workflow-confirmation requires --project-id")
     if args.require_agent_workflow_confirmation and not args.launch_workflow_type:
         raise SystemExit("--require-agent-workflow-confirmation requires --launch-workflow-type")
     if args.require_agent_workflow_resume and not args.require_agent_workflow_confirmation:
         raise SystemExit("--require-agent-workflow-resume requires --require-agent-workflow-confirmation")
-    if args.require_completed_upload and (args.project_id is None or args.upload_session_id is None):
+    if args.require_agent_workflow_fingerprint_negative and not args.require_agent_workflow_resume:
+        raise SystemExit("--require-agent-workflow-fingerprint-negative requires --require-agent-workflow-resume")
+    if args.reuse_persisted_agent_launch_evidence:
+        if not args.agent_state_db:
+            raise SystemExit("--reuse-persisted-agent-launch-evidence requires --agent-state-db")
+        if args.task_id is None:
+            raise SystemExit("--reuse-persisted-agent-launch-evidence requires --task-id")
+        if not (
+            args.require_agent_workflow_confirmation
+            and args.require_agent_workflow_resume
+            and args.require_launched_task
+        ):
+            raise SystemExit(
+                "--reuse-persisted-agent-launch-evidence requires confirmation, resume, and launched-task gates"
+            )
+    if args.require_unknown_workflow_incubation and args.project_id is None:
+        raise SystemExit("--require-unknown-workflow-incubation requires --project-id")
+    if args.require_completed_upload and (
+        args.project_id is None or (args.upload_session_id is None and not args.require_uploaded_series)
+    ):
         raise SystemExit("--require-completed-upload requires --project-id and --upload-session-id")
     if args.require_real_evidence_ids and (
-        args.project_id is None or args.upload_session_id is None or (args.task_id is None and not args.require_launched_task)
+        args.project_id is None
+        or (args.upload_session_id is None and not args.require_uploaded_series)
+        or (args.task_id is None and not args.require_launched_task)
     ):
         raise SystemExit(
             "--require-real-evidence-ids requires --project-id, --upload-session-id, and --task-id "
-            "unless --require-launched-task will supply the backend task id"
+            "unless --require-uploaded-series and/or --require-launched-task will supply them"
         )
     if args.require_deployment_identity and not args.deployment_id:
         raise SystemExit("--require-deployment-identity requires --deployment-id")
@@ -1393,12 +2826,30 @@ def main(argv: Sequence[str] | None = None) -> None:
         raise SystemExit("--require-container-native-qc requires --task-id")
     if args.require_completed_task and args.task_id is None and not args.require_launched_task:
         raise SystemExit("--require-completed-task requires --task-id")
+    if args.require_task_events and args.task_id is None and not args.require_launched_task:
+        raise SystemExit("--require-task-events requires --task-id")
+    if args.require_observe_repair and args.task_id is None and not args.require_launched_task:
+        raise SystemExit("--require-observe-repair requires --task-id")
     if args.require_launched_task and (
         (args.launch_series_id is None and not args.require_uploaded_series) or not args.launch_workflow_type
     ):
         raise SystemExit("--require-launched-task requires --launch-series-id and --launch-workflow-type")
+    if args.require_production_readiness and args.require_launched_task and not args.require_agent_workflow_resume:
+        raise SystemExit(
+            "--require-production-readiness with --require-launched-task requires --require-agent-workflow-resume"
+        )
+    if args.require_deployment_identity and args.require_launched_task and not args.require_agent_workflow_resume:
+        raise SystemExit(
+            "--require-deployment-identity with --require-launched-task requires --require-agent-workflow-resume"
+        )
+    if args.require_runtime_toolchain and args.require_launched_task and not args.require_agent_workflow_resume:
+        raise SystemExit(
+            "--require-runtime-toolchain with --require-launched-task requires --require-agent-workflow-resume"
+        )
     if args.launch_series_id is not None and args.launch_series_id <= 0:
         raise SystemExit("--launch-series-id must be a positive integer")
+    if args.uploaded_series_id is not None and args.uploaded_series_id <= 0:
+        raise SystemExit("--uploaded-series-id must be a positive integer")
     if args.launch_workflow_type is not None and not _is_privacy_safe_symbol(args.launch_workflow_type):
         raise SystemExit("--launch-workflow-type must be privacy-safe")
     if args.require_launched_task and args.launch_workflow_type in DEBUG_ONLY_WORKFLOWS:
@@ -1418,8 +2869,19 @@ def main(argv: Sequence[str] | None = None) -> None:
     health = _request("GET", f"{base}/health")
     _validate_health(health)
     production_readiness = None
+    fast_launch_readiness = None
+    fast_launch_readiness_status = "skipped"
     if args.require_production_readiness:
-        production_readiness = _safe_production_readiness(_request("GET", f"{base}/deployment"))
+        deployment_status = _request("GET", f"{base}/deployment")
+        production_readiness = _safe_production_readiness(deployment_status)
+        fast_launch_readiness = _safe_fast_launch_readiness(deployment_status)
+        fast_launch_readiness_status = fast_launch_readiness.pop("_acceptance_status", "passed")
+    runtime_toolchain = None
+    if args.require_runtime_toolchain:
+        runtime_toolchain = _safe_runtime_toolchain(
+            _runtime_toolchain_status(base),
+            required_workflow_type=args.launch_workflow_type,
+        )
     deployment_identity = None
     if args.deployment_id:
         health_version = health.get("version")
@@ -1461,6 +2923,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             capabilities.get("model_tool_loop") is True,
             "model capabilities.model_tool_loop must be true when --require-model-tool-loop is set",
         )
+    _validate_direct_model_gateway(safe_model_status, args.expected_model_provider_profile)
     rag_before = _request("GET", f"{base}/agent/rag/status")
     rag = _request("POST", f"{base}/agent/rag/rebuild")
     rag_after = _request("GET", f"{base}/agent/rag/status")
@@ -1475,6 +2938,19 @@ def main(argv: Sequence[str] | None = None) -> None:
     vendor_pointer_integrity = None
     if args.require_vendor_pointer_integrity:
         vendor_pointer_integrity = _validate_vendor_pointer_integrity(rag_after)
+    elasticsearch_hybrid_rag = None
+    elasticsearch_hybrid_rebuild = None
+    elasticsearch_hybrid_query = None
+    if args.require_elasticsearch_hybrid_rag:
+        elasticsearch_hybrid_rag = _validate_elasticsearch_hybrid_rag(rag_after)
+        elasticsearch_hybrid_rebuild = _validate_elasticsearch_hybrid_rebuild(
+            rag,
+            status_evidence=elasticsearch_hybrid_rag,
+        )
+        elasticsearch_hybrid_query = _validate_elasticsearch_hybrid_query_evidence(
+            _request("POST", f"{base}/agent/rag/query", {"query": ELASTICSEARCH_HYBRID_SMOKE_QUERY}),
+            status_evidence=elasticsearch_hybrid_rag,
+        )
     vendor_coverage_catalog = _summarize_vendor_coverage_catalog(rag_after)
     launchability_matrix = None
     launchability_query = None
@@ -1485,7 +2961,9 @@ def main(argv: Sequence[str] | None = None) -> None:
         )
     run = None
     model_smoke_status = "skipped_missing_model_config"
-    if status.get("configured"):
+    if status.get("configured") and args.skip_agent_run_smoke:
+        model_smoke_status = "skipped_by_option"
+    elif status.get("configured"):
         agent_project_id = args.project_id if args.require_project_agent_context else None
         run = _request("POST", f"{base}/agent/runs", {"project_id": agent_project_id, "message": args.message})
         _validate_agent_run(run)
@@ -1500,21 +2978,53 @@ def main(argv: Sequence[str] | None = None) -> None:
     task_result_summary = None
     completed_task = None
     task_workflow_selection = None
+    task_events = None
+    observe_repair = None
     upload_inventory_contract = None
     launched_task = None
     uploaded_series = None
     agent_workflow_confirmation = None
     agent_workflow_resume = None
-    if args.require_uploaded_series:
-        uploaded_series = _validate_uploaded_series(
-            _upload_nifti(base, args.project_id, Path(args.upload_nifti_file)),
+    agent_workflow_fingerprint_negative = None
+    unknown_workflow_incubation = None
+    if args.reuse_persisted_agent_launch_evidence:
+        _require(args.task_id is not None, "--reuse-persisted-agent-launch-evidence requires --task-id")
+        _require(args.project_id is not None, "--reuse-persisted-agent-launch-evidence requires --project-id")
+        _require(args.launch_series_id is not None, "--reuse-persisted-agent-launch-evidence requires --launch-series-id")
+        task_for_launch = _request("GET", f"{base}/tasks/{args.task_id}")
+        persisted_launch = _load_persisted_agent_launch_evidence(
+            Path(args.agent_state_db),
+            task=task_for_launch,
+            task_id=args.task_id,
             project_id=args.project_id,
+            series_id=args.launch_series_id,
+            workflow_type=args.launch_workflow_type,
         )
+        agent_workflow_confirmation = persisted_launch["agent_workflow_confirmation"]
+        agent_workflow_resume = persisted_launch["agent_workflow_resume"]
+        agent_workflow_fingerprint_negative = persisted_launch["agent_workflow_fingerprint_negative"]
+        launched_task = persisted_launch["launched_task"]
+    if args.require_uploaded_series:
+        if args.uploaded_series_id is not None:
+            existing_series_response = _request("GET", f"{base}/projects/{args.project_id}/series")
+            uploaded_series = _select_existing_uploaded_series(
+                existing_series_response,
+                project_id=args.project_id,
+                series_id=args.uploaded_series_id,
+                upload_session_id=args.upload_session_id,
+            )
+        else:
+            uploaded_series = _validate_uploaded_series(
+                _upload_nifti(base, args.project_id, Path(args.upload_nifti_file)),
+                project_id=args.project_id,
+            )
         if args.launch_series_id is not None and args.launch_series_id != uploaded_series["series_id"]:
             raise SystemExit("--launch-series-id must match the series returned by --require-uploaded-series")
         if args.launch_series_id is None:
             args.launch_series_id = uploaded_series["series_id"]
-    if args.require_agent_workflow_confirmation:
+        if args.upload_session_id is None and uploaded_series.get("upload_session_id"):
+            args.upload_session_id = uploaded_series["upload_session_id"]
+    if args.require_agent_workflow_confirmation and not args.reuse_persisted_agent_launch_evidence:
         _require(
             args.launch_series_id is not None,
             "--require-agent-workflow-confirmation requires --launch-series-id or --require-uploaded-series",
@@ -1530,12 +3040,50 @@ def main(argv: Sequence[str] | None = None) -> None:
             series_id=args.launch_series_id,
             workflow_type=args.launch_workflow_type,
         )
-    if args.require_agent_workflow_resume:
+    if args.require_agent_workflow_resume and not args.reuse_persisted_agent_launch_evidence:
         _require(agent_workflow_confirmation is not None, "--require-agent-workflow-resume requires a prepared confirmation")
         thread_id = agent_workflow_run.get("thread_id") if isinstance(agent_workflow_run, dict) else None
         _require(isinstance(thread_id, str) and bool(thread_id), "agent workflow resume failed: confirmation thread_id missing")
         confirmation_payload = agent_workflow_run.get("confirmation") if isinstance(agent_workflow_run, dict) else None
         _require(isinstance(confirmation_payload, dict), "agent workflow resume failed: confirmation payload missing")
+        if args.require_agent_workflow_fingerprint_negative:
+            fingerprint_negative_run = _request(
+                "POST",
+                f"{base}/agent/runs",
+                {"project_id": args.project_id, "message": workflow_message},
+            )
+            fingerprint_negative_thread_id = (
+                fingerprint_negative_run.get("thread_id") if isinstance(fingerprint_negative_run, dict) else None
+            )
+            _require(
+                isinstance(fingerprint_negative_thread_id, str) and bool(fingerprint_negative_thread_id),
+                "agent workflow fingerprint negative failed: confirmation thread_id missing",
+            )
+            fingerprint_negative_confirmation = (
+                fingerprint_negative_run.get("confirmation") if isinstance(fingerprint_negative_run, dict) else None
+            )
+            _require(
+                isinstance(fingerprint_negative_confirmation, dict),
+                "agent workflow fingerprint negative failed: confirmation payload missing",
+            )
+            _validate_agent_workflow_confirmation(
+                fingerprint_negative_run,
+                project_id=args.project_id,
+                series_id=args.launch_series_id,
+                workflow_type=args.launch_workflow_type,
+            )
+            tampered_confirmation = _tampered_confirmation_payload(
+                fingerprint_negative_confirmation,
+                original_series_id=int(args.launch_series_id),
+            )
+            agent_workflow_fingerprint_negative = _validate_agent_workflow_fingerprint_negative(
+                _request(
+                    "POST",
+                    f"{base}/agent/runs/{quote(fingerprint_negative_thread_id, safe='')}/resume",
+                    {"approved": True, "confirmation": tampered_confirmation},
+                ),
+                thread_id=fingerprint_negative_thread_id,
+            )
         agent_workflow_resume = _validate_agent_workflow_resume(
             _request(
                 "POST",
@@ -1561,8 +3109,23 @@ def main(argv: Sequence[str] | None = None) -> None:
             "project_id": agent_workflow_resume["project_id"],
             "series_id": agent_workflow_resume["series_id"],
             "workflow_type": agent_workflow_resume["workflow_type"],
+            **(
+                {"runtime_workflow_type": agent_workflow_resume["runtime_workflow_type"]}
+                if agent_workflow_resume.get("runtime_workflow_type")
+                else {}
+            ),
+            "launch_source": "agent_workflow_resume",
             "initial_status": agent_workflow_resume["initial_status"],
         }
+    if args.require_unknown_workflow_incubation:
+        _require(status.get("configured"), "--require-unknown-workflow-incubation requires configured model gateway")
+        unknown_workflow_incubation = _validate_unknown_workflow_incubation(
+            _request(
+                "POST",
+                f"{base}/agent/runs",
+                {"project_id": args.project_id, "message": UNKNOWN_WORKFLOW_INCUBATION_SMOKE_QUERY},
+            )
+        )
     if args.require_launched_task:
         if agent_workflow_resume is not None:
             _require(
@@ -1619,6 +3182,18 @@ def main(argv: Sequence[str] | None = None) -> None:
                 if project_series is None:
                     project_series = _request("GET", f"{base}/projects/{args.project_id}/series")
                 task_workflow_selection = _validate_task_workflow_selection(project_series, completed_task)
+        if args.require_task_events:
+            _require(completed_task is not None, "--require-task-events requires completed task evidence")
+            task_events = _validate_task_events(
+                _request("GET", f"{base}/tasks/{args.task_id}/events"),
+                args.task_id,
+                completed_task,
+            )
+        if args.require_observe_repair:
+            observe_repair = _validate_observe_repair(
+                _request("GET", f"{base}/tasks/{args.task_id}/observe-repair"),
+                args.task_id,
+            )
         task_artifact_manifest = _validate_task_artifact_manifest(
             _request("GET", f"{base}/tasks/{args.task_id}/artifact-manifest"),
             args.task_id,
@@ -1646,21 +3221,28 @@ def main(argv: Sequence[str] | None = None) -> None:
     smoke_gate = {
         "api_base": base,
         "require_model": bool(args.require_model),
+        "skip_agent_run_smoke": bool(args.skip_agent_run_smoke),
         "require_project_agent_context": bool(args.require_project_agent_context),
         "require_agent_workflow_confirmation": bool(args.require_agent_workflow_confirmation),
         "require_agent_workflow_resume": bool(args.require_agent_workflow_resume),
+        "require_agent_workflow_fingerprint_negative": bool(args.require_agent_workflow_fingerprint_negative),
+        "require_unknown_workflow_incubation": bool(args.require_unknown_workflow_incubation),
         "require_deployment_identity": bool(args.require_deployment_identity),
         "require_production_readiness": bool(args.require_production_readiness),
+        "require_runtime_toolchain": bool(args.require_runtime_toolchain),
         "deployment_id": args.deployment_id,
         "min_documents": max(args.min_documents, 0),
         "min_chunks": max(args.min_chunks, 0),
         "require_raw_source_policy": bool(args.require_raw_source_policy),
         "require_vendor_pointer_integrity": bool(args.require_vendor_pointer_integrity),
+        "require_elasticsearch_hybrid_rag": bool(args.require_elasticsearch_hybrid_rag),
         "require_real_evidence_ids": bool(args.require_real_evidence_ids),
         "require_completed_upload": bool(args.require_completed_upload),
         "require_uploaded_series": bool(args.require_uploaded_series),
         "require_completed_task": bool(args.require_completed_task),
         "require_launched_task": bool(args.require_launched_task),
+        "require_task_events": bool(args.require_task_events),
+        "require_observe_repair": bool(args.require_observe_repair),
         "require_launchability_matrix": bool(args.require_launchability_matrix),
         "require_container_native_qc": bool(args.require_container_native_qc),
         "min_native_qc_images": max(args.min_native_qc_images, 0),
@@ -1681,6 +3263,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     if args.require_model_tool_loop:
         smoke_gate["require_model_tool_loop"] = True
 
+    model_deployment = safe_model_status.get("deployment") if isinstance(safe_model_status.get("deployment"), dict) else {}
     payload = {
         "generated_at_utc": _generated_at_utc(),
         "smoke_gate": smoke_gate,
@@ -1689,9 +3272,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         "deployment_identity": deployment_identity,
         "production_readiness_status": "passed" if args.require_production_readiness else "skipped",
         "production_readiness": production_readiness,
+        "fast_launch_readiness_status": fast_launch_readiness_status,
+        "fast_launch_readiness": fast_launch_readiness,
+        "runtime_toolchain_status": "passed" if runtime_toolchain else "skipped",
+        "runtime_toolchain": runtime_toolchain,
         "model_status": safe_model_status,
         "model_smoke_status": model_smoke_status,
-        "rag_before": rag_before.get("index"),
+        "rag_before": _safe_rag_index_summary(rag_before.get("index")),
         "rag_raw_sources": rag_after.get("vendor_raw_sources"),
         "rag_vendor_pointer_integrity": rag_after.get("vendor_pointer_integrity"),
         "rag_vendor_pointer_integrity_status": (
@@ -1712,14 +3299,49 @@ def main(argv: Sequence[str] | None = None) -> None:
         "rag_vendor_coverage_catalog_complete_vendor_doc_count": vendor_coverage_catalog["complete_vendor_doc_count"],
         "rag_vendor_coverage_catalog_incomplete_vendor_doc_count": vendor_coverage_catalog["incomplete_vendor_doc_count"],
         "rag_vendor_coverage_catalog_raw_source_count": vendor_coverage_catalog["raw_source_count"],
+        "rag_elasticsearch_hybrid_status": "passed" if elasticsearch_hybrid_rag else "skipped",
+        "rag_elasticsearch_hybrid": elasticsearch_hybrid_rag,
+        "rag_rebuild_elasticsearch_hybrid": elasticsearch_hybrid_rebuild,
+        "rag_elasticsearch_hybrid_query_status": elasticsearch_hybrid_query.get("status") if elasticsearch_hybrid_query else "skipped",
+        "rag_elasticsearch_hybrid_query_mode": elasticsearch_hybrid_query.get("mode") if elasticsearch_hybrid_query else None,
+        "rag_elasticsearch_hybrid_query_retrieval_source": elasticsearch_hybrid_query.get("retrieval_source") if elasticsearch_hybrid_query else None,
+        "rag_elasticsearch_hybrid_query_source": elasticsearch_hybrid_query.get("source") if elasticsearch_hybrid_query else None,
+        "rag_elasticsearch_hybrid_query_citation_count": elasticsearch_hybrid_query.get("citation_count") if elasticsearch_hybrid_query else 0,
+        "rag_elasticsearch_hybrid_query_top_score": elasticsearch_hybrid_query.get("top_score") if elasticsearch_hybrid_query else 0,
+        "rag_elasticsearch_hybrid_query_index": elasticsearch_hybrid_query.get("index") if elasticsearch_hybrid_query else None,
+        "rag_elasticsearch_hybrid_query_lexical_retriever": (
+            elasticsearch_hybrid_query.get("lexical_retriever") if elasticsearch_hybrid_query else None
+        ),
+        "rag_elasticsearch_hybrid_query_vector_retriever": (
+            elasticsearch_hybrid_query.get("vector_retriever") if elasticsearch_hybrid_query else None
+        ),
+        "rag_elasticsearch_hybrid_query_dense_vector_field": (
+            elasticsearch_hybrid_query.get("dense_vector_field") if elasticsearch_hybrid_query else None
+        ),
+        "rag_elasticsearch_hybrid_query_fusion": elasticsearch_hybrid_query.get("fusion") if elasticsearch_hybrid_query else None,
+        "rag_elasticsearch_hybrid_query_rrf_unavailable_reason": (
+            elasticsearch_hybrid_query.get("rrf_unavailable_reason") if elasticsearch_hybrid_query else None
+        ),
+        "rag_elasticsearch_hybrid_query_dense_vector_dims": elasticsearch_hybrid_query.get("dense_vector_dims") if elasticsearch_hybrid_query else 0,
+        "rag_elasticsearch_hybrid_query_embedding_provider": elasticsearch_hybrid_query.get("embedding_provider") if elasticsearch_hybrid_query else None,
+        "rag_elasticsearch_hybrid_query_embedding_model": elasticsearch_hybrid_query.get("embedding_model") if elasticsearch_hybrid_query else None,
+        "rag_elasticsearch_hybrid_query_embedding_transport": elasticsearch_hybrid_query.get("embedding_transport") if elasticsearch_hybrid_query else None,
+        "rag_elasticsearch_hybrid_query_embedding_endpoint_configured": (
+            elasticsearch_hybrid_query.get("embedding_endpoint_configured") if elasticsearch_hybrid_query else None
+        ),
+        "rag_elasticsearch_hybrid_query_embedding_production_ready": (
+            elasticsearch_hybrid_query.get("embedding_production_ready") if elasticsearch_hybrid_query else None
+        ),
         "rag_document_count": rag.get("document_count"),
         "rag_chunk_count": rag.get("chunk_count"),
         "rag_semantic_index": rag.get("semantic_index"),
-        "rag_after": rag_after.get("index"),
+        "rag_after": _safe_rag_index_summary(rag_after.get("index")),
         "agent_run_status": run.get("status") if run else "skipped",
         "agent_run_id": run.get("agent_run_id") if run else None,
         "agent_model_gateway_status": "passed" if run else "skipped",
         "agent_model_gateway_access": run.get("model_gateway_access") if run else None,
+        "agent_model_transport_access": model_deployment.get("model_gateway_access") if run else None,
+        "agent_model_trust_env_proxy": safe_model_status.get("trust_env_proxy") if run else None,
         "agent_safe_metadata": _safe_agent_metadata(run),
         "agent_project_context_status": "passed" if args.require_project_agent_context else "skipped",
         "agent_run_project_id": run.get("project_id") if run else None,
@@ -1727,6 +3349,10 @@ def main(argv: Sequence[str] | None = None) -> None:
         "agent_workflow_confirmation": agent_workflow_confirmation,
         "agent_workflow_resume_status": "passed" if agent_workflow_resume else "skipped",
         "agent_workflow_resume": agent_workflow_resume,
+        "agent_workflow_fingerprint_negative_status": "passed" if agent_workflow_fingerprint_negative else "skipped",
+        "agent_workflow_fingerprint_negative": agent_workflow_fingerprint_negative,
+        "unknown_workflow_incubation_status": "passed" if unknown_workflow_incubation else "skipped",
+        "unknown_workflow_incubation": unknown_workflow_incubation,
         "intent": (run.get("intent") or run.get("agent_intent")) if run else None,
         "agent_intent": (run.get("agent_intent") or run.get("intent")) if run else None,
         "selected_skill": run.get("selected_skill") if run else None,
@@ -1744,6 +3370,31 @@ def main(argv: Sequence[str] | None = None) -> None:
         "launched_task": launched_task,
         "task_workflow_selection_status": "passed" if task_workflow_selection else "skipped",
         "task_workflow_selection": task_workflow_selection,
+        "task_events_status": task_events.get("status") if task_events else "skipped",
+        "task_events_task_id": task_events.get("task_id") if task_events else None,
+        "task_events_event_types": task_events.get("event_types") if task_events else [],
+        "task_events_status_event_status": task_events.get("status_event_status") if task_events else None,
+        "task_events_remote_log_count": task_events.get("remote_log_count") if task_events else 0,
+        "task_events_remote_log_source_stages": task_events.get("remote_log_source_stages") if task_events else [],
+        "task_events_main_log_tail_present": task_events.get("main_log_tail_present") if task_events else False,
+        "observe_repair_status": observe_repair.get("status") if observe_repair else "skipped",
+        "observe_repair_task_id": observe_repair.get("task_id") if observe_repair else None,
+        "observe_repair_policy": observe_repair.get("policy") if observe_repair else None,
+        "observe_repair_auto_rerun_allowed": observe_repair.get("auto_rerun_allowed") if observe_repair else None,
+        "observe_repair_task_creation_allowed": (
+            observe_repair.get("task_creation_allowed") if observe_repair else None
+        ),
+        "observe_repair_forbidden_actions": observe_repair.get("forbidden_actions") if observe_repair else [],
+        "observe_repair_production_task_created": observe_repair.get("production_task_created") if observe_repair else None,
+        "observe_repair_requires_preflight_before_retry": (
+            observe_repair.get("requires_preflight_before_retry") if observe_repair else None
+        ),
+        "observe_repair_requires_human_confirmation_before_retry": (
+            observe_repair.get("requires_human_confirmation_before_retry") if observe_repair else None
+        ),
+        "observe_repair_repair_suggestion_count": (
+            observe_repair.get("repair_suggestion_count") if observe_repair else 0
+        ),
         "rag_launchability_matrix_status": launchability_matrix.get("status") if launchability_matrix else "skipped",
         "rag_launchability_matrix_source": launchability_matrix.get("source") if launchability_matrix else None,
         "rag_launchability_query_status": launchability_query.get("status") if launchability_query else "skipped",
@@ -1753,6 +3404,10 @@ def main(argv: Sequence[str] | None = None) -> None:
         "series_count": project_contract.get("series_count") if project_contract else 0,
         "series_with_workflow_eligibility": project_contract.get("series_with_workflow_eligibility") if project_contract else 0,
         "series_modalities": project_contract.get("modalities") if project_contract else [],
+        "project_workflow_eligibility_metadata_status": project_contract.get("workflow_metadata_status") if project_contract else "skipped",
+        "project_workflow_eligibility_metadata_required_fields": project_contract.get("workflow_metadata_required_fields") if project_contract else [],
+        "project_workflow_eligibility_metadata_workflow_types": project_contract.get("workflow_metadata_workflow_types") if project_contract else [],
+        "project_workflow_eligibility_metadata_item_count": project_contract.get("workflow_metadata_item_count") if project_contract else 0,
         "upload_inventory_contract_status": upload_inventory_contract.get("status") if upload_inventory_contract else "skipped",
         "upload_inventory_completion_status": "passed" if args.require_completed_upload else "skipped",
         "upload_inventory_session_id": upload_inventory_contract.get("upload_session_id") if upload_inventory_contract else None,
@@ -1761,6 +3416,10 @@ def main(argv: Sequence[str] | None = None) -> None:
         "upload_inventory_series_ids": upload_inventory_contract.get("series_ids") if upload_inventory_contract else [],
         "upload_inventory_series_with_workflow_eligibility": upload_inventory_contract.get("series_with_workflow_eligibility") if upload_inventory_contract else 0,
         "upload_inventory_modalities": upload_inventory_contract.get("modalities") if upload_inventory_contract else [],
+        "upload_inventory_workflow_eligibility_metadata_status": upload_inventory_contract.get("workflow_metadata_status") if upload_inventory_contract else "skipped",
+        "upload_inventory_workflow_eligibility_metadata_required_fields": upload_inventory_contract.get("workflow_metadata_required_fields") if upload_inventory_contract else [],
+        "upload_inventory_workflow_eligibility_metadata_workflow_types": upload_inventory_contract.get("workflow_metadata_workflow_types") if upload_inventory_contract else [],
+        "upload_inventory_workflow_eligibility_metadata_item_count": upload_inventory_contract.get("workflow_metadata_item_count") if upload_inventory_contract else 0,
         "uploaded_series_status": "passed" if uploaded_series else "skipped",
         "uploaded_series": uploaded_series,
         "task_artifact_manifest_status": task_artifact_manifest.get("status") if task_artifact_manifest else "skipped",

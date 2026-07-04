@@ -15,6 +15,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { PageHeader } from '../components/ui/PageHeader';
 import { api } from '../lib/api';
 import { queryKeys } from '../lib/query';
+import { normalizeWorkflowCatalog } from '../lib/workflows';
 
 export function ResultsIndexPage() {
   const projectId = Number(useParams().projectId);
@@ -24,6 +25,11 @@ export function ResultsIndexPage() {
     queryKey: queryKeys.tasks(projectId)
   });
   const tasks = tasksQuery.data || [];
+  const { data: workflowPayload } = useQuery({
+    queryFn: api.listWorkflows,
+    queryKey: queryKeys.workflows,
+  });
+  const workflowCatalog = normalizeWorkflowCatalog(workflowPayload);
   const projectDataErrorMessage = tasksQuery.error instanceof Error
     ? tasksQuery.error.message
     : 'Project data could not be loaded.';
@@ -136,7 +142,12 @@ export function ResultsIndexPage() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {resultTasks.map((task) => (
+          {resultTasks.map((task) => {
+            const workflowDisplayName =
+              task.workflow_metadata?.display_name ||
+              workflowCatalog.items[task.workflow_type]?.display_name ||
+              task.workflow_type;
+            return (
             <Link
               key={task.id}
               to={`/projects/${projectId}/results/${task.id}`}
@@ -150,8 +161,9 @@ export function ResultsIndexPage() {
                   <StatusBadge status={task.status} />
                 </div>
                 <div className="font-bold text-gray-900 group-hover:text-[#065F46] transition-colors mb-1">
-                  {task.workflow_type}
+                  {workflowDisplayName}
                 </div>
+                <div className="text-[10px] font-medium text-gray-400 mb-1">Stable workflow ID: {task.workflow_type}</div>
                 <div className="text-[10px] font-mono text-gray-400 mb-4">RUN_ID: {task.id}</div>
               </div>
 
@@ -162,7 +174,8 @@ export function ResultsIndexPage() {
                 <ChevronRight className="w-4 h-4 text-gray-300 group-hover:translate-x-1 transition-transform" />
               </div>
             </Link>
-          ))}
+            );
+          })}
         </div>
 
         {resultTasks.length === 0 && (

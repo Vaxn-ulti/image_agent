@@ -38,6 +38,7 @@ REQUIRED_RAG_DOCS = [
     "contracts/task-events.md",
     "contracts/container-qc-artifacts.md",
     "contracts/agent-run-ledger.md",
+    "contracts/elasticsearch-hybrid-search.md",
     "interpretation/t1_features.md",
     "interpretation/bold_features.md",
     "data-requirements/modalities-bids.md",
@@ -127,7 +128,7 @@ REQUIRED_WORKFLOW_METADATA = {
     },
     "workflows/bold_fmriprep_xcpd_report.md": {
         "workflow_type": "bold_fmriprep_xcpd_report",
-        "status": "incubation_reference",
+        "status": "production_supported",
     },
     "workflows/dwi_fast_gpu_dti.md": {
         "workflow_type": "dwi_fast_gpu_dti",
@@ -371,6 +372,132 @@ def test_container_qc_artifact_policy_is_in_rag_and_skills():
     assert "outputs.reports" in reviewer_ref
 
 
+def test_elasticsearch_hybrid_rag_contract_documents_official_sources_and_boundaries():
+    contract = (REPO_ROOT / "docs" / "rag" / "contracts" / "elasticsearch-hybrid-search.md").read_text(encoding="utf-8")
+    vendor_doc = (REPO_ROOT / "docs" / "rag" / "vendor" / "elastic_official_hybrid_search.md").read_text(encoding="utf-8")
+    raw_rrf = (
+        REPO_ROOT / "docs" / "rag" / "vendor" / "raw-sources" / "elastic_rrf.html"
+    ).read_text(encoding="utf-8")
+    raw_manifest = json.loads(
+        (REPO_ROOT / "docs" / "rag" / "vendor" / "raw-sources" / "manifest.json").read_text(encoding="utf-8")
+    )
+    raw_sources = raw_manifest.get("sources") or []
+    elastic_rrf_canonical_url = "https://www.elastic.co/docs/reference/elasticsearch/rest-apis/reciprocal-rank-fusion"
+    assert f'<link rel="canonical" href="{elastic_rrf_canonical_url}"' in raw_rrf
+
+    for phrase in (
+        "Elasticsearch hybrid search",
+        "BM25",
+        "dense_vector",
+        "kNN",
+        "RRF",
+        "IMAGE_AGENT_RAG_EMBEDDING_PROVIDER",
+        "IMAGE_AGENT_ELASTICSEARCH_INDEX",
+        "OpenAI-compatible HTTP `/embeddings` fallback",
+        "local_hashing",
+        "dense_vector_dims",
+        "embedding_model",
+        "embedding_transport",
+        "embedding_endpoint_configured",
+        "embedding_production_ready",
+        "embedding_error",
+        "mode=embedding_required",
+        "must not create or bulk-write a connected Elasticsearch index",
+        "Connected rebuild owns the configured RAG index",
+        "defaults to `image_agent_rag`",
+        "rebuild deletes it, recreates the current mapping",
+        "bulk-writes only the current curated chunks with `refresh=wait_for`",
+        "prevents stale Elasticsearch documents from surviving",
+        "local contract artifacts",
+        "https://www.elastic.co/guide/en/elasticsearch/reference/current/dense-vector.html",
+        "https://www.elastic.co/guide/en/elasticsearch/reference/current/knn-search.html",
+        elastic_rrf_canonical_url,
+        "https://www.elastic.co/docs/deploy-manage/deploy/self-managed/install-elasticsearch-with-docker",
+        "https://www.elastic.co/docs/deploy-manage/deploy/self-managed/install-elasticsearch-docker-basic",
+        "https://www.elastic.co/docs/deploy-manage/deploy/self-managed/install-elasticsearch-docker-prod",
+        "retrieved_date: 2026-06-18",
+        "raw snapshots are provenance evidence only",
+        "present in the current local RAG manifest",
+        "Stale or unsafe hits are ignored individually",
+        "at least one current safe hit",
+        "docs/rag/vendor/elastic_official_hybrid_search.md",
+        "backend registry, preflight, confirmation, fingerprint, task_service.create_series_task(), and pipeline runner remain authoritative",
+    ):
+        assert phrase in contract
+
+    for phrase in (
+        "source_type: rag_vendor",
+        "raw_source_ids: elastic_dense_vector, elastic_knn_search, elastic_rrf, elastic_docker_install, elastic_docker_basic, elastic_docker_prod",
+        "https://www.elastic.co/guide/en/elasticsearch/reference/current/dense-vector.html",
+        "https://www.elastic.co/guide/en/elasticsearch/reference/current/knn-search.html",
+        elastic_rrf_canonical_url,
+        "https://www.elastic.co/docs/deploy-manage/deploy/self-managed/install-elasticsearch-with-docker",
+        "https://www.elastic.co/docs/deploy-manage/deploy/self-managed/install-elasticsearch-docker-basic",
+        "https://www.elastic.co/docs/deploy-manage/deploy/self-managed/install-elasticsearch-docker-prod",
+        "BM25",
+        "dense_vector",
+        "kNN",
+        "RRF",
+        "single-node acceptance/dev-test runtime",
+        "production high availability",
+        "not a task launcher",
+    ):
+        assert phrase in vendor_doc
+
+    elastic_sources = {
+        source.get("id"): source
+        for source in raw_sources
+        if source.get("vendor_doc") == "elastic_official_hybrid_search.md"
+    }
+    assert set(elastic_sources) == {
+        "elastic_dense_vector",
+        "elastic_knn_search",
+        "elastic_rrf",
+        "elastic_docker_install",
+        "elastic_docker_basic",
+        "elastic_docker_prod",
+    }
+    assert elastic_sources["elastic_rrf"]["url"] == elastic_rrf_canonical_url
+    assert (
+        elastic_sources["elastic_docker_basic"]["url"]
+        == "https://www.elastic.co/docs/deploy-manage/deploy/self-managed/install-elasticsearch-docker-basic"
+    )
+    for source in elastic_sources.values():
+        assert source["status"] == "downloaded"
+        assert source["source_type"] == "official_docs"
+        raw_file = REPO_ROOT / "docs" / "rag" / "vendor" / "raw-sources" / source["file"]
+        assert raw_file.exists()
+        assert hashlib.sha256(raw_file.read_bytes()).hexdigest() == source["sha256"]
+        assert raw_file.stat().st_size == source["bytes"]
+
+
+def test_elasticsearch_vendor_doc_has_machine_readable_boundaries():
+    metadata, _body = _parse_frontmatter(
+        (
+            REPO_ROOT / "docs" / "rag" / "vendor" / "elastic_official_hybrid_search.md"
+        ).read_text(encoding="utf-8")
+    )
+
+    assert metadata["source_type"] == "rag_vendor"
+    assert _metadata_list(metadata["raw_source_ids"]) == [
+        "elastic_dense_vector",
+        "elastic_knn_search",
+        "elastic_rrf",
+        "elastic_docker_install",
+        "elastic_docker_basic",
+        "elastic_docker_prod",
+    ]
+    assert isinstance(metadata.get("unsupported_boundaries"), list)
+    boundaries = "\n".join(metadata["unsupported_boundaries"])
+    for phrase in (
+        "not a task launcher",
+        "Raw official snapshots are provenance evidence only",
+        "Unknown workflows remain IncubationLedger/proposal only",
+        "ObserveRepair remains read-only",
+    ):
+        assert phrase in boundaries
+
+
 def test_container_qc_artifact_policy_requires_curated_official_source_ids():
     paths = [
         REPO_ROOT / "docs" / "rag" / "contracts" / "container-qc-artifacts.md",
@@ -408,9 +535,43 @@ def test_artifact_manifest_contract_is_documented_for_frontend_use():
         "stable preview/download list",
         "do not expose backend absolute paths",
         "result-summary remains authoritative",
+        "`workflow_metadata`",
+        "`runtime_workflow_type`",
+        "registry-backed",
         "`/tasks/{task_id}/artifacts/{relative_path}`",
     ):
         assert phrase in combined
+
+
+def test_result_summary_rag_contract_documents_workflow_metadata_boundary():
+    contract = (REPO_ROOT / "docs" / "rag" / "contracts" / "result-summary.md").read_text(encoding="utf-8")
+
+    for phrase in (
+        "`workflow_metadata`",
+        "`display_name`",
+        "`capability_summary`",
+        "`workflow_family`",
+        "`workflow_role`",
+        "`pipeline_stages`",
+        "`primary_outputs`",
+        "`qc_outputs`",
+        "`report_outputs`",
+        "`limitations`",
+        "`is_report_only`",
+        "`agent_selectable`",
+        "display and interpretation only",
+        "`workflow_type` remains the stable machine id",
+        "confirmation fingerprint",
+        "database task records",
+        "Historical or runtime aliases",
+        "`runtime_workflow_type`",
+        "stable public workflow metadata",
+        "preserve the raw `workflow_type`",
+        "`agent_selectable` does not authorize task creation",
+        "`summary_path` is omitted",
+        "must not create or relaunch tasks",
+    ):
+        assert phrase in contract
 
 
 def test_deepprep_official_outputs_are_documented_for_agent_use():
@@ -440,6 +601,10 @@ def test_deepprep_official_outputs_are_documented_for_agent_use():
         "outputs.figures",
         "container-native DeepPrep QC",
         "placeholder_outputs=true",
+        "`t1_deepprep_anat_report` is the stable public workflow_type",
+        "`t1_deepprep` is the runtime_workflow_type",
+        "workflow_metadata.is_report_only=false",
+        "not a report-only workflow",
     ):
         assert phrase in combined
 
@@ -850,11 +1015,11 @@ def test_qsi_container_contracts_are_documented_for_agent_use():
     combined = qsiprep_doc + "\n" + qsirecon_doc + "\n" + workflow_doc + "\n" + skill_ref
 
     for phrase in (
-        "pennlinc/qsiprep:latest",
+        "pennlinc/qsiprep:26.0.0",
         "--eddy-config",
         "QSIPrep visual reports",
         "desc-image_qc.tsv",
-        "pennlinc/qsirecon:latest",
+        "pennlinc/qsirecon:26.0.0",
         "--recon-spec",
         "dipy_dki",
         "mrtrix_multishell_msmt_noACT",
@@ -872,6 +1037,7 @@ def test_qsi_container_contracts_are_documented_for_agent_use():
     ):
         assert phrase in combined
     assert "custom JSON spec" not in combined
+    assert "pennlinc/qsirecon:latest" not in combined
 
 
 def test_developer_skill_documents_locked_container_versions_for_execution_acceptance():
@@ -884,7 +1050,7 @@ def test_developer_skill_documents_locked_container_versions_for_execution_accep
     combined = "\n".join([testing_matrix, contracts, gpu_strategy, examples, maintenance])
 
     for phrase in (
-        "pennlinc/qsiprep:1.0.2",
+        "pennlinc/qsiprep:26.0.0",
         "pennlinc/qsirecon:26.0.0",
         "nipreps/fmriprep:25.2.5",
         "pennlinc/xcp_d:26.0.2",
@@ -894,6 +1060,7 @@ def test_developer_skill_documents_locked_container_versions_for_execution_accep
     ):
         assert phrase in combined
     for phrase in (
+        "pennlinc/qsiprep:1.0.2",
         "pennlinc/qsiprep:latest",
         "pennlinc/qsirecon:latest",
         "nipreps/fmriprep:latest",
@@ -988,6 +1155,9 @@ def test_fast_dti_toolbox_contract_is_documented_for_agent_use():
         "native_artifact: false",
         "replaces_native_qc: false",
         "not full QSIPrep",
+        "workflow_metadata.is_report_only=false",
+        "not a report-only workflow",
+        "registry, preflight, human confirmation, confirmation fingerprint, task_service.create_series_task(), and the pipeline runner",
     ):
         assert phrase in combined
 
@@ -1114,6 +1284,8 @@ def test_remote_smoke_acceptance_gate_is_documented_for_agent_use():
         "`--min-chunks`",
         "`--require-raw-source-policy`",
         "`--require-vendor-pointer-integrity`",
+        "`--require-elasticsearch-hybrid-rag`",
+        "`--require-runtime-toolchain`",
         "`--require-real-evidence-ids`",
         "`--require-launchability-matrix`",
         "`--require-container-native-qc`",
@@ -1138,6 +1310,29 @@ def test_remote_smoke_acceptance_gate_is_documented_for_agent_use():
         "`rag_raw_sources.curated_sources`",
         "must exactly match",
         "no missing or extra vendor docs",
+        "`rag_elasticsearch_hybrid_status=passed`",
+        "`rag_rebuild_elasticsearch_hybrid`",
+        "`rag_elasticsearch_hybrid.persisted=true`",
+        "`rag_elasticsearch_hybrid.mode=connected`",
+        "`rag_elasticsearch_hybrid.indexed_chunk_count`",
+        "`rag_elasticsearch_hybrid.dense_vector_dims`",
+        "`rag_elasticsearch_hybrid.error`",
+        "`rag_elasticsearch_hybrid.embedding_error`",
+        "`rag_elasticsearch_hybrid.embedding_provider`",
+        "`rag_elasticsearch_hybrid.embedding_model`",
+        "`rag_elasticsearch_hybrid.embedding_transport`",
+        "`rag_elasticsearch_hybrid.embedding_endpoint_configured`",
+        "`rag_status_hybrid_index_matches_env=true`",
+        "OpenAI-compatible `/embeddings` fallback",
+        "`rag_elasticsearch_hybrid.embedding_production_ready=true`",
+        "`mode=embedding_required`",
+        "intentionally did not create or bulk-write the connected index",
+        "`rag_elasticsearch_hybrid_query_status=passed`",
+        "`rag_elasticsearch_hybrid_query_mode=elasticsearch_hybrid`",
+        "`rag_elasticsearch_hybrid_query_retrieval_source=elasticsearch_hybrid`",
+        "`rag_elasticsearch_hybrid_query_source`",
+        "`rag_elasticsearch_hybrid_query_dense_vector_field=embedding`",
+        "query-time dense-vector field matches `rag_elasticsearch_hybrid.dense_vector_field`",
         "`rag_launchability_matrix_status=passed`",
         "`rag_launchability_matrix_source`",
         "`rag_launchability_query_status=passed`",
@@ -1177,6 +1372,23 @@ def test_remote_smoke_acceptance_gate_is_documented_for_agent_use():
         "`app=image_agent`",
         "configured `/agent/runs` must return `status=answered`",
         "`model_smoke_status=passed`",
+        "`fast_launch_readiness_status=pre_acceptance`",
+        "`fast_launch_readiness.checks.rag_elasticsearch_hybrid.status=passed`",
+        "`fast_launch_readiness.checks.rag_elasticsearch_hybrid.official_rrf_source_present=true`",
+        "`rag_hybrid_official_rrf_source_missing`",
+        "`runtime_toolchain_status=passed`",
+        "`runtime_toolchain.workflow_tool_execution=deployment_server_local`",
+        "`runtime_toolchain.docker_runtime_host=api_server`",
+        "`runtime_toolchain.required_workflow_available=true`",
+        "`rag_elasticsearch_hybrid_status=passed`",
+        "`rag_elasticsearch_hybrid.mode=connected`",
+        "`rag_elasticsearch_hybrid.indexed_chunk_count`",
+        "`rag_elasticsearch_hybrid.embedding_provider`",
+        "`rag_elasticsearch_hybrid.embedding_model`",
+        "`rag_elasticsearch_hybrid.embedding_transport`",
+        "`rag_status_hybrid_index_matches_env=true`",
+        "OpenAI-compatible `/embeddings` fallback",
+        "`rag_elasticsearch_hybrid.embedding_production_ready=true`",
         "`agent_run_id`",
         "`semantic_index=true`",
         "missing model gateway is a skip only when `--require-model` is omitted",
@@ -1201,6 +1413,29 @@ def test_remote_acceptance_evidence_template_requires_strict_model_and_restart_e
         "`project_contract_status=passed`",
         "`upload_inventory_contract_status=passed`",
         "`task_artifact_manifest_status=passed`",
+        "`--require-runtime-toolchain`",
+        "`runtime_toolchain_status=passed`",
+        "`runtime_toolchain.workflow_tool_execution=deployment_server_local`",
+        "`runtime_toolchain.docker_runtime_host=api_server`",
+        "`runtime_toolchain.required_workflow_available=true`",
+        "`--require-task-events`",
+        "`--require-observe-repair`",
+        "`--require-unknown-workflow-incubation`",
+        "`task_events_status=passed`",
+        "`task_events_event_types`",
+        "`task_events_remote_log_count`",
+        "`observe_repair_status=passed`",
+        "`observe_repair_policy=read_only_observe_repair`",
+        "`observe_repair_auto_rerun_allowed=false`",
+        "`observe_repair_production_task_created=false`",
+        "`unknown_workflow_incubation_status=passed`",
+        "`unknown_workflow_incubation.action_lane=toolchain_incubation`",
+        "`unknown_workflow_incubation.task_created=false`",
+        "`unknown_workflow_incubation.confirmation_created=false`",
+        "`unknown_workflow_incubation.task_creation_allowed=false`",
+        "`unknown_workflow_incubation.forbidden_actions`",
+        "`unknown_workflow_incubation.production_task_created=false`",
+        "`/tasks/{task_id}/events`",
         "`remote_evidence_ids_status=passed`",
         "`rag_vendor_pointer_integrity_status=passed`",
         "`rag_vendor_pointer_integrity_referenced_vendor_docs`",
@@ -1272,6 +1507,34 @@ def test_remote_smoke_acceptance_json_verifier_is_documented():
         "does not replace running `smoke_remote_agent.py` on the deployed API server",
         "`model_smoke_status=passed`",
         "`remote_evidence_ids_status=passed`",
+        "`smoke_gate.require_agent_workflow_fingerprint_negative=true`",
+        "`agent_workflow_fingerprint_negative_status=passed`",
+        "`agent_workflow_fingerprint_negative.confirmation_gate=fingerprint_mismatch`",
+        "`agent_workflow_fingerprint_negative.production_task_created=false`",
+        "`agent_workflow_fingerprint_negative.task_created=false`",
+        "`checked.agent_workflow_fingerprint_negative_status=passed`",
+        "`checked.agent_workflow_fingerprint_negative_confirmation_gate=fingerprint_mismatch`",
+        "`checked.agent_workflow_fingerprint_negative_production_task_created=false`",
+        "`checked.agent_workflow_fingerprint_negative_task_created=false`",
+        "`checked.unknown_workflow_incubation_status=passed`",
+        "`checked.unknown_workflow_incubation_action_lane=toolchain_incubation`",
+        "`checked.unknown_workflow_incubation_task_created=false`",
+        "`checked.unknown_workflow_incubation_confirmation_created=false`",
+        "`checked.unknown_workflow_incubation_task_creation_allowed=false`",
+        "`checked.unknown_workflow_incubation_forbidden_actions`",
+        "`checked.unknown_workflow_incubation_production_task_created=false`",
+        "`task_events_status=passed`",
+        "`task_events_event_types`",
+        "`task_events_remote_log_count`",
+        "`observe_repair_status=passed`",
+        "`observe_repair_policy=read_only_observe_repair`",
+        "`observe_repair_auto_rerun_allowed=false`",
+        "`observe_repair_production_task_created=false`",
+        "`fast_launch_readiness_status=pre_acceptance`",
+        "`fast_launch_readiness.checks.rag_elasticsearch_hybrid.status=passed`",
+        "`rag_elasticsearch_hybrid_status=passed`",
+        "`rag_elasticsearch_hybrid.mode=connected`",
+        "`rag_elasticsearch_hybrid.indexed_chunk_count`",
         "`rag_vendor_pointer_integrity_status=passed`",
         "`require_vendor_pointer_integrity`",
         "`rag_vendor_pointer_integrity_referenced_vendor_docs`",
@@ -1325,6 +1588,93 @@ def test_developer_testing_matrix_requires_deployment_identity_for_strict_smoke(
         "`python scripts/verify_remote_smoke_acceptance.py --max-age-hours 24 <remote-smoke-acceptance.json>`",
     ):
         assert phrase in matrix
+
+
+def test_remote_acceptance_docs_require_result_summary_workflow_metadata_evidence():
+    paths = [
+        REPO_ROOT / "docs" / "deployment" / "remote-agent-acceptance-template.md",
+        REPO_ROOT / "docs" / "deployment" / "remote-agent-production.md",
+        REPO_ROOT / "docs" / "product-readiness.md",
+        REPO_ROOT / "docs" / "skills" / "image-agent-developer" / "references" / "testing-matrix.md",
+    ]
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in paths)
+
+    for phrase in (
+        "`task_result_summary.workflow_metadata.workflow_type`",
+        "`task_result_summary.workflow_metadata.runtime_workflow_type`",
+        "`task_result_summary.workflow_metadata.display_name`",
+        "`task_result_summary.workflow_metadata.capability_summary`",
+        "`task_result_summary.workflow_metadata.pipeline_stages`",
+        "`task_result_summary.workflow_metadata.primary_outputs`",
+        "`task_result_summary.workflow_metadata.qc_outputs`",
+        "`task_result_summary.workflow_metadata.report_outputs`",
+        "`task_result_summary.workflow_metadata.limitations`",
+        "`task_result_summary.workflow_metadata.agent_selectable=true`",
+        "`task_result_summary.workflow_metadata.is_report_only=false`",
+        "`agent_workflow_confirmation.workflow_metadata.agent_selectable=true`",
+        "`checked.agent_workflow_confirmation_metadata_agent_selectable=true`",
+        "`checked.task_result_summary_metadata_agent_selectable=true`",
+        "`project_workflow_eligibility_metadata_status=passed`",
+        "`project_workflow_eligibility_metadata_required_fields`",
+        "`project_workflow_eligibility_metadata_workflow_types`",
+        "`project_workflow_eligibility_metadata_item_count`",
+        "`upload_inventory_workflow_eligibility_metadata_status=passed`",
+        "`upload_inventory_workflow_eligibility_metadata_required_fields`",
+        "`upload_inventory_workflow_eligibility_metadata_workflow_types`",
+        "`upload_inventory_workflow_eligibility_metadata_item_count`",
+        "`checked.project_workflow_eligibility_metadata_status=passed`",
+        "`checked.project_workflow_eligibility_metadata_task_workflow_type_included=true`",
+        "`checked.upload_inventory_workflow_eligibility_metadata_status=passed`",
+        "`checked.upload_inventory_workflow_eligibility_metadata_task_workflow_type_included=true`",
+        "result-summary workflow metadata is display/interpretation evidence only",
+        "does not replace stable `workflow_type` for task creation, confirmation fingerprints, database records, or artifact routes",
+    ):
+        assert phrase in combined
+
+
+def test_remote_acceptance_docs_require_agent_resume_for_strict_launch_evidence():
+    paths = {
+        "acceptance_template": REPO_ROOT / "docs" / "deployment" / "remote-agent-acceptance-template.md",
+        "production_runbook": REPO_ROOT / "docs" / "deployment" / "remote-agent-production.md",
+        "product_readiness": REPO_ROOT / "docs" / "product-readiness.md",
+        "developer_testing_matrix": REPO_ROOT
+        / "docs"
+        / "skills"
+        / "image-agent-developer"
+        / "references"
+        / "testing-matrix.md",
+    }
+
+    for name, path in paths.items():
+        content = path.read_text(encoding="utf-8")
+        for phrase in (
+            "`--require-production-readiness --require-launched-task`",
+            "`--require-deployment-identity --require-launched-task`",
+            "`--require-runtime-toolchain --require-launched-task`",
+            "`--require-agent-workflow-resume`",
+            "`direct_series_run`",
+            "local/diagnostic smoke only",
+        ):
+            assert phrase in content, f"{name} missing {phrase}"
+
+
+def test_remote_production_runbook_uses_runtime_probe_as_primary_toolchain_contract():
+    production_doc = (REPO_ROOT / "docs" / "deployment" / "remote-agent-production.md").read_text(encoding="utf-8")
+
+    for phrase in (
+        "`/runtime/probe`",
+        "portable machine-discovered contract",
+        "local Docker daemon",
+        "workflow image availability",
+        "Elasticsearch configuration/reachability",
+        "`/runtime/containers` remains a compatibility fallback",
+        "`--require-runtime-toolchain` calls the deployed server's `/runtime/probe`",
+        "set -a; . /home/yyf/project/image_agent/.env; set +a;",
+        "IMAGE_AGENT_ROOT=/home/yyf/project/image_agent IMAGE_AGENT_ENV_FILE=/home/yyf/project/image_agent/.env",
+        "-m app.scripts.probe_runtime_environment --json",
+        "--runtime-probe-json /tmp/image_agent_runtime_probe_<timestamp>.json",
+    ):
+        assert phrase in production_doc
 
 
 def test_developer_testing_matrix_requires_stale_task_gate_before_strict_acceptance():
@@ -1490,12 +1840,20 @@ def test_workflow_launchability_matrix_documents_supported_and_external_boundari
         "`external_reference_only`",
         "`unsupported_external`",
         "`t1_deepprep`",
+        "`t1_deepprep_anat_report` | `production_supported`",
+        "`t1_deepprep_anat_report` is the stable public workflow_type",
+        "`t1_deepprep` is the runtime_workflow_type",
         "`bold_deepprep`",
         "`bold_second_level`",
         "`bold_fmriprep_xcpd_report`",
         "`IMAGE_AGENT_TASK_*`",
-        "Do not call it production-ready unless wrapper and real task evidence exist",
+        "`bold_fmriprep_xcpd_report` | `production_supported`",
+        "fixed workflow that must pass registry, preflight, human confirmation, confirmation fingerprint, task_service.create_series_task(), and the pipeline runner",
+        "workflow_metadata.is_report_only=false",
         "`dwi_fast_gpu_dti`",
+        "`dwi_fast_gpu_dti` | `production_supported`",
+        "Launch only when DWI NIfTI, `.bval`, `.bvec`, and JSON sidecar",
+        "registry, preflight, human confirmation, confirmation fingerprint, task_service.create_series_task(), and the pipeline runner",
         "`dwi_qsiprep`",
         "`dwi_qsirecon`",
         "`dwi_qsi_full`",
@@ -1550,6 +1908,9 @@ def test_image_agent_skill_references_document_backend_readiness_contracts():
         "`runnable_workflows`",
         "`blocked_workflows`",
         "`primary_recommendation`",
+        "`workflow_eligibility` items include `workflow_metadata`",
+        "`workflow_eligibility.workflow_metadata` is display/interpretation evidence only",
+        "`workflow_type` remains the stable machine id",
         "`/projects/{project_id}/datasets/{upload_session_id}/inventory`",
         "side-effect-free",
     ):
@@ -1560,6 +1921,7 @@ def test_image_agent_skill_references_document_backend_readiness_contracts():
         "`--upload-session-id`",
         "`--task-id`",
         "`--require-real-evidence-ids`",
+        "`--require-elasticsearch-hybrid-rag`",
         "`--require-launchability-matrix`",
         "`--require-container-native-qc`",
         "`--min-native-qc-images`",
@@ -1569,6 +1931,24 @@ def test_image_agent_skill_references_document_backend_readiness_contracts():
         "`upload_inventory_contract_status=passed`",
         "`task_artifact_manifest_status=passed`",
         "`remote_evidence_ids_status=passed`",
+        "`rag_elasticsearch_hybrid_status=passed`",
+        "`rag_rebuild_elasticsearch_hybrid`",
+        "`rag_elasticsearch_hybrid.persisted=true`",
+        "`rag_elasticsearch_hybrid.mode=connected`",
+        "`rag_elasticsearch_hybrid.indexed_chunk_count`",
+        "`rag_elasticsearch_hybrid.dense_vector_dims`",
+        "`rag_elasticsearch_hybrid.error`",
+        "`rag_elasticsearch_hybrid.embedding_error`",
+        "`rag_elasticsearch_hybrid.embedding_provider`",
+        "`rag_elasticsearch_hybrid.embedding_model`",
+        "`rag_elasticsearch_hybrid.embedding_transport`",
+        "`rag_elasticsearch_hybrid.embedding_production_ready=true`",
+        "`rag_elasticsearch_hybrid_query_status=passed`",
+        "`rag_elasticsearch_hybrid_query_mode=elasticsearch_hybrid`",
+        "`rag_elasticsearch_hybrid_query_retrieval_source=elasticsearch_hybrid`",
+        "`rag_elasticsearch_hybrid_query_source`",
+        "`rag_elasticsearch_hybrid_query_dense_vector_field=embedding`",
+        "query-time dense-vector field matches `rag_elasticsearch_hybrid.dense_vector_field`",
         "`rag_launchability_matrix_status=passed`",
         "`rag_launchability_query_status=passed`",
         "`rag_launchability_query_source`",
@@ -1586,6 +1966,8 @@ def test_image_agent_skill_references_document_backend_readiness_contracts():
         "no missing or extra vendor docs",
         "unsafe artifact-manifest paths",
         "malformed `workflow_eligibility`",
+        "weak `workflow_eligibility.workflow_metadata`",
+        "`display_name`, `capability_summary`, `workflow_family`, `workflow_role`, `pipeline_stages`, `primary_outputs`, `qc_outputs`, `report_outputs`, `limitations`, `agent_selectable=true`, and `is_report_only=false`",
         "RAG launchability matrix query citation missing",
     ):
         assert phrase in testing_matrix
@@ -1923,6 +2305,7 @@ def test_product_readiness_gate_blocks_frontend_until_agent_contracts_are_verifi
         "OpenAI SDK Responses-style or Chat Completions-compatible",
         "durable run/thread state",
         "official-source RAG",
+        "persisted Elasticsearch hybrid search",
         "raw-source manifest",
         "container-native QC",
         "Docker/container-native",
@@ -1943,6 +2326,8 @@ def test_product_readiness_gate_blocks_frontend_until_agent_contracts_are_verifi
         "remote gate verifier overlay",
         "40 passed",
         "strict smoke gate scripts",
+        "`task_events_status=passed`",
+        "`/tasks/{task_id}/events`",
         "179 passed",
         "verify_remote_smoke_acceptance.py -h",
         "IMAGE_AGENT_RESTART_PREFLIGHT_ONLY=1",
@@ -1970,6 +2355,22 @@ def test_product_readiness_gate_blocks_frontend_until_agent_contracts_are_verifi
         "run_strict_remote_smoke_acceptance",
         "verify_stale_task_resolution.py",
         "model_smoke_status=passed",
+        "rag_elasticsearch_hybrid_status=passed",
+        "rag_rebuild_elasticsearch_hybrid",
+        "rag_elasticsearch_hybrid.mode=connected",
+        "rag_elasticsearch_hybrid.indexed_chunk_count",
+        "rag_elasticsearch_hybrid.dense_vector_dims",
+        "rag_elasticsearch_hybrid.error",
+        "rag_elasticsearch_hybrid.embedding_error",
+        "rag_elasticsearch_hybrid.embedding_provider",
+        "rag_elasticsearch_hybrid.embedding_model",
+        "rag_elasticsearch_hybrid.embedding_transport",
+        "rag_status_hybrid_index_matches_env=true",
+        "rag_elasticsearch_hybrid.embedding_production_ready=true",
+        "rag_elasticsearch_hybrid_query_status=passed",
+        "rag_elasticsearch_hybrid_query_retrieval_source=elasticsearch_hybrid",
+        "rag_elasticsearch_hybrid_query_dense_vector_field=embedding",
+        "query-time dense-vector field matches `rag_elasticsearch_hybrid.dense_vector_field`",
         "container_native_qc_status=passed",
         "scientific_report_artifacts_status=passed",
         "remote server",
@@ -1978,6 +2379,177 @@ def test_product_readiness_gate_blocks_frontend_until_agent_contracts_are_verifi
 
     assert "skipped_missing_model_config" in gate
     assert "is not production acceptance" in gate
+
+
+def test_elasticsearch_hybrid_preflight_docs_require_component_fields():
+    docs = {
+        "product_readiness": (REPO_ROOT / "docs" / "product-readiness.md").read_text(encoding="utf-8"),
+        "remote_production": (REPO_ROOT / "docs" / "deployment" / "remote-agent-production.md").read_text(
+            encoding="utf-8"
+        ),
+        "testing_matrix": (
+            REPO_ROOT / "docs" / "skills" / "image-agent-developer" / "references" / "testing-matrix.md"
+        ).read_text(encoding="utf-8"),
+    }
+
+    for name, text in docs.items():
+        for phrase in (
+            "verify_elasticsearch_hybrid_prerequisites.py",
+            "read-only preflight",
+            "`rag_status_hybrid_lexical_retriever=standard`",
+            "`rag_status_hybrid_vector_retriever=knn`",
+            "`rag_status_hybrid_dense_vector_field=embedding`",
+            "`rag_status_hybrid_official_rrf_source_present=true`",
+        ):
+            assert phrase in text, f"{phrase!r} missing from {name}"
+
+
+def test_elasticsearch_hybrid_fast_launch_docs_require_component_blockers():
+    docs = {
+        "product_readiness": (REPO_ROOT / "docs" / "product-readiness.md").read_text(encoding="utf-8"),
+        "remote_production": (REPO_ROOT / "docs" / "deployment" / "remote-agent-production.md").read_text(
+            encoding="utf-8"
+        ),
+    }
+
+    for name, text in docs.items():
+        for phrase in (
+            "`fast_launch_readiness.checks.rag_elasticsearch_hybrid.lexical_retriever=standard`",
+            "`fast_launch_readiness.checks.rag_elasticsearch_hybrid.vector_retriever=knn`",
+            "`fast_launch_readiness.checks.rag_elasticsearch_hybrid.dense_vector_field=embedding`",
+            "`rag_hybrid_lexical_retriever_not_standard`",
+            "`rag_hybrid_vector_retriever_not_knn`",
+            "`rag_hybrid_dense_vector_field_not_embedding`",
+        ):
+            assert phrase in text, f"{phrase!r} missing from {name}"
+
+
+def test_elasticsearch_hybrid_query_docs_require_component_fields():
+    docs = {
+        "product_readiness": (REPO_ROOT / "docs" / "product-readiness.md").read_text(encoding="utf-8"),
+        "remote_production": (REPO_ROOT / "docs" / "deployment" / "remote-agent-production.md").read_text(
+            encoding="utf-8"
+        ),
+        "remote_acceptance_template": (
+            REPO_ROOT / "docs" / "deployment" / "remote-agent-acceptance-template.md"
+        ).read_text(encoding="utf-8"),
+        "testing_matrix": (
+            REPO_ROOT / "docs" / "skills" / "image-agent-developer" / "references" / "testing-matrix.md"
+        ).read_text(encoding="utf-8"),
+        "elasticsearch_contract": (
+            REPO_ROOT / "docs" / "rag" / "contracts" / "elasticsearch-hybrid-search.md"
+        ).read_text(encoding="utf-8"),
+    }
+
+    for name, text in docs.items():
+        for phrase in (
+            "`rag_elasticsearch_hybrid_query_lexical_retriever=standard`",
+            "`rag_elasticsearch_hybrid_query_vector_retriever=knn`",
+            "`rag_elasticsearch_hybrid_query_fusion=rrf`",
+            "query-time hybrid components match `rag_elasticsearch_hybrid`",
+        ):
+            assert phrase in text, f"{phrase!r} missing from {name}"
+
+
+def test_elasticsearch_hybrid_rebuild_docs_require_component_matching():
+    docs = {
+        "product_readiness": (REPO_ROOT / "docs" / "product-readiness.md").read_text(encoding="utf-8"),
+        "remote_production": (REPO_ROOT / "docs" / "deployment" / "remote-agent-production.md").read_text(
+            encoding="utf-8"
+        ),
+        "remote_acceptance_template": (
+            REPO_ROOT / "docs" / "deployment" / "remote-agent-acceptance-template.md"
+        ).read_text(encoding="utf-8"),
+        "testing_matrix": (
+            REPO_ROOT / "docs" / "skills" / "image-agent-developer" / "references" / "testing-matrix.md"
+        ).read_text(encoding="utf-8"),
+        "elasticsearch_contract": (
+            REPO_ROOT / "docs" / "rag" / "contracts" / "elasticsearch-hybrid-search.md"
+        ).read_text(encoding="utf-8"),
+    }
+
+    for name, text in docs.items():
+        for phrase in (
+            "`rag_rebuild_elasticsearch_hybrid.lexical_retriever`",
+            "`rag_rebuild_elasticsearch_hybrid.vector_retriever`",
+            "`rag_rebuild_elasticsearch_hybrid.dense_vector_field`",
+            "`rag_rebuild_elasticsearch_hybrid.fusion`",
+            "rebuild",
+            "match `rag_elasticsearch_hybrid`",
+        ):
+            assert phrase in text, f"{phrase!r} missing from {name}"
+
+
+def test_remote_production_runbook_stale_apply_builder_uses_current_required_cli_args():
+    production_doc = (REPO_ROOT / "docs" / "deployment" / "remote-agent-production.md").read_text(encoding="utf-8")
+    command_line = next(
+        line for line in production_doc.splitlines() if "scripts/build_stale_task_apply_request.py" in line
+    )
+
+    for required_arg in (
+        "--deployment-id",
+        "--expected-health-version",
+        "--remote-nifti-file",
+        "--workflow-type",
+        "--project-id",
+        "--upload-session-id",
+        "--production-cors-origins",
+        "--production-public-base-url",
+    ):
+        assert required_arg in command_line
+    assert "<deployment_id>" in command_line
+    assert "<expected_health_version>" in command_line
+    assert "<remote_nifti_file>" in command_line
+    assert "<real_registered_workflow_type>" in command_line
+    assert "<project_id>" in command_line
+    assert "<upload_session_id>" in command_line
+    assert "<https_console_origin>" in command_line
+    assert "<https_api_origin>" in command_line
+
+
+def test_remote_production_runbook_release_gate_materializer_uses_current_required_cli_args():
+    production_doc = (REPO_ROOT / "docs" / "deployment" / "remote-agent-production.md").read_text(encoding="utf-8")
+    command_line = next(
+        line for line in production_doc.splitlines() if "scripts/build_release_gate_command_plan.py" in line
+    )
+
+    for required_arg in (
+        "--approval-json-command-path",
+        "--deployment-id",
+        "--expected-health-version",
+        "--remote-nifti-file",
+        "--workflow-type",
+        "--project-id",
+        "--upload-session-id",
+        "--evidence-timestamp",
+        "--production-cors-origins",
+        "--production-public-base-url",
+    ):
+        assert required_arg in command_line
+    assert "<deployment_id>" in command_line
+    assert "<expected_health_version>" in command_line
+    assert "<remote_nifti_file>" in command_line
+    assert "<real_registered_workflow_type>" in command_line
+    assert "<project_id>" in command_line
+    assert "<upload_session_id>" in command_line
+    assert "<https_console_origin>" in command_line
+    assert "<https_api_origin>" in command_line
+
+
+def test_remote_production_runbook_documents_existing_uploaded_series_shortcut():
+    production_doc = (REPO_ROOT / "docs" / "deployment" / "remote-agent-production.md").read_text(encoding="utf-8")
+
+    for phrase in (
+        "`--uploaded-series-id <uploaded_series_id>`",
+        "replace `--remote-nifti-file <remote_nifti_file>`",
+        "same project",
+        "completed upload session",
+        "must not be combined with `--remote-nifti-file`",
+        "must not be combined with `--upload-nifti-file`",
+        "avoids re-uploading large imaging data",
+        "still requires `--require-uploaded-series`",
+    ):
+        assert phrase in production_doc
 
 
 def test_product_readiness_documents_fast_launch_main_flow_and_boundaries():
@@ -1995,12 +2567,18 @@ def test_product_readiness_documents_fast_launch_main_flow_and_boundaries():
         "/projects/{project_id}/series",
         "/workflows",
         "/series/{series_id}/run",
+        "Formal fixed-workflow launch must come from `/agent/runs/{thread_id}/resume` after human confirmation and fingerprint verification",
+        "Direct `/series/{series_id}/run` remains local diagnostic-only for debug/mock API-runnable workflows",
         "smoke_local_main_flow.py",
         "--require-agent-confirmation",
         "--require-agent-resume",
         "`/agent/runs/{thread_id}/resume`",
         "`agent_workflow_resume_status=passed`",
         "`confirmation_gate=fingerprint_verified`",
+        "`--require-agent-workflow-fingerprint-negative`",
+        "`agent_workflow_fingerprint_negative_status=passed`",
+        "`agent_workflow_fingerprint_negative.confirmation_gate=fingerprint_mismatch`",
+        "`agent_workflow_fingerprint_negative.task_created=false`",
         "/chat",
         "/agent/rag/query",
         "IMAGE_AGENT_CORS_ORIGINS",
@@ -2011,6 +2589,7 @@ def test_product_readiness_documents_fast_launch_main_flow_and_boundaries():
         "Real processing acceptance belongs on the deployed API server",
     ):
         assert phrase in gate
+    assert "actual workflow launch still routed through `/series/{series_id}/run` or the server-side resume confirmation path" not in gate
 
 
 def test_developer_testing_matrix_documents_control_and_execution_planes():
@@ -2025,6 +2604,10 @@ def test_developer_testing_matrix_documents_control_and_execution_planes():
         "does not prove the deployed server's local Docker/toolchain execution",
         "--require-agent-resume",
         "`agent_workflow_resume_status=passed`",
+        "`--require-agent-workflow-fingerprint-negative`",
+        "`agent_workflow_fingerprint_negative_status=passed`",
+        "`agent_workflow_fingerprint_negative.confirmation_gate=fingerprint_mismatch`",
+        "`agent_workflow_fingerprint_negative.task_created=false`",
         "mock tests must not be reported as real workflow acceptance",
         "Real scripts are deployment acceptance evidence only when they run against actual data and registered outputs",
     ):

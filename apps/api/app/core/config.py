@@ -1,14 +1,19 @@
 import os
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[4]
-DATA_ROOT = ROOT / "data"
-DB_PATH = DATA_ROOT / "app.db"
-PROJECTS_ROOT = DATA_ROOT / "projects"
-ENV_PATH = ROOT / ".env"
+_DEFAULT_ROOT = Path(__file__).resolve().parents[4]
 
 
-def load_env_file(path: Path = ENV_PATH) -> None:
+def _env_path_before_root() -> Path:
+    configured = os.environ.get("IMAGE_AGENT_ENV_FILE", "").strip()
+    if configured:
+        return Path(configured)
+    configured_root = Path(os.environ.get("IMAGE_AGENT_ROOT", _DEFAULT_ROOT))
+    return configured_root / ".env"
+
+
+def load_env_file(path: Path | None = None) -> None:
+    path = path or Path(os.environ.get("IMAGE_AGENT_ENV_FILE", "") or Path(os.environ.get("IMAGE_AGENT_ROOT", _DEFAULT_ROOT)) / ".env")
     if not path.exists():
         return
     for raw_line in path.read_text(encoding="utf-8").splitlines():
@@ -22,13 +27,20 @@ def load_env_file(path: Path = ENV_PATH) -> None:
             os.environ[key] = value
 
 
-load_env_file()
+ENV_PATH = _env_path_before_root()
+load_env_file(ENV_PATH)
+
+ROOT = Path(os.environ.get("IMAGE_AGENT_ROOT", _DEFAULT_ROOT))
+DATA_ROOT = ROOT / "data"
+DB_PATH = DATA_ROOT / "app.db"
+PROJECTS_ROOT = DATA_ROOT / "projects"
+ENV_PATH = Path(os.environ.get("IMAGE_AGENT_ENV_FILE", ROOT / ".env"))
 
 SUDO_PASSWORD = os.environ.get("IMAGE_AGENT_SUDO_PASSWORD", "")
 FS_LICENSE = Path(os.environ.get("IMAGE_AGENT_FS_LICENSE", "/home/yyf/codex/license.txt"))
 DOCKER_IMAGES = {
     "deepprep": "pbfslab/deepprep:25.1.0",
-    "qsiprep": "pennlinc/qsiprep:1.0.2",
+    "qsiprep": "pennlinc/qsiprep:26.0.0",
     "qsirecon": "pennlinc/qsirecon:26.0.0",
 }
 QSIRECON_PROFILE = os.environ.get("IMAGE_AGENT_QSIRECON_PROFILE", "dki").strip().lower() or "dki"

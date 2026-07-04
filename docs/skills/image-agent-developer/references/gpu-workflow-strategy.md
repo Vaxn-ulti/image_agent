@@ -13,8 +13,8 @@
 - `dwi_fast_gpu_dti` is the production DWI workflow.
 - It is based on `/home/yyf/project/MCI_project/scripts/run_fast_gpu_dti_features.sh`, but the backend should own the steps rather than shelling to an opaque external script forever.
 - Use host FSL from `/home/yyf/project/MCI_project/tools/fsl` for GPU `eddy_cuda`, `flirt`, `applywarp`, and related FSL utilities.
-- Use the locked `pennlinc/qsiprep:1.0.2` image only as an MRtrix toolbox image for `dwi2mask`, `mrconvert`, `dwi2tensor`, `tensor2metric`, `mrstats`, and `mrcalc`.
-- Keep execution images fixed for migration and acceptance evidence: production/default DWI toolbox `pennlinc/qsiprep:1.0.2`, legacy QSIRecon `pennlinc/qsirecon:26.0.0`, BOLD fMRIPrep `nipreps/fmriprep:25.2.5`, and BOLD XCP-D `pennlinc/xcp_d:26.0.2`. Strict acceptance rejects `:latest` or untagged images.
+- Use the locked `pennlinc/qsiprep:26.0.0` image only as an MRtrix toolbox image for `dwi2mask`, `mrconvert`, `dwi2tensor`, `tensor2metric`, `mrstats`, and `mrcalc`.
+- Keep execution images fixed for migration and acceptance evidence: production/default DWI toolbox `pennlinc/qsiprep:26.0.0`, legacy QSIRecon `pennlinc/qsirecon:26.0.0`, BOLD fMRIPrep `nipreps/fmriprep:25.2.5`, and BOLD XCP-D `pennlinc/xcp_d:26.0.2`. Strict acceptance rejects `:latest` or untagged images.
 - Do not run full QSIPrep or full QSIRecon for production `dwi_fast_gpu_dti`.
 - Require DWI NIfTI, `.bval`, `.bvec`, and JSON sidecar fields `PhaseEncodingDirection` and `TotalReadoutTime`.
 - The runner should write FA/MD/AD/RD native DWI maps, MNI152 maps, QC/provenance, and atlas regional TSV tables.
@@ -35,8 +35,8 @@ Validation for production DWI must verify:
 - Eddy `num_threads` defaults to `DWI_QSIPREP_OMP_NTHREADS` (4) with a floor of 2; override via `IMAGE_AGENT_EDDY_NUM_THREADS`.
 - QSIPrep source (`qsiprep/workflows/dwi/fsl.py`) forces CUDA eddy to 1 thread. Single-threaded CUDA eddy is expected, not a failure.
 - The `num_threads >= 4` floor in the config is a safety backstop for non-CUDA eddy or future QSIPrep versions that remove the override.
-- The locked `pennlinc/qsiprep:1.0.2` image exposes `eddy_cuda11.0` at `/app/.pixi/envs/qsiprep/bin/eddy_cuda11.0` in the current acceptance profile. Detection uses `eddy_cuda*` glob to accept versioned binaries (`eddy_cuda11.0`, `eddy_cuda10.2`, etc.), not only an exact `eddy_cuda` name.
-- Backend creates symlinks `eddy_cuda` → `eddy_cuda11.0` and `eddy_cuda10.2` → `eddy_cuda11.0` inside `/app/.pixi/envs/qsiprep/bin` via a bash wrapper script.
+- The locked `pennlinc/qsiprep:26.0.0` image exposes `eddy_cuda11.0` at `/app/.pixi/envs/qsiprep/bin/eddy_cuda11.0` in the current acceptance profile. Detection uses `eddy_cuda*` glob to accept versioned binaries (`eddy_cuda11.0`, `eddy_cuda10.2`, etc.), not only an exact `eddy_cuda` name.
+- Backend creates symlinks `eddy_cuda` -> `eddy_cuda11.0` and `eddy_cuda10.2` -> `eddy_cuda11.0` inside `/app/.pixi/envs/qsiprep/bin` via a bash wrapper script.
 - QSIRecon documentation has no confirmed CUDA-only CLI switch. The current policy is to expose GPUs with Docker `--gpus all` and record whether the container can see them.
 - `dwi_qsi_full` enforces the same GPU safety checks as standalone `dwi_qsiprep` and `dwi_qsirecon` (eddy_cuda* probe for QSIPrep, GPU visibility for QSIRecon).
 
@@ -45,7 +45,7 @@ Validation for production DWI must verify:
 Use this command shape for GPU-enabled QSIPrep work:
 
 ```text
-docker run --rm --gpus all -v {bids}:/data:ro -v {output}:/output -v {work}:/work -v {fs_license}:/opt/freesurfer/license.txt:ro -v {eddy_cuda_config}:/eddy_cuda_config.json:ro pennlinc/qsiprep:1.0.2 /data /output participant --eddy-config /eddy_cuda_config.json
+docker run --rm --gpus all -v {bids}:/data:ro -v {output}:/output -v {work}:/work -v {fs_license}:/opt/freesurfer/license.txt:ro -v {eddy_cuda_config}:/eddy_cuda_config.json:ro pennlinc/qsiprep:26.0.0 /data /output participant --eddy-config /eddy_cuda_config.json
 ```
 
 Validation must:
@@ -94,7 +94,7 @@ Do not add undocumented QSIRecon CUDA CLI flags. If a future image or documentat
 
 ## 2026-05-15 Controller Finding: CUDA Eddy Forced Single-Thread
 
-The locked `pennlinc/qsiprep:1.0.2` source (`qsiprep/workflows/dwi/fsl.py`) forces CUDA eddy to 1 thread:
+The locked `pennlinc/qsiprep:26.0.0` source (`qsiprep/workflows/dwi/fsl.py`) forces CUDA eddy to 1 thread:
 
 ```python
 if eddy_args['use_cuda']:

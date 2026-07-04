@@ -87,19 +87,44 @@ describe('SettingsPage', () => {
             status: 'passed',
             task_creation: 'server_side_resume_confirmation_only',
           },
+          production_deployment: {
+            blocking_reasons: [],
+            readiness_status: 'ready',
+            ready: true,
+            required: false,
+            status: 'blocked',
+          },
           model_gateway_target: {
             actual_model: 'gpt-5.5',
+            actual_model_gateway_access: 'direct',
             actual_provider_profile: 'rawchat',
+            actual_trust_env_proxy: false,
             actual_wire_api: 'responses',
             expected_model: 'gpt-5.5',
+            expected_model_gateway_access: 'direct',
             expected_provider_profile: 'rawchat',
+            expected_trust_env_proxy: false,
             expected_wire_api: 'responses',
+            direct_transport: true,
             model_tool_loop: true,
             status: 'passed',
           },
           strict_remote_acceptance: {
             required_evidence: 'strict remote smoke JSON verified within freshness window',
             status: 'missing',
+          },
+          rag_elasticsearch_hybrid: {
+            blocking_codes: [
+              'rag_hybrid_lexical_retriever_not_standard',
+              'rag_hybrid_vector_retriever_not_knn',
+              'rag_hybrid_dense_vector_field_not_embedding',
+            ],
+            dense_vector_field: 'dense',
+            embedding_endpoint_configured: false,
+            official_rrf_source_present: false,
+            lexical_retriever: 'bm25_only',
+            status: 'blocked',
+            vector_retriever: 'script_score',
           },
           upload_workflow_result_contract: {
             result_endpoints: [
@@ -129,11 +154,21 @@ describe('SettingsPage', () => {
     expect(await screen.findByText('Fast Launch Readiness')).toBeInTheDocument();
     expect(await screen.findByText('Launch blocked')).toBeInTheDocument();
     expect(await screen.findByText('rawchat / gpt-5.5 / responses')).toBeInTheDocument();
+    expect(await screen.findByText('Direct transport protected')).toBeInTheDocument();
+    expect(await screen.findByText('Production deployment not enabled')).toBeInTheDocument();
     expect(await screen.findByText('Agent boundary protected')).toBeInTheDocument();
     expect(await screen.findByText('Strict remote acceptance missing')).toBeInTheDocument();
+    expect(await screen.findByText('ES hybrid RAG blocked')).toBeInTheDocument();
+    expect(await screen.findByText('bm25_only / script_score / dense')).toBeInTheDocument();
+    expect(await screen.findByText('rag_hybrid_lexical_retriever_not_standard')).toBeInTheDocument();
+    expect(await screen.findByText('rag_hybrid_vector_retriever_not_knn')).toBeInTheDocument();
+    expect(await screen.findByText('rag_hybrid_dense_vector_field_not_embedding')).toBeInTheDocument();
     expect(
       await screen.findByText('Strict remote acceptance evidence has not been verified for the upload-agent-workflow-result chain.'),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/reciprocal-rank-fusion/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/sk-/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\/home\/yyf\/project\/image_agent/)).not.toBeInTheDocument();
   });
 
   it('shows the backend public API base hint from deployment status', async () => {

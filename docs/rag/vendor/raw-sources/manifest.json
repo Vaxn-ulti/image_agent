@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-06-08T04:44:42Z",
+  "generated_at": "2026-06-18T00:00:00Z",
   "note": "Raw official source snapshots for curated vendor RAG summaries. Do not index wholesale; use as traceable source evidence.",
   "sources": [
     {
@@ -660,6 +660,78 @@
       "retrieved_at": "2026-06-08T04:45:21Z",
       "sha256": "b7c1591f0c8903a5d2241809996c6937e57e8c4f5e3d448eb9e38c8267328bb7",
       "bytes": 798,
+      "status": "downloaded",
+      "download_mode": "fresh_download"
+    },
+    {
+      "id": "elastic_dense_vector",
+      "vendor_doc": "elastic_official_hybrid_search.md",
+      "url": "https://www.elastic.co/guide/en/elasticsearch/reference/current/dense-vector.html",
+      "file": "elastic_dense_vector.html",
+      "source_type": "official_docs",
+      "retrieved_at": "2026-06-18T00:00:00Z",
+      "sha256": "acffbbb8554c059ca3704492c3fa7e1d347d3e1f11554c5918d1308cd4353420",
+      "bytes": 1415008,
+      "status": "downloaded",
+      "download_mode": "fresh_download"
+    },
+    {
+      "id": "elastic_knn_search",
+      "vendor_doc": "elastic_official_hybrid_search.md",
+      "url": "https://www.elastic.co/guide/en/elasticsearch/reference/current/knn-search.html",
+      "file": "elastic_knn_search.html",
+      "source_type": "official_docs",
+      "retrieved_at": "2026-06-18T00:00:00Z",
+      "sha256": "0f7aca5aabbf6abbcb08d6da29acb4b7be9b0d906af84bbfee9e90158f824f5b",
+      "bytes": 334300,
+      "status": "downloaded",
+      "download_mode": "fresh_download"
+    },
+    {
+      "id": "elastic_rrf",
+      "vendor_doc": "elastic_official_hybrid_search.md",
+      "url": "https://www.elastic.co/docs/reference/elasticsearch/rest-apis/reciprocal-rank-fusion",
+      "file": "elastic_rrf.html",
+      "source_type": "official_docs",
+      "retrieved_at": "2026-06-18T00:00:00Z",
+      "sha256": "b2d825b3609441b64cc2e78c299a1e2585a0b726d89fd49d2de311cbb2487289",
+      "bytes": 1380019,
+      "status": "downloaded",
+      "download_mode": "fresh_download"
+    },
+    {
+      "id": "elastic_docker_install",
+      "vendor_doc": "elastic_official_hybrid_search.md",
+      "url": "https://www.elastic.co/docs/deploy-manage/deploy/self-managed/install-elasticsearch-with-docker",
+      "file": "elastic_docker_install.html",
+      "source_type": "official_docs",
+      "retrieved_at": "2026-06-19T00:00:00Z",
+      "sha256": "f10eff1f6ac1ef31c292097587b840c70c805a2b015d68f0d705c55297500262",
+      "bytes": 253693,
+      "status": "downloaded",
+      "download_mode": "fresh_download"
+    },
+    {
+      "id": "elastic_docker_basic",
+      "vendor_doc": "elastic_official_hybrid_search.md",
+      "url": "https://www.elastic.co/docs/deploy-manage/deploy/self-managed/install-elasticsearch-docker-basic",
+      "file": "elastic_docker_basic.html",
+      "source_type": "official_docs",
+      "retrieved_at": "2026-06-19T00:00:00Z",
+      "sha256": "3fdd9a9c0d9c2eb99e1bf919c58ac14bff09888efa2d17dcef28884f8717a7ca",
+      "bytes": 272343,
+      "status": "downloaded",
+      "download_mode": "fresh_download"
+    },
+    {
+      "id": "elastic_docker_prod",
+      "vendor_doc": "elastic_official_hybrid_search.md",
+      "url": "https://www.elastic.co/docs/deploy-manage/deploy/self-managed/install-elasticsearch-docker-prod",
+      "file": "elastic_docker_prod.html",
+      "source_type": "official_docs",
+      "retrieved_at": "2026-06-19T00:00:00Z",
+      "sha256": "718bb3e4c2463511961cb59d423915f79ffd6bccbc5ccd0c63eb7d395a21edd5",
+      "bytes": 272573,
       "status": "downloaded",
       "download_mode": "fresh_download"
     }

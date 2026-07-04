@@ -43,6 +43,35 @@ def test_build_result_summary_has_frontend_sections_and_spaces(tmp_path):
     assert Path(summary["summary_path"]).parent.name == "summary"
 
 
+def test_build_result_summary_omits_empty_downloadable_outputs(tmp_path):
+    valid = tmp_path / "reports" / "sub-01.html"
+    empty = tmp_path / "reports" / "sub-01_task-rest_desc-validation_bold.html"
+    valid.parent.mkdir()
+    valid.write_text("<html>valid</html>", encoding="utf-8")
+    empty.write_text("", encoding="utf-8")
+
+    summary_path = build_result_summary(
+        out_dir=tmp_path,
+        task_id=135,
+        workflow_type="bold_fmriprep_xcpd_report",
+        modality="BOLD",
+        spaces=["MNI152NLin6Asym"],
+        feature_groups=["reports"],
+        outputs={
+            "reports": [
+                {"name": valid.name, "path": valid},
+                {"name": empty.name, "path": empty},
+            ]
+        },
+        provenance={"source": "unit-test"},
+    )
+
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    report_paths = [item["relative_path"] for item in summary["outputs"]["reports"]]
+
+    assert report_paths == ["reports/sub-01.html"]
+
+
 def test_discover_result_summary_prefers_summary_json(tmp_path):
     summary = tmp_path / "summary" / "dwi_result_summary.json"
     summary.parent.mkdir()

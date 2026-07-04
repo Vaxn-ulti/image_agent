@@ -4,6 +4,9 @@ import json
 import os
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlsplit
+
+import httpx
 
 from app.agent.tool_dispatcher import dispatch_model_tool_calls, tool_trace_message, tool_trace_response_items
 from app.agent.tool_registry import openai_tool_specs
@@ -138,6 +141,13 @@ def _provider_profile(provider: str) -> str:
     return aliases.get(normalized, "custom")
 
 
+def _is_rawchat_direct_target(profile_name: str, base_url: str) -> bool:
+    if profile_name == "rawchat":
+        return True
+    host = (urlsplit(base_url).hostname or "").lower()
+    return host == "rawchat.cn" or host.endswith(".rawchat.cn")
+
+
 def _model_capabilities(wire_api: str) -> dict[str, bool]:
     return {
         "text": wire_api == "responses" or wire_api in CHAT_COMPLETIONS_WIRE_APIS,
@@ -161,6 +171,7 @@ class ModelConfig:
     auto_compact_token_limit: int
     send_metadata: bool = True
     provider_profile: str = "openai"
+    trust_env_proxy: bool = False
 
     @classmethod
     def from_env(cls) -> "ModelConfig":
@@ -186,6 +197,9 @@ class ModelConfig:
             ["IMAGE_AGENT_MODEL_WIRE_API", *profile["wire_api_env"]],
             profile["wire_api"],
         ).lower()
+        trust_env_proxy = _env_bool("IMAGE_AGENT_MODEL_TRUST_ENV_PROXY", False)
+        if _is_rawchat_direct_target(profile_name, base_url):
+            trust_env_proxy = False
         return cls(
             provider=provider,
             api_key=api_key,
@@ -210,6 +224,7 @@ class ModelConfig:
                 or _env_bool("OPENAI_RESPONSES_DISABLE_METADATA", False)
             ),
             provider_profile=profile_name,
+            trust_env_proxy=trust_env_proxy,
         )
 
 
@@ -235,6 +250,7 @@ def provider_status(config: ModelConfig | None = None) -> dict[str, Any]:
         "metadata_enabled": cfg.send_metadata,
         "context_window": cfg.context_window,
         "auto_compact_token_limit": cfg.auto_compact_token_limit,
+        "trust_env_proxy": cfg.trust_env_proxy,
         "capabilities": _model_capabilities(cfg.wire_api),
         "gateway_diagnostics": gateway_diagnostics(cfg),
         "deployment": {
@@ -510,6 +526,16 @@ class ModelGateway:
     def __init__(self, config: ModelConfig | None = None) -> None:
         self.config = config or ModelConfig.from_env()
 
+    def _client_kwargs(self) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {
+            "api_key": self.config.api_key,
+            "base_url": self.config.base_url,
+            "timeout": self.config.timeout_seconds,
+        }
+        if not self.config.trust_env_proxy:
+            kwargs["http_client"] = httpx.Client(trust_env=False, timeout=self.config.timeout_seconds)
+        return kwargs
+
     def complete_text(self, messages: list[dict[str, Any]], *, purpose: str = "text") -> str:
         if self.config.wire_api in CHAT_COMPLETIONS_WIRE_APIS:
             body = self._request_chat_completions(messages, structured=False, purpose=purpose)
@@ -618,7 +644,7 @@ class ModelGateway:
         if self.config.send_metadata:
             payload["metadata"] = {"purpose": purpose}
         client_class = _openai_client_class()
-        client = client_class(api_key=self.config.api_key, base_url=self.config.base_url, timeout=self.config.timeout_seconds)
+        client = client_class(**self._client_kwargs())
         try:
             return _response_to_dict(client.responses.create(**payload))
         except Exception as exc:
@@ -647,7 +673,7 @@ class ModelGateway:
             structured_schema=structured_schema,
         )
         client_class = _openai_client_class()
-        client = client_class(api_key=self.config.api_key, base_url=self.config.base_url, timeout=self.config.timeout_seconds)
+        client = client_class(**self._client_kwargs())
         try:
             return _response_to_dict(client.chat.completions.create(**payload))
         except Exception as exc:

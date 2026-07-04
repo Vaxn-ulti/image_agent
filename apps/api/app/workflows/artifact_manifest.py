@@ -83,11 +83,19 @@ def build_artifact_manifest(
         category_counts[category] = category_counts.get(category, 0) + 1
 
     summary_available = isinstance(result_summary, dict)
+    workflow_metadata = result_summary.get("workflow_metadata") if summary_available else None
+    runtime_workflow_type = task.get("runtime_workflow_type") or (
+        result_summary.get("runtime_workflow_type") if summary_available else None
+    )
+    if runtime_workflow_type is None and isinstance(workflow_metadata, dict):
+        runtime_workflow_type = workflow_metadata.get("runtime_workflow_type")
     return {
         "contract_version": ARTIFACT_MANIFEST_VERSION,
         "task_id": task["id"],
         "project_id": task["project_id"],
         "workflow_type": task.get("workflow_type"),
+        "runtime_workflow_type": runtime_workflow_type,
+        "workflow_metadata": workflow_metadata,
         "modality": result_summary.get("modality") if summary_available else None,
         "task_status": task.get("status"),
         "result_summary": {
@@ -129,6 +137,10 @@ def _append_manifest_item(
     if not target.exists() or not target.is_file():
         _omit(omitted, item, "missing_or_not_file", relative_path)
         return
+    size_bytes = target.stat().st_size
+    if size_bytes <= 0:
+        _omit(omitted, item, "empty_file", relative_path)
+        return
     normalized_relative_path = target.relative_to(output_dir).as_posix()
     if normalized_relative_path in seen:
         return
@@ -140,7 +152,7 @@ def _append_manifest_item(
         "relative_path": normalized_relative_path,
         "download_url": f"/tasks/{task_id}/artifacts/{quote(normalized_relative_path)}",
         "content_type": content_type,
-        "size_bytes": target.stat().st_size,
+        "size_bytes": size_bytes,
         "exists": True,
         "preview_kind": _preview_kind(target, content_type),
         "source": source,

@@ -20,9 +20,15 @@ SAFE_NESTED_AGENT_FIELDS = {
         "project_id",
         "series_id",
         "workflow_type",
+        "runtime_workflow_type",
+        "fingerprint",
+        "confirmation_fingerprint",
+        "workflow_metadata",
         "qsiprep_task_id",
         "summary",
         "risks",
+        "preflight",
+        "data_candidate_selection",
     },
     "task": {
         "id",
@@ -30,6 +36,7 @@ SAFE_NESTED_AGENT_FIELDS = {
         "project_id",
         "series_id",
         "workflow_type",
+        "runtime_workflow_type",
         "status",
         "progress",
         "created_at",
@@ -41,6 +48,7 @@ SAFE_NESTED_AGENT_FIELDS = {
         "series_id",
         "task_id",
         "workflow_type",
+        "runtime_workflow_type",
         "qsiprep_task_id",
         "approved",
         "action_lane",
@@ -80,6 +88,7 @@ class AgentRunEvent(BaseModel):
     message: str | None = None
     task_id: int | None = None
     workflow_type: str | None = None
+    runtime_workflow_type: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: str | None = None
 
@@ -96,6 +105,7 @@ class AgentRunResponse(BaseModel):
     series_id: int | None = None
     task_id: int | None = None
     workflow_type: str | None = None
+    runtime_workflow_type: str | None = None
     intent: str | None = None
     action_lane: str | None = None
     selected_skill: str | None = None
@@ -103,9 +113,14 @@ class AgentRunResponse(BaseModel):
     message: str | None = None
     confirmation: dict[str, Any] | None = None
     task: dict[str, Any] | None = None
+    proposed_toolchain: dict[str, Any] | None = None
+    task_observation: dict[str, Any] | None = None
+    repair_plan: dict[str, Any] | None = None
     backend_tool: str | None = None
     tool_input: dict[str, Any] | None = None
     production_task_created: bool | None = None
+    task_creation_allowed: bool | None = None
+    forbidden_actions: list[str] = Field(default_factory=list)
     model_gateway_access: str | None = None
     safe_metadata: dict[str, Any] = Field(default_factory=dict)
     retrieved_sources: list[dict[str, Any]] = Field(default_factory=list)
@@ -220,6 +235,13 @@ def build_agent_run_response_payload(
     safe_metadata = _dict_value(ledger.get("safe_metadata")) or _dict_value(result.get("safe_metadata"))
     if original:
         safe_metadata = {**safe_metadata, "contract_status_normalized_from": original}
+    proposed_toolchain = _optional_dict(result.get("proposed_toolchain"))
+    task_creation_allowed = result.get("task_creation_allowed")
+    if not isinstance(task_creation_allowed, bool) and proposed_toolchain:
+        task_creation_allowed = proposed_toolchain.get("task_creation_allowed")
+    forbidden_actions = result.get("forbidden_actions")
+    if not isinstance(forbidden_actions, list) and proposed_toolchain:
+        forbidden_actions = proposed_toolchain.get("forbidden_actions")
     payload = {
         "contract_version": contract_version,
         "agent_run_id": result.get("agent_run_id") or ledger.get("agent_run_id"),
@@ -253,6 +275,13 @@ def build_agent_run_response_payload(
             _dict_value(result.get("tool_input")).get("workflow_type"),
             ledger.get("workflow_type"),
         ),
+        "runtime_workflow_type": _first_value(
+            result.get("runtime_workflow_type"),
+            _dict_value(result.get("task")).get("runtime_workflow_type"),
+            _dict_value(result.get("confirmation")).get("runtime_workflow_type"),
+            _dict_value(result.get("tool_input")).get("runtime_workflow_type"),
+            ledger.get("runtime_workflow_type"),
+        ),
         "intent": result.get("intent") or _dict_value(result.get("decision")).get("intent") or ledger.get("intent"),
         "action_lane": result.get("action_lane") or _dict_value(result.get("confirmation")).get("action_lane") or ledger.get("action_lane"),
         "selected_skill": result.get("selected_skill") or ledger.get("selected_skill"),
@@ -260,9 +289,14 @@ def build_agent_run_response_payload(
         "message": result.get("message"),
         "confirmation": _optional_safe_nested_dict("confirmation", result.get("confirmation")),
         "task": _optional_safe_nested_dict("task", result.get("task")),
+        "proposed_toolchain": proposed_toolchain,
+        "task_observation": _optional_dict(result.get("task_observation")),
+        "repair_plan": _optional_dict(result.get("repair_plan")),
         "backend_tool": result.get("backend_tool"),
         "tool_input": _optional_safe_nested_dict("tool_input", result.get("tool_input")),
         "production_task_created": result.get("production_task_created") if isinstance(result.get("production_task_created"), bool) else safe_metadata.get("production_task_created"),
+        "task_creation_allowed": task_creation_allowed if isinstance(task_creation_allowed, bool) else None,
+        "forbidden_actions": forbidden_actions if isinstance(forbidden_actions, list) else [],
         "model_gateway_access": ledger.get("model_gateway_access"),
         "safe_metadata": safe_metadata,
         "retrieved_sources": _list_value(ledger.get("retrieved_sources")),
@@ -331,9 +365,9 @@ def _optional_safe_nested_dict(kind: str, value: Any) -> dict[str, Any] | None:
         return None
     allowed = SAFE_NESTED_AGENT_FIELDS.get(kind, set())
     safe = {
-        key: nested_value
+        key: _sanitize_public_value(nested_value)
         for key, nested_value in value.items()
-        if key in allowed and _is_safe_nested_scalar(nested_value)
+        if key in allowed
     }
     return safe or None
 

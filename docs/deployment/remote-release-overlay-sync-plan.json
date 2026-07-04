@@ -1,0 +1,112 @@
+{
+  "archive_path": "/tmp/image_agent_release_codex-qsiprep260-runtime-probe-20260619T181921Z.tar.gz",
+  "incoming_release_overlay": "/home/yyf/project/image_agent_releases/codex-qsiprep260-runtime-probe-20260619T181921Z.incoming",
+  "plan_id": "remote_release_overlay_sync_plan_v1",
+  "privacy_and_safety_invariants": [
+    "do_not_copy_dotenv_or_secret_files",
+    "do_not_copy_git_or_dependency_caches",
+    "do_not_copy_raw_patient_data",
+    "do_not_modify_remote_live_tree",
+    "do_not_overwrite_existing_release_overlay"
+  ],
+  "release_id": "codex-qsiprep260-runtime-probe-20260619T181921Z",
+  "release_overlay": "/home/yyf/project/image_agent_releases/codex-qsiprep260-runtime-probe-20260619T181921Z",
+  "remote_host": "yyf@10.2.32.14",
+  "remote_project_root": "/home/yyf/project/image_agent",
+  "remote_release_root": "/home/yyf/project/image_agent_releases",
+  "schema_version": 1,
+  "status": "operator_review_required",
+  "steps": [
+    {
+      "command": "git diff --check && python scripts/check_repository_hygiene.py --paths README.md scripts apps/api/scripts docs/deployment docs/rag docs/skills && python scripts/run_frontend_contract_tests.py --console-dir apps/console src/lib/api.test.ts src/lib/workflows.test.ts src/routes/AgentPage.test.tsx src/routes/WorkflowsPage.test.tsx src/routes/ResultDetailPage.test.tsx && printf \"%s\\n\" frontend_api_contract_tests=passed && python apps/api/scripts/verify_release_gate_command_plan.py docs/deployment/remote-release-gate-command-plan.json",
+      "expected_success": [
+        "git diff --check has no whitespace errors",
+        "repository_hygiene_status=passed",
+        "frontend_api_contract_tests=passed",
+        "release_gate_command_plan status=passed"
+      ],
+      "id": "local_preflight",
+      "mutates_remote_state": false,
+      "purpose": "Check local diff hygiene and release-gate plan validity before packaging the current worktree.",
+      "requires_operator_authorization": false,
+      "runs_on": "local"
+    },
+    {
+      "command": "python apps/api/scripts/build_release_overlay_sync_plan.py --write-archive --release-id codex-qsiprep260-runtime-probe-20260619T181921Z --archive-path /tmp/image_agent_release_codex-qsiprep260-runtime-probe-20260619T181921Z.tar.gz",
+      "expected_success": [
+        "status=passed",
+        "excluded_secret_and_runtime_paths=true",
+        "member_count>0"
+      ],
+      "id": "build_current_worktree_archive",
+      "mutates_remote_state": false,
+      "purpose": "Create a local tar.gz from git tracked files plus unignored untracked files, excluding secret, dependency, cache, and patient-data paths.",
+      "requires_operator_authorization": false,
+      "runs_on": "local"
+    },
+    {
+      "command": "scp /tmp/image_agent_release_codex-qsiprep260-runtime-probe-20260619T181921Z.tar.gz yyf@10.2.32.14:/tmp/image_agent_release_codex-qsiprep260-runtime-probe-20260619T181921Z.tar.gz",
+      "expected_success": [
+        "remote_archive=/tmp/image_agent_release_codex-qsiprep260-runtime-probe-20260619T181921Z.tar.gz",
+        "live_project_tree_untouched=true"
+      ],
+      "id": "upload_archive_to_remote_tmp",
+      "mutates_remote_state": true,
+      "purpose": "Upload the reviewed release archive to a temporary path on yyf without touching the live project tree.",
+      "requires_operator_authorization": true,
+      "runs_on": "local"
+    },
+    {
+      "command": "ssh yyf@10.2.32.14 'set -eu; test ! -e /home/yyf/project/image_agent_releases/codex-qsiprep260-runtime-probe-20260619T181921Z.incoming; mkdir -p /home/yyf/project/image_agent_releases/codex-qsiprep260-runtime-probe-20260619T181921Z.incoming; tar -xzf /tmp/image_agent_release_codex-qsiprep260-runtime-probe-20260619T181921Z.tar.gz -C /home/yyf/project/image_agent_releases/codex-qsiprep260-runtime-probe-20260619T181921Z.incoming'",
+      "expected_success": [
+        "incoming_release_overlay=/home/yyf/project/image_agent_releases/codex-qsiprep260-runtime-probe-20260619T181921Z.incoming",
+        "existing_incoming_overlay_absent=true",
+        "live_project_tree_untouched=true"
+      ],
+      "id": "extract_archive_to_incoming_overlay",
+      "mutates_remote_state": true,
+      "purpose": "Extract into a new incoming release overlay only if it does not already exist.",
+      "requires_operator_authorization": true,
+      "runs_on": "remote"
+    },
+    {
+      "command": "ssh yyf@10.2.32.14 'cd /home/yyf/project/image_agent_releases/codex-qsiprep260-runtime-probe-20260619T181921Z.incoming && test -f apps/api/app/scripts/probe_runtime_environment.py && test -f apps/api/scripts/build_stale_task_apply_request.py && test -f apps/api/scripts/verify_stale_task_apply_request.py && test -f apps/api/scripts/build_elasticsearch_hybrid_config_plan.py && test -f apps/api/scripts/verify_elasticsearch_hybrid_config_plan.py && test -f apps/api/scripts/setup_elasticsearch_hybrid_rag.py && test -f apps/api/scripts/setup_local_embedding_service.py && test -f apps/api/scripts/verify_elasticsearch_hybrid_prerequisites.py && test -f apps/api/scripts/smoke_remote_agent.py && test -f apps/api/scripts/verify_remote_smoke_acceptance.py && test -f apps/api/scripts/verify_release_gate_command_plan.py && test -f docs/deployment/remote-elasticsearch-hybrid-config-plan.json && test -f docs/rag/contracts/elasticsearch-hybrid-search.md && test -f apps/console/package.json && test -f apps/console/package-lock.json && test -f apps/console/src/lib/api.test.ts && test -f apps/console/src/lib/workflows.test.ts && test -f apps/console/src/routes/AgentPage.test.tsx && test -f apps/console/src/routes/WorkflowsPage.test.tsx && test -f apps/console/src/routes/ResultDetailPage.test.tsx && test -f scripts/check_repository_hygiene.py && test -f scripts/configure_docker_access.py && test -f scripts/run_frontend_contract_tests.py && test -f scripts/verify_rawchat_direct_connectivity.py && test -f tools/restart_remote_image_agent_api.sh && printf \"%s\\n\" release_overlay_current=true required_gate_scripts_present=true elasticsearch_hybrid_contract_present=true'",
+      "expected_success": [
+        "release_overlay_current=true",
+        "required_gate_scripts_present=true",
+        "elasticsearch_hybrid_contract_present=true"
+      ],
+      "id": "verify_incoming_overlay_contents",
+      "mutates_remote_state": false,
+      "purpose": "Verify the incoming overlay contains the current gate scripts and Elasticsearch hybrid contract before promotion.",
+      "requires_operator_authorization": false,
+      "runs_on": "remote"
+    },
+    {
+      "command": "ssh yyf@10.2.32.14 'set -eu; test ! -e /home/yyf/project/image_agent_releases/codex-qsiprep260-runtime-probe-20260619T181921Z; mv /home/yyf/project/image_agent_releases/codex-qsiprep260-runtime-probe-20260619T181921Z.incoming /home/yyf/project/image_agent_releases/codex-qsiprep260-runtime-probe-20260619T181921Z; printf %s\\\\n release_overlay_promoted=true'",
+      "expected_success": [
+        "release_overlay_promoted=true",
+        "existing_release_overlay_absent=true",
+        "live_project_tree_untouched=true"
+      ],
+      "id": "promote_incoming_overlay",
+      "mutates_remote_state": true,
+      "purpose": "Promote the verified incoming overlay to the final release path without overwriting an existing release.",
+      "requires_operator_authorization": true,
+      "runs_on": "remote"
+    },
+    {
+      "command": "ssh yyf@10.2.32.14 'cd /home/yyf/project/image_agent_releases/codex-qsiprep260-runtime-probe-20260619T181921Z && test -f apps/api/app/scripts/probe_runtime_environment.py && test -f apps/api/scripts/build_stale_task_apply_request.py && test -f apps/api/scripts/verify_stale_task_apply_request.py && test -f apps/api/scripts/build_elasticsearch_hybrid_config_plan.py && test -f apps/api/scripts/verify_elasticsearch_hybrid_config_plan.py && test -f apps/api/scripts/setup_elasticsearch_hybrid_rag.py && test -f apps/api/scripts/setup_local_embedding_service.py && test -f apps/api/scripts/verify_elasticsearch_hybrid_prerequisites.py && test -f apps/api/scripts/smoke_remote_agent.py && test -f apps/api/scripts/verify_remote_smoke_acceptance.py && test -f apps/api/scripts/verify_release_gate_command_plan.py && test -f docs/deployment/remote-elasticsearch-hybrid-config-plan.json && test -f docs/rag/contracts/elasticsearch-hybrid-search.md && test -f apps/console/package.json && test -f apps/console/package-lock.json && test -f apps/console/src/lib/api.test.ts && test -f apps/console/src/lib/workflows.test.ts && test -f apps/console/src/routes/AgentPage.test.tsx && test -f apps/console/src/routes/WorkflowsPage.test.tsx && test -f apps/console/src/routes/ResultDetailPage.test.tsx && test -f scripts/check_repository_hygiene.py && test -f scripts/configure_docker_access.py && test -f scripts/run_frontend_contract_tests.py && test -f scripts/verify_rawchat_direct_connectivity.py && test -f tools/restart_remote_image_agent_api.sh && printf \"%s\\n\" release_overlay_current=true required_gate_scripts_present=true elasticsearch_hybrid_contract_present=true'",
+      "expected_success": [
+        "release_overlay_current=true",
+        "required_gate_scripts_present=true",
+        "elasticsearch_hybrid_contract_present=true"
+      ],
+      "id": "verify_promoted_overlay_contents",
+      "mutates_remote_state": false,
+      "purpose": "Re-run the same content check against the promoted release overlay before using it in the release gate.",
+      "requires_operator_authorization": false,
+      "runs_on": "remote"
+    }
+  ]
+}

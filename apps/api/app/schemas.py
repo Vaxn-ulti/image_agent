@@ -20,6 +20,7 @@ class UploadSessionCreate(BaseModel):
 
 class RunRequest(BaseModel):
     workflow_type: str = "t1_deepprep_mock"
+    runtime_workflow_type: str | None = None
     qsiprep_task_id: int | None = None
 
 
@@ -51,6 +52,10 @@ class AgentResumeConfirmation(BaseModel):
     project_id: int | None = None
     series_id: int | None = None
     workflow_type: str | None = None
+    runtime_workflow_type: str | None = None
+    fingerprint: str | None = None
+    confirmation_fingerprint: str | None = None
+    workflow_metadata: dict[str, Any] | None = None
     qsiprep_task_id: int | None = None
     summary: str | None = None
     risks: list[str] | None = None

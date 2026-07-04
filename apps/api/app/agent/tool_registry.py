@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from app.workflows.registry import allowed_runtime_workflows
+from app.workflows.registry import FIXED_WORKFLOW, list_workflows
 
 
 FUNCTION_TOOLS: list[dict[str, Any]] = [
@@ -114,6 +114,11 @@ FUNCTION_TOOLS: list[dict[str, Any]] = [
         "parameters": {"type": "object", "required": ["task_id"], "properties": {"task_id": {"type": "integer"}}},
     },
     {
+        "name": "observe_repair_task",
+        "description": "Read-only task status/events/result summary observation and repair suggestions only; never retries, reruns, or creates tasks.",
+        "parameters": {"type": "object", "required": ["task_id"], "properties": {"task_id": {"type": "integer"}}},
+    },
+    {
         "name": "propose_toolchain",
         "description": "Draft an incubating toolchain proposal, optionally decomposing provided container script text or approved script paths, without production execution.",
         "parameters": {
@@ -182,7 +187,11 @@ def list_function_tools() -> list[dict[str, Any]]:
 
 
 def _inject_registered_workflow_enums(tools: list[dict[str, Any]]) -> None:
-    workflow_types = sorted(allowed_runtime_workflows())
+    workflow_types = sorted(
+        str(workflow["type"])
+        for workflow in list_workflows(lane=FIXED_WORKFLOW)
+        if workflow.get("requires_confirmation") and workflow.get("runtime_workflow_type")
+    )
     for tool in tools:
         if tool.get("name") != "preflight_workflow":
             continue

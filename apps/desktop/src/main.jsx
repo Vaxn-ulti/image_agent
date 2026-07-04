@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Activity, Brain, FileUp, MessageSquare, Play, RefreshCw, Server } from 'lucide-react';
 import { api, getApiBase } from './lib/api';
+import { resultSummaryTitle, workflowMachineLabel, workflowMetadata } from './lib/resultSummary.mjs';
+import { workflowOptionsForSeries } from './lib/workflows.mjs';
 import './styles.css';
 
 function App() {
@@ -12,9 +14,11 @@ function App() {
   const [tasks, setTasks] = useState([]);
   const [outputs, setOutputs] = useState({});
   const [resultSummaries, setResultSummaries] = useState({});
+  const [artifactManifests, setArtifactManifests] = useState({});
   const [logs, setLogs] = useState({});
+  const [taskEvents, setTaskEvents] = useState({});
   const [workflows, setWorkflows] = useState([]);
-  const [dwiFiles, setDwiFiles] = useState({ nifti: null, bval: null, bvec: null });
+  const [dwiFiles, setDwiFiles] = useState({ nifti: null, bval: null, bvec: null, jsonSidecar: null });
   const [deployment, setDeployment] = useState(null);
   const [runtime, setRuntime] = useState(null);
   const [inventory, setInventory] = useState(null);
@@ -69,9 +73,9 @@ function App() {
 
   async function uploadDwi(e) {
     e.preventDefault();
-    if (!project || !dwiFiles.nifti || !dwiFiles.bval || !dwiFiles.bvec) { setError('Choose DWI NIfTI, bval, and bvec files.'); return; }
+    if (!project || !dwiFiles.nifti || !dwiFiles.bval || !dwiFiles.bvec || !dwiFiles.jsonSidecar) { setError('Choose DWI NIfTI, bval, bvec, and JSON sidecar files.'); return; }
     setBusy(true); setError('');
-    try { await api.uploadDwi(project.id, dwiFiles.nifti, dwiFiles.bval, dwiFiles.bvec); setDwiFiles({ nifti: null, bval: null, bvec: null }); await loadSeries(project.id); e.currentTarget.reset(); }
+    try { await api.uploadDwi(project.id, dwiFiles.nifti, dwiFiles.bval, dwiFiles.bvec, dwiFiles.jsonSidecar); setDwiFiles({ nifti: null, bval: null, bvec: null, jsonSidecar: null }); await loadSeries(project.id); e.currentTarget.reset(); }
     catch (err) { setError(err.message); }
     finally { setBusy(false); }
   }
@@ -140,18 +144,33 @@ function App() {
           ? 'Run and complete BOLD fMRIPrep/XCP-D or legacy DeepPrep before ALFF/fALFF.'
           : 'Run BOLD fMRIPrep/XCP-D validate, BOLD fMRIPrep/XCP-D, or legacy DeepPrep before ALFF/fALFF validate.');
       }
-      await api.runSeries(seriesItem.id, workflowType, qsiprep?.id || null);
+      const dependencyNote = qsiprep?.id ? ` Use completed QSIPrep task ${qsiprep.id} as the QSIRecon prerequisite.` : '';
+      const prepared = await api.runAgent(
+        project.id,
+        `Prepare workflow ${workflowType} for series ${seriesItem.id}. Return confirmation only and do not create a task yet.${dependencyNote}`,
+      );
+      if (prepared.status === 'confirmation_required' && prepared.thread_id && prepared.confirmation) {
+        const confirmed = window.confirm(`Approve workflow ${prepared.confirmation.workflow_type || workflowType} for series ${prepared.confirmation.series_id || seriesItem.id}?`);
+        await api.resumeAgent(prepared.thread_id, confirmed, prepared.confirmation);
+      } else if (prepared.status !== 'task_created') {
+        throw new Error(prepared.answer || prepared.message || 'Agent did not return workflow confirmation.');
+      }
       await loadTasks(project.id);
     } catch (err) { setError(err.message); }
     finally { setBusy(false); }
   }
 
   async function showLogs(taskId) { const res = await api.getLogs(taskId); setLogs((prev) => ({ ...prev, [taskId]: res.text })); }
+  async function showTaskEvents(taskId) { const res = await api.getTaskEvents(taskId); setTaskEvents((prev) => ({ ...prev, [taskId]: res })); }
   async function showOutputs(taskId) { const res = await api.getOutputs(taskId); setOutputs((prev) => ({ ...prev, [taskId]: res })); }
   async function showResultSummary(taskId) {
     try {
-      const summary = await api.getResultSummary(taskId);
+      const [summary, artifactManifest] = await Promise.all([
+        api.getResultSummary(taskId),
+        api.getArtifactManifest(taskId).catch(() => null),
+      ]);
       setResultSummaries((prev) => ({ ...prev, [taskId]: summary }));
+      if (artifactManifest) setArtifactManifests((prev) => ({ ...prev, [taskId]: artifactManifest }));
     } catch (err) {
       setResultSummaries((prev) => ({ ...prev, [taskId]: { error: err.message } }));
     }
@@ -210,6 +229,7 @@ function App() {
           <label>DWI NIfTI<input type="file" accept=".nii,.gz" onChange={(e) => setDwiFiles((x) => ({ ...x, nifti: e.target.files?.[0] || null }))}/></label>
           <label>bval<input type="file" accept=".bval" onChange={(e) => setDwiFiles((x) => ({ ...x, bval: e.target.files?.[0] || null }))}/></label>
           <label>bvec<input type="file" accept=".bvec" onChange={(e) => setDwiFiles((x) => ({ ...x, bvec: e.target.files?.[0] || null }))}/></label>
+          <label>JSON sidecar<input type="file" accept=".json,application/json" onChange={(e) => setDwiFiles((x) => ({ ...x, jsonSidecar: e.target.files?.[0] || null }))}/></label>
           <button disabled={busy}>Upload DWI</button>
         </form>
         <div className="panel">
@@ -221,10 +241,11 @@ function App() {
           {tasks.map((t) => <div className="task" key={t.id}>
             <div className="task-head"><strong>#{t.id} {t.workflow_type}</strong><span className={`status ${t.status}`}>{t.status} {t.progress}%</span></div>
             <progress value={t.progress} max="100" />
-            <div className="button-row"><button onClick={() => showLogs(t.id)}>Logs</button><button onClick={() => showOutputs(t.id)}>Outputs</button><button onClick={() => showResultSummary(t.id)}>Result summary</button></div>
+            <div className="button-row"><button onClick={() => showTaskEvents(t.id)}>Events</button><button onClick={() => showLogs(t.id)}>Logs</button><button onClick={() => showOutputs(t.id)}>Outputs</button><button onClick={() => showResultSummary(t.id)}>Result summary</button></div>
+            {taskEvents[t.id] && <TaskEventsPanel payload={taskEvents[t.id]} />}
             {logs[t.id] && <pre>{logs[t.id]}</pre>}
             {(outputs[t.id] || []).length > 0 && <ul className="outputs">{outputs[t.id].map((o) => <li key={o.id}>{o.output_type}: {o.path || JSON.stringify(o.metadata)}</li>)}</ul>}
-            {resultSummaries[t.id] && <ResultSummaryPanel taskId={t.id} summary={resultSummaries[t.id]} />}
+            {resultSummaries[t.id] && <ResultSummaryPanel taskId={t.id} summary={resultSummaries[t.id]} artifactManifest={artifactManifests[t.id]} />}
           </div>)}{!tasks.length && <div className="empty">No tasks yet.</div>}
         </div>
         <div className="panel chat">
@@ -259,6 +280,39 @@ function ChatMessage({ message }) {
       </details>}
     </div>}
     {message.provider && message.role !== 'assistant' && <small>{message.provider}</small>}
+  </div>;
+}
+
+function TaskEventsPanel({ payload }) {
+  const events = payload.events || [];
+  const remoteLogs = payload.remote_logs || [];
+  return <div className="task-events">
+    <div className="summary-head">
+      <strong>Read-only task events</strong>
+      <span>{payload.status || 'ok'}</span>
+    </div>
+    {events.length > 0 && <div className="event-grid">
+      {events.map((event, index) => <div className="event-card" key={`${event.type || 'event'}-${index}`}>
+        <strong>{event.type || 'task.event'}</strong>
+        <div className="summary-chips">
+          {event.status && <span>{event.status}</span>}
+          {typeof event.progress === 'number' && <span>{event.progress}%</span>}
+          {event.source_stage && <span>{event.source_stage}</span>}
+          {event.name && <span>{event.name}</span>}
+        </div>
+      </div>)}
+    </div>}
+    {payload.main_log?.tail && <div className="log-tail">
+      <strong>Main log tail</strong>
+      <pre>{payload.main_log.tail}</pre>
+    </div>}
+    {remoteLogs.length > 0 && <div className="remote-log-list">
+      <strong>Remote log summaries</strong>
+      {remoteLogs.map((log) => <div className="remote-log" key={log.name}>
+        <div>{log.name} {log.source_stage ? `(${log.source_stage})` : ''}</div>
+        <pre>{log.tail}</pre>
+      </div>)}
+    </div>}
   </div>;
 }
 
@@ -329,8 +383,9 @@ function ArtifactList({ taskId, title, artifacts, empty }) {
   </div>;
 }
 
-function ResultSummaryPanel({ taskId, summary }) {
+function ResultSummaryPanel({ taskId, summary, artifactManifest }) {
   if (summary.error) return <div className="result-summary error">Result summary unavailable: {summary.error}</div>;
+  const metadata = workflowMetadata(summary, artifactManifest);
   const reportArtifacts = Array.isArray(summary.outputs?.reports) ? summary.outputs.reports : [];
   const htmlReports = reportArtifacts.filter(isHtmlReport);
   const reportFigures = reportArtifacts.filter(isPreviewableFigure);
@@ -341,10 +396,14 @@ function ResultSummaryPanel({ taskId, summary }) {
   const sourceArtifacts = flattenOutputs(summary.outputs || {}, new Set(['reports', 'figures', 'tables', 'metrics', 'maps', 'logs']));
   return <div className="result-summary">
     <div className="summary-head">
-      <strong>{summary.modality} result summary</strong>
-      <span>{summary.workflow_type} / contract {summary.contract_version}</span>
+      <strong>{resultSummaryTitle(summary, artifactManifest)}</strong>
+      <span>{workflowMachineLabel(summary, artifactManifest)}</span>
     </div>
+    {metadata?.capability_summary && <p className="workflow-capability">{metadata.capability_summary}</p>}
     <div className="summary-chips">
+      {metadata?.workflow_family && <span>{metadata.workflow_family}</span>}
+      {metadata?.workflow_role && <span>{metadata.workflow_role}</span>}
+      {metadata?.is_report_only === true && <span>report only</span>}
       {(summary.feature_groups || []).map((group) => <span key={group}>{group}</span>)}
       {(summary.spaces || []).map((space) => <span key={`space-${space}`}>{space}</span>)}
     </div>
@@ -418,25 +477,6 @@ function RuntimePanel({ deployment, runtime }) {
       {Object.entries(workflows).map(([name, check]) => <span key={name}>{name}: {check.available ? 'image ready' : 'image missing'} ({check.image})</span>)}
     </div>
   </div>;
-}
-
-const FALLBACK_WORKFLOWS = {
-  T1: ['t1_deepprep_anat_report', 't1_deepprep_validate', 't1_deepprep', 't1_deepprep_mock'],
-  BOLD: ['bold_fmriprep_xcpd_report', 'bold_fmriprep_xcpd_report_validate', 'bold_deepprep_validate', 'bold_deepprep', 'bold_alff_validate', 'bold_alff', 'bold_falff_validate', 'bold_falff'],
-  DWI: ['dwi_fast_gpu_dti_validate', 'dwi_fast_gpu_dti'],
-  DICOM: [],
-};
-
-function workflowOptionsForSeries(series, workflows) {
-  const registryOptions = (workflows || []).filter((workflow) => {
-    if (!workflow?.type || workflow.type === 'toolchain_proposal') return false;
-    if (workflow.modality !== series.modality) return false;
-    return workflow.lane === 'fixed_workflow' || workflow.api_runnable;
-  });
-  const options = registryOptions.length > 0
-    ? registryOptions
-    : (FALLBACK_WORKFLOWS[series.modality] || []).map((type) => ({ type }));
-  return options.filter((workflow, index, list) => list.findIndex((item) => item.type === workflow.type) === index);
 }
 
 function SeriesRow({ series, workflows, busy, run, hasAnyQsiprep, hasCompletedQsiprep, hasAnyBoldPreproc, hasCompletedBoldPreproc }) {

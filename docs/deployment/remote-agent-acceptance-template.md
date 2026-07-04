@@ -92,19 +92,25 @@ python scripts/smoke_remote_agent.py \
   --require-project-agent-context \
   --require-agent-workflow-confirmation \
   --require-agent-workflow-resume \
+  --require-agent-workflow-fingerprint-negative \
+  --require-unknown-workflow-incubation \
   --require-deployment-identity \
   --require-production-readiness \
+  --require-runtime-toolchain \
   --deployment-id <accepted-release-or-commit> \
   --expected-health-version <expected-health-version> \
   --min-documents 60 \
   --min-chunks 200 \
   --require-raw-source-policy \
   --require-vendor-pointer-integrity \
+  --require-elasticsearch-hybrid-rag \
   --require-real-evidence-ids \
   --require-completed-upload \
   --require-uploaded-series \
   --upload-nifti-file <remote-nifti-file> \
   --require-completed-task \
+  --require-task-events \
+  --require-observe-repair \
   --require-launched-task \
   --launch-workflow-type <real-registered-workflow-type> \
   --wait-task-completion-timeout-seconds 21600 \
@@ -131,13 +137,36 @@ Attach the strict smoke acceptance JSON and verify it contains:
 - `deployment_identity.health_version` is present, is a short privacy-safe version string, and matches `smoke_gate.expected_health_version` when supplied
 - `production_readiness_status=passed`
 - `production_readiness.required=true`, `production_readiness.ready=true`, `production_readiness.status=ready`, and `production_readiness.blocking_reasons=[]`
+- `fast_launch_readiness_status=pre_acceptance`, `fast_launch_readiness.ready=false` only because strict acceptance env has not yet been exported, and `fast_launch_readiness.checks.rag_elasticsearch_hybrid.status=passed` with the same connected Elasticsearch hybrid index, mode, chunk count, vector dimensions, embedding provider, and embedding model as `rag_elasticsearch_hybrid`
+- `--require-runtime-toolchain` was included in the strict smoke command
+- `runtime_toolchain_status=passed`
+- `runtime_toolchain.workflow_tool_execution=deployment_server_local`
+- `runtime_toolchain.docker_runtime_host=api_server`
+- `runtime_toolchain.required_workflow_available=true`
+- `runtime_toolchain` does not expose `fs_license_path`, Docker inspect tails, backend paths, or secrets
+- Strict launch-source guard: `--require-production-readiness --require-launched-task`, `--require-deployment-identity --require-launched-task`, and `--require-runtime-toolchain --require-launched-task` must also include `--require-agent-workflow-resume`; otherwise the live smoke CLI rejects the command. `direct_series_run` is local/diagnostic smoke only and must not be used as strict launch evidence.
 - `agent_run_id`
 - `agent_project_context_status=passed`
 - `agent_run_project_id` matches `smoke_gate.project_id`
 - `agent_workflow_confirmation_status=passed`
 - `agent_workflow_confirmation.status=confirmation_required`, `intent=run_workflow`, `selected_skill=image-agent-workflow-runner`, and `production_task_created=false`
 - `agent_workflow_confirmation.project_id`, `series_id`, and `workflow_type` match the strict smoke project, uploaded/launched series, and deterministic backend task workflow
+- `agent_workflow_confirmation.workflow_metadata.workflow_type` matches the stable confirmation `workflow_type`; `workflow_metadata.display_name` is a descriptive display label, not the machine id; `agent_workflow_confirmation.workflow_metadata.agent_selectable=true`; `workflow_metadata.is_report_only=false`
 - `smoke_gate.require_agent_workflow_resume=true`
+- `smoke_gate.require_agent_workflow_fingerprint_negative=true`
+- `agent_workflow_fingerprint_negative_status=passed`
+- `agent_workflow_fingerprint_negative.confirmation_gate=fingerprint_mismatch`
+- `agent_workflow_fingerprint_negative.production_task_created=false`
+- `agent_workflow_fingerprint_negative.task_created=false`
+- `--require-unknown-workflow-incubation` was included in the strict smoke command
+- `smoke_gate.require_unknown_workflow_incubation=true`
+- `unknown_workflow_incubation_status=passed`
+- `unknown_workflow_incubation.action_lane=toolchain_incubation`
+- `unknown_workflow_incubation.task_created=false`
+- `unknown_workflow_incubation.confirmation_created=false`
+- `unknown_workflow_incubation.task_creation_allowed=false`
+- `unknown_workflow_incubation.forbidden_actions` includes `confirmation_creation`, `production_task_creation`, and `pipeline_runner_launch`
+- `unknown_workflow_incubation.production_task_created=false`
 - `agent_workflow_resume_status=passed`
 - `agent_workflow_resume.status=task_created`, `production_task_created=true`, and `confirmation_gate=fingerprint_verified`
 - `agent_workflow_resume.task_id`, `project_id`, `series_id`, and `workflow_type` match the strict smoke task, project, completed task series, and completed task workflow
@@ -154,8 +183,23 @@ Attach the strict smoke acceptance JSON and verify it contains:
 - `launched_task.project_id` matches `smoke_gate.project_id`
 - `launched_task.series_id` matches `task_status.series_id`
 - `launched_task.workflow_type` matches `task_status.workflow_type`
+- `launched_task.launch_source=agent_workflow_resume`
 - `task_status_status=passed`
 - `task_status.status=completed`, `task_status.task_id` matches `smoke_gate.task_id`, `task_status.project_id` matches `smoke_gate.project_id`, and `task_status` does not expose backend paths such as `log_path`
+- `--require-task-events` was included in the strict smoke command
+- `smoke_gate.require_task_events=true`
+- `task_events_status=passed`
+- `task_events_task_id` matches `smoke_gate.task_id`
+- `task_events_event_types` includes `task.status` and `task.remote_log`
+- `task_events_status_event_status=completed`
+- `task_events_remote_log_count` is greater than zero, `task_events_remote_log_source_stages` are privacy-safe symbols, and `task_events_main_log_tail_present=true`
+- task event evidence is read-only observation from `/tasks/{task_id}/events`; it must not retry, rerun, or create production tasks
+- `--require-observe-repair` was included in the strict smoke command
+- `observe_repair_status=passed`
+- `observe_repair_policy=read_only_observe_repair`
+- `observe_repair_auto_rerun_allowed=false`
+- `observe_repair_production_task_created=false`
+- `observe_repair_requires_preflight_before_retry=true` and `observe_repair_requires_human_confirmation_before_retry=true`
 - `task_workflow_selection_status=passed`
 - `task_workflow_selection.workflow_type` matches `task_status.workflow_type`, `task_workflow_selection.series_id` matches `task_status.series_id`, and `task_workflow_selection.matched_runnable_workflow=true`
 - `rag_launchability_matrix_status=passed`
@@ -180,6 +224,20 @@ Attach the strict smoke acceptance JSON and verify it contains:
 - `rag_vendor_pointer_integrity_issue_count=0`
 - `rag_vendor_pointer_integrity_referenced_vendor_docs` lists the curated vendor docs referenced by RAG workflows/contracts
 - the vendor pointer integrity gate proves curated vendor summaries are answer sources; raw snapshots are provenance evidence only
+- `smoke_gate.require_elasticsearch_hybrid_rag=true`
+- `rag_elasticsearch_hybrid_status=passed`
+- `rag_rebuild_elasticsearch_hybrid` is present, connected, and its `index`, `indexed_chunk_count`, `dense_vector_dims`, `embedding_provider`, `embedding_model`, `lexical_retriever`, `vector_retriever`, `dense_vector_field`, and `fusion` match `rag_elasticsearch_hybrid`; its `configured=true` and `embedding_production_ready` are also true
+- `rag_elasticsearch_hybrid.engine=elasticsearch`, `configured=true`, privacy-safe `index`, `persisted=true`, `mode=connected`, positive `indexed_chunk_count`, positive `dense_vector_dims`, `lexical_retriever=standard`, `vector_retriever=knn`, `dense_vector_field=embedding`, production configured `embedding_provider`, non-empty `embedding_model`, `embedding_production_ready=true`, and `fusion=rrf`
+- `rag_elasticsearch_hybrid.error`, `rag_elasticsearch_hybrid.embedding_error`, `rag_rebuild_elasticsearch_hybrid.error`, and `rag_rebuild_elasticsearch_hybrid.embedding_error` are absent
+- `rag_elasticsearch_hybrid.official_rrf_source_present=true`; the live backend `/agent/rag/status.hybrid_search.official_sources` must contain the Elastic RRF documentation URL from `docs/rag/contracts/elasticsearch-hybrid-search.md`, but strict smoke and verifier evidence must not save any raw `official_sources` list
+- `rag_elasticsearch_hybrid_query_status=passed`
+- `rag_elasticsearch_hybrid_query_mode=elasticsearch_hybrid`
+- `rag_elasticsearch_hybrid_query_retrieval_source=elasticsearch_hybrid`
+- `rag_elasticsearch_hybrid_query_source=docs/rag/contracts/elasticsearch-hybrid-search.md`
+- `rag_elasticsearch_hybrid_query_index`, `rag_elasticsearch_hybrid_query_lexical_retriever=standard`, `rag_elasticsearch_hybrid_query_vector_retriever=knn`, `rag_elasticsearch_hybrid_query_dense_vector_field=embedding`, `rag_elasticsearch_hybrid_query_fusion=rrf`, `dense_vector_dims`, `embedding_provider`, `embedding_model`, and `embedding_transport` match `rag_elasticsearch_hybrid`; the query-time dense-vector field matches `rag_elasticsearch_hybrid.dense_vector_field`, and query-time hybrid components match `rag_elasticsearch_hybrid`
+- `rag_elasticsearch_hybrid_query_embedding_endpoint_configured=true`
+- `rag_elasticsearch_hybrid_query_embedding_production_ready=true`
+- local `.rag_index/elasticsearch/*` contract files are useful development evidence, but production acceptance requires the deployed API to report a persisted Elasticsearch hybrid index
 - `rag_vendor_coverage_catalog_status=complete`
 - `rag_vendor_coverage_catalog_vendor_doc_count` greater than zero
 - `rag_vendor_coverage_catalog_complete_vendor_doc_count` equals the vendor doc count
@@ -194,6 +252,13 @@ Attach the strict smoke acceptance JSON and verify it contains:
 - `task_result_summary_status=passed`
 - `task_result_summary.task_id` matches `smoke_gate.task_id`
 - `task_result_summary.workflow_type` matches `task_status.workflow_type`
+- `task_result_summary.workflow_metadata.workflow_type` matches the result-summary `workflow_type`
+- `task_result_summary.workflow_metadata.runtime_workflow_type` matches `task_status.runtime_workflow_type`
+- `task_result_summary.workflow_metadata.display_name` is a descriptive label that does not replace the machine id
+- `task_result_summary.workflow_metadata.capability_summary`, `task_result_summary.workflow_metadata.pipeline_stages`, `task_result_summary.workflow_metadata.primary_outputs`, `task_result_summary.workflow_metadata.qc_outputs`, `task_result_summary.workflow_metadata.report_outputs`, and `task_result_summary.workflow_metadata.limitations` are present
+- `task_result_summary.workflow_metadata.agent_selectable=true`
+- `task_result_summary.workflow_metadata.is_report_only=false`
+- result-summary workflow metadata is display/interpretation evidence only and does not replace stable `workflow_type` for task creation, confirmation fingerprints, database records, or artifact routes
 - `task_result_summary.contract_version`, `modality`, and `feature_groups` are present
 - `task_result_summary.output_group_count` and `task_result_summary.output_item_count` are greater than zero
 - `task_result_summary.downloadable_output_count` is greater than zero
@@ -233,7 +298,13 @@ Run the offline strict smoke acceptance JSON verifier `apps/api/scripts/verify_r
 python scripts/verify_remote_smoke_acceptance.py "../../docs/deployment/remote-smoke-acceptance-<timestamp>.json" --max-age-hours 24
 ```
 
-Attach the verifier report only when `python scripts/verify_remote_smoke_acceptance.py` prints `status=passed` with `--max-age-hours 24`. This offline strict smoke acceptance JSON verifier does not replace running `smoke_remote_agent.py` on the deployed server; it re-checks the saved evidence freshness and the same strict fields, including `deployment_identity_status=passed`, `production_readiness_status=passed`, `production_readiness.ready=true`, empty `production_readiness.blocking_reasons`, a privacy-safe `deployment_identity.deployment_id` matching `smoke_gate.deployment_id`, a privacy-safe `deployment_identity.health_version` matching `smoke_gate.expected_health_version` when supplied, `model_smoke_status=passed`, `smoke_gate.expected_model_wire_api`, `model_status.wire_api` matching that expected wire API, `smoke_gate.expected_model_provider_profile`, `model_status.provider_profile` matching that expected provider profile, `smoke_gate.require_model_tool_loop=true`, `model_status.capabilities.model_tool_loop=true`, `agent_project_context_status=passed`, `agent_run_project_id` matching `smoke_gate.project_id`, `agent_workflow_confirmation_status=passed`, `agent_workflow_confirmation.status=confirmation_required`, `agent_workflow_confirmation.intent=run_workflow`, `agent_workflow_confirmation.selected_skill=image-agent-workflow-runner`, `agent_workflow_confirmation.production_task_created=false`, matching Agent confirmation project/series/workflow fields, `smoke_gate.require_agent_workflow_resume=true`, `agent_workflow_resume_status=passed`, `agent_workflow_resume.status=task_created`, `agent_workflow_resume.production_task_created=true`, `agent_workflow_resume.confirmation_gate=fingerprint_verified`, matching Agent resume task/project/series/workflow fields, `remote_evidence_ids_status=passed`, `upload_inventory_completion_status=passed`, `upload_inventory_status=completed`, `launched_task_status=passed`, `launched_task.task_id` matching `smoke_gate.task_id`, `launched_task.project_id` matching `smoke_gate.project_id`, `launched_task.series_id` matching `task_status.series_id`, `launched_task.workflow_type` matching `task_status.workflow_type`, `task_status_status=passed`, `task_status.status=completed`, `task_status.task_id` matching `smoke_gate.task_id`, `task_workflow_selection_status=passed`, `task_workflow_selection.matched_runnable_workflow=true`, `task_workflow_selection.series_id` matching `task_status.series_id`, `task_workflow_selection.workflow_type` matching `task_status.workflow_type`, `task_result_summary_status=passed`, `task_result_summary.task_id` matching `smoke_gate.task_id`, `task_result_summary.workflow_type` matching `task_status.workflow_type`, non-empty `task_result_summary.feature_groups`, positive result-summary output counts, positive result-summary downloadable-output counts, safe downloadable-output paths, recomputed downloadable-output URLs, matching `artifact_manifest_relative_paths`/`artifact_manifest_download_urls`, non-empty `task_result_summary.provenance_keys`, `rag_raw_sources.manifest_schema_version`, `rag_raw_sources.source_count`, `rag_raw_sources.vendor_doc_count`, `rag_vendor_pointer_integrity_status=passed`, `require_vendor_pointer_integrity`, `rag_vendor_pointer_integrity_referenced_vendor_docs`, `rag_vendor_coverage_catalog_status=complete`, `vendor_coverage_catalog`, `vendor_coverage_catalog.vendors`, `rag_raw_sources.curated_sources`, `rag_launchability_query_status=passed`, `container_native_qc_status=passed`, `container_native_qc_served_urls`, `container_native_qc_artifacts`, `container_native_qc_official_source_ids`, each container-native QC artifact `relative_path` is slash-relative and safe, each container-native QC artifact `download_url` is recomputed from `task_id` and `relative_path`, each container-native QC artifact `content_type` matches `preview_kind`, `scientific_report_artifacts_status=passed`, `scientific_report_served_urls`, and `scientific_report_artifacts`; `vendor_coverage_catalog.vendors` and `rag_raw_sources.curated_sources` must exactly match with no missing or extra vendor docs, each scientific report artifact `download_url` is served with non-empty bytes, and each scientific report artifact `content_type` matches `preview_kind`. The verifier also checks that `vendor_coverage_catalog` must not expose `manifest_path`, `persist_dir`, `raw_snapshots`, `raw_files`, or `sha256`.
+Attach the verifier report only when `python scripts/verify_remote_smoke_acceptance.py` prints `status=passed` with `--max-age-hours 24`. This offline strict smoke acceptance JSON verifier does not replace running `smoke_remote_agent.py` on the deployed server; it re-checks the saved evidence freshness and the same strict fields, including `deployment_identity_status=passed`, `production_readiness_status=passed`, `production_readiness.ready=true`, empty `production_readiness.blocking_reasons`, `fast_launch_readiness_status=pre_acceptance`, the sole missing strict-acceptance blocker, `fast_launch_readiness.checks.rag_elasticsearch_hybrid.status=passed`, a privacy-safe `deployment_identity.deployment_id` matching `smoke_gate.deployment_id`, a privacy-safe `deployment_identity.health_version` matching `smoke_gate.expected_health_version` when supplied, `model_smoke_status=passed`, `smoke_gate.expected_model_wire_api`, `model_status.wire_api` matching that expected wire API, `smoke_gate.expected_model_provider_profile`, `model_status.provider_profile` matching that expected provider profile, `smoke_gate.require_model_tool_loop=true`, `model_status.capabilities.model_tool_loop=true`, `agent_project_context_status=passed`, `agent_run_project_id` matching `smoke_gate.project_id`, `agent_workflow_confirmation_status=passed`, `agent_workflow_confirmation.status=confirmation_required`, `agent_workflow_confirmation.intent=run_workflow`, `agent_workflow_confirmation.selected_skill=image-agent-workflow-runner`, `agent_workflow_confirmation.production_task_created=false`, matching Agent confirmation project/series/workflow fields, `agent_workflow_confirmation.workflow_metadata.workflow_type` matching the stable confirmation `workflow_type`, a descriptive `agent_workflow_confirmation.workflow_metadata.display_name` that does not equal the machine id, `agent_workflow_confirmation.workflow_metadata.is_report_only=false`, `smoke_gate.require_agent_workflow_resume=true`, `smoke_gate.require_agent_workflow_fingerprint_negative=true`, `agent_workflow_fingerprint_negative_status=passed`, `agent_workflow_fingerprint_negative.confirmation_gate=fingerprint_mismatch`, `agent_workflow_fingerprint_negative.production_task_created=false`, `agent_workflow_fingerprint_negative.task_created=false`, `checked.agent_workflow_fingerprint_negative_status=passed`, `checked.agent_workflow_fingerprint_negative_confirmation_gate=fingerprint_mismatch`, `checked.agent_workflow_fingerprint_negative_production_task_created=false`, `checked.agent_workflow_fingerprint_negative_task_created=false`, `agent_workflow_resume_status=passed`, `agent_workflow_resume.status=task_created`, `agent_workflow_resume.production_task_created=true`, `agent_workflow_resume.confirmation_gate=fingerprint_verified`, matching Agent resume task/project/series/workflow fields, `remote_evidence_ids_status=passed`, `upload_inventory_completion_status=passed`, `upload_inventory_status=completed`, `launched_task_status=passed`, `launched_task.task_id` matching `smoke_gate.task_id`, `launched_task.project_id` matching `smoke_gate.project_id`, `launched_task.series_id` matching `task_status.series_id`, `launched_task.workflow_type` matching `task_status.workflow_type`, `task_status_status=passed`, `task_status.status=completed`, `task_status.task_id` matching `smoke_gate.task_id`, `task_workflow_selection_status=passed`, `task_workflow_selection.matched_runnable_workflow=true`, `task_workflow_selection.series_id` matching `task_status.series_id`, `task_workflow_selection.workflow_type` matching `task_status.workflow_type`, `task_result_summary_status=passed`, `task_result_summary.task_id` matching `smoke_gate.task_id`, `task_result_summary.workflow_type` matching `task_status.workflow_type`, non-empty `task_result_summary.feature_groups`, positive result-summary output counts, positive result-summary downloadable-output counts, safe downloadable-output paths, recomputed downloadable-output URLs, matching `artifact_manifest_relative_paths`/`artifact_manifest_download_urls`, non-empty `task_result_summary.provenance_keys`, `rag_raw_sources.manifest_schema_version`, `rag_raw_sources.source_count`, `rag_raw_sources.vendor_doc_count`, `smoke_gate.require_elasticsearch_hybrid_rag=true`, `rag_elasticsearch_hybrid_status=passed`, `rag_rebuild_elasticsearch_hybrid` present with matching indexed chunk count, dense vector dimensions, embedding provider, and embedding model, `rag_elasticsearch_hybrid.persisted=true`, `rag_elasticsearch_hybrid.mode=connected`, positive `rag_elasticsearch_hybrid.indexed_chunk_count`, positive `rag_elasticsearch_hybrid.dense_vector_dims`, absent `rag_elasticsearch_hybrid.error`, absent `rag_elasticsearch_hybrid.embedding_error`, `rag_elasticsearch_hybrid.embedding_provider`, `rag_elasticsearch_hybrid.embedding_model`, `rag_elasticsearch_hybrid.embedding_production_ready=true`, `rag_elasticsearch_hybrid.fusion=rrf`, `rag_elasticsearch_hybrid.official_rrf_source_present=true`, no saved raw `rag_elasticsearch_hybrid.official_sources`, `rag_vendor_pointer_integrity_status=passed`, `require_vendor_pointer_integrity`, `rag_vendor_pointer_integrity_referenced_vendor_docs`, `rag_vendor_coverage_catalog_status=complete`, `vendor_coverage_catalog`, `vendor_coverage_catalog.vendors`, `rag_raw_sources.curated_sources`, `rag_launchability_query_status=passed`, `container_native_qc_status=passed`, `container_native_qc_served_urls`, `container_native_qc_artifacts`, `container_native_qc_official_source_ids`, each container-native QC artifact `relative_path` is slash-relative and safe, each container-native QC artifact `download_url` is recomputed from `task_id` and `relative_path`, each container-native QC artifact `content_type` matches `preview_kind`, `scientific_report_artifacts_status=passed`, `scientific_report_served_urls`, and `scientific_report_artifacts`; `vendor_coverage_catalog.vendors` and `rag_raw_sources.curated_sources` must exactly match with no missing or extra vendor docs, each scientific report artifact `download_url` is served with non-empty bytes, and each scientific report artifact `content_type` matches `preview_kind`. The verifier also checks that `vendor_coverage_catalog` must not expose `manifest_path`, `persist_dir`, `raw_snapshots`, `raw_files`, or `sha256`. For Elasticsearch hybrid RAG, it also requires `rag_elasticsearch_hybrid_query_status=passed`, `rag_elasticsearch_hybrid_query_mode=elasticsearch_hybrid`, `rag_elasticsearch_hybrid_query_retrieval_source=elasticsearch_hybrid`, `rag_elasticsearch_hybrid_query_source` pointing at `docs/rag/contracts/elasticsearch-hybrid-search.md`, and `rag_elasticsearch_hybrid_query_dense_vector_field=embedding` with the query-time dense-vector field matching `rag_elasticsearch_hybrid.dense_vector_field`.
+
+For unknown workflow safety, the verifier must also report `checked.unknown_workflow_incubation_status=passed`, `checked.unknown_workflow_incubation_action_lane=toolchain_incubation`, `checked.unknown_workflow_incubation_task_created=false`, `checked.unknown_workflow_incubation_confirmation_created=false`, `checked.unknown_workflow_incubation_task_creation_allowed=false`, `checked.unknown_workflow_incubation_forbidden_actions`, and `checked.unknown_workflow_incubation_production_task_created=false`.
+
+For Elasticsearch hybrid RAG, rebuild evidence must also have absent `rag_rebuild_elasticsearch_hybrid.error` and absent `rag_rebuild_elasticsearch_hybrid.embedding_error`; `rag_rebuild_elasticsearch_hybrid.lexical_retriever`, `rag_rebuild_elasticsearch_hybrid.vector_retriever`, `rag_rebuild_elasticsearch_hybrid.dense_vector_field`, and `rag_rebuild_elasticsearch_hybrid.fusion` must match `rag_elasticsearch_hybrid`. A status-only or query-only clean result is not sufficient production evidence.
+
+Workflow metadata selection evidence must be present in both live smoke JSON and verifier checked output: `agent_workflow_confirmation.workflow_metadata.agent_selectable=true`, `task_result_summary.workflow_metadata.agent_selectable=true`, `checked.agent_workflow_confirmation_metadata_agent_selectable=true`, and `checked.task_result_summary_metadata_agent_selectable=true`. These values are display/selection evidence only and do not replace stable `workflow_type` task identity or launch gates.
 
 ## Production Acceptance Decision
 
@@ -251,13 +322,16 @@ Accepted only if all of the following are true:
 - strict smoke acceptance JSON includes `agent_run_id`, `intent`, and `selected_skill`;
 - strict smoke acceptance JSON reports `agent_project_context_status=passed` and `agent_run_project_id` matching `smoke_gate.project_id`;
 - strict smoke acceptance JSON reports `agent_workflow_confirmation_status=passed`, `status=confirmation_required`, `intent=run_workflow`, `selected_skill=image-agent-workflow-runner`, and `production_task_created=false` for the same project, series, and workflow;
+- strict smoke acceptance JSON reports confirmation `workflow_metadata.workflow_type` matching the stable workflow id, a descriptive display name that does not replace the id, and `workflow_metadata.is_report_only=false`;
 - strict smoke acceptance JSON reports `agent_workflow_resume_status=passed`, `status=task_created`, `production_task_created=true`, `confirmation_gate=fingerprint_verified`, and task/project/series/workflow fields matching the completed task;
+- strict smoke acceptance JSON reports `agent_workflow_fingerprint_negative_status=passed`, `confirmation_gate=fingerprint_mismatch`, `production_task_created=false`, and `task_created=false` for the tampered Agent workflow confirmation before the valid resume creates the task;
 - strict smoke acceptance JSON reports `remote_evidence_ids_status=passed` with real `project_id`, `upload_session_id`, and `task_id`;
 - strict smoke acceptance JSON reports `upload_inventory_completion_status=passed` and `upload_inventory_status=completed`;
-- strict smoke acceptance JSON reports `launched_task_status=passed` and proves the backend task-creation response, either server-side Agent resume with `--require-agent-workflow-resume` or deterministic `/series/{series_id}/run`, matches the completed task id, project id, series id, and workflow type;
+- strict smoke acceptance JSON reports `launched_task_status=passed` and proves the backend task-creation response came from server-side Agent resume with `--require-agent-workflow-resume`; `launched_task.launch_source` must be `agent_workflow_resume` and the task id, project id, series id, and workflow type must match the completed task;
 - strict smoke acceptance JSON reports `task_status_status=passed` and `task_status.status=completed` for the same real `task_id`;
 - strict smoke acceptance JSON reports `task_workflow_selection_status=passed` and proves the completed task workflow was listed in the same series `workflow_eligibility.runnable_workflows`;
 - strict smoke acceptance JSON reports `rag_vendor_pointer_integrity_status=passed`, `rag_vendor_pointer_integrity_pointer_count` greater than zero, `rag_vendor_pointer_integrity_issue_count=0`, and non-empty `rag_vendor_pointer_integrity_referenced_vendor_docs`;
+- strict smoke acceptance JSON reports `rag_elasticsearch_hybrid_status=passed`, `rag_elasticsearch_hybrid.configured=true`, privacy-safe `rag_elasticsearch_hybrid.index`, matching `rag_rebuild_elasticsearch_hybrid.index`, `rag_elasticsearch_hybrid.persisted=true`, `rag_elasticsearch_hybrid.mode=connected`, positive `rag_elasticsearch_hybrid.indexed_chunk_count`, positive `rag_elasticsearch_hybrid.dense_vector_dims`, checked `rag_elasticsearch_hybrid_error_absent=true`, checked `rag_elasticsearch_hybrid_embedding_error_absent=true`, checked `rag_rebuild_elasticsearch_hybrid_error_absent=true`, checked `rag_rebuild_elasticsearch_hybrid_embedding_error_absent=true`, `rag_elasticsearch_hybrid.embedding_provider`, `rag_elasticsearch_hybrid.embedding_model`, matching `rag_rebuild_elasticsearch_hybrid.embedding_model`, `rag_elasticsearch_hybrid.embedding_production_ready=true`, `rag_rebuild_elasticsearch_hybrid.embedding_production_ready=true`, `rag_elasticsearch_hybrid.fusion=rrf`, `rag_elasticsearch_hybrid_query_status=passed`, `rag_elasticsearch_hybrid_query_mode=elasticsearch_hybrid`, `rag_elasticsearch_hybrid_query_retrieval_source=elasticsearch_hybrid`, `rag_elasticsearch_hybrid_query_dense_vector_field=embedding`, and `smoke_gate.require_elasticsearch_hybrid_rag=true`;
 - strict smoke acceptance JSON reports `rag_vendor_coverage_catalog_status=complete`, positive `rag_vendor_coverage_catalog_vendor_doc_count`, and a safe `vendor_coverage_catalog` summary;
 - strict smoke acceptance JSON reports `rag_launchability_matrix_status=passed`, `rag_launchability_matrix_source`, and `rag_launchability_query_status=passed` from `/agent/rag/query` citation/source fields rather than answer text alone;
 - strict smoke acceptance JSON satisfies RAG document/chunk thresholds, raw-source policy, curated provenance policy, and the provenance pointer integrity gate.

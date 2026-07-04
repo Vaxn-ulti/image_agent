@@ -1,6 +1,8 @@
 from fastapi.testclient import TestClient
 import hashlib
 import json
+import sys
+import types
 
 import pytest
 
@@ -66,6 +68,37 @@ def _insert_project(database, project_id: int, name: str | None = None) -> None:
         )
 
 
+def _ready_elasticsearch_hybrid_status(**overrides) -> dict:
+    hybrid = {
+        "engine": "elasticsearch",
+        "configured": True,
+        "persisted": True,
+        "mode": "connected",
+        "index": "image_agent_rag",
+        "indexed_chunk_count": 260,
+        "dense_vector_dims": 1536,
+        "embedding_provider": "openai",
+        "embedding_model": "text-embedding-3-small",
+        "embedding_transport": "openai_compatible_http",
+        "embedding_endpoint_configured": True,
+        "embedding_production_ready": True,
+        "lexical_retriever": "standard",
+        "vector_retriever": "knn",
+        "dense_vector_field": "embedding",
+        "fusion": "rrf",
+        "official_sources": [
+            "https://www.elastic.co/docs/reference/elasticsearch/rest-apis/reciprocal-rank-fusion",
+        ],
+    }
+    hybrid.update(overrides)
+    return {
+        "index": {
+            "engine": "elasticsearch_hybrid",
+            "hybrid_search": hybrid,
+        }
+    }
+
+
 def test_agent_model_status_uses_model_gateway(monkeypatch):
     monkeypatch.setenv("IMAGE_AGENT_MODEL_PROVIDER", "OpenAI")
     monkeypatch.setenv("IMAGE_AGENT_MODEL_API_KEY", "secret-value")
@@ -87,6 +120,7 @@ def test_agent_model_status_uses_model_gateway(monkeypatch):
     assert body["provider"] == "OpenAI"
     assert body["provider_profile"] == "openai"
     assert body["configured"] is True
+    assert body["trust_env_proxy"] is False
     assert body["capabilities"] == {
         "text": True,
         "structured_json": True,
@@ -143,8 +177,12 @@ def test_deployment_status_reports_production_readiness_blockers(monkeypatch):
     monkeypatch.setenv("IMAGE_AGENT_CORS_ORIGINS", "https://console.example.com")
     monkeypatch.setenv("IMAGE_AGENT_PUBLIC_BASE_URL", "https://api.example.com")
     monkeypatch.setenv("BACKEND_RUNTIME_MODE", "remote")
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    for key in MODEL_ENV_KEYS:
+        monkeypatch.delenv(key, raising=False)
+    from app.services import agent_service
     from app.main import app
+
+    monkeypatch.setattr(agent_service, "public_model_status", lambda: {"configured": False})
 
     result = TestClient(app).get("/deployment")
 
@@ -154,6 +192,7 @@ def test_deployment_status_reports_production_readiness_blockers(monkeypatch):
         "required": True,
         "ready": False,
         "status": "blocked",
+        "deployment_scope": "public_internet",
         "blocking_reasons": ["Agent model gateway is not configured."],
     }
 
@@ -204,6 +243,106 @@ def test_deployment_status_requires_public_https_api_base_without_path(monkeypat
         assert "IMAGE_AGENT_PUBLIC_BASE_URL must be a public HTTPS API origin without path, query, or fragment." in readiness["blocking_reasons"]
 
 
+def test_deployment_status_rejects_private_or_bare_production_origins(monkeypatch):
+    monkeypatch.setenv("IMAGE_AGENT_ENV", "production")
+    monkeypatch.setenv("IMAGE_AGENT_CORS_ORIGINS", "https://console.example.com")
+    monkeypatch.setenv("BACKEND_RUNTIME_MODE", "remote")
+    monkeypatch.setenv("OPENAI_API_KEY", "secret-value")
+    from app.main import app
+
+    for public_base_url in (
+        "https://10.2.32.14",
+        "https://192.168.1.20",
+        "https://172.16.0.8",
+        "https://api",
+    ):
+        monkeypatch.setenv("IMAGE_AGENT_CORS_ORIGINS", "https://console.example.com")
+        monkeypatch.setenv("IMAGE_AGENT_PUBLIC_BASE_URL", public_base_url)
+        readiness = TestClient(app).get("/deployment").json()["production_readiness"]
+        assert "IMAGE_AGENT_PUBLIC_BASE_URL must be a public HTTPS API origin without path, query, or fragment." in readiness["blocking_reasons"]
+
+    for cors_origin in (
+        "https://10.2.32.14",
+        "https://192.168.1.20",
+        "https://172.16.0.8",
+        "https://console",
+    ):
+        monkeypatch.setenv("IMAGE_AGENT_CORS_ORIGINS", cors_origin)
+        monkeypatch.setenv("IMAGE_AGENT_PUBLIC_BASE_URL", "https://api.example.com")
+        readiness = TestClient(app).get("/deployment").json()["production_readiness"]
+        assert "Production CORS origins must include a non-localhost console origin." in readiness["blocking_reasons"]
+
+
+def test_deployment_status_allows_private_network_product_readiness(monkeypatch):
+    monkeypatch.setenv("IMAGE_AGENT_ENV", "production")
+    monkeypatch.setenv("IMAGE_AGENT_DEPLOYMENT_SCOPE", "private_network")
+    monkeypatch.setenv("IMAGE_AGENT_CORS_ORIGINS", "http://127.0.0.1:5173")
+    monkeypatch.setenv("IMAGE_AGENT_PUBLIC_BASE_URL", "http://127.0.0.1:8000")
+    monkeypatch.setenv("BACKEND_RUNTIME_MODE", "remote")
+    monkeypatch.setenv("OPENAI_API_KEY", "secret-value")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_PROVIDER", "rawchat")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_API_KEY", "secret-value")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_BASE_URL", "https://rawchat.cn/codex")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_NAME", "gpt-5.5")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_WIRE_API", "responses")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_TRUST_ENV_PROXY", "0")
+    monkeypatch.setenv("IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_STATUS", "passed")
+    monkeypatch.setenv("IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_ID", "yyf-private-acceptance-20260622")
+    from app.services import agent_service
+    from app.main import app
+
+    monkeypatch.setattr(agent_service, "rag_status", lambda root: _ready_elasticsearch_hybrid_status())
+
+    result = TestClient(app).get("/deployment")
+
+    assert result.status_code == 200
+    body = result.json()
+    assert body["production_readiness"] == {
+        "required": True,
+        "ready": True,
+        "status": "ready",
+        "deployment_scope": "private_network",
+        "blocking_reasons": [],
+    }
+    assert body["fast_launch_readiness"]["ready"] is True
+    assert body["fast_launch_readiness"]["checks"]["production_deployment"]["deployment_scope"] == "private_network"
+
+
+def test_deployment_fast_launch_readiness_requires_production_mode(monkeypatch):
+    monkeypatch.delenv("IMAGE_AGENT_ENV", raising=False)
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_PROVIDER", "rawchat")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_API_KEY", "secret-value")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_BASE_URL", "https://rawchat.cn/codex")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_NAME", "gpt-5.5")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_WIRE_API", "responses")
+    monkeypatch.setenv("IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_STATUS", "passed")
+    monkeypatch.setenv("IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_ID", "remote-smoke-20260616T120000Z")
+    from app.services import agent_service
+    from app.main import app
+
+    monkeypatch.setattr(agent_service, "rag_status", lambda root: _ready_elasticsearch_hybrid_status())
+
+    result = TestClient(app).get("/deployment")
+
+    assert result.status_code == 200
+    readiness = result.json()["fast_launch_readiness"]
+    assert readiness["ready"] is False
+    assert readiness["status"] == "blocked"
+    assert readiness["checks"]["production_deployment"] == {
+        "status": "blocked",
+        "deployment_scope": "public_internet",
+        "required": False,
+        "ready": True,
+        "readiness_status": "ready",
+        "blocking_reasons": [],
+    }
+    assert (
+        "Production deployment readiness has not been enabled."
+        in readiness["blocking_reasons"]
+    )
+    assert "secret-value" not in json.dumps(readiness)
+
+
 def test_deployment_fast_launch_readiness_requires_rawchat_responses_and_remote_evidence(monkeypatch):
     monkeypatch.setenv("IMAGE_AGENT_MODEL_PROVIDER", "rawchat")
     monkeypatch.setenv("IMAGE_AGENT_MODEL_API_KEY", "secret-value")
@@ -228,7 +367,12 @@ def test_deployment_fast_launch_readiness_requires_rawchat_responses_and_remote_
         "actual_wire_api": "responses",
         "expected_model": "gpt-5.5",
         "actual_model": "gpt-5.5",
+        "expected_trust_env_proxy": False,
+        "actual_trust_env_proxy": False,
+        "expected_model_gateway_access": "direct",
+        "actual_model_gateway_access": "direct",
         "model_tool_loop": True,
+        "direct_transport": True,
     }
     assert readiness["checks"]["agent_task_boundary"]["status"] == "passed"
     assert readiness["checks"]["strict_remote_acceptance"]["status"] == "missing"
@@ -241,7 +385,71 @@ def test_deployment_fast_launch_readiness_requires_rawchat_responses_and_remote_
     assert "api_key" not in body_json
 
 
+@pytest.mark.parametrize(
+    ("trust_env_proxy", "gateway_access"),
+    [
+        (False, "ssh_reverse_tunnel"),
+        (True, "direct"),
+    ],
+)
+def test_deployment_fast_launch_readiness_blocks_rawchat_without_direct_transport(
+    monkeypatch,
+    trust_env_proxy,
+    gateway_access,
+):
+    monkeypatch.setenv("IMAGE_AGENT_ENV", "production")
+    monkeypatch.setenv("IMAGE_AGENT_CORS_ORIGINS", "https://console.example.com")
+    monkeypatch.setenv("IMAGE_AGENT_PUBLIC_BASE_URL", "https://api.example.com")
+    monkeypatch.setenv("IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_STATUS", "passed")
+    monkeypatch.setenv("IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_ID", "remote-smoke-20260616T120000Z")
+    from app.services import agent_service
+    from app.main import app
+
+    monkeypatch.setattr(agent_service, "rag_status", lambda root: _ready_elasticsearch_hybrid_status())
+    monkeypatch.setattr(
+        agent_service,
+        "public_model_status",
+        lambda: {
+            "configured": True,
+            "provider_profile": "rawchat",
+            "wire_api": "responses",
+            "model": "gpt-5.5",
+            "trust_env_proxy": trust_env_proxy,
+            "capabilities": {"model_tool_loop": True},
+            "deployment": {"model_gateway_access": gateway_access},
+        },
+    )
+
+    result = TestClient(app).get("/deployment")
+
+    assert result.status_code == 200
+    readiness = result.json()["fast_launch_readiness"]
+    assert readiness["ready"] is False
+    assert readiness["status"] == "blocked"
+    assert readiness["checks"]["model_gateway_target"] == {
+        "status": "blocked",
+        "expected_provider_profile": "rawchat",
+        "actual_provider_profile": "rawchat",
+        "expected_wire_api": "responses",
+        "actual_wire_api": "responses",
+        "expected_model": "gpt-5.5",
+        "actual_model": "gpt-5.5",
+        "expected_trust_env_proxy": False,
+        "actual_trust_env_proxy": trust_env_proxy,
+        "expected_model_gateway_access": "direct",
+        "actual_model_gateway_access": gateway_access,
+        "model_tool_loop": True,
+        "direct_transport": False,
+    }
+    assert readiness["blocking_reasons"] == [
+        "Model gateway is not pinned to direct rawchat GPT-5.5 Responses with model tool loop."
+    ]
+
+
 def test_deployment_fast_launch_readiness_accepts_privacy_safe_remote_acceptance_id(monkeypatch):
+    monkeypatch.setenv("IMAGE_AGENT_ENV", "production")
+    monkeypatch.setenv("IMAGE_AGENT_CORS_ORIGINS", "https://console.example.com")
+    monkeypatch.setenv("IMAGE_AGENT_PUBLIC_BASE_URL", "https://api.example.com")
     monkeypatch.setenv("IMAGE_AGENT_MODEL_PROVIDER", "rawchat")
     monkeypatch.setenv("IMAGE_AGENT_MODEL_API_KEY", "secret-value")
     monkeypatch.setenv("IMAGE_AGENT_MODEL_BASE_URL", "https://rawchat.cn/codex")
@@ -249,7 +457,10 @@ def test_deployment_fast_launch_readiness_accepts_privacy_safe_remote_acceptance
     monkeypatch.setenv("IMAGE_AGENT_MODEL_WIRE_API", "responses")
     monkeypatch.setenv("IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_STATUS", "passed")
     monkeypatch.setenv("IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_ID", "remote-smoke-20260616T120000Z")
+    from app.services import agent_service
     from app.main import app
+
+    monkeypatch.setattr(agent_service, "rag_status", lambda root: _ready_elasticsearch_hybrid_status())
 
     result = TestClient(app).get("/deployment")
 
@@ -263,6 +474,205 @@ def test_deployment_fast_launch_readiness_accepts_privacy_safe_remote_acceptance
         "evidence_id": "remote-smoke-20260616T120000Z",
         "required_evidence": "strict remote smoke JSON verified within freshness window",
     }
+    assert readiness["checks"]["rag_elasticsearch_hybrid"]["status"] == "passed"
+    assert readiness["checks"]["rag_elasticsearch_hybrid"]["official_rrf_source_present"] is True
+    readiness_json = json.dumps(readiness)
+    assert "official_sources" not in readiness_json
+    assert "reciprocal-rank-fusion" not in readiness_json
+
+
+def test_deployment_fast_launch_readiness_requires_elasticsearch_hybrid_components(monkeypatch):
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_PROVIDER", "rawchat")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_API_KEY", "secret-value")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_BASE_URL", "https://rawchat.cn/codex")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_NAME", "gpt-5.5")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_WIRE_API", "responses")
+    monkeypatch.setenv("IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_STATUS", "passed")
+    monkeypatch.setenv("IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_ID", "remote-smoke-20260616T120000Z")
+    from app.services import agent_service
+    from app.main import app
+
+    monkeypatch.setattr(
+        agent_service,
+        "rag_status",
+        lambda root: _ready_elasticsearch_hybrid_status(
+            lexical_retriever="bm25_only",
+            vector_retriever="script_score",
+            dense_vector_field="dense",
+        ),
+    )
+
+    result = TestClient(app).get("/deployment")
+
+    assert result.status_code == 200
+    readiness = result.json()["fast_launch_readiness"]
+    hybrid = readiness["checks"]["rag_elasticsearch_hybrid"]
+    assert readiness["ready"] is False
+    assert readiness["status"] == "blocked"
+    assert hybrid["status"] == "blocked"
+    assert hybrid["lexical_retriever"] == "bm25_only"
+    assert hybrid["vector_retriever"] == "script_score"
+    assert hybrid["dense_vector_field"] == "dense"
+    assert hybrid["blocking_codes"] == [
+        "rag_hybrid_lexical_retriever_not_standard",
+        "rag_hybrid_vector_retriever_not_knn",
+        "rag_hybrid_dense_vector_field_not_embedding",
+    ]
+    assert "Current deployment RAG is not ready Elasticsearch hybrid with production embeddings." in readiness[
+        "blocking_reasons"
+    ]
+    assert "secret-value" not in json.dumps(readiness)
+
+
+def test_deployment_fast_launch_readiness_requires_current_elasticsearch_hybrid(monkeypatch):
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_PROVIDER", "rawchat")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_API_KEY", "secret-value")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_BASE_URL", "https://rawchat.cn/codex")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_NAME", "gpt-5.5")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_WIRE_API", "responses")
+    monkeypatch.setenv("IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_STATUS", "passed")
+    monkeypatch.setenv("IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_ID", "remote-smoke-20260616T120000Z")
+    from app.services import agent_service
+    from app.main import app
+
+    monkeypatch.setattr(
+        agent_service,
+        "rag_status",
+        lambda root: {
+            "index": {
+                "engine": "elasticsearch_hybrid",
+                "hybrid_search": {
+                    "engine": "elasticsearch",
+                    "configured": False,
+                    "persisted": False,
+                    "mode": "local_contract",
+                    "index": "image_agent_rag",
+                    "indexed_chunk_count": 0,
+                    "dense_vector_dims": 64,
+                    "embedding_provider": "local_hashing",
+                    "embedding_model": "local-token-hash-v1",
+                    "embedding_transport": None,
+                    "embedding_endpoint_configured": False,
+                    "embedding_production_ready": False,
+                    "fusion": "rrf",
+                },
+            }
+        },
+    )
+
+    result = TestClient(app).get("/deployment")
+
+    assert result.status_code == 200
+    readiness = result.json()["fast_launch_readiness"]
+    assert readiness["ready"] is False
+    assert readiness["status"] == "blocked"
+    assert readiness["checks"]["rag_elasticsearch_hybrid"] == {
+        "status": "blocked",
+        "engine": "elasticsearch",
+        "configured": False,
+        "mode": "local_contract",
+        "persisted": False,
+        "index": "image_agent_rag",
+        "indexed_chunk_count": 0,
+        "dense_vector_dims": 64,
+        "embedding_provider": "local_hashing",
+        "embedding_model": "local-token-hash-v1",
+        "embedding_transport": None,
+        "embedding_endpoint_configured": False,
+        "embedding_production_ready": False,
+        "lexical_retriever": None,
+        "vector_retriever": None,
+        "dense_vector_field": None,
+        "fusion": "rrf",
+        "official_rrf_source_present": False,
+        "blocking_codes": [
+            "rag_hybrid_not_configured",
+            "rag_hybrid_not_persisted",
+            "rag_hybrid_mode_not_ready",
+            "rag_indexed_chunk_count_missing",
+            "rag_embedding_provider_local",
+            "rag_embedding_transport_missing_or_unsupported",
+            "rag_embedding_endpoint_not_configured",
+            "rag_embedding_not_production_ready",
+            "rag_hybrid_lexical_retriever_not_standard",
+            "rag_hybrid_vector_retriever_not_knn",
+            "rag_hybrid_dense_vector_field_not_embedding",
+            "rag_hybrid_official_rrf_source_missing",
+        ],
+    }
+    assert "Current deployment RAG is not ready Elasticsearch hybrid with production embeddings." in readiness[
+        "blocking_reasons"
+    ]
+    assert "secret-value" not in json.dumps(readiness)
+
+
+def test_deployment_fast_launch_readiness_requires_embedding_endpoint_configured(monkeypatch):
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_PROVIDER", "rawchat")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_API_KEY", "secret-value")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_BASE_URL", "https://rawchat.cn/codex")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_NAME", "gpt-5.5")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_WIRE_API", "responses")
+    monkeypatch.setenv("IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_STATUS", "passed")
+    monkeypatch.setenv("IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_ID", "remote-smoke-20260616T120000Z")
+    from app.services import agent_service
+    from app.main import app
+
+    monkeypatch.setattr(
+        agent_service,
+        "rag_status",
+        lambda root: _ready_elasticsearch_hybrid_status(embedding_endpoint_configured=False),
+    )
+
+    result = TestClient(app).get("/deployment")
+
+    assert result.status_code == 200
+    readiness = result.json()["fast_launch_readiness"]
+    assert readiness["ready"] is False
+    assert readiness["status"] == "blocked"
+    assert readiness["checks"]["rag_elasticsearch_hybrid"]["status"] == "blocked"
+    assert readiness["checks"]["rag_elasticsearch_hybrid"]["embedding_endpoint_configured"] is False
+    assert readiness["checks"]["rag_elasticsearch_hybrid"]["blocking_codes"] == [
+        "rag_embedding_endpoint_not_configured"
+    ]
+    assert "Current deployment RAG is not ready Elasticsearch hybrid with production embeddings." in readiness[
+        "blocking_reasons"
+    ]
+
+
+def test_deployment_fast_launch_readiness_requires_official_elasticsearch_rrf_source(monkeypatch):
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_PROVIDER", "rawchat")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_API_KEY", "secret-value")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_BASE_URL", "https://rawchat.cn/codex")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_NAME", "gpt-5.5")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_WIRE_API", "responses")
+    monkeypatch.setenv("IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_STATUS", "passed")
+    monkeypatch.setenv("IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_ID", "remote-smoke-20260616T120000Z")
+    from app.services import agent_service
+    from app.main import app
+
+    monkeypatch.setattr(
+        agent_service,
+        "rag_status",
+        lambda root: _ready_elasticsearch_hybrid_status(official_sources=["https://docs.example.invalid/rrf"]),
+    )
+
+    result = TestClient(app).get("/deployment")
+
+    assert result.status_code == 200
+    readiness = result.json()["fast_launch_readiness"]
+    assert readiness["ready"] is False
+    assert readiness["status"] == "blocked"
+    assert readiness["checks"]["rag_elasticsearch_hybrid"]["status"] == "blocked"
+    assert readiness["checks"]["rag_elasticsearch_hybrid"]["official_rrf_source_present"] is False
+    assert readiness["checks"]["rag_elasticsearch_hybrid"]["blocking_codes"] == [
+        "rag_hybrid_official_rrf_source_missing"
+    ]
+    assert "Current deployment RAG is not ready Elasticsearch hybrid with production embeddings." in readiness[
+        "blocking_reasons"
+    ]
+    readiness_json = json.dumps(readiness)
+    assert "docs.example.invalid" not in readiness_json
+    assert "reciprocal-rank-fusion" not in readiness_json
 
 
 def test_agent_run_returns_answer_and_persists_privacy_safe_ledger(tmp_path, monkeypatch):
@@ -333,6 +743,110 @@ def test_agent_run_returns_answer_and_persists_privacy_safe_ledger(tmp_path, mon
     assert event_types == ["agent_run_created", "agent_run_started", "agent_run_completed"]
 
 
+def test_agent_run_unconfigured_model_answers_inventory_without_confirmation(tmp_path, monkeypatch):
+    from app.core import config
+    from app.db import database
+    from app import main
+    from app.main import app
+
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
+    database.init_db()
+    _insert_project(database, 7)
+    monkeypatch.setattr(
+        main,
+        "read_project_context",
+        lambda project_id, *, rows_fn, workflows: {
+            "project_id": project_id,
+            "project_files": [
+                {"id": 31, "original_name": "sub-01_T1w.nii.gz", "file_type": "NIFTI"},
+                {"id": 32, "original_name": "sub-01_T1w.json", "file_type": "JSON"},
+            ],
+            "series": [
+                {"id": 11, "modality": "T1", "sequence_label": "T1w_MPRAGE", "supported_for_processing": 1}
+            ],
+            "workflows": workflows,
+        },
+    )
+
+    result = TestClient(app).post(
+        "/agent/runs",
+        json={"project_id": 7, "message": "我上传了什么文件，可以跑什么任务"},
+    )
+
+    assert result.status_code == 200
+    body = result.json()
+    assert body["status"] == "answered"
+    assert body["intent"] == "inventory_capability"
+    assert "confirmation" not in body
+    assert body["production_task_created"] is False
+    assert "Uploaded files" in body["answer"]
+    assert "sub-01_T1w.nii.gz" in body["answer"]
+    assert "Detected series" in body["answer"]
+    assert "T1w_MPRAGE" in body["answer"]
+    assert "Runnable fixed workflows" in body["answer"]
+    assert "No approval request has been created" in body["answer"]
+
+
+def test_agent_run_unconfigured_model_returns_complete_result_analysis(tmp_path, monkeypatch):
+    from app.core import config
+    from app.db import database
+    from app import main
+    from app.main import app
+
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
+    database.init_db()
+    _insert_project(database, 7)
+    monkeypatch.setattr(
+        main,
+        "read_project_context",
+        lambda project_id, *, rows_fn, workflows: {
+            "project_id": project_id,
+            "tasks": [
+                {
+                    "id": 140,
+                    "project_id": project_id,
+                    "series_id": 11,
+                    "workflow_type": "t1_deepprep_anat_report",
+                    "status": "completed",
+                    "progress": 100,
+                    "error_message": None,
+                }
+            ],
+            "result_summaries": [
+                {
+                    "task_id": 140,
+                    "workflow_type": "t1_deepprep_anat_report",
+                    "outputs": {
+                        "reports": [{"relative_path": "reports/index.html"}],
+                        "qc": [{"relative_path": "QC/sub-01/figures/sub-01_desc-surfparc_T1w.svg"}],
+                    },
+                }
+            ],
+            "workflows": workflows,
+        },
+    )
+
+    result = TestClient(app).post(
+        "/agent/runs",
+        json={"project_id": 7, "message": "请替我完整分析结果和QC报告"},
+    )
+
+    assert result.status_code == 200
+    body = result.json()
+    assert body["status"] == "answered"
+    assert body["production_task_created"] is False
+    assert "confirmation" not in body
+    assert "Observation summary" in body["answer"]
+    assert "task 140" in body["answer"]
+    assert "Result artifacts" in body["answer"]
+    assert "reports/index.html" in body["answer"]
+    assert "QC observations" in body["answer"]
+    assert "sub-01_desc-surfparc_T1w.svg" in body["answer"]
+    assert "No workflow was launched" in body["answer"]
+
+
 def test_agent_run_confirmation_does_not_create_task_before_resume(tmp_path, monkeypatch):
     from app.core import config
     from app.db import database
@@ -358,7 +872,17 @@ def test_agent_run_confirmation_does_not_create_task_before_resume(tmp_path, mon
                     "project_id": 7,
                     "series_id": 11,
                     "workflow_type": "t1_deepprep_anat_report",
+                    "runtime_workflow_type": "t1_deepprep",
+                    "fingerprint": "a" * 64,
+                    "workflow_metadata": {
+                        "workflow_type": "t1_deepprep_anat_report",
+                        "runtime_workflow_type": "t1_deepprep",
+                        "display_name": "T1 DeepPrep anatomical processing, QC, and report",
+                        "agent_selectable": True,
+                        "is_report_only": False,
+                    },
                     "action_lane": "fixed_workflow",
+                    "preflight": {"ok": True, "runtime_workflow_type": "t1_deepprep"},
                 },
             }
 
@@ -377,6 +901,11 @@ def test_agent_run_confirmation_does_not_create_task_before_resume(tmp_path, mon
     assert body["status"] == "confirmation_required"
     assert body["production_task_created"] is False
     assert body["confirmation"]["workflow_type"] == "t1_deepprep_anat_report"
+    assert body["confirmation"]["runtime_workflow_type"] == "t1_deepprep"
+    assert body["confirmation"]["fingerprint"] == "a" * 64
+    assert body["confirmation"]["workflow_metadata"]["workflow_type"] == "t1_deepprep_anat_report"
+    assert body["confirmation"]["workflow_metadata"]["is_report_only"] is False
+    assert body["confirmation"]["preflight"]["runtime_workflow_type"] == "t1_deepprep"
 
     with database.connect() as conn:
         task_count = conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
@@ -388,7 +917,107 @@ def test_agent_run_confirmation_does_not_create_task_before_resume(tmp_path, mon
     assert row["task_id"] is None
 
 
-def test_agent_run_uses_langgraph_runner_when_agent_engine_is_langgraph(tmp_path, monkeypatch):
+def test_agent_run_forces_unknown_fixed_workflow_into_incubation_without_production_task(tmp_path, monkeypatch):
+    from app.core import config
+    from app.db import database
+    from app.agent.incubation import IncubationLedger
+    from app.agent.langgraph_runner import LangGraphAgentRunner
+    from app import main
+    from app.main import app
+    from app.services import task_service
+
+    monkeypatch.setattr(config, "DATA_ROOT", tmp_path)
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(config, "PROJECTS_ROOT", tmp_path / "projects")
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(main, "PROJECTS_ROOT", tmp_path / "projects")
+    monkeypatch.setenv("IMAGE_AGENT_AGENT_ENGINE", "langgraph")
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("production task service must not be called for unknown fixed workflow")
+
+    monkeypatch.setattr(task_service, "create_series_task", fail_if_called)
+    monkeypatch.setattr(main, "run_pipeline_task", fail_if_called)
+
+    class FakeGateway:
+        def complete_structured_with_tools(self, messages, *, purpose, tool_context, structured_schema=None, max_tool_rounds=2):
+            return {
+                "decision": {
+                    "intent": "run_workflow",
+                    "action_lane": "fixed_workflow",
+                    "lane": "fixed_workflow",
+                    "workflow_type": "dwi_magic_connectome_report",
+                    "series_id": 11,
+                    "summary": "Run an unknown fixed workflow",
+                    "objective": "Evaluate unknown workflow routing",
+                    "modality": "DWI",
+                    "input_modality": "DWI",
+                    "toolchain": ["sandbox", "proposal"],
+                    "primitives": ["proposal"],
+                    "script_paths": [],
+                    "script_text": "echo propose unknown workflow",
+                    "risks": ["workflow_type is not registered"],
+                    "recommended_next_step": "Use incubation proposal",
+                    "tool_chain_hint": "incubation",
+                    "requires_confirmation": True,
+                },
+                "tool_trace": [{"stage": "planner", "mode": "openai_function_tools_dispatched"}],
+                "tool_messages": [],
+            }
+
+        def complete_text(self, messages, *, purpose):
+            return "answer"
+
+    runner = LangGraphAgentRunner(
+        gateway=FakeGateway(),
+        incubation_ledger=IncubationLedger(tmp_path / "incubation_ledger"),
+        rag_root=tmp_path,
+    )
+    monkeypatch.setattr(main, "AgentRunner", lambda: runner)
+    monkeypatch.setattr(
+        main,
+        "read_project_context",
+        lambda project_id, *, rows_fn, workflows: {
+            "project_id": project_id,
+            "series": [{"id": 11, "modality": "DWI", "supported_for_processing": 1}],
+            "workflows": workflows,
+        },
+    )
+    database.init_db()
+    _insert_project(database, 7)
+
+    result = TestClient(app).post("/agent/runs", json={"project_id": 7, "message": "run unknown fixed workflow"})
+
+    assert result.status_code == 200
+    body = result.json()
+    assert body["contract_version"] == "agent_run.v1"
+    assert body["status"] == "toolchain_proposed"
+    assert body["action_lane"] == "toolchain_incubation"
+    assert body["production_task_created"] is False
+    assert body["task_creation_allowed"] is False
+    assert body["forbidden_actions"] == ["confirmation_creation", "production_task_creation", "pipeline_runner_launch"]
+    assert body["safe_metadata"]["lane"] == "toolchain_incubation"
+    assert body["proposed_toolchain"]["task_creation_allowed"] is False
+    assert body["proposed_toolchain"]["forbidden_actions"] == [
+        "confirmation_creation",
+        "production_task_creation",
+        "pipeline_runner_launch",
+    ]
+    assert body["proposed_toolchain"]["production_task_created"] is False
+    assert body["proposed_toolchain"]["promotion_gate"]["production_task_created"] is False
+    assert body["proposed_toolchain"]["proposal_id"].startswith("inc_")
+
+    with database.connect() as conn:
+        task_count = conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
+        row = conn.execute("SELECT * FROM agent_runs WHERE agent_run_id=?", (body["agent_run_id"],)).fetchone()
+
+    assert task_count == 0
+    assert row["request_type"] == "run"
+    assert row["status"] == "toolchain_proposed"
+    assert row["task_id"] is None
+
+
+def test_agent_run_uses_langgraph_runner_by_default(tmp_path, monkeypatch):
     from app.core import config
     from app.db import database
     from app import main
@@ -396,7 +1025,7 @@ def test_agent_run_uses_langgraph_runner_when_agent_engine_is_langgraph(tmp_path
 
     monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
     monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
-    monkeypatch.setenv("IMAGE_AGENT_AGENT_ENGINE", "langgraph")
+    monkeypatch.delenv("IMAGE_AGENT_AGENT_ENGINE", raising=False)
     monkeypatch.setenv("IMAGE_AGENT_MODEL_API_KEY", "test-key")
     monkeypatch.setenv("IMAGE_AGENT_MODEL_PROVIDER", "rawchat")
     monkeypatch.setenv("IMAGE_AGENT_MODEL_WIRE_API", "responses")
@@ -762,6 +1391,155 @@ def test_agent_rag_rebuild_endpoint_builds_persistent_index(tmp_path, monkeypatc
     assert body["semantic_index"] is True
     assert body["document_count"] == 1
     assert (tmp_path / ".rag_index" / "chunks.jsonl").exists()
+
+
+def test_agent_rag_status_rebuild_query_emit_matching_connected_elasticsearch_evidence(tmp_path, monkeypatch):
+    from app import main
+    from app.main import app
+
+    class FakeElasticsearchIndices:
+        def __init__(self, owner):
+            self.owner = owner
+
+        def exists(self, *, index):
+            self.owner.exists_calls.append(index)
+            return False
+
+        def create(self, **kwargs):
+            self.owner.create_calls.append(kwargs)
+
+    class FakeElasticsearch:
+        instances = []
+        search_response = {"hits": {"hits": []}}
+
+        def __init__(self, url, api_key=None):
+            self.url = url
+            self.api_key = api_key
+            self.exists_calls = []
+            self.create_calls = []
+            self.bulk_calls = []
+            self.search_calls = []
+            self.indices = FakeElasticsearchIndices(self)
+            FakeElasticsearch.instances.append(self)
+
+        def bulk(self, **kwargs):
+            self.bulk_calls.append(kwargs)
+            return {"errors": False}
+
+        def search(self, **kwargs):
+            self.search_calls.append(kwargs)
+            return FakeElasticsearch.search_response
+
+    rag_doc = tmp_path / "docs" / "rag" / "contracts" / "elasticsearch-hybrid-search.md"
+    rag_doc.parent.mkdir(parents=True)
+    rag_doc.write_text(
+        "---\nsource_type: rag_contract\n---\n"
+        "# Elasticsearch Hybrid Search\n"
+        "Official BM25 dense-vector kNN RRF retrieval evidence for Image Agent.\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(main, "REPO_ROOT", tmp_path)
+    monkeypatch.setenv("IMAGE_AGENT_ELASTICSEARCH_URL", "https://elastic:super-secret-password@es.local:9200")
+    monkeypatch.setenv("IMAGE_AGENT_ELASTICSEARCH_API_KEY", "sk-elasticsearch-secret-token")
+    monkeypatch.setitem(sys.modules, "elasticsearch", types.SimpleNamespace(Elasticsearch=FakeElasticsearch))
+
+    rebuild = TestClient(app).post("/agent/rag/rebuild")
+
+    assert rebuild.status_code == 200
+    hybrid = rebuild.json()["hybrid_search"]
+    assert hybrid["configured"] is True
+    assert hybrid["persisted"] is False
+    assert hybrid["mode"] == "embedding_required"
+    assert hybrid["indexed_chunk_count"] == 0
+    assert hybrid["embedding_provider"] == "local_hashing"
+    assert hybrid["embedding_production_ready"] is False
+    assert FakeElasticsearch.instances == []
+    serialized = json.dumps(rebuild.json(), sort_keys=True)
+    assert "super-secret-password" not in serialized
+    assert "sk-elasticsearch-secret-token" not in serialized
+
+    class FakeEmbeddings:
+        def create(self, *, model, input):
+            text = str(input)
+            vector = [0.9, 0.8, 0.7] if "RRF evidence" in text else [0.4, 0.5, 0.6]
+            return types.SimpleNamespace(data=[types.SimpleNamespace(embedding=vector)])
+
+    class FakeOpenAI:
+        def __init__(self, *, api_key, base_url, timeout, **kwargs):
+            self.embeddings = FakeEmbeddings()
+
+    monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(OpenAI=FakeOpenAI))
+    monkeypatch.setenv("IMAGE_AGENT_RAG_EMBEDDING_PROVIDER", "openai")
+    monkeypatch.setenv("IMAGE_AGENT_RAG_EMBEDDING_MODEL", "text-embedding-3-small")
+    monkeypatch.setenv("IMAGE_AGENT_RAG_EMBEDDING_API_KEY", "embedding-secret")
+    monkeypatch.setenv("IMAGE_AGENT_RAG_EMBEDDING_BASE_URL", "https://embedding.example/v1")
+
+    rebuild = TestClient(app).post("/agent/rag/rebuild")
+
+    assert rebuild.status_code == 200
+    hybrid = rebuild.json()["hybrid_search"]
+    assert hybrid["persisted"] is True
+    assert hybrid["mode"] == "connected"
+    assert hybrid["indexed_chunk_count"] == 1
+    assert hybrid["embedding_provider"] == "openai"
+    assert hybrid["embedding_model"] == "text-embedding-3-small"
+    assert hybrid["embedding_transport"] == "sdk"
+    assert hybrid["embedding_endpoint_configured"] is True
+    assert hybrid["embedding_production_ready"] is True
+    serialized = json.dumps(rebuild.json(), sort_keys=True)
+    assert "super-secret-password" not in serialized
+    assert "sk-elasticsearch-secret-token" not in serialized
+    assert "embedding-secret" not in serialized
+    assert "https://embedding.example/v1" not in serialized
+    assert FakeElasticsearch.instances[0].url == "https://elastic:super-secret-password@es.local:9200"
+    assert FakeElasticsearch.instances[0].api_key == "sk-elasticsearch-secret-token"
+    assert FakeElasticsearch.instances[0].bulk_calls
+
+    status = TestClient(app).get("/agent/rag/status")
+
+    assert status.status_code == 200
+    status_hybrid = status.json()["index"]["hybrid_search"]
+    assert status_hybrid["persisted"] is True
+    assert status_hybrid["mode"] == "connected"
+    assert status_hybrid["index"] == hybrid["index"] == "image_agent_rag"
+    assert status_hybrid["indexed_chunk_count"] == hybrid["indexed_chunk_count"] == 1
+    assert status_hybrid["dense_vector_dims"] == hybrid["dense_vector_dims"] == 3
+    assert status_hybrid["embedding_provider"] == hybrid["embedding_provider"] == "openai"
+    assert status_hybrid["embedding_model"] == hybrid["embedding_model"] == "text-embedding-3-small"
+    assert status_hybrid["embedding_transport"] == hybrid["embedding_transport"] == "sdk"
+    assert status_hybrid["embedding_endpoint_configured"] is True
+    assert status_hybrid["embedding_production_ready"] is True
+
+    FakeElasticsearch.search_response = {
+        "hits": {
+            "hits": [
+                {
+                    "_score": 42.0,
+                    "_source": {
+                        "source": "docs/rag/contracts/elasticsearch-hybrid-search.md",
+                        "title": "Elasticsearch Hybrid Search",
+                        "text": "Official BM25 dense-vector kNN RRF retrieval evidence for Image Agent.",
+                        "metadata": {"source_type": "rag_contract"},
+                    },
+                }
+            ]
+        }
+    }
+
+    query = TestClient(app).post(
+        "/agent/rag/query",
+        json={"query": "Elasticsearch hybrid RRF evidence"},
+    )
+
+    assert query.status_code == 200
+    body = query.json()
+    assert body["retrieval_mode"] == "elasticsearch_hybrid"
+    assert body["retrieval_source"] == "elasticsearch_hybrid"
+    assert body["citations"][0]["path"] == "docs/rag/contracts/elasticsearch-hybrid-search.md"
+    assert body["citations"][0]["source"] == "docs/rag/contracts/elasticsearch-hybrid-search.md"
+    search_client = FakeElasticsearch.instances[-1]
+    assert search_client.search_calls[0]["index"] == "image_agent_rag"
+    assert "rrf" in search_client.search_calls[0]["body"]["retriever"]
 
 
 def test_agent_rag_status_reports_persistent_index(tmp_path, monkeypatch):
@@ -1472,6 +2250,47 @@ def test_agent_rag_query_launchability_uses_matrix_citations(tmp_path, monkeypat
     assert "workflow_eligibility remains authoritative" in body["answer"]
 
 
+def test_agent_rag_query_backend_context_includes_workflow_capability_metadata(tmp_path, monkeypatch):
+    from app.core import config
+    from app.db import database
+    from app import main
+    from app.main import app
+
+    monkeypatch.setattr(config, "DATA_ROOT", tmp_path)
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(config, "PROJECTS_ROOT", tmp_path / "projects")
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(main, "REPO_ROOT", tmp_path)
+
+    database.init_db()
+    client = TestClient(app)
+    project = client.post("/projects", json={"name": "P-rag-workflows"}).json()
+    result = client.post(
+        "/agent/rag/query",
+        json={"project_id": project["id"], "query": "What fixed workflows can Image Agent run?"},
+    )
+
+    assert result.status_code == 200
+    workflows = result.json()["backend_context"]["supported_workflows"]
+    t1 = next(item for item in workflows if item["workflow_type"] == "t1_deepprep_anat_report")
+    assert t1["runtime_workflow_type"] == "t1_deepprep"
+    assert t1["lane"] == "fixed_workflow"
+    assert t1["requires_confirmation"] is True
+    assert t1["display_name"] == "T1 DeepPrep anatomical processing, QC, and report"
+    assert t1["capability_summary"]
+    assert t1["pipeline_stages"]
+    assert t1["primary_outputs"]
+    assert t1["qc_outputs"]
+    assert t1["report_outputs"]
+    assert t1["limitations"]
+    assert t1["is_report_only"] is False
+
+    incubation = next(item for item in workflows if item["workflow_type"] == "toolchain_proposal")
+    assert incubation["lane"] == "toolchain_incubation"
+    assert incubation["runtime_workflow_type"] is None
+    assert incubation["requires_confirmation"] is False
+
+
 def test_agent_rag_query_returns_raw_source_evidence_for_vendor_citations(tmp_path, monkeypatch):
     from app import main
     from app.agent.rag_index import build_local_rag_index
@@ -1752,7 +2571,20 @@ def test_agent_resume_approved_confirmation_creates_real_task(tmp_path, monkeypa
         "project_id": 1,
         "series_id": 11,
         "workflow_type": "t1_deepprep_anat_report",
+        "runtime_workflow_type": "t1_deepprep",
         "action_lane": "fixed_workflow",
+        "preflight": {
+            "ok": True,
+            "workflow_type": "t1_deepprep_anat_report",
+            "runtime_workflow_type": "t1_deepprep",
+        },
+        "workflow_metadata": {
+            "workflow_type": "t1_deepprep_anat_report",
+            "display_name": "T1 DeepPrep anatomical processing, QC, and report",
+            "workflow_family": "t1",
+            "workflow_role": "anat_processing",
+            "is_report_only": False,
+        },
     }
     thread = store.create_pending_confirmation(
         confirmation=confirmation,
@@ -1760,16 +2592,22 @@ def test_agent_resume_approved_confirmation_creates_real_task(tmp_path, monkeypa
         selected_skill="image-agent-workflow-runner",
         retrieved_context={},
     )
+    public_confirmation = {
+        **confirmation,
+        "runtime_workflow_type": "t1_deepprep",
+        "fingerprint": thread["confirmation_fingerprint"],
+    }
 
     result = TestClient(app).post(
         f"/agent/runs/{thread['thread_id']}/resume",
-        json={"approved": True, "confirmation": confirmation},
+        json={"approved": True, "confirmation": public_confirmation},
     )
 
     assert result.status_code == 200
     body = result.json()
     assert body["status"] == "task_created"
-    assert body["task"]["workflow_type"] == "t1_deepprep"
+    assert body["task"]["workflow_type"] == "t1_deepprep_anat_report"
+    assert body["task"]["runtime_workflow_type"] == "t1_deepprep"
     assert body["task"]["status"] == "queued"
     assert body["agent_run_id"]
 
@@ -1788,10 +2626,137 @@ def test_agent_resume_approved_confirmation_creates_real_task(tmp_path, monkeypa
     assert row["status"] == "task_created"
     assert row["project_id"] == 1
     assert row["series_id"] == 11
-    assert row["workflow_type"] == "t1_deepprep"
+    assert row["workflow_type"] == "t1_deepprep_anat_report"
     assert row["task_id"] == body["task"]["id"]
     assert row["approved"] == 1
     assert event_types == ["agent_run_created", "agent_run_started", "agent_run_completed"]
+
+
+def test_agent_resume_preserves_canonical_workflow_type_and_records_runtime_alias(tmp_path, monkeypatch):
+    from app.core import config
+    from app.db import database
+    from app.agent.thread_store import AgentThreadStore
+    from app import main
+    from app.main import app
+
+    monkeypatch.setattr(config, "DATA_ROOT", tmp_path)
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(config, "PROJECTS_ROOT", tmp_path / "projects")
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(main, "PROJECTS_ROOT", tmp_path / "projects")
+    monkeypatch.setattr(main, "run_pipeline_task", lambda task_id, qsiprep_task_id=None: None)
+    store = AgentThreadStore(tmp_path / "agent_threads")
+    original_runner = main.AgentRunner
+    monkeypatch.setattr(main, "AgentRunner", lambda: original_runner(thread_store=store))
+
+    database.init_db()
+    with database.connect() as conn:
+        conn.execute("INSERT INTO projects(id, name, description, created_at) VALUES(?,?,?,?)", (1, "P", "", database.now_iso()))
+        conn.execute(
+            "INSERT INTO files(id, project_id, original_name, storage_path, file_type, size, sha256, created_at) VALUES(?,?,?,?,?,?,?,?)",
+            (1, 1, "t1.nii.gz", str(tmp_path / "t1.nii.gz"), "NIFTI", 1, "x", database.now_iso()),
+        )
+        conn.execute(
+            "INSERT INTO imaging_series(id, project_id, file_id, sequence_label, supported_for_processing, unsupported_reason, modality, format, confidence, metadata_json, status, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            (11, 1, 1, "T1_MPRAGE", 1, "", "T1", "NIFTI", 0.9, json.dumps({}), "detected", database.now_iso()),
+        )
+
+    confirmation = {
+        "type": "workflow_execution",
+        "project_id": 1,
+        "series_id": 11,
+        "workflow_type": "t1_deepprep_anat_report",
+        "runtime_workflow_type": "t1_deepprep",
+        "action_lane": "fixed_workflow",
+        "preflight": {
+            "ok": True,
+            "workflow_type": "t1_deepprep_anat_report",
+            "runtime_workflow_type": "t1_deepprep",
+        },
+        "data_candidate_selection": None,
+    }
+    thread = store.create_pending_confirmation(
+        confirmation=confirmation,
+        decision={"intent": "run_workflow"},
+        selected_skill="image-agent-workflow-runner",
+        retrieved_context={},
+    )
+    public_confirmation = {
+        **confirmation,
+        "runtime_workflow_type": "t1_deepprep",
+        "fingerprint": thread["confirmation_fingerprint"],
+    }
+
+    result = TestClient(app).post(
+        f"/agent/runs/{thread['thread_id']}/resume",
+        json={"approved": True, "confirmation": public_confirmation},
+    )
+
+    assert result.status_code == 200
+    body = result.json()
+    assert body["status"] == "task_created"
+    assert body["workflow_type"] == "t1_deepprep_anat_report"
+    assert body["runtime_workflow_type"] == "t1_deepprep"
+    assert body["task"]["workflow_type"] == "t1_deepprep_anat_report"
+    assert body["task"]["runtime_workflow_type"] == "t1_deepprep"
+
+    with database.connect() as conn:
+        task_row = conn.execute("SELECT workflow_type, runtime_workflow_type FROM tasks WHERE id=?", (body["task"]["id"],)).fetchone()
+        run_row = conn.execute("SELECT workflow_type FROM agent_runs WHERE agent_run_id=?", (body["agent_run_id"],)).fetchone()
+
+    assert task_row["workflow_type"] == "t1_deepprep_anat_report"
+    assert task_row["runtime_workflow_type"] == "t1_deepprep"
+    assert run_row["workflow_type"] == "t1_deepprep_anat_report"
+
+
+def test_task_observe_repair_exposes_runtime_workflow_type(tmp_path, monkeypatch):
+    from app.core import config
+    from app.db import database
+    from app import main
+    from app.main import app
+
+    monkeypatch.setattr(config, "DATA_ROOT", tmp_path)
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(config, "PROJECTS_ROOT", tmp_path / "projects")
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(main, "PROJECTS_ROOT", tmp_path / "projects")
+
+    database.init_db()
+    with database.connect() as conn:
+        conn.execute("INSERT INTO projects(id, name, description, created_at) VALUES(?,?,?,?)", (1, "P", "", database.now_iso()))
+        conn.execute(
+            "INSERT INTO files(id, project_id, original_name, storage_path, file_type, size, sha256, created_at) VALUES(?,?,?,?,?,?,?,?)",
+            (1, 1, "t1.nii.gz", str(tmp_path / "t1.nii.gz"), "NIFTI", 1, "x", database.now_iso()),
+        )
+        conn.execute(
+            "INSERT INTO imaging_series(id, project_id, file_id, sequence_label, supported_for_processing, unsupported_reason, modality, format, confidence, metadata_json, status, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            (11, 1, 1, "T1_MPRAGE", 1, "", "T1", "NIFTI", 0.9, json.dumps({}), "detected", database.now_iso()),
+        )
+        conn.execute(
+            "INSERT INTO tasks(id, project_id, series_id, workflow_type, runtime_workflow_type, status, progress, log_path, created_at) VALUES(?,?,?,?,?,?,?,?,?)",
+            (21, 1, 11, "t1_deepprep_anat_report", "t1_deepprep", "failed", 100, str(tmp_path / "task.log"), database.now_iso()),
+        )
+
+    task_result = TestClient(app).get("/tasks/21")
+    observe_repair_result = TestClient(app).get("/tasks/21/observe-repair")
+    task_list_result = TestClient(app).get("/projects/1/tasks")
+    observe_result = TestClient(app).post("/agent/runs", json={"project_id": 1, "message": "why did task 21 fail?"})
+
+    assert task_result.status_code == 200
+    assert task_result.json()["workflow_type"] == "t1_deepprep_anat_report"
+    assert task_result.json()["runtime_workflow_type"] == "t1_deepprep"
+    assert task_result.json()["workflow_metadata"]["workflow_type"] == "t1_deepprep_anat_report"
+    assert task_result.json()["workflow_metadata"]["runtime_workflow_type"] == "t1_deepprep"
+    assert task_result.json()["workflow_metadata"]["display_name"] == "T1 DeepPrep anatomical processing, QC, and report"
+    assert task_result.json()["workflow_metadata"]["is_report_only"] is False
+    assert task_list_result.status_code == 200
+    assert task_list_result.json()[0]["workflow_metadata"]["workflow_type"] == "t1_deepprep_anat_report"
+    assert observe_repair_result.status_code == 200
+    assert observe_repair_result.json()["task"]["workflow_type"] == "t1_deepprep_anat_report"
+    assert observe_repair_result.json()["task"]["runtime_workflow_type"] == "t1_deepprep"
+    assert observe_repair_result.json()["task"]["workflow_metadata"]["workflow_type"] == "t1_deepprep_anat_report"
+    assert observe_repair_result.json()["task"]["workflow_metadata"]["is_report_only"] is False
+    assert observe_result.status_code == 200
 
 
 def test_langgraph_agent_resume_approved_confirmation_creates_real_task_via_task_service(tmp_path, monkeypatch):
@@ -1830,6 +2795,11 @@ def test_langgraph_agent_resume_approved_confirmation_creates_real_task_via_task
         "series_id": 11,
         "workflow_type": "t1_deepprep_anat_report",
         "action_lane": "fixed_workflow",
+        "preflight": {
+            "ok": True,
+            "workflow_type": "t1_deepprep_anat_report",
+            "runtime_workflow_type": "t1_deepprep",
+        },
     }
     thread = store.create_pending_confirmation(
         confirmation=confirmation,
@@ -1847,7 +2817,8 @@ def test_langgraph_agent_resume_approved_confirmation_creates_real_task_via_task
     body = result.json()
     assert body["status"] == "task_created"
     assert body["production_task_created"] is True
-    assert body["task"]["workflow_type"] == "t1_deepprep"
+    assert body["task"]["workflow_type"] == "t1_deepprep_anat_report"
+    assert body["task"]["runtime_workflow_type"] == "t1_deepprep"
     assert body["safe_metadata"]["agent_engine"] == "langgraph"
     assert body["safe_metadata"]["lane"] == "fixed_workflow"
     assert body["safe_metadata"]["confirmation_gate"] == "fingerprint_verified"
@@ -1860,7 +2831,7 @@ def test_langgraph_agent_resume_approved_confirmation_creates_real_task_via_task
         ).fetchone()
 
     assert task_count == 1
-    assert row["workflow_type"] == "t1_deepprep"
+    assert row["workflow_type"] == "t1_deepprep_anat_report"
     assert row["task_id"] == body["task"]["id"]
     assert row["approved"] == 1
     safe_metadata = json.loads(row["safe_metadata_json"])
@@ -1940,16 +2911,30 @@ def test_langgraph_agent_resume_blocks_incubation_without_creating_task(tmp_path
     assert safe_metadata["confirmation_gate"] == "incubation_blocked"
 
 
-def test_agent_resume_rejects_confirmation_mismatch(tmp_path, monkeypatch):
+def test_agent_resume_blocks_client_confirmation_mismatch(tmp_path, monkeypatch):
     from app.core import config
     from app.db import database
     from app.agent.thread_store import AgentThreadStore
     from app import main
     from app.main import app
 
+    monkeypatch.setattr(config, "DATA_ROOT", tmp_path)
     monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(config, "PROJECTS_ROOT", tmp_path / "projects")
     monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(main, "PROJECTS_ROOT", tmp_path / "projects")
+    monkeypatch.setattr(main, "run_pipeline_task", lambda task_id, qsiprep_task_id=None: None)
     database.init_db()
+    with database.connect() as conn:
+        conn.execute("INSERT INTO projects(id, name, description, created_at) VALUES(?,?,?,?)", (1, "P", "", database.now_iso()))
+        conn.execute(
+            "INSERT INTO files(id, project_id, original_name, storage_path, file_type, size, sha256, created_at) VALUES(?,?,?,?,?,?,?,?)",
+            (1, 1, "t1.nii.gz", str(tmp_path / "t1.nii.gz"), "NIFTI", 1, "x", database.now_iso()),
+        )
+        conn.execute(
+            "INSERT INTO imaging_series(id, project_id, file_id, sequence_label, supported_for_processing, unsupported_reason, modality, format, confidence, metadata_json, status, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            (11, 1, 1, "T1_MPRAGE", 1, "", "T1", "NIFTI", 0.9, json.dumps({}), "detected", database.now_iso()),
+        )
 
     store = AgentThreadStore(tmp_path / "agent_threads")
     original_runner = main.AgentRunner
@@ -1960,6 +2945,11 @@ def test_agent_resume_rejects_confirmation_mismatch(tmp_path, monkeypatch):
         "series_id": 11,
         "workflow_type": "t1_deepprep_anat_report",
         "action_lane": "fixed_workflow",
+        "preflight": {
+            "ok": True,
+            "workflow_type": "t1_deepprep_anat_report",
+            "runtime_workflow_type": "t1_deepprep",
+        },
     }
     thread = store.create_pending_confirmation(
         confirmation=confirmation,
@@ -1974,8 +2964,13 @@ def test_agent_resume_rejects_confirmation_mismatch(tmp_path, monkeypatch):
     )
 
     assert result.status_code == 200
-    assert result.json()["status"] == "blocked"
-    assert result.json()["production_task_created"] is False
+    body = result.json()
+    assert body["status"] == "blocked"
+    assert body["production_task_created"] is False
+    assert body["message"] == "Confirmation payload does not match the server-side pending confirmation."
+    with database.connect() as conn:
+        task_count = conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
+    assert task_count == 0
 
 
 def test_series_run_rejects_incubation_workflow_without_creating_task(tmp_path, monkeypatch):

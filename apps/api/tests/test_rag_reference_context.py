@@ -46,7 +46,7 @@ def test_retrieve_reference_context_uses_persistent_index_when_available(tmp_pat
         limit=2,
     )
 
-    assert result["mode"] in {"llama_index", "local_persistent_index"}
+    assert result["mode"] in {"elasticsearch_hybrid_fallback", "llama_index", "local_persistent_index"}
     assert result["results"]
     assert result["results"][0]["metadata"]["workflow_type"] == "bold_fmriprep_xcpd_report"
 

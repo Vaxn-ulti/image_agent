@@ -15,12 +15,12 @@ Safety rules enforced here:
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 from pathlib import Path
 
 from app.core.config import PROJECTS_ROOT
 from app.db.database import connect, now_iso
+from app.workflows.docker_command import docker_command_prefix, docker_stdin_for_prefix
 
 APP_LABEL_FILTER = "image_agent.app=image_agent"
 
@@ -28,17 +28,15 @@ APP_LABEL_FILTER = "image_agent.app=image_agent"
 
 
 def _sudo_docker_prefix():
-    pw = os.environ.get("IMAGE_AGENT_SUDO_PASSWORD")
-    if not pw:
-        raise RuntimeError("IMAGE_AGENT_SUDO_PASSWORD is required for docker commands")
-    return ["sudo", "-S", "docker"], pw
+    prefix = docker_command_prefix(default=["sudo", "-S", "docker"])
+    return prefix, docker_stdin_for_prefix(prefix, purpose="docker commands")
 
 
 def _docker(args, timeout=30):
-    prefix, pw = _sudo_docker_prefix()
+    prefix, input_text = _sudo_docker_prefix()
     proc = subprocess.run(
         prefix + args,
-        input=pw + "\n",
+        input=input_text,
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

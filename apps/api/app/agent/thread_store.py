@@ -13,14 +13,25 @@ from app.db.database import now_iso
 
 
 DEFAULT_CONFIRMATION_TTL_SECONDS = 60 * 60
+CONFIRMATION_ENVELOPE_KEYS = {"fingerprint", "confirmation_fingerprint"}
+
+
+def _canonical_confirmation_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            str(key): _canonical_confirmation_value(item)
+            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+            if item is not None and str(key) not in CONFIRMATION_ENVELOPE_KEYS
+        }
+    if isinstance(value, list):
+        return [_canonical_confirmation_value(item) for item in value]
+    if isinstance(value, tuple):
+        return [_canonical_confirmation_value(item) for item in value]
+    return value
 
 
 def confirmation_fingerprint(confirmation: dict[str, Any]) -> str:
-    relevant = {
-        key: confirmation.get(key)
-        for key in ("type", "action_lane", "project_id", "series_id", "workflow_type", "qsiprep_task_id")
-    }
-    raw = json.dumps(relevant, sort_keys=True, ensure_ascii=False)
+    raw = json.dumps(_canonical_confirmation_value(confirmation), sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 

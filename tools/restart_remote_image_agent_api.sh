@@ -2,9 +2,32 @@
 set -euo pipefail
 
 ROOT="${IMAGE_AGENT_ROOT:-/home/yyf/project/image_agent}"
-RELEASE_ROOT="${IMAGE_AGENT_RELEASE_ROOT:-$ROOT}"
+
+infer_release_root_from_cwd() {
+  local cwd
+  cwd="$(pwd -P)"
+  case "$cwd" in
+    */apps/api)
+      cd "$cwd/../.."
+      pwd -P
+      ;;
+    */apps/api/)
+      cd "$cwd/../.."
+      pwd -P
+      ;;
+    *)
+      if [[ -d "$cwd/apps/api" ]]; then
+        printf '%s\n' "$cwd"
+      else
+        printf '%s\n' "$ROOT"
+      fi
+      ;;
+  esac
+}
+
+RELEASE_ROOT="${IMAGE_AGENT_RELEASE_ROOT:-$(infer_release_root_from_cwd)}"
 API_DIR="${IMAGE_AGENT_API_DIR:-$RELEASE_ROOT/apps/api}"
-ENV_FILE="${IMAGE_AGENT_ENV_FILE:-$ROOT/.env}"
+ENV_FILE="${1:-${IMAGE_AGENT_ENV_FILE:-$ROOT/.env}}"
 SHARED_VENV_BIN="${IMAGE_AGENT_SHARED_VENV_BIN:-$ROOT/apps/api/.venv/bin}"
 VENV_BIN="${IMAGE_AGENT_VENV_BIN:-$SHARED_VENV_BIN}"
 PYTHON_BIN="${IMAGE_AGENT_PYTHON_BIN:-$VENV_BIN/python}"
@@ -32,6 +55,9 @@ load_env() {
     . ../../.env
   fi
   set +a
+  export IMAGE_AGENT_ROOT="$ROOT"
+  export IMAGE_AGENT_RELEASE_ROOT="$RELEASE_ROOT"
+  export IMAGE_AGENT_ENV_FILE="$ENV_FILE"
 }
 
 check_no_active_tasks() {

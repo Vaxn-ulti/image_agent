@@ -22,6 +22,7 @@ from app.core.config import (
 from app.db.database import connect, now_iso
 from app.workflows import dwi_fast_dti
 from app.workflows.bold_results import write_bold_result_summary_from_outputs, write_bold_scientific_report_from_outputs
+from app.workflows.docker_command import docker_command_prefix, docker_stdin_for_prefix, docker_uses_password
 from app.workflows.remote_scripts import (
     bold_remote_script_config,
     discover_bold_fmriprep_xcpd_outputs,
@@ -52,14 +53,15 @@ DWI_QSIRECON_MEM_MB = int(os.environ.get("IMAGE_AGENT_DWI_QSIRECON_MEM_MB", "240
 IMAGES = {
     "t1_deepprep": "pbfslab/deepprep:25.1.0",
     "bold_deepprep": "pbfslab/deepprep:25.1.0",
-    "dwi_qsiprep": "pennlinc/qsiprep:1.0.2",
+    "dwi_qsiprep": "pennlinc/qsiprep:26.0.0",
     "dwi_qsirecon": "pennlinc/qsirecon:26.0.0",
-    "dwi_qsi_full": "pennlinc/qsiprep:1.0.2",
+    "dwi_qsi_full": "pennlinc/qsiprep:26.0.0",
     "dwi_fast_gpu_dti": dwi_fast_dti.IMAGE,
     "bold_fmriprep": "nipreps/fmriprep:25.2.5",
     "bold_fmriprep_xcpd_report": "nipreps/fmriprep:25.2.5",
     "bold_fmriprep_xcpd_report_xcpd": "pennlinc/xcp_d:26.0.2",
 }
+AUTO_PULL_MISSING_WORKFLOW_IMAGES_ENV = "IMAGE_AGENT_AUTO_PULL_MISSING_WORKFLOW_IMAGES"
 
 QSIRECON_LEGACY_COMMAND = {
     "profile": "dki",
@@ -153,6 +155,51 @@ def _link_existing_sidecars(src, dst, suffixes=(".json", ".bval", ".bvec")):
             _link_or_copy(sidecar, target)
             linked[suffix] = target
     return linked
+
+
+def _read_json_object(path: Path) -> dict:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Invalid JSON sidecar: {path.name}") from exc
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"JSON sidecar must contain an object: {path.name}")
+    return payload
+
+
+def _infer_bold_repetition_time(src_path: Path) -> float:
+    try:
+        import nibabel as nib
+    except Exception as exc:  # pragma: no cover - dependency is available in supported installs
+        raise RuntimeError("BOLD workflow requires nibabel to infer RepetitionTime") from exc
+    try:
+        zooms = nib.load(str(src_path)).header.get_zooms()
+    except Exception as exc:
+        raise RuntimeError(f"Unable to read BOLD NIfTI header for RepetitionTime: {src_path.name}") from exc
+    if len(zooms) < 4:
+        raise RuntimeError("BOLD workflow requires 4D NIfTI with RepetitionTime metadata")
+    try:
+        tr = float(zooms[3])
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("BOLD workflow requires numeric RepetitionTime metadata") from exc
+    if tr <= 0:
+        raise RuntimeError("BOLD workflow requires positive RepetitionTime metadata")
+    return tr
+
+
+def _ensure_bold_repetition_time_sidecar(src_path: Path, target: Path) -> Path:
+    sidecar = target.with_name(_sidecar_base(target) + ".json")
+    metadata = _read_json_object(sidecar) if sidecar.exists() else {}
+    existing = metadata.get("RepetitionTime")
+    if existing is not None:
+        try:
+            if float(existing) > 0:
+                return sidecar
+        except (TypeError, ValueError):
+            pass
+    metadata["RepetitionTime"] = _infer_bold_repetition_time(src_path)
+    sidecar.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return sidecar
 
 
 def _stage_nifti_for_container(src, dst_base):
@@ -360,6 +407,7 @@ def _stage_bold(series, dirs):
     src_path = Path(main_file["storage_path"])
     target = _stage_nifti_for_container(src_path, dirs["bids"] / f"sub-{SUBJECT}" / "func" / f"sub-{SUBJECT}_task-rest_bold")
     _link_existing_sidecars(src_path, target, suffixes=(".json",))
+    _ensure_bold_repetition_time_sidecar(src_path, target)
     return target
 
 
@@ -514,19 +562,69 @@ def _dicom_dir(series):
 
 
 def _sudo_docker_prefix():
-    pw = os.environ.get("IMAGE_AGENT_SUDO_PASSWORD")
-    if not pw:
-        raise RuntimeError("IMAGE_AGENT_SUDO_PASSWORD is required for real Docker workflows")
-    return ["sudo", "-S", "docker"], pw
+    prefix = docker_command_prefix(default=["sudo", "-S", "docker"])
+    return prefix, docker_stdin_for_prefix(prefix, purpose="real Docker workflows")
 
 
 def _docker_image_exists(image):
-    cmd = ["sudo", "-S", "docker", "image", "inspect", image]
-    password = os.environ.get("IMAGE_AGENT_SUDO_PASSWORD")
-    if not password:
-        return False, "IMAGE_AGENT_SUDO_PASSWORD is required for sudo docker image inspect"
-    proc = subprocess.run(cmd, input=password + "\n", text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=30)
+    prefix = docker_command_prefix(default=["sudo", "-S", "docker"])
+    try:
+        input_text = docker_stdin_for_prefix(prefix, purpose="docker image inspect")
+    except RuntimeError as exc:
+        return False, str(exc)
+    proc = subprocess.run(
+        [*prefix, "image", "inspect", image],
+        input=input_text,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=30,
+    )
     return proc.returncode == 0, proc.stdout[-2000:]
+
+
+def _truthy_env(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _docker_pull_image(image):
+    prefix = docker_command_prefix(default=["sudo", "-S", "docker"])
+    try:
+        input_text = docker_stdin_for_prefix(prefix, purpose="docker pull")
+    except RuntimeError as exc:
+        return False, str(exc)
+    proc = subprocess.run(
+        [*prefix, "pull", image],
+        input=input_text,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=None,
+    )
+    return proc.returncode == 0, proc.stdout[-2000:]
+
+
+def _ensure_docker_image(image, *, auto_pull_missing: bool):
+    ok, detail = _docker_image_exists(image)
+    result = {
+        "available": ok,
+        "detail_tail": detail[-500:],
+        "pull_attempted": False,
+        "pull_status": "not_required" if ok else "disabled",
+    }
+    if ok or not auto_pull_missing:
+        return result
+    pulled, pull_detail = _docker_pull_image(image)
+    result["pull_attempted"] = True
+    result["pull_status"] = "pulled" if pulled else "failed"
+    result["pull_detail_tail"] = pull_detail[-500:]
+    if pulled:
+        ok_after_pull, inspect_after_pull = _docker_image_exists(image)
+        result["available"] = ok_after_pull
+        result["detail_tail"] = inspect_after_pull[-500:]
+        if not ok_after_pull:
+            result["pull_status"] = "pulled_but_inspect_failed"
+    return result
 
 
 
@@ -558,10 +656,9 @@ if matches:
 print("No executable matching eddy_cuda* found in PATH or common QSIPrep/FSL locations")
 sys.exit(1)
 """
+    prefix = docker_command_prefix(default=["sudo", "-S", "docker"])
     cmd = [
-        "sudo",
-        "-S",
-        "docker",
+        *prefix,
         "run",
         "--rm",
         "--entrypoint",
@@ -570,17 +667,17 @@ sys.exit(1)
         "-c",
         script,
     ]
-    password = os.environ.get("IMAGE_AGENT_SUDO_PASSWORD")
-    if not password:
-        return False, "IMAGE_AGENT_SUDO_PASSWORD is required for sudo docker run"
-    proc = subprocess.run(cmd, input=password + "\n", text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=90)
+    try:
+        input_text = docker_stdin_for_prefix(prefix, purpose="docker run")
+    except RuntimeError as exc:
+        return False, str(exc)
+    proc = subprocess.run(cmd, input=input_text, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=90)
     return proc.returncode == 0, proc.stdout[-2000:]
 
 def _docker_gpu_visible(image):
+    prefix = docker_command_prefix(default=["sudo", "-S", "docker"])
     cmd = [
-        "sudo",
-        "-S",
-        "docker",
+        *prefix,
         "run",
         "--rm",
         "--gpus",
@@ -591,26 +688,47 @@ def _docker_gpu_visible(image):
         "-c",
         "import os,sys; sys.exit(0 if any(name.startswith('nvidia') for name in os.listdir('/dev')) else 1)",
     ]
-    password = os.environ.get("IMAGE_AGENT_SUDO_PASSWORD")
-    if not password:
-        return False, "IMAGE_AGENT_SUDO_PASSWORD is required for sudo docker run"
-    proc = subprocess.run(cmd, input=password + "\n", text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=90)
+    try:
+        input_text = docker_stdin_for_prefix(prefix, purpose="docker run")
+    except RuntimeError as exc:
+        return False, str(exc)
+    proc = subprocess.run(cmd, input=input_text, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=90)
     return proc.returncode == 0, proc.stdout[-2000:]
 
 
-def inspect_runtime() -> dict:
+def inspect_runtime(auto_pull_missing_images: bool | None = None) -> dict:
+    auto_pull = _truthy_env(AUTO_PULL_MISSING_WORKFLOW_IMAGES_ENV) if auto_pull_missing_images is None else bool(
+        auto_pull_missing_images
+    )
     checks = {}
     for workflow, image in IMAGES.items():
         if workflow == "bold_fmriprep":
             continue
-        ok, detail = _docker_image_exists(image)
+        image_status = _ensure_docker_image(image, auto_pull_missing=auto_pull)
         checks[workflow] = {
             "image": image,
-            "available": ok,
-            "detail_tail": detail[-500:],
+            "available": image_status["available"],
+            "detail_tail": image_status["detail_tail"],
+            "pull_attempted": image_status["pull_attempted"],
+            "pull_status": image_status["pull_status"],
+            **({"pull_detail_tail": image_status["pull_detail_tail"]} if image_status.get("pull_detail_tail") else {}),
         }
+    pull_attempted_count = sum(1 for workflow in checks.values() if workflow.get("pull_attempted") is True)
+    pull_succeeded_count = sum(1 for workflow in checks.values() if workflow.get("pull_status") == "pulled")
+    pull_failed_count = sum(
+        1
+        for workflow in checks.values()
+        if workflow.get("pull_status") in {"failed", "pulled_but_inspect_failed"}
+    )
     return {
-        "docker_requires_sudo": True,
+        "docker_requires_sudo": docker_uses_password(docker_command_prefix(default=["sudo", "-S", "docker"])),
+        "runtime_preparation": {
+            "auto_pull_missing_images": auto_pull,
+            "setting": AUTO_PULL_MISSING_WORKFLOW_IMAGES_ENV,
+            "pull_attempted_count": pull_attempted_count,
+            "pull_succeeded_count": pull_succeeded_count,
+            "pull_failed_count": pull_failed_count,
+        },
         "fs_license_path": str(FS_LICENSE),
         "fs_license_exists": FS_LICENSE.exists(),
         "qsirecon_profile": QSIRECON_PROFILE,
@@ -898,6 +1016,7 @@ def _write_dwi_fast_validate(task_id, workflow_type, dirs, log_path):
 
 def _write_bold_fmriprep_xcpd_summary(task_id, workflow_type, dirs, log_path):
     from app.workflows.result_contract import build_result_summary
+    from app.workflows.scientific_reports import build_scientific_report_summary
 
     output_dir = dirs["output"]
     outputs = discover_bold_fmriprep_xcpd_outputs(output_dir)
@@ -929,6 +1048,26 @@ def _write_bold_fmriprep_xcpd_summary(task_id, workflow_type, dirs, log_path):
         existing = [{"registration_skipped": True}]
     if not existing:
         _insert_output(task_id, "json", summary_path, {"kind": "result_summary", "modality": "BOLD"})
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    report_summary_path = build_scientific_report_summary(
+        output_dir,
+        task_id=task_id,
+        workflow_type=workflow_type,
+        summary=summary,
+    )
+    _append(log_path, f"Wrote BOLD fMRIPrep + XCP-D scientific report summary: {report_summary_path}")
+    report_metadata = {"kind": "scientific_report_summary", "modality": "BOLD"}
+    try:
+        existing_report = _rows(
+            "SELECT id FROM outputs WHERE task_id=? AND path=? AND metadata_json=? LIMIT 1",
+            (task_id, str(report_summary_path), json.dumps(report_metadata)),
+        )
+    except sqlite3.OperationalError as exc:
+        if "no such table: outputs" not in str(exc):
+            raise
+        existing_report = [{"registration_skipped": True}]
+    if not existing_report:
+        _insert_output(task_id, "json", report_summary_path, report_metadata)
     return summary_path
 
 
@@ -975,13 +1114,15 @@ def _register_outputs(task_id, output_dir):
 
 
 def _run_command(task, cmd, log_path):
-    docker_prefix, password = _sudo_docker_prefix()
+    docker_prefix, input_text = _sudo_docker_prefix()
     full = docker_prefix + cmd[1:]
     _append(log_path, "RUN " + " ".join(str(x) for x in full))
-    proc = subprocess.Popen(full, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-    assert proc.stdin is not None
-    proc.stdin.write(password + "\n")
-    proc.stdin.close()
+    stdin = subprocess.PIPE if input_text is not None else subprocess.DEVNULL
+    proc = subprocess.Popen(full, stdin=stdin, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    if input_text is not None:
+        assert proc.stdin is not None
+        proc.stdin.write(input_text)
+        proc.stdin.close()
     assert proc.stdout is not None
     for line in proc.stdout:
         _append(log_path, line.rstrip())
@@ -996,7 +1137,7 @@ def run_pipeline_task(task_id: int, qsiprep_task_id: int | None = None) -> None:
         return
     task = dict(task_row)
     log_path = task["log_path"]
-    workflow_type = task["workflow_type"]
+    workflow_type = task.get("runtime_workflow_type") or task["workflow_type"]
     validate = workflow_type.endswith("_validate")
     workflow = workflow_type[:-9] if validate else workflow_type
     try:

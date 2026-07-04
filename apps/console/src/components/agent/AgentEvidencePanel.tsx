@@ -1,4 +1,5 @@
 import type { RagResponse } from '../../lib/types';
+import { formatAgentText } from '../../lib/agentText';
 import { safeEvidenceJson } from '../../lib/redaction';
 import { Panel, PanelBody, PanelHeader, PanelTitle } from '../ui/Panel';
 
@@ -16,7 +17,7 @@ export function AgentEvidencePanel({ response }: { response: RagResponse }) {
       <PanelBody>
         <div className="rounded-lg border border-border bg-background p-4">
           <div className="text-xs font-semibold uppercase tracking-normal text-muted">Answer</div>
-          <p className="mt-2 text-sm leading-6 text-foreground">{response.answer}</p>
+          <p className="mt-2 whitespace-pre-line text-sm leading-6 text-foreground">{formatAgentText(response.answer)}</p>
         </div>
         <div className="mt-3 rounded-lg border border-accent/30 bg-accentSoft p-3">
           <div className="text-xs font-semibold uppercase tracking-normal text-accent">Recommended next step</div>

@@ -30,8 +30,24 @@ export function SettingsPage() {
     modelTarget?.actual_model,
     modelTarget?.actual_wire_api,
   ].filter(Boolean).join(' / ') || 'Not reported';
+  const directModelTransport = modelTarget?.direct_transport === true
+    || (modelTarget?.actual_trust_env_proxy === false && modelTarget?.actual_model_gateway_access === 'direct');
+  const productionDeployment = fastLaunchReadiness?.checks?.production_deployment;
+  const productionDeploymentPassed = productionDeployment?.status === 'passed';
+  const productionDeploymentLabel = productionDeploymentPassed
+    ? 'Production deployment ready'
+    : productionDeployment?.required === false
+      ? 'Production deployment not enabled'
+      : 'Production deployment blocked';
   const agentBoundaryPassed = fastLaunchReadiness?.checks?.agent_task_boundary?.status === 'passed';
   const remoteAcceptance = fastLaunchReadiness?.checks?.strict_remote_acceptance;
+  const ragReadiness = fastLaunchReadiness?.checks?.rag_elasticsearch_hybrid;
+  const ragComponentLabel = [
+    ragReadiness?.lexical_retriever,
+    ragReadiness?.vector_retriever,
+    ragReadiness?.dense_vector_field,
+  ].filter(Boolean).join(' / ') || 'Not reported';
+  const ragReady = ragReadiness?.status === 'passed';
   const apiDisconnected = deploymentError || runtimeError;
 
   function handleSave() {
@@ -166,6 +182,15 @@ export function SettingsPage() {
                     <div className="rounded-lg border border-white/80 bg-white/70 p-2">
                       <div className="font-bold text-gray-800">Model target</div>
                       <div className="mt-1 font-mono text-[11px] text-gray-600">{modelTargetLabel}</div>
+                      <div className={`mt-1 text-[11px] font-semibold ${directModelTransport ? 'text-green-700' : 'text-amber-700'}`}>
+                        {directModelTransport ? 'Direct transport protected' : 'Model transport needs review'}
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-white/80 bg-white/70 p-2">
+                      <div className="font-bold text-gray-800">Production deployment</div>
+                      <div className={`mt-1 text-[11px] font-semibold ${productionDeploymentPassed ? 'text-green-700' : 'text-amber-700'}`}>
+                        {productionDeploymentLabel}
+                      </div>
                     </div>
                     <div className="rounded-lg border border-white/80 bg-white/70 p-2">
                       <div className="font-bold text-gray-800">Agent boundary</div>
@@ -184,6 +209,16 @@ export function SettingsPage() {
                       </div>
                     </div>
                     <div className="rounded-lg border border-white/80 bg-white/70 p-2">
+                      <div className="font-bold text-gray-800">ES hybrid RAG</div>
+                      <div className={`mt-1 text-[11px] font-semibold ${ragReady ? 'text-green-700' : 'text-amber-700'}`}>
+                        {ragReady ? 'ES hybrid RAG ready' : 'ES hybrid RAG blocked'}
+                      </div>
+                      <div className="mt-1 break-words font-mono text-[11px] text-gray-600">{ragComponentLabel}</div>
+                      <div className="mt-1 text-[11px] text-gray-500">
+                        RRF source {ragReadiness?.official_rrf_source_present ? 'present' : 'not verified'}
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-white/80 bg-white/70 p-2">
                       <div className="font-bold text-gray-800">Result contract</div>
                       <div className="mt-1 text-[11px] font-semibold text-gray-600">
                         Upload, workflow, outputs, summary, manifest
@@ -194,6 +229,9 @@ export function SettingsPage() {
                     <div className="space-y-1">
                       {(fastLaunchReadiness.blocking_reasons || []).map((reason) => (
                         <div key={reason} className="text-xs font-medium text-amber-700">{reason}</div>
+                      ))}
+                      {(ragReadiness?.blocking_codes || []).map((code) => (
+                        <div key={code} className="break-words font-mono text-[11px] text-amber-700">{code}</div>
                       ))}
                     </div>
                   ) : null}

@@ -2,11 +2,14 @@ import type { Task } from './types';
 
 export const queryKeys = {
   deployment: ['deployment'] as const,
+  agentRun: (agentRunId: string) => ['agent-run', agentRunId] as const,
+  agentRuns: (projectId: number) => ['agent-runs', projectId] as const,
   health: ['health'] as const,
   inventory: (projectId: number, uploadSessionId: number) => ['inventory', projectId, uploadSessionId] as const,
   logs: (taskId: number) => ['logs', taskId] as const,
   outputs: (taskId: number) => ['outputs', taskId] as const,
   project: (projectId: number) => ['project', projectId] as const,
+  projectFiles: (projectId: number) => ['project-files', projectId] as const,
   projects: ['projects'] as const,
   ragStatus: ['rag-status'] as const,
   resultContract: ['result-contract'] as const,

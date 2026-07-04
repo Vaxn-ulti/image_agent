@@ -14,6 +14,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { PageHeader } from '../components/ui/PageHeader';
 import { api } from '../lib/api';
 import { queryKeys } from '../lib/query';
+import { normalizeWorkflowCatalog } from '../lib/workflows';
 
 export function ReportsPage() {
   const projectId = Number(useParams().projectId);
@@ -22,6 +23,11 @@ export function ReportsPage() {
     queryFn: () => api.listProjectTasks(projectId),
     queryKey: queryKeys.tasks(projectId)
   });
+  const { data: workflowPayload } = useQuery({
+    queryFn: api.listWorkflows,
+    queryKey: queryKeys.workflows,
+  });
+  const workflowCatalog = normalizeWorkflowCatalog(workflowPayload);
   const projectDataErrorMessage = error instanceof Error ? error.message : 'Could not load reports';
 
   const reportTasks = tasks.filter((task) =>
@@ -88,7 +94,12 @@ export function ReportsPage() {
 
       {/* Reports Grid */}
       <div className="grid gap-6 md:grid-cols-2">
-        {reportTasks.map((task) => (
+        {reportTasks.map((task) => {
+          const workflowDisplayName =
+            task.workflow_metadata?.display_name ||
+            workflowCatalog.items[task.workflow_type]?.display_name ||
+            task.workflow_type;
+          return (
           <div
             key={task.id}
             className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col group transition-all hover:shadow-md hover:border-[#065F46]/20"
@@ -105,8 +116,9 @@ export function ReportsPage() {
                   <StatusBadge status={task.status} />
                 </div>
                 <h3 className="text-lg font-bold text-gray-900 group-hover:text-[#065F46] transition-colors truncate">
-                  {task.workflow_type.replace(/_/g, ' ')} Report
+                  {workflowDisplayName}
                 </h3>
+                <div className="mt-1 text-[10px] font-medium text-gray-400">Stable workflow ID: {task.workflow_type}</div>
                 <p className="text-xs text-gray-500 mt-1 leading-relaxed line-clamp-2">
                   Comprehensive review of cortical thickness, volume statistics, and automated segmentation
                   quality control images for series #{task.series_id || '0'}.
@@ -130,7 +142,8 @@ export function ReportsPage() {
               <ChevronRight className="w-4 h-4 text-gray-300 group-hover:translate-x-1 transition-transform" />
             </div>
           </div>
-        ))}
+          );
+        })}
 
         {!reportTasks.length && (
           <div className="col-span-full py-24 bg-white rounded-2xl border border-dashed border-gray-200 flex flex-col items-center justify-center text-center">

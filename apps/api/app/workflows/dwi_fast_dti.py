@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import math
 import os
@@ -12,13 +13,14 @@ from pathlib import Path
 from typing import Any
 
 from app.core.config import load_env_file
+from app.workflows.docker_command import docker_command_prefix, docker_stdin_for_prefix
 from app.workflows.native_qc import discover_native_qc_outputs
 from app.workflows.result_contract import build_result_summary
 from app.workflows.scientific_reports import build_scientific_report_summary
 
 load_env_file()
 
-MRTRIX_IMAGE = os.environ.get("IMAGE_AGENT_DWI_MRTRIX_IMAGE", "pennlinc/qsiprep:1.0.2")
+MRTRIX_IMAGE = os.environ.get("IMAGE_AGENT_DWI_MRTRIX_IMAGE", "pennlinc/qsiprep:26.0.0")
 IMAGE = MRTRIX_IMAGE
 FSL_DIR = Path(os.environ.get("IMAGE_AGENT_FSL_DIR", "/home/yyf/project/MCI_project/tools/fsl"))
 MAX_RUNTIME_SEC = int(os.environ.get("IMAGE_AGENT_DWI_FAST_DTI_MAX_RUNTIME_SEC", "2100"))
@@ -383,14 +385,14 @@ def check_runtime(
     if gpu.returncode != 0:
         return False, "\n".join(details + [f"GPU check failed rc={gpu.returncode}"])
 
-    password = os.environ.get("IMAGE_AGENT_SUDO_PASSWORD")
-    if not password:
-        return False, "\n".join(details + ["IMAGE_AGENT_SUDO_PASSWORD is required for MRtrix toolbox checks"])
     probe = "for c in mrinfo mrconvert dwi2mask dwi2tensor tensor2metric mrstats mrcalc; do command -v $c || exit 3; done"
+    prefix = docker_command_prefix(default=["sudo", "-S", "docker"])
+    try:
+        input_text = docker_stdin_for_prefix(prefix, purpose="MRtrix toolbox checks")
+    except RuntimeError as exc:
+        return False, "\n".join(details + [str(exc)])
     cmd = [
-        "sudo",
-        "-S",
-        "docker",
+        *prefix,
         "run",
         "--rm",
         "--entrypoint",
@@ -401,7 +403,7 @@ def check_runtime(
     ]
     proc = subprocess.run(
         cmd,
-        input=password + "\n",
+        input=input_text,
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -441,10 +443,8 @@ def _fsl_bin(fsl_dir: Path, name: str) -> Path:
 
 
 def _sudo_password() -> str:
-    password = os.environ.get("IMAGE_AGENT_SUDO_PASSWORD")
-    if not password:
-        raise RuntimeError("IMAGE_AGENT_SUDO_PASSWORD is required for the MRtrix toolbox container")
-    return password
+    prefix = docker_command_prefix(default=["sudo", "-S", "docker"])
+    return docker_stdin_for_prefix(prefix, purpose="the MRtrix toolbox container") or ""
 
 
 def _mrtrix_command(
@@ -454,10 +454,9 @@ def _mrtrix_command(
     work_dir: Path,
     command: str,
 ) -> list[str]:
+    prefix = docker_command_prefix(default=["sudo", "-S", "docker"])
     return [
-        "sudo",
-        "-S",
-        "docker",
+        *prefix,
         "run",
         "--rm",
         "--gpus",
@@ -790,7 +789,7 @@ def run_fast_dti(
     _write_eddy_files(subset["json"], subset["bval"], work_dir)
     shutil.copy2(subset["json"], qc_dir / "input_metadata.json")
 
-    password = _sudo_password()
+    docker_input = _sudo_password()
     try:
         _run_logged(
             _mrtrix_command(
@@ -806,7 +805,7 @@ def run_fast_dti(
             ),
             log_path,
             timeout=_remaining_timeout(start, max_runtime_sec),
-            input_text=password + "\n",
+            input_text=docker_input or None,
         )
     except Exception:
         _derive_fallback_mask(subset["dwi"], maps_dir / "mask.nii.gz", qc_dir)
@@ -820,7 +819,7 @@ def run_fast_dti(
             ),
             log_path,
             timeout=_remaining_timeout(start, max_runtime_sec),
-            input_text=password + "\n",
+            input_text=docker_input or None,
         )
 
     eddy_cuda = _fsl_bin(fsl_dir, "eddy_cuda")
@@ -867,7 +866,7 @@ def run_fast_dti(
         ),
         log_path,
         timeout=_remaining_timeout(start, max_runtime_sec),
-        input_text=password + "\n",
+        input_text=docker_input or None,
     )
     native_metric_sanitization = _sanitize_metric_maps(maps_dir)
 
@@ -1088,6 +1087,12 @@ def write_result_summary_from_outputs(out_dir: Path, task_id: int, workflow_type
     if max_runtime_sec is None and qc_metrics.get("runtime_limit_sec"):
         max_runtime_sec = int(float(qc_metrics["runtime_limit_sec"]))
 
+    _write_native_qc_artifacts(
+        qc_dir=qc_dir,
+        qc_metrics=qc_metrics,
+        provenance=provenance_payload,
+        atlas=atlas,
+    )
     native_qc = discover_native_qc_outputs(out_dir, workflow_type)
     return build_result_summary(
         out_dir=out_dir,
@@ -1111,6 +1116,79 @@ def write_result_summary_from_outputs(out_dir: Path, task_id: int, workflow_type
             "metric_sanitization": provenance_payload.get("metric_sanitization", {}),
         },
     )
+
+
+def _write_native_qc_artifacts(
+    *,
+    qc_dir: Path,
+    qc_metrics: dict[str, str],
+    provenance: dict[str, Any],
+    atlas: str,
+) -> None:
+    figures_dir = qc_dir / "figures"
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    status_rows = [
+        ("GPU eddy", qc_metrics.get("gpu_eddy", "completed")),
+        ("DTI tensor", qc_metrics.get("tensor", "completed")),
+        ("MNI registration", qc_metrics.get("mni_registration", "completed")),
+        ("Atlas statistics", qc_metrics.get("atlas_statistics", "completed")),
+    ]
+    runtime_sec = provenance.get("runtime_sec") or qc_metrics.get("runtime_sec") or ""
+    runtime_limit = provenance.get("max_runtime_sec") or qc_metrics.get("runtime_limit_sec") or ""
+    existing_figures = [
+        path
+        for path in figures_dir.iterdir()
+        if path.is_file() and path.suffix.lower() in {".png", ".svg", ".jpg", ".jpeg", ".webp"}
+    ]
+    svg_rows = "\n".join(
+        f'<text x="36" y="{120 + index * 34}" font-size="18">{html.escape(label)}: {html.escape(str(status))}</text>'
+        for index, (label, status) in enumerate(status_rows)
+    )
+    svg_path = figures_dir / "dwi_fast_gpu_dti_native_qc.svg"
+    if not existing_figures:
+        svg_path.write_text(
+            "\n".join(
+                [
+                    '<svg xmlns="http://www.w3.org/2000/svg" width="900" height="320" viewBox="0 0 900 320">',
+                    '<rect width="900" height="320" fill="#f8fafc"/>',
+                    '<rect x="24" y="24" width="852" height="272" fill="#ffffff" stroke="#334155" stroke-width="2"/>',
+                    '<text x="36" y="64" font-size="26" font-family="Arial" fill="#0f172a">DWI fast GPU DTI native QC</text>',
+                    f'<text x="36" y="96" font-size="16" font-family="Arial" fill="#334155">Atlas: {html.escape(atlas)}</text>',
+                    svg_rows,
+                    f'<text x="36" y="272" font-size="16" font-family="Arial" fill="#334155">Runtime: {html.escape(str(runtime_sec))} / {html.escape(str(runtime_limit))} seconds</text>',
+                    '</svg>',
+                ]
+            ),
+            encoding="utf-8",
+        )
+    html_rows = "\n".join(
+        f"<tr><th>{html.escape(label)}</th><td>{html.escape(str(status))}</td></tr>"
+        for label, status in status_rows
+    )
+    index_path = qc_dir / "index.html"
+    if not index_path.exists():
+        figure_name = existing_figures[0].name if existing_figures else svg_path.name
+        index_path.write_text(
+            "\n".join(
+                [
+                    "<!doctype html>",
+                    "<html>",
+                    "<head><meta charset=\"utf-8\"><title>DWI fast GPU DTI native QC</title></head>",
+                    "<body>",
+                    "<h1>DWI fast GPU DTI native QC</h1>",
+                    f"<p>Atlas: {html.escape(atlas)}</p>",
+                    "<table>",
+                    html_rows,
+                    f"<tr><th>Runtime seconds</th><td>{html.escape(str(runtime_sec))}</td></tr>",
+                    f"<tr><th>Runtime limit seconds</th><td>{html.escape(str(runtime_limit))}</td></tr>",
+                    "</table>",
+                    f"<figure><img src=\"figures/{html.escape(figure_name)}\" alt=\"DWI fast GPU DTI native QC\"></figure>",
+                    "</body>",
+                    "</html>",
+                ]
+            ),
+            encoding="utf-8",
+        )
 
 
 def write_scientific_report_summary_from_outputs(out_dir: Path, task_id: int, workflow_type: str) -> Path:

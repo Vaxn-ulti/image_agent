@@ -12,6 +12,7 @@ MODEL_ENV_KEYS = [
     "IMAGE_AGENT_MODEL_NAME",
     "IMAGE_AGENT_MODEL_REVIEW_NAME",
     "IMAGE_AGENT_MODEL_WIRE_API",
+    "IMAGE_AGENT_MODEL_TRUST_ENV_PROXY",
     "MODEL_PROVIDER",
     "OPENAI_API_KEY",
     "OPENAI_BASE_URL",
@@ -219,6 +220,36 @@ def test_provider_status_reports_responses_gateway_diagnostics(monkeypatch):
         "workflow_task_creation": "server_side_resume_confirmation_only",
     }
     assert "secret-value" not in json.dumps(status)
+
+
+def test_provider_status_reports_proxy_trust_boolean_without_proxy_values(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "secret-value")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://rawchat.cn/codex")
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.example:8080")
+
+    status = model_gateway.provider_status()
+
+    assert status["trust_env_proxy"] is False
+    assert "proxy.example" not in json.dumps(status)
+
+
+@pytest.mark.parametrize(
+    ("provider", "base_url"),
+    [
+        ("rawchat", "https://gateway.example/codex"),
+        ("OpenAI", "https://rawchat.cn/codex"),
+    ],
+)
+def test_rawchat_target_forces_direct_connection_even_when_proxy_trust_is_requested(monkeypatch, provider, base_url):
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_PROVIDER", provider)
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_API_KEY", "secret-value")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_BASE_URL", base_url)
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_TRUST_ENV_PROXY", "1")
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.example:8080")
+
+    config = model_gateway.ModelConfig.from_env()
+
+    assert config.trust_env_proxy is False
 
 
 def test_provider_status_reports_chat_completions_gateway_diagnostics(monkeypatch):
@@ -537,8 +568,13 @@ def test_request_uses_openai_sdk_responses_client(monkeypatch):
             }
 
     class FakeOpenAI:
-        def __init__(self, *, api_key, base_url, timeout):
-            calls["client"] = {"api_key": api_key, "base_url": base_url, "timeout": timeout}
+        def __init__(self, *, api_key, base_url, timeout, http_client):
+            calls["client"] = {
+                "api_key": api_key,
+                "base_url": base_url,
+                "timeout": timeout,
+                "trust_env": http_client.trust_env,
+            }
             self.responses = FakeResponses()
 
     monkeypatch.setattr(model_gateway, "OpenAI", FakeOpenAI, raising=False)
@@ -558,13 +594,76 @@ def test_request_uses_openai_sdk_responses_client(monkeypatch):
 
     body = model_gateway.ModelGateway(config)._request([{"role": "user", "content": "hi"}], structured=True, purpose="agent_plan")
 
-    assert calls["client"] == {"api_key": "secret-value", "base_url": "http://127.0.0.1:8080", "timeout": 12}
+    assert calls["client"] == {
+        "api_key": "secret-value",
+        "base_url": "http://127.0.0.1:8080",
+        "timeout": 12,
+        "trust_env": False,
+    }
     assert calls["payload"]["model"] == "gpt-5.5"
     assert calls["payload"]["input"][0] == {"role": "user", "content": "hi"}
     assert calls["payload"]["metadata"] == {"purpose": "agent_plan"}
     assert calls["payload"]["text"]["format"]["type"] == "json_object"
     assert calls["payload"]["tool_choice"] == "auto"
     assert body["output"][0]["content"][0]["text"] == "hello"
+
+
+def test_request_disables_openai_sdk_environment_proxy_by_default(monkeypatch):
+    calls = {}
+
+    class FakeResponses:
+        def create(self, **_payload):
+            return {"output": [{"type": "message", "content": [{"type": "output_text", "text": "ok"}]}]}
+
+    class FakeOpenAI:
+        def __init__(self, **kwargs):
+            http_client = kwargs.get("http_client")
+            calls["trust_env"] = getattr(http_client, "trust_env", None)
+            self.responses = FakeResponses()
+
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.example:8080")
+    monkeypatch.setattr(model_gateway, "OpenAI", FakeOpenAI, raising=False)
+    config = model_gateway.ModelConfig(
+        provider="OpenAI",
+        api_key="secret-value",
+        base_url="https://rawchat.cn/codex",
+        model="gpt-5.5",
+        review_model="gpt-5.5",
+        wire_api="responses",
+        reasoning_effort="high",
+        store=False,
+        timeout_seconds=12,
+        context_window=1000000,
+        auto_compact_token_limit=900000,
+    )
+
+    model_gateway.ModelGateway(config)._request([{"role": "user", "content": "hi"}], structured=False, purpose="smoke")
+
+    assert calls["trust_env"] is False
+
+
+def test_request_can_opt_into_openai_sdk_environment_proxy(monkeypatch):
+    calls = {}
+
+    class FakeResponses:
+        def create(self, **_payload):
+            return {"output": [{"type": "message", "content": [{"type": "output_text", "text": "ok"}]}]}
+
+    class FakeOpenAI:
+        def __init__(self, **kwargs):
+            calls["has_http_client"] = "http_client" in kwargs
+            self.responses = FakeResponses()
+
+    monkeypatch.setenv("OPENAI_API_KEY", "secret-value")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://openai-compatible.example/codex")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_TRUST_ENV_PROXY", "1")
+    monkeypatch.setattr(model_gateway, "OpenAI", FakeOpenAI, raising=False)
+
+    config = model_gateway.ModelConfig.from_env()
+    model_gateway.ModelGateway(config)._request([{"role": "user", "content": "hi"}], structured=False, purpose="smoke")
+
+    assert config.trust_env_proxy is True
+    assert calls["has_http_client"] is False
 
 
 def test_request_forwards_json_schema_to_openai_sdk_responses_client(monkeypatch):
@@ -583,8 +682,13 @@ def test_request_forwards_json_schema_to_openai_sdk_responses_client(monkeypatch
             }
 
     class FakeOpenAI:
-        def __init__(self, *, api_key, base_url, timeout):
-            calls["client"] = {"api_key": api_key, "base_url": base_url, "timeout": timeout}
+        def __init__(self, *, api_key, base_url, timeout, http_client):
+            calls["client"] = {
+                "api_key": api_key,
+                "base_url": base_url,
+                "timeout": timeout,
+                "trust_env": http_client.trust_env,
+            }
             self.responses = FakeResponses()
 
     monkeypatch.setattr(model_gateway, "OpenAI", FakeOpenAI, raising=False)
@@ -751,8 +855,13 @@ def test_complete_text_uses_openai_sdk_chat_completions_client(monkeypatch):
             self.completions = FakeCompletions()
 
     class FakeOpenAI:
-        def __init__(self, *, api_key, base_url, timeout):
-            calls["client"] = {"api_key": api_key, "base_url": base_url, "timeout": timeout}
+        def __init__(self, *, api_key, base_url, timeout, http_client):
+            calls["client"] = {
+                "api_key": api_key,
+                "base_url": base_url,
+                "timeout": timeout,
+                "trust_env": http_client.trust_env,
+            }
             self.chat = FakeChat()
 
     monkeypatch.setattr(model_gateway, "OpenAI", FakeOpenAI, raising=False)
@@ -777,6 +886,7 @@ def test_complete_text_uses_openai_sdk_chat_completions_client(monkeypatch):
         "api_key": "secret-value",
         "base_url": "https://openai-compatible.example/v1",
         "timeout": 12,
+        "trust_env": False,
     }
     assert calls["payload"]["model"] == "gpt-5.5"
     assert calls["payload"]["messages"] == [{"role": "user", "content": "ping"}]

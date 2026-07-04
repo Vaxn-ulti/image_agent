@@ -16,13 +16,22 @@ from app.agent.incubation import (
     decompose_toolchain_steps,
 )
 from app.core.config import PROJECTS_ROOT
+from app.imaging.detect import read_json_summary_file
 from app.workflows.result_contract import load_result_summary
 from app.workflows.remote_scripts import (
     classify_bold_fmriprep_xcpd_artifact_stage,
     path_safe_remote_preflight_summary,
     preflight_bold_fmriprep_xcpd_remote,
 )
-from app.workflows.registry import FIXED_WORKFLOW, get_workflow, list_workflows as registry_list_workflows, resolve_runtime_workflow_type
+from app.workflows.registry import (
+    FIXED_WORKFLOW,
+    get_workflow,
+    list_workflows as registry_list_workflows,
+    resolve_runtime_workflow_type,
+    workflow_public_metadata,
+    workflow_public_metadata_for_record,
+)
+from app.workflows.task_logs import collect_remote_task_logs
 
 
 RowsFn = Callable[[str, tuple[Any, ...]], list[dict[str, Any]]]
@@ -30,8 +39,15 @@ RowsFn = Callable[[str, tuple[Any, ...]], list[dict[str, Any]]]
 
 def _redact_host_paths(value: str) -> str:
     text = str(value)
+    text = re.sub(
+        r"(?i)\b([A-Z0-9_]*(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD|LICENSE)[A-Z0-9_]*)\s*=\s*[^\s\"']+",
+        r"\1=[redacted-secret]",
+        text,
+    )
+    text = re.sub(r"sk-[A-Za-z0-9._-]+", "[redacted-secret]", text)
     text = re.sub(r"[A-Za-z]:[\\/][^\s\"']+", "[redacted-host-path]", text)
     text = re.sub(r"/(?:home|Users|mnt|data|tmp|var)/[^\s\"']+", "[redacted-host-path]", text)
+    text = re.sub(r"(?i)\bpatient[-_\s]*[A-Za-z0-9_.-]+", "patient-[redacted]", text)
     return text
 
 
@@ -40,6 +56,25 @@ def _safe_task_for_agent(task: dict[str, Any]) -> dict[str, Any]:
     public.pop("log_path", None)
     if public.get("error_message"):
         public["error_message"] = _redact_host_paths(str(public["error_message"]))
+    workflow_type = public.get("workflow_type")
+    if workflow_type and "workflow_metadata" not in public:
+        public["workflow_metadata"] = workflow_public_metadata_for_record(
+            str(workflow_type),
+            public.get("runtime_workflow_type"),
+        )
+    return public
+
+
+def _safe_result_summary_for_agent(summary: dict[str, Any], task: dict[str, Any]) -> dict[str, Any]:
+    public = dict(summary)
+    public.pop("summary_path", None)
+    public.setdefault(
+        "workflow_metadata",
+        workflow_public_metadata_for_record(
+            public.get("workflow_type") or task.get("workflow_type"),
+            task.get("runtime_workflow_type"),
+        ),
+    )
     return public
 
 
@@ -71,7 +106,7 @@ def read_project_context(
             (project_id,),
         )
         tasks = rows_fn(
-            "SELECT id, project_id, series_id, workflow_type, status, progress, error_message, created_at, started_at, finished_at "
+            "SELECT id, project_id, series_id, workflow_type, runtime_workflow_type, status, progress, error_message, created_at, started_at, finished_at "
             "FROM tasks WHERE project_id=? ORDER BY id DESC LIMIT 50",
             (project_id,),
         )
@@ -80,23 +115,45 @@ def read_project_context(
             "FROM outputs JOIN tasks ON tasks.id=outputs.task_id WHERE tasks.project_id=? ORDER BY outputs.id DESC LIMIT 100",
             (project_id,),
         )
+        project_files = rows_fn(
+            "SELECT id, project_id, original_name, file_type, size, sha256, storage_path, created_at "
+            "FROM files WHERE project_id=? ORDER BY id DESC LIMIT 50",
+            (project_id,),
+        )
     else:
         series = []
         tasks = rows_fn(
-            "SELECT id, project_id, series_id, workflow_type, status, progress, error_message, created_at, started_at, finished_at "
+            "SELECT id, project_id, series_id, workflow_type, runtime_workflow_type, status, progress, error_message, created_at, started_at, finished_at "
             "FROM tasks ORDER BY id DESC LIMIT 10",
             (),
         )
         outputs = []
+        project_files = []
     return {
         "project_id": project_id,
         "project": project,
         "project_root": str(root / str(project_id)) if project_id is not None else "",
         "series": [_parse_series(row) for row in series],
+        "project_files": [_safe_project_file_for_agent(row) for row in project_files],
         "tasks": tasks,
         "outputs": [parse_output(row) for row in outputs],
         "workflows": workflows,
     }
+
+
+def _safe_project_file_for_agent(row: dict[str, Any]) -> dict[str, Any]:
+    item = {
+        "id": row.get("id"),
+        "project_id": row.get("project_id"),
+        "original_name": row.get("original_name"),
+        "file_type": row.get("file_type"),
+        "size": row.get("size"),
+        "sha256": row.get("sha256"),
+        "created_at": row.get("created_at"),
+    }
+    if str(row.get("file_type") or "").upper() == "JSON":
+        item["json_summary"] = read_json_summary_file(str(row.get("storage_path") or ""))
+    return item
 
 
 def _parse_series(series: dict[str, Any]) -> dict[str, Any]:
@@ -359,6 +416,11 @@ def preflight_workflow(context: dict[str, Any], *, series_id: int, workflow_type
             checks.append({"name": "fixed_workflow_lane", "status": "fail"})
         else:
             checks.append({"name": "fixed_workflow_lane", "status": "pass"})
+        if registered_workflow is not None and registered_workflow.get("agent_selectable") is not True:
+            blocking_errors.append("Workflow is not selectable for Agent production launch")
+            checks.append({"name": "agent_selectable_production_workflow", "status": "fail"})
+        elif registered_workflow is not None:
+            checks.append({"name": "agent_selectable_production_workflow", "status": "pass"})
         if series is not None and workflow.get("modality") and workflow.get("modality") != series.get("modality"):
             blocking_errors.append(f"Workflow requires {workflow.get('modality')} but series is {series.get('modality')}")
             checks.append({"name": "modality_match", "status": "fail"})
@@ -410,7 +472,7 @@ def list_workflows(
 
 def _read_task_raw(task_id: int, *, rows_fn: RowsFn) -> dict[str, Any]:
     rows = rows_fn(
-        "SELECT id, project_id, series_id, workflow_type, status, progress, error_message, log_path, created_at, started_at, finished_at "
+        "SELECT id, project_id, series_id, workflow_type, runtime_workflow_type, status, progress, error_message, log_path, created_at, started_at, finished_at "
         "FROM tasks WHERE id=?",
         (task_id,),
     )
@@ -435,22 +497,25 @@ def read_task_events(task_id: int, *, rows_fn: RowsFn, projects_root: Path | Non
     main_log_path = Path(str(task.get("log_path") or ""))
     main_text = main_log_path.read_text(encoding="utf-8", errors="replace") if main_log_path.exists() else ""
     root = projects_root or PROJECTS_ROOT
-    output_log_dir = root / str(task["project_id"]) / "derivatives" / str(task_id) / "output" / "logs"
-    remote_logs = []
-    if output_log_dir.exists():
-        for log_file in sorted(output_log_dir.glob("*.log")):
-            try:
-                text = log_file.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-            remote_logs.append(
-                {
-                    "name": log_file.name,
-                    "source_stage": classify_bold_fmriprep_xcpd_artifact_stage(log_file, root / str(task["project_id"]) / "derivatives" / str(task_id) / "output"),
-                    "size_bytes": log_file.stat().st_size,
-                    "tail": _redact_host_paths(text[-tail_chars:]),
-                }
-            )
+    output_dir = root / str(task["project_id"]) / "derivatives" / str(task_id) / "output"
+    remote_logs = [
+        {
+            "name": item.get("name"),
+            "source_stage": item.get("source_stage"),
+            "size_bytes": item.get("size_bytes"),
+            "tail": _redact_host_paths(str(item.get("tail") or "")[-tail_chars:]),
+        }
+        for item in collect_remote_task_logs(output_dir)
+    ]
+    if not remote_logs and main_text.strip():
+        remote_logs = [
+            {
+                "name": "task.log",
+                "source_stage": "pipeline_runner",
+                "size_bytes": main_log_path.stat().st_size if main_log_path.exists() else len(main_text.encode("utf-8")),
+                "tail": _redact_host_paths(main_text[-tail_chars:]),
+            }
+        ]
     events = [
         {"type": "task.status", "status": task.get("status"), "progress": task.get("progress")},
         *[
@@ -486,19 +551,71 @@ def read_result_summary(task_id: int, *, rows_fn: RowsFn, projects_root: Path | 
         path = Path(str(parsed.get("path") or ""))
         metadata = parsed.get("metadata") or {}
         if path.exists() and (metadata.get("kind") == "result_summary" or path.name.endswith("_result_summary.json")):
-            return {"status": "ok", "task": task, "result_summary": json.loads(path.read_text(encoding="utf-8"))}
+            return {
+                "status": "ok",
+                "task": task,
+                "result_summary": _safe_result_summary_for_agent(
+                    json.loads(path.read_text(encoding="utf-8")),
+                    task,
+                ),
+            }
     root = projects_root or PROJECTS_ROOT
     output_dir = root / str(task["project_id"]) / "derivatives" / str(task_id) / "output"
     summary = load_result_summary(output_dir)
     if summary is None:
         return {"status": "not_found", "task": task, "result_summary": None}
-    return {"status": "ok", "task": task, "result_summary": summary}
+    return {"status": "ok", "task": task, "result_summary": _safe_result_summary_for_agent(summary, task)}
+
+
+def observe_repair_task(task_id: int, *, rows_fn: RowsFn, projects_root: Path | None = None) -> dict[str, Any]:
+    task_result = read_task(task_id, rows_fn=rows_fn)
+    events_result = read_task_events(task_id, rows_fn=rows_fn, projects_root=projects_root)
+    summary_result = read_result_summary(task_id, rows_fn=rows_fn, projects_root=projects_root)
+    task = task_result.get("task") if task_result.get("status") == "ok" else None
+    suggestions: list[dict[str, Any]] = []
+    if task is None:
+        suggestions.append({"kind": "inspect", "message": "Task was not found; verify the task id from backend task records."})
+    else:
+        status = str(task.get("status") or "")
+        if status == "failed":
+            suggestions.append(
+                {
+                    "kind": "failed_task_repair_plan",
+                    "message": "Inspect redacted task events and remote log tails, identify the first concrete runtime error, then draft a repair plan.",
+                }
+            )
+        if summary_result.get("status") == "not_found":
+            suggestions.append(
+                {
+                    "kind": "result_summary_repair_plan",
+                    "message": "Verify output registration and result-summary discovery before proposing any report or artifact repair.",
+                }
+            )
+        if not suggestions:
+            suggestions.append({"kind": "observe", "message": "Continue read-only observation; no repair action is currently suggested."})
+    return {
+        "status": "ok" if task is not None else "not_found",
+        "policy": "read_only_observe_repair",
+        "task_id": task_id,
+        "task": task,
+        "events": events_result.get("events") or [],
+        "remote_logs": events_result.get("remote_logs") or [],
+        "main_log": events_result.get("main_log") or {"tail": ""},
+        "result_summary_status": summary_result.get("status"),
+        "repair_suggestions": suggestions,
+        "auto_rerun_allowed": False,
+        "task_creation_allowed": False,
+        "forbidden_actions": ["auto_retry", "auto_rerun", "task_creation"],
+        "production_task_created": False,
+        "requires_preflight_before_retry": True,
+        "requires_human_confirmation_before_retry": True,
+    }
 
 
 def create_workflow_task(
     *,
     confirmation: dict[str, Any],
-    create_task_fn: Callable[[int, str, int | None], dict[str, Any]],
+    create_task_fn: Callable[..., dict[str, Any]],
 ) -> dict[str, Any]:
     if not confirmation.get("approved"):
         return {
@@ -516,10 +633,28 @@ def create_workflow_task(
             "message": "Toolchain incubation proposals cannot create production tasks.",
             "production_task_created": False,
         }
+    if workflow.get("agent_selectable") is not True:
+        return {
+            "status": "blocked",
+            "message": "Workflow is not selectable for Agent production launch.",
+            "production_task_created": False,
+        }
     series_id = confirmation.get("series_id")
     if series_id is None:
         return {"status": "blocked", "message": "series_id is required to create a workflow task."}
     preflight = confirmation.get("preflight") if isinstance(confirmation.get("preflight"), dict) else {}
+    if preflight.get("ok") is not True:
+        return {
+            "status": "blocked",
+            "message": "Workflow task creation requires a passed preflight check.",
+            "production_task_created": False,
+        }
+    if preflight.get("workflow_type") not in {None, workflow_type}:
+        return {
+            "status": "blocked",
+            "message": "preflight workflow_type must match confirmation workflow_type.",
+            "production_task_created": False,
+        }
     preflight_runtime_type = preflight.get("runtime_workflow_type") if preflight.get("ok") is True else None
     try:
         runtime_workflow_type = resolve_runtime_workflow_type(str(preflight_runtime_type or workflow_type))
@@ -529,14 +664,29 @@ def create_workflow_task(
             "message": f"Unknown runtime_workflow_type: {preflight_runtime_type}",
             "production_task_created": False,
         }
-    task = create_task_fn(int(series_id), runtime_workflow_type, confirmation.get("qsiprep_task_id"))
+    try:
+        task = create_task_fn(
+            int(series_id),
+            workflow_type,
+            confirmation.get("qsiprep_task_id"),
+            runtime_workflow_type=runtime_workflow_type,
+        )
+    except TypeError:
+        task = create_task_fn(int(series_id), runtime_workflow_type, confirmation.get("qsiprep_task_id"))
     return {
         "status": "task_created",
         "workflow_type": workflow_type,
         "runtime_workflow_type": runtime_workflow_type,
         "task": task,
         "production_task_created": True,
-        "events": [{"type": "agent.task_created", "task_id": task.get("id"), "workflow_type": runtime_workflow_type}],
+        "events": [
+            {
+                "type": "agent.task_created",
+                "task_id": task.get("id"),
+                "workflow_type": workflow_type,
+                "runtime_workflow_type": runtime_workflow_type,
+            }
+        ],
     }
 
 

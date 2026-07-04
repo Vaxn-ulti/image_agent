@@ -16,6 +16,7 @@ export type WorkflowCatalog = {
 function workflowName(item: string | WorkflowCatalogItem): string | null {
   if (typeof item === 'string') return item;
   if (!item || typeof item !== 'object') return null;
+  if (item.lane === 'fixed_workflow' && item.agent_selectable === false && !item.api_runnable) return null;
   if (item.lane && item.lane !== 'fixed_workflow' && !item.api_runnable) return null;
   if (!item.api_runnable && (!item.requires_confirmation || !item.runtime_workflow_type)) return null;
   return item.type || item.workflow_type || item.runtime_workflow_type || null;

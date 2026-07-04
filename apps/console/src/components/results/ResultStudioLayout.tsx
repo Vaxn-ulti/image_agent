@@ -12,7 +12,12 @@ import { T1ResultView } from './T1ResultView';
 type ResultStudioLayoutProps = {
   apiBase: string;
   artifactManifest?: ArtifactManifest;
+  exportError?: string;
+  exportReadyDownload?: { filename: string; url: string } | null;
+  exporting?: boolean;
+  onExportBundle?: () => void;
   summary: ResultSummary;
+  workflowDisplayName?: string;
 };
 
 function isReportArtifact(artifact: OutputItem) {
@@ -32,7 +37,16 @@ function isReportArtifact(artifact: OutputItem) {
   );
 }
 
-export function ResultStudioLayout({ apiBase, artifactManifest, summary }: ResultStudioLayoutProps) {
+export function ResultStudioLayout({
+  apiBase,
+  artifactManifest,
+  exportError,
+  exportReadyDownload,
+  exporting,
+  onExportBundle,
+  summary,
+  workflowDisplayName,
+}: ResultStudioLayoutProps) {
   const manifestArtifacts = artifactManifest?.artifacts || [];
   const usesManifest = manifestArtifacts.length > 0;
   const allArtifacts = usesManifest ? manifestArtifacts : flattenOutputs(summary.outputs);
@@ -53,8 +67,13 @@ export function ResultStudioLayout({ apiBase, artifactManifest, summary }: Resul
     <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
       <ResultSummaryHeader
         artifactCount={artifacts.length + reportArtifacts.length}
+        exportError={exportError}
+        exportReadyDownload={exportReadyDownload}
+        exporting={exporting}
+        onExportBundle={onExportBundle}
         reportFigures={reportFigures}
         summary={summary}
+        workflowDisplayName={workflowDisplayName}
       />
 
       <div className="grid gap-8 xl:grid-cols-[1fr_320px]">

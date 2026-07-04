@@ -30,11 +30,11 @@ export function LoginPage() {
         </div>
         <label className="mb-3 block text-sm font-medium">
           Username
-          <Input className="mt-1" defaultValue="demo" name="username" />
+          <Input className="mt-1" name="username" placeholder="operator" />
         </label>
         <label className="mb-4 block text-sm font-medium">
           Password
-          <Input className="mt-1" defaultValue="demo" name="password" type="password" />
+          <Input className="mt-1" name="password" type="password" />
         </label>
         <Button className="w-full" variant="primary">
           Connect

@@ -23,8 +23,8 @@ RUNTIME_IMAGE_CONTRACTS: dict[str, dict[str, str]] = {
         "fmriprep": "nipreps/fmriprep:25.2.5",
         "xcpd": "pennlinc/xcp_d:26.0.2",
     },
-    "dwi_fast_gpu_dti": {"mrtrix_toolbox": "pennlinc/qsiprep:1.0.2"},
-    "dwi_fast_gpu_dti_validate": {"mrtrix_toolbox": "pennlinc/qsiprep:1.0.2"},
+    "dwi_fast_gpu_dti": {"mrtrix_toolbox": "pennlinc/qsiprep:26.0.0"},
+    "dwi_fast_gpu_dti_validate": {"mrtrix_toolbox": "pennlinc/qsiprep:26.0.0"},
 }
 
 
@@ -58,7 +58,7 @@ WORKFLOW_CAPABILITY_CATALOG: dict[str, dict[str, Any]] = {
             "container-native QC artifacts, structured result summaries, and a scientific report."
         ),
         "pipeline_stages": [
-            {"name": "BIDS preparation", "purpose": "Prepare supported BOLD NIfTI/BIDS input and optional T1/anat context."},
+            {"name": "BIDS preparation", "purpose": "Prepare supported BOLD NIfTI/BIDS input with required same-project T1/anat context."},
             {"name": "fMRIPrep preprocessing", "purpose": "Run motion/coregistration/normalization-oriented BOLD preprocessing."},
             {"name": "XCP-D postprocessing", "purpose": "Generate denoised derivatives and single-subject BOLD metrics."},
             {"name": "result packaging", "purpose": "Register metrics, native QC artifacts, result summary, and report artifacts."},
@@ -70,7 +70,9 @@ WORKFLOW_CAPABILITY_CATALOG: dict[str, dict[str, Any]] = {
         ],
         "qc_outputs": ["container-native fMRIPrep and XCP-D QC artifacts", "HTML reports", "QC figures"],
         "report_outputs": ["HTML scientific report", "report figures", "report manifest"],
-        "limitations": ["Not report-only; requires BOLD-compatible input, configured scripts, containers, and FreeSurfer license."],
+        "limitations": [
+            "Not report-only; requires BOLD-compatible input, same-project T1/anat data, configured scripts, containers, and FreeSurfer license."
+        ],
         "agent_selection_aliases": [
             "bold preprocessing",
             "fmri preprocessing",
@@ -104,6 +106,19 @@ WORKFLOW_CAPABILITY_CATALOG: dict[str, dict[str, Any]] = {
     },
 }
 
+WORKFLOW_PUBLIC_METADATA_FIELDS = (
+    "display_name",
+    "capability_summary",
+    "workflow_family",
+    "workflow_role",
+    "pipeline_stages",
+    "primary_outputs",
+    "qc_outputs",
+    "report_outputs",
+    "limitations",
+    "is_report_only",
+)
+
 
 WORKFLOW_REGISTRY: list[dict[str, Any]] = [
     {
@@ -133,7 +148,7 @@ WORKFLOW_REGISTRY: list[dict[str, Any]] = [
         "result_summary_schema": "BOLD",
         "input_requirements": [
             "supported BOLD NIfTI/BIDS series",
-            "optional companion T1/anat",
+            "same-project companion T1/anat",
             "FreeSurfer license",
             "fMRIPrep and XCP-D container runtime",
         ],
@@ -153,7 +168,7 @@ WORKFLOW_REGISTRY: list[dict[str, Any]] = [
         "result_summary_schema": "BOLD",
         "input_requirements": [
             "supported BOLD NIfTI/BIDS series",
-            "optional companion T1/anat",
+            "same-project companion T1/anat",
             "FreeSurfer license",
             "fMRIPrep and XCP-D deployment-local scripts",
         ],
@@ -308,8 +323,8 @@ WORKFLOW_REGISTRY: list[dict[str, Any]] = [
         "modality": "DWI",
         "profile": "production",
         "lane": FIXED_WORKFLOW,
-        "status": "legacy_supported",
-        "agent_selectable": False,
+        "status": "production_contract",
+        "agent_selectable": True,
         "requires_confirmation": True,
         "runtime_class": "app.workflows.pipeline.run_pipeline_task",
         "runtime_workflow_type": "dwi_fast_gpu_dti",
@@ -572,6 +587,51 @@ def get_workflow(workflow_type: str) -> dict[str, Any]:
         if workflow["type"] == workflow_type:
             return _clone(workflow)
     raise KeyError(workflow_type)
+
+
+def workflow_public_metadata(workflow_or_type: dict[str, Any] | str) -> dict[str, Any]:
+    if isinstance(workflow_or_type, str):
+        workflow = get_workflow(workflow_or_type)
+    else:
+        workflow_type = str(workflow_or_type.get("type") or workflow_or_type.get("workflow_type") or "")
+        try:
+            workflow = get_workflow(workflow_type) if workflow_type else _clone(workflow_or_type)
+        except KeyError:
+            workflow = _clone(workflow_or_type)
+    metadata = {
+        "workflow_type": workflow.get("type") or workflow.get("workflow_type"),
+        "runtime_workflow_type": workflow.get("runtime_workflow_type"),
+        "lane": workflow.get("lane"),
+        "status": workflow.get("status"),
+        "agent_selectable": workflow.get("agent_selectable") is True,
+        "requires_confirmation": workflow.get("requires_confirmation"),
+    }
+    for field in WORKFLOW_PUBLIC_METADATA_FIELDS:
+        metadata[field] = deepcopy(workflow.get(field))
+    return metadata
+
+
+def workflow_public_metadata_for_record(workflow_type: str | None, runtime_workflow_type: str | None = None) -> dict[str, Any] | None:
+    candidate_types = [value for value in (workflow_type, runtime_workflow_type) if value]
+    for candidate in candidate_types:
+        try:
+            workflow = get_workflow(str(candidate))
+        except KeyError:
+            continue
+        if workflow.get("agent_selectable") or workflow.get("api_runnable"):
+            return workflow_public_metadata(workflow)
+
+    for candidate in candidate_types:
+        for workflow in list_workflows(lane=FIXED_WORKFLOW):
+            if workflow.get("agent_selectable") and workflow.get("runtime_workflow_type") == candidate:
+                return workflow_public_metadata(workflow)
+
+    for candidate in candidate_types:
+        try:
+            return workflow_public_metadata(str(candidate))
+        except KeyError:
+            continue
+    return None
 
 
 def allowed_runtime_workflows() -> set[str]:

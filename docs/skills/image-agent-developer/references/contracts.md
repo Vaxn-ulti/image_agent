@@ -127,7 +127,7 @@ Artifact serving rules:
 - `/tasks/{task_id}/artifacts/{relative_path}` must resolve only inside `data/projects/{project_id}/derivatives/{task_id}/output`.
 - `.nii.gz` artifacts should be served with `content-type: application/gzip`, matching result-summary `content_type`.
 - Browser-preview report artifacts should be served with useful media types, including `image/png` for current report-builder figures, `image/svg+xml` for legacy SVG figures, and `text/html` for report indexes.
-- `/tasks/{task_id}/artifact-manifest` should be the frontend's stable preview/download list and should not expose backend absolute paths. The result-summary remains authoritative for scientific/result interpretation.
+- `/tasks/{task_id}/artifact-manifest` should be the frontend's stable preview/download list and should not expose backend absolute paths. The result-summary remains authoritative for scientific/result interpretation. The manifest envelope may include registry-backed `workflow_metadata` and `runtime_workflow_type` from the same public result-summary/task record normalization path so report/QC panels can display workflow capability context without trusting stale runner-written metadata.
 - Do not expose backend absolute paths to frontend users. Keep any host-path debugging evidence server-side, redacted, and out of frontend/API artifact contracts.
 
 Workflow eligibility contract:
@@ -135,6 +135,9 @@ Workflow eligibility contract:
 - Upload, series, and ingest-inventory responses should expose derived `workflow_eligibility` without creating production tasks.
 - Covered surfaces include `POST /projects/{project_id}/upload`, DWI/DICOM upload variants, `GET /projects/{project_id}/series`, `GET /series/{series_id}`, and `GET /projects/{project_id}/datasets/{upload_session_id}/inventory` (`/projects/{project_id}/datasets/{upload_session_id}/inventory`).
 - Every `workflow_eligibility` envelope should include `policy_version=workflow_eligibility_v1`, `production_task_created=false`, `primary_recommendation`, `runnable_workflows`, and `blocked_workflows`.
+- `workflow_eligibility` items include `workflow_metadata` so frontend, Agent, and RAG consumers can display `display_name`, `capability_summary`, workflow family/role, pipeline stages, output classes, QC/report outputs, limitations, and `is_report_only` without renaming the workflow.
+- `workflow_eligibility.workflow_metadata` is display/interpretation evidence only. It does not authorize task creation and must not replace registry, preflight, human confirmation, confirmation fingerprint, `task_service.create_series_task()`, or the pipeline runner.
+- `workflow_type` remains the stable machine id for task creation, confirmation fingerprints, database task rows, result-summary records, artifact routes, logs, and acceptance evidence.
 - `runnable_workflows` names workflows that satisfy current backend launch requirements from persisted files and metadata. `blocked_workflows` must carry concrete missing requirements instead of vague not-ready text.
 - Eligibility is advisory launchability, not a successful run claim. Real acceptance still requires a completed task, registered outputs, result-summary evidence, and remote strict smoke evidence.
 - Ingest inventory must remain side-effect-free: do not create production task rows while deriving eligibility for uploaded files.
@@ -203,7 +206,7 @@ Metadata precedence:
 - BOLD downstream metrics require completed BOLD DeepPrep outputs for the same series.
 - Fast GPU DTI requires DWI NIfTI plus `.bval`, `.bvec`, and a JSON sidecar containing `PhaseEncodingDirection` and `TotalReadoutTime`; it is the production DWI workflow.
 - Legacy BIDS-ingested DWI records may lack newer `has_json` / `json_file_id` metadata. They may be accepted only when real `.json`, `.bval`, and `.bvec` sidecars are present in `metadata.sidecars` or BIDS/NIFTI_BIDS placement, and the JSON contains `PhaseEncodingDirection` plus `TotalReadoutTime`. Ordinary `/upload-dwi` records without JSON must still be rejected.
-- Production `dwi_fast_gpu_dti` must use host FSL from `/home/yyf/project/MCI_project/tools/fsl` for GPU `eddy_cuda` and FSL registration utilities. It uses the locked `pennlinc/qsiprep:1.0.2` image only as an MRtrix toolbox image for commands such as `dwi2mask`, `mrconvert`, `dwi2tensor`, `tensor2metric`, `mrstats`, and `mrcalc`.
+- Production `dwi_fast_gpu_dti` must use host FSL from `/home/yyf/project/MCI_project/tools/fsl` for GPU `eddy_cuda` and FSL registration utilities. It uses the locked `pennlinc/qsiprep:26.0.0` image only as an MRtrix toolbox image for commands such as `dwi2mask`, `mrconvert`, `dwi2tensor`, `tensor2metric`, `mrstats`, and `mrcalc`.
 - Production `dwi_fast_gpu_dti` must not execute full `qsiprep /data /out participant` or full QSIRecon. The expected max runtime target is `2100` seconds / 35 minutes.
 - QSIPrep requires DWI NIfTI plus `.bval` and `.bvec`.
 - QSIRecon requires a completed QSIPrep task output and a valid `--recon-spec`.

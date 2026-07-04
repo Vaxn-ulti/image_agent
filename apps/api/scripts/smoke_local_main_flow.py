@@ -4,6 +4,7 @@ import argparse
 import gzip
 import json
 import mimetypes
+import re
 import struct
 import tempfile
 import time
@@ -97,6 +98,26 @@ def _int_id(payload: dict, key: str, label: str) -> int:
     return value
 
 
+def _is_privacy_safe_symbol(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and bool(value)
+        and len(value) <= 140
+        and all(char.isalnum() or char in "_.-" for char in value)
+    )
+
+
+def _contains_unredacted_unsafe_text(value: object) -> bool:
+    if not isinstance(value, str):
+        return False
+    return bool(
+        re.search(r"[A-Za-z]:[\\/]", value)
+        or re.search(r"/(?:home|Users|mnt|data|tmp|var)/", value)
+        or re.search(r"(?i)(api[_-]?key|token|secret|password|license)\s*=", value)
+        or re.search(r"(?<![A-Za-z0-9])sk-[A-Za-z0-9._-]+", value)
+    )
+
+
 def _safe_model_status(status: dict) -> dict:
     safe: dict = {"configured": bool(status.get("configured"))}
     for key in ("provider", "provider_profile", "model", "review_model", "wire_api", "reasoning_effort"):
@@ -146,12 +167,87 @@ def _safe_workflow_entry(entry: object) -> dict | None:
     if not isinstance(workflow_type, str) or not workflow_type:
         return None
     safe = {"workflow_type": workflow_type}
+    workflow_metadata = _safe_workflow_metadata(entry.get("workflow_metadata"), workflow_type=workflow_type)
+    if workflow_metadata:
+        safe["workflow_metadata"] = workflow_metadata
     blocking_reasons = entry.get("blocking_reasons")
     if isinstance(blocking_reasons, list):
         safe_reasons = [reason for reason in blocking_reasons if isinstance(reason, str) and reason and len(reason) <= 180]
         if safe_reasons:
             safe["blocking_reasons"] = safe_reasons
     return safe
+
+
+def _safe_workflow_metadata(metadata: object, *, workflow_type: str) -> dict | None:
+    if not isinstance(metadata, dict):
+        return None
+    metadata_workflow_type = metadata.get("workflow_type")
+    if metadata_workflow_type != workflow_type or not _safe_symbol(metadata_workflow_type):
+        return None
+    safe: dict = {"workflow_type": metadata_workflow_type}
+    runtime_workflow_type = metadata.get("runtime_workflow_type")
+    if isinstance(runtime_workflow_type, str) and _safe_symbol(runtime_workflow_type):
+        safe["runtime_workflow_type"] = runtime_workflow_type
+    for key in ("workflow_family", "workflow_role"):
+        value = metadata.get(key)
+        if isinstance(value, str) and _safe_symbol(value):
+            safe[key] = value
+    display_name = metadata.get("display_name")
+    if isinstance(display_name, str) and 0 < len(display_name) <= 160 and _safe_human_text(display_name):
+        safe["display_name"] = display_name
+    capability_summary = metadata.get("capability_summary")
+    if isinstance(capability_summary, str) and _safe_human_text(capability_summary, max_len=320):
+        safe["capability_summary"] = capability_summary
+    for key in ("primary_outputs", "qc_outputs", "report_outputs", "limitations"):
+        values = _safe_text_list(metadata.get(key), max_items=8, max_len=160)
+        if values is not None:
+            safe[key] = values
+    pipeline_stages = _safe_pipeline_stages(metadata.get("pipeline_stages"))
+    if pipeline_stages is not None:
+        safe["pipeline_stages"] = pipeline_stages
+    for key in ("agent_selectable", "is_report_only"):
+        value = metadata.get(key)
+        if isinstance(value, bool):
+            safe[key] = value
+    return safe
+
+
+def _safe_symbol(value: str) -> bool:
+    return bool(value) and len(value) <= 120 and all(ch.isalnum() or ch in {"_", "-", "."} for ch in value)
+
+
+def _safe_human_text(value: str, *, max_len: int = 160) -> bool:
+    if not value or len(value) > max_len:
+        return False
+    lowered = value.lower()
+    return "://" not in value and "\\" not in value and not any(
+        token in lowered for token in ("/home/", "/users/", "/tmp/", "/var/")
+    )
+
+
+def _safe_text_list(value: object, *, max_items: int, max_len: int) -> list[str] | None:
+    if not isinstance(value, list):
+        return None
+    safe_items = [item for item in value[:max_items] if isinstance(item, str) and _safe_human_text(item, max_len=max_len)]
+    return safe_items if safe_items else None
+
+
+def _safe_pipeline_stages(value: object) -> list[dict] | None:
+    if not isinstance(value, list):
+        return None
+    safe_stages: list[dict] = []
+    for item in value[:8]:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name")
+        purpose = item.get("purpose")
+        if not isinstance(name, str) or not _safe_human_text(name, max_len=80):
+            continue
+        safe_stage = {"name": name}
+        if isinstance(purpose, str) and _safe_human_text(purpose, max_len=180):
+            safe_stage["purpose"] = purpose
+        safe_stages.append(safe_stage)
+    return safe_stages if safe_stages else None
 
 
 def _safe_workflow_eligibility(eligibility: object) -> dict | None:
@@ -167,7 +263,7 @@ def _safe_workflow_eligibility(eligibility: object) -> dict | None:
     if isinstance(primary, dict):
         primary_workflow = _safe_workflow_entry(primary)
         if primary_workflow:
-            safe["primary_recommendation"] = {"workflow_type": primary_workflow["workflow_type"]}
+            safe["primary_recommendation"] = primary_workflow
     for key in ("runnable_workflows", "blocked_workflows"):
         entries = eligibility.get(key)
         if isinstance(entries, list):
@@ -245,6 +341,49 @@ def _safe_rag_rebuild(rebuild: dict) -> dict:
         "document_count": rebuild.get("document_count") if isinstance(rebuild.get("document_count"), int) else None,
         "chunk_count": rebuild.get("chunk_count") if isinstance(rebuild.get("chunk_count"), int) else None,
         "semantic_index": rebuild.get("semantic_index") is True,
+    }
+
+
+def _validate_task_events(events_payload: dict, task_id: int, completed_task: dict) -> dict:
+    _require(events_payload.get("status") == "ok", "task events status must be ok")
+    task = events_payload.get("task") if isinstance(events_payload.get("task"), dict) else {}
+    _require(int(task.get("id") or task.get("task_id") or 0) == task_id, "task events task_id mismatch")
+    _require(task.get("status") == completed_task.get("status"), "task events task status mismatch")
+    _require(task.get("workflow_type") == completed_task.get("workflow_type"), "task events workflow_type mismatch")
+    for section_name in ("task", "main_log"):
+        section = events_payload.get(section_name)
+        if isinstance(section, dict):
+            for key, value in section.items():
+                _require(not _contains_unredacted_unsafe_text(value), f"task events {section_name}.{key} leaked unsafe text")
+    events = events_payload.get("events")
+    _require(isinstance(events, list) and events, "task events list must be non-empty")
+    event_types = sorted({str(event.get("type")) for event in events if isinstance(event, dict) and event.get("type")})
+    _require("task.status" in event_types, "task events must include task.status")
+    _require("task.remote_log" in event_types, "task events must include task.remote_log")
+    status_events = [event for event in events if isinstance(event, dict) and event.get("type") == "task.status"]
+    _require(any(event.get("status") == completed_task.get("status") for event in status_events), "task status event mismatch")
+    remote_logs = events_payload.get("remote_logs")
+    _require(isinstance(remote_logs, list) and remote_logs, "task events remote_logs must be non-empty")
+    source_stages: list[str] = []
+    for item in remote_logs:
+        _require(isinstance(item, dict), "task events remote_log must be an object")
+        for key, value in item.items():
+            _require(not _contains_unredacted_unsafe_text(value), f"task events remote_log.{key} leaked unsafe text")
+        name = str(item.get("name") or "")
+        source_stage = str(item.get("source_stage") or "")
+        _require(name.endswith(".log") and _is_privacy_safe_symbol(name.replace(".", "_")), "task events remote_log name invalid")
+        _require(_is_privacy_safe_symbol(source_stage), "task events remote_log source_stage invalid")
+        _require(int(item.get("size_bytes") or 0) > 0, "task events remote_log size_bytes missing")
+        source_stages.append(source_stage)
+    main_log = events_payload.get("main_log") if isinstance(events_payload.get("main_log"), dict) else {}
+    return {
+        "status": "passed",
+        "task_id": task_id,
+        "event_types": event_types,
+        "status_event_status": completed_task.get("status"),
+        "remote_log_count": len(remote_logs),
+        "remote_log_source_stages": sorted(set(source_stages)),
+        "main_log_tail_present": bool(str(main_log.get("tail") or "")),
     }
 
 
@@ -402,6 +541,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--wait-task-completion-timeout-seconds", type=float, default=0)
     parser.add_argument("--wait-task-completion-poll-seconds", type=float, default=1)
     parser.add_argument("--require-task-outputs", action="store_true")
+    parser.add_argument("--require-task-events", action="store_true")
     parser.add_argument("--require-result-summary", action="store_true")
     parser.add_argument("--require-artifact-manifest", action="store_true")
     parser.add_argument("--expected-model-provider-profile")
@@ -441,6 +581,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     args = _parse_args(argv)
     if args.require_agent_resume and not args.require_agent_confirmation:
         raise SystemExit("--require-agent-resume requires --require-agent-confirmation")
+    if args.require_task_events and not args.wait_task_completion_timeout_seconds:
+        raise SystemExit("--require-task-events requires --wait-task-completion-timeout-seconds")
     base = args.api_base.rstrip("/")
     workflow_type = args.workflow_type
     agent_workflow_type = args.agent_workflow_type or workflow_type
@@ -541,6 +683,20 @@ def main(argv: Sequence[str] | None = None) -> None:
             )
             payload["task_completion_status"] = "passed"
             payload["completed_task"] = completed_task
+        if args.require_task_events:
+            _require(completed_task is not None, "task events require completed task evidence")
+            task_events = _validate_task_events(
+                _request("GET", f"{base}/tasks/{launched_task['task_id']}/events"),
+                launched_task["task_id"],
+                completed_task,
+            )
+            payload["task_events_status"] = task_events["status"]
+            payload["task_events_task_id"] = task_events["task_id"]
+            payload["task_events_event_types"] = task_events["event_types"]
+            payload["task_events_status_event_status"] = task_events["status_event_status"]
+            payload["task_events_remote_log_count"] = task_events["remote_log_count"]
+            payload["task_events_remote_log_source_stages"] = task_events["remote_log_source_stages"]
+            payload["task_events_main_log_tail_present"] = task_events["main_log_tail_present"]
         if args.require_task_outputs:
             outputs = _safe_outputs(_request("GET", f"{base}/tasks/{launched_task['task_id']}/outputs"))
             _require(outputs, "task outputs are required but none were returned")

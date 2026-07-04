@@ -308,7 +308,7 @@ def dispatch_tool_call(
                 tools.promote_toolchain_to_workflow(args["proposal"], approved=bool(args.get("approved"))),
                 call_id=call_id,
             )
-        if tool_name in {"read_project_context", "read_task", "read_task_events", "read_result_summary"} and rows_fn is None:
+        if tool_name in {"read_project_context", "read_task", "read_task_events", "read_result_summary", "observe_repair_task"} and rows_fn is None:
             return _blocked_result(tool_name, "rows_fn is required for database-backed read tools", call_id=call_id)
         if tool_name == "read_project_context":
             return _ok_result(
@@ -338,6 +338,16 @@ def dispatch_tool_call(
             return _ok_result(
                 tool_name,
                 tools.read_result_summary(
+                    int(args["task_id"]),
+                    rows_fn=rows_fn,  # type: ignore[arg-type]
+                    projects_root=Path(projects_root) if projects_root is not None else None,
+                ),
+                call_id=call_id,
+            )
+        if tool_name == "observe_repair_task":
+            return _ok_result(
+                tool_name,
+                tools.observe_repair_task(
                     int(args["task_id"]),
                     rows_fn=rows_fn,  # type: ignore[arg-type]
                     projects_root=Path(projects_root) if projects_root is not None else None,

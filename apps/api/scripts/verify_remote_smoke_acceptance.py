@@ -10,6 +10,33 @@ from urllib.parse import quote
 
 
 LAUNCHABILITY_MATRIX_SOURCE = "docs/rag/workflows/workflow_launchability_matrix.md"
+ELASTICSEARCH_HYBRID_CONTRACT_SOURCE = "docs/rag/contracts/elasticsearch-hybrid-search.md"
+ELASTICSEARCH_RRF_SOURCE_URL = "https://www.elastic.co/docs/reference/elasticsearch/rest-apis/reciprocal-rank-fusion"
+ELASTICSEARCH_ACCEPTED_FUSION_FALLBACK_REASON = "license_non_compliant"
+LOCAL_EMBEDDING_PROVIDERS = {
+    "",
+    "local_hashing",
+    "deterministic_local_hashing",
+    "local-token-hash-v1",
+    "mock",
+    "mock_embedding",
+}
+WORKFLOW_ELIGIBILITY_METADATA_REQUIRED_FIELDS = [
+    "display_name",
+    "capability_summary",
+    "workflow_family",
+    "workflow_role",
+    "pipeline_stages",
+    "primary_outputs",
+    "qc_outputs",
+    "report_outputs",
+    "limitations",
+    "agent_selectable",
+    "is_report_only",
+]
+STRICT_REMOTE_ACCEPTANCE_MISSING_REASON = (
+    "Strict remote acceptance evidence has not been verified for the upload-agent-workflow-result chain."
+)
 CONTAINER_NATIVE_QC_OFFICIAL_SOURCE_IDS = frozenset(
     {
         "docs/rag/vendor/deepprep_official_container_usage.md",
@@ -25,9 +52,36 @@ CONTAINER_NATIVE_QC_OFFICIAL_SOURCE_IDS = frozenset(
 DEBUG_ONLY_WORKFLOWS = frozenset({"t1_deepprep_mock"})
 
 
+def _rrf_unavailable_reason(metadata: dict) -> str:
+    return str(metadata.get("rrf_unavailable_reason") or "").strip()
+
+
+def _require_elasticsearch_fusion(metadata: dict, *, context: str) -> tuple[str, str | None]:
+    fusion = str(metadata.get("fusion") or "").strip()
+    reason = _rrf_unavailable_reason(metadata)
+    if fusion == "rrf":
+        return fusion, None
+    _require(
+        fusion == "query_plus_knn" and reason == ELASTICSEARCH_ACCEPTED_FUSION_FALLBACK_REASON,
+        f"{context}.fusion must be rrf or query_plus_knn with rrf_unavailable_reason=license_non_compliant",
+    )
+    return fusion, reason
+
+
 def _require(condition: bool, message: str) -> None:
     if not condition:
         raise SystemExit(message)
+
+
+def _verify_no_saved_official_sources(value: object, *, path: str = "") -> None:
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            child_path = f"{path}.{key}" if path else str(key)
+            _require(key != "official_sources", f"{child_path} must not be saved")
+            _verify_no_saved_official_sources(nested, path=child_path)
+    elif isinstance(value, list):
+        for index, nested in enumerate(value):
+            _verify_no_saved_official_sources(nested, path=f"{path}[{index}]")
 
 
 def _int_metric(value: object) -> int:
@@ -51,6 +105,14 @@ def _require_positive_int_metric(payload: dict, key: str) -> int:
     value = _require_int_metric(payload, key)
     _require(value > 0, f"{key} must be greater than zero")
     return value
+
+
+def _require_positive_numeric_metric(payload: dict, key: str) -> float:
+    value = payload.get(key)
+    _require(isinstance(value, (int, float)) and not isinstance(value, bool), f"{key} must be numeric")
+    numeric = float(value)
+    _require(numeric > 0, f"{key} must be greater than zero")
+    return numeric
 
 
 def _require_positive_int_metric_with_prefix(payload: dict, key: str, *, prefix: str) -> int:
@@ -78,6 +140,14 @@ def _require_privacy_safe_symbol(payload: dict, key: str) -> None:
     )
 
 
+def _require_prefixed_privacy_safe_symbol(payload: dict, key: str, *, prefix: str) -> None:
+    value = payload.get(key)
+    _require(
+        _is_privacy_safe_symbol(value),
+        f"{prefix}.{key} must be privacy-safe",
+    )
+
+
 def _verify_no_debug_only_workflows(payload: dict) -> None:
     for section_name in (
         "task_status",
@@ -101,6 +171,18 @@ def _is_privacy_safe_symbol(value: object) -> bool:
         and len(value) <= 140
         and all(char.isalnum() or char in "_.-" for char in value)
     )
+
+
+def _requires_direct_model_gateway(status: dict, expected_provider_profile: object) -> bool:
+    provider_profile = str(status.get("provider_profile") or "").strip().lower()
+    expected_profile = str(expected_provider_profile or "").strip().lower()
+    if provider_profile == "rawchat" or expected_profile == "rawchat":
+        return True
+    base_url = status.get("base_url")
+    if not isinstance(base_url, str) or not base_url:
+        return False
+    host = (urlsplit(base_url).hostname or "").lower()
+    return host == "rawchat.cn" or host.endswith(".rawchat.cn")
 
 
 def _verify_model_status(payload: dict, gate: dict) -> None:
@@ -143,6 +225,9 @@ def _verify_model_status(payload: dict, gate: dict) -> None:
             capabilities.get("model_tool_loop") is True,
             "model_status.capabilities.model_tool_loop must be true",
         )
+    trust_env_proxy = status.get("trust_env_proxy")
+    if trust_env_proxy is not None:
+        _require(isinstance(trust_env_proxy, bool), "model_status.trust_env_proxy must be boolean")
     deployment = status.get("deployment")
     if deployment is not None:
         _require(isinstance(deployment, dict), "model_status.deployment must be an object")
@@ -151,6 +236,16 @@ def _verify_model_status(payload: dict, gate: dict) -> None:
             key_text = str(key)
             _require(key_text in allowed_deployment_keys, f"model_status.deployment must not expose {key_text}")
             _require(_is_privacy_safe_symbol(value), f"model_status.deployment.{key_text} must be privacy-safe")
+    if _requires_direct_model_gateway(status, expected_provider_profile):
+        _require(
+            status.get("trust_env_proxy") is False,
+            "rawchat model_status.trust_env_proxy must be false",
+        )
+        _require(isinstance(deployment, dict), "model_status.deployment must be present for rawchat direct acceptance")
+        _require(
+            deployment.get("model_gateway_access") == "direct",
+            "rawchat model_status.deployment.model_gateway_access must be direct",
+        )
     gateway_diagnostics = status.get("gateway_diagnostics")
     if gateway_diagnostics is not None:
         _require(isinstance(gateway_diagnostics, dict), "model_status.gateway_diagnostics must be an object")
@@ -217,12 +312,18 @@ def _verify_gate_settings(payload: dict) -> dict:
         "require_project_agent_context",
         "require_agent_workflow_confirmation",
         "require_agent_workflow_resume",
+        "require_agent_workflow_fingerprint_negative",
+        "require_unknown_workflow_incubation",
         "require_raw_source_policy",
         "require_vendor_pointer_integrity",
+        "require_elasticsearch_hybrid_rag",
+        "require_runtime_toolchain",
         "require_real_evidence_ids",
         "require_completed_upload",
         "require_uploaded_series",
         "require_launchability_matrix",
+        "require_task_events",
+        "require_observe_repair",
         "require_container_native_qc",
         "require_scientific_report_artifacts",
     ):
@@ -254,6 +355,153 @@ def _verify_production_readiness(payload: dict) -> None:
     _require(not blocking_reasons, "production_readiness.blocking_reasons must be empty")
 
 
+def _verify_fast_launch_readiness(payload: dict) -> dict:
+    readiness_status = payload.get("fast_launch_readiness_status")
+    _require(
+        readiness_status in {"passed", "pre_acceptance"},
+        "fast_launch_readiness_status must be passed or pre_acceptance",
+    )
+    readiness = payload.get("fast_launch_readiness")
+    _require(isinstance(readiness, dict), "fast_launch_readiness must be present")
+    blocking_reasons = readiness.get("blocking_reasons")
+    _require(isinstance(blocking_reasons, list), "fast_launch_readiness.blocking_reasons must be a list")
+    checks = readiness.get("checks")
+    _require(isinstance(checks, dict), "fast_launch_readiness.checks must be present")
+    rag_check = checks.get("rag_elasticsearch_hybrid")
+    _require(
+        isinstance(rag_check, dict),
+        "fast_launch_readiness.checks.rag_elasticsearch_hybrid must be present",
+    )
+    _require(
+        rag_check.get("status") == "passed",
+        "fast_launch_readiness.checks.rag_elasticsearch_hybrid.status must be passed",
+    )
+    production_deployment = checks.get("production_deployment")
+    _require(
+        isinstance(production_deployment, dict),
+        "fast_launch_readiness.checks.production_deployment must be present",
+    )
+    _require(
+        production_deployment.get("status") == "passed",
+        "fast_launch_readiness.checks.production_deployment.status must be passed",
+    )
+    _require(
+        production_deployment.get("required") is True,
+        "fast_launch_readiness.checks.production_deployment.required must be true",
+    )
+    _require(
+        production_deployment.get("ready") is True,
+        "fast_launch_readiness.checks.production_deployment.ready must be true",
+    )
+    _require(
+        production_deployment.get("readiness_status") == "ready",
+        "fast_launch_readiness.checks.production_deployment.readiness_status must be ready",
+    )
+    production_deployment_blockers = production_deployment.get("blocking_reasons")
+    _require(
+        isinstance(production_deployment_blockers, list),
+        "fast_launch_readiness.checks.production_deployment.blocking_reasons must be a list",
+    )
+    _require(
+        not production_deployment_blockers,
+        "fast_launch_readiness.checks.production_deployment.blocking_reasons must be empty",
+    )
+    for check_name in (
+        "model_gateway_target",
+        "agent_task_boundary",
+        "upload_workflow_result_contract",
+    ):
+        check = checks.get(check_name)
+        _require(isinstance(check, dict), f"fast_launch_readiness.checks.{check_name} must be present")
+        _require(
+            check.get("status") == "passed",
+            f"fast_launch_readiness.checks.{check_name}.status must be passed",
+        )
+    strict_remote_acceptance = checks.get("strict_remote_acceptance")
+    _require(
+        isinstance(strict_remote_acceptance, dict),
+        "fast_launch_readiness.checks.strict_remote_acceptance must be present",
+    )
+    strict_status = strict_remote_acceptance.get("status")
+    if readiness_status == "passed":
+        _require(readiness.get("ready") is True, "fast_launch_readiness.ready must be true")
+        _require(readiness.get("status") == "ready", "fast_launch_readiness.status must be ready")
+        _require(not blocking_reasons, "fast_launch_readiness.blocking_reasons must be empty")
+        _require(
+            strict_status == "passed",
+            "fast_launch_readiness.checks.strict_remote_acceptance.status must be passed",
+        )
+    else:
+        _require(readiness.get("ready") is False, "fast_launch_readiness.ready must be false before acceptance")
+        _require(readiness.get("status") == "blocked", "fast_launch_readiness.status must be blocked before acceptance")
+        _require(
+            blocking_reasons == [STRICT_REMOTE_ACCEPTANCE_MISSING_REASON],
+            "fast_launch_readiness.blocking_reasons must explain missing strict remote acceptance evidence",
+        )
+        _require(
+            strict_status == "missing",
+            "fast_launch_readiness.checks.strict_remote_acceptance.status must be missing before acceptance",
+        )
+    _require(rag_check.get("engine") == "elasticsearch", "fast_launch_readiness.checks.rag_elasticsearch_hybrid.engine must be elasticsearch")
+    _require(rag_check.get("configured") is True, "fast_launch_readiness.checks.rag_elasticsearch_hybrid.configured must be true")
+    _require(rag_check.get("persisted") is True, "fast_launch_readiness.checks.rag_elasticsearch_hybrid.persisted must be true")
+    _require(rag_check.get("mode") == "connected", "fast_launch_readiness.checks.rag_elasticsearch_hybrid.mode must be connected")
+    _require(_is_privacy_safe_symbol(rag_check.get("index")), "fast_launch_readiness.checks.rag_elasticsearch_hybrid.index must be privacy-safe")
+    _require_positive_int_metric_with_prefix(
+        rag_check,
+        "indexed_chunk_count",
+        prefix="fast_launch_readiness.checks.rag_elasticsearch_hybrid",
+    )
+    _require_positive_int_metric_with_prefix(
+        rag_check,
+        "dense_vector_dims",
+        prefix="fast_launch_readiness.checks.rag_elasticsearch_hybrid",
+    )
+    embedding_provider = str(rag_check.get("embedding_provider") or "").strip()
+    _require(
+        embedding_provider and embedding_provider.lower() not in LOCAL_EMBEDDING_PROVIDERS,
+        "fast_launch_readiness.checks.rag_elasticsearch_hybrid.embedding_provider must be production configured",
+    )
+    _require(
+        _is_privacy_safe_symbol(rag_check.get("embedding_model")),
+        "fast_launch_readiness.checks.rag_elasticsearch_hybrid.embedding_model must be present",
+    )
+    embedding_transport = str(rag_check.get("embedding_transport") or "").strip()
+    _require(
+        embedding_transport,
+        "fast_launch_readiness.checks.rag_elasticsearch_hybrid.embedding_transport must be present",
+    )
+    _require(
+        embedding_transport in {"sdk", "openai_compatible_http"},
+        "fast_launch_readiness.checks.rag_elasticsearch_hybrid.embedding_transport must be production-safe",
+    )
+    _require(
+        rag_check.get("embedding_production_ready") is True,
+        "fast_launch_readiness.checks.rag_elasticsearch_hybrid.embedding_production_ready must be true",
+    )
+    _require(
+        rag_check.get("embedding_endpoint_configured") is True,
+        "fast_launch_readiness.checks.rag_elasticsearch_hybrid.embedding_endpoint_configured must be true",
+    )
+    _require(rag_check.get("fusion") == "rrf", "fast_launch_readiness.checks.rag_elasticsearch_hybrid.fusion must be rrf")
+    rag_status = payload.get("rag_elasticsearch_hybrid") if isinstance(payload.get("rag_elasticsearch_hybrid"), dict) else {}
+    for key in (
+        "index",
+        "mode",
+        "indexed_chunk_count",
+        "dense_vector_dims",
+        "embedding_provider",
+        "embedding_model",
+        "embedding_transport",
+        "embedding_endpoint_configured",
+    ):
+        _require(
+            rag_check.get(key) == rag_status.get(key),
+            f"fast_launch_readiness.checks.rag_elasticsearch_hybrid.{key} must match rag_elasticsearch_hybrid",
+        )
+    return rag_check
+
+
 def _verify_task_status(payload: dict, gate: dict) -> None:
     _require_status(payload, "task_status_status")
     task_status = payload.get("task_status")
@@ -263,6 +511,140 @@ def _verify_task_status(payload: dict, gate: dict) -> None:
     _require(task_status.get("status") == "completed", "task_status.status must be completed")
     _require_positive_id(task_status, "series_id", prefix="task_status")
     _require_privacy_safe_symbol(task_status, "workflow_type")
+
+
+def _verify_runtime_toolchain(payload: dict) -> dict:
+    _require_status(payload, "runtime_toolchain_status")
+    runtime = payload.get("runtime_toolchain")
+    _require(isinstance(runtime, dict), "runtime_toolchain must be present")
+    allowed_keys = {
+        "workflow_tool_execution",
+        "docker_runtime_host",
+        "docker_requires_sudo",
+        "fs_license_exists",
+        "workflow_count",
+        "available_workflow_count",
+        "required_workflow_type",
+        "required_runtime_workflow_type",
+        "required_workflow_available",
+        "unavailable_workflows",
+        "workflow_types",
+    }
+    for key in runtime:
+        _require(key in allowed_keys, f"runtime_toolchain must not expose {key}")
+    _require(
+        runtime.get("workflow_tool_execution") == "deployment_server_local",
+        "runtime_toolchain.workflow_tool_execution must be deployment_server_local",
+    )
+    _require(runtime.get("docker_runtime_host") == "api_server", "runtime_toolchain.docker_runtime_host must be api_server")
+    _require(isinstance(runtime.get("docker_requires_sudo"), bool), "runtime_toolchain.docker_requires_sudo must be boolean")
+    _require(runtime.get("fs_license_exists") is True, "runtime_toolchain.fs_license_exists must be true")
+    _require_positive_int_metric_with_prefix(runtime, "workflow_count", prefix="runtime_toolchain")
+    available_count = _require_positive_int_metric_with_prefix(
+        runtime,
+        "available_workflow_count",
+        prefix="runtime_toolchain",
+    )
+    _require(
+        available_count <= runtime["workflow_count"],
+        "runtime_toolchain.available_workflow_count cannot exceed workflow_count",
+    )
+    for key in ("workflow_types", "unavailable_workflows"):
+        values = runtime.get(key)
+        _require(isinstance(values, list), f"runtime_toolchain.{key} must be a list")
+        for value in values:
+            _require(_is_privacy_safe_symbol(value), f"runtime_toolchain.{key} entries must be privacy-safe")
+    required_workflow_type = runtime.get("required_workflow_type")
+    _require(_is_privacy_safe_symbol(required_workflow_type), "runtime_toolchain.required_workflow_type must be privacy-safe")
+    task_status = payload.get("task_status") if isinstance(payload.get("task_status"), dict) else {}
+    _require(
+        required_workflow_type == task_status.get("workflow_type"),
+        "runtime_toolchain.required_workflow_type must match task_status.workflow_type",
+    )
+    has_required_runtime_workflow_type = "required_runtime_workflow_type" in runtime
+    required_runtime_workflow_type = runtime.get("required_runtime_workflow_type") if has_required_runtime_workflow_type else None
+    workflow_type_required_in_runtime = required_workflow_type
+    if has_required_runtime_workflow_type:
+        _require(
+            _is_privacy_safe_symbol(required_runtime_workflow_type),
+            "runtime_toolchain.required_runtime_workflow_type must be privacy-safe",
+        )
+        workflow_type_required_in_runtime = required_runtime_workflow_type
+    task_runtime_workflow_type = task_status.get("runtime_workflow_type")
+    if has_required_runtime_workflow_type and isinstance(task_runtime_workflow_type, str) and task_runtime_workflow_type:
+        _require(
+            required_runtime_workflow_type == task_runtime_workflow_type,
+            "runtime_toolchain.required_runtime_workflow_type must match task_status.runtime_workflow_type",
+        )
+    _require(
+        workflow_type_required_in_runtime in runtime.get("workflow_types", []),
+        "runtime_toolchain.workflow_types must include required_runtime_workflow_type"
+        if has_required_runtime_workflow_type
+        else "runtime_toolchain.workflow_types must include required_workflow_type",
+    )
+    _require(runtime.get("required_workflow_available") is True, "runtime_toolchain.required_workflow_available must be true")
+    _require(
+        workflow_type_required_in_runtime not in runtime.get("unavailable_workflows", []),
+        "runtime_toolchain.unavailable_workflows must not include required_runtime_workflow_type"
+        if has_required_runtime_workflow_type
+        else "runtime_toolchain.unavailable_workflows must not include required_workflow_type",
+    )
+    return runtime
+
+
+def _verify_task_events(payload: dict, gate: dict) -> None:
+    _require_status(payload, "task_events_status")
+    _require(payload.get("task_events_task_id") == gate.get("task_id"), "task_events_task_id must match smoke_gate.task_id")
+    event_types = payload.get("task_events_event_types")
+    _require(isinstance(event_types, list) and "task.status" in event_types, "task_events_event_types must include task.status")
+    _require(isinstance(event_types, list) and "task.remote_log" in event_types, "task_events_event_types must include task.remote_log")
+    task_status = payload.get("task_status") if isinstance(payload.get("task_status"), dict) else {}
+    _require(
+        payload.get("task_events_status_event_status") == task_status.get("status") == "completed",
+        "task_events_status_event_status must be completed",
+    )
+    _require_positive_int(payload, "task_events_remote_log_count")
+    source_stages = payload.get("task_events_remote_log_source_stages")
+    _require(
+        isinstance(source_stages, list)
+        and source_stages
+        and all(_is_privacy_safe_symbol(item) for item in source_stages),
+        "task_events_remote_log_source_stages must be non-empty privacy-safe symbols",
+    )
+    _require(payload.get("task_events_main_log_tail_present") is True, "task_events_main_log_tail_present must be true")
+
+
+def _verify_observe_repair(payload: dict, gate: dict) -> None:
+    _require_status(payload, "observe_repair_status")
+    _require(payload.get("observe_repair_task_id") == gate.get("task_id"), "observe_repair_task_id must match smoke_gate.task_id")
+    _require(
+        payload.get("observe_repair_policy") == "read_only_observe_repair",
+        "observe_repair_policy must be read_only_observe_repair",
+    )
+    _require(payload.get("observe_repair_auto_rerun_allowed") is False, "observe_repair_auto_rerun_allowed must be false")
+    _require(
+        payload.get("observe_repair_task_creation_allowed") is False,
+        "observe_repair_task_creation_allowed must be false",
+    )
+    forbidden_actions = payload.get("observe_repair_forbidden_actions")
+    _require(
+        isinstance(forbidden_actions, list)
+        and {"auto_retry", "auto_rerun", "task_creation"}.issubset(set(forbidden_actions)),
+        "observe_repair_forbidden_actions must include auto_retry, auto_rerun, and task_creation",
+    )
+    _require(
+        payload.get("observe_repair_production_task_created") is False,
+        "observe_repair_production_task_created must be false",
+    )
+    _require(
+        payload.get("observe_repair_requires_preflight_before_retry") is True,
+        "observe_repair_requires_preflight_before_retry must be true",
+    )
+    _require(
+        payload.get("observe_repair_requires_human_confirmation_before_retry") is True,
+        "observe_repair_requires_human_confirmation_before_retry must be true",
+    )
+    _require_positive_int(payload, "observe_repair_repair_suggestion_count")
 
 
 def _verify_launched_task(payload: dict, gate: dict) -> None:
@@ -290,7 +672,26 @@ def _verify_launched_task(payload: dict, gate: dict) -> None:
         launched_task.get("workflow_type") == task_status.get("workflow_type"),
         "launched_task.workflow_type must match task_status.workflow_type",
     )
+    _require(
+        task_status.get("runtime_workflow_type") is not None,
+        "task_status.runtime_workflow_type must be present",
+    )
+    _require_privacy_safe_symbol(task_status, "runtime_workflow_type")
+    _require(
+        launched_task.get("launch_source") == "agent_workflow_resume",
+        "launched_task.launch_source must be agent_workflow_resume",
+    )
+    _require(
+        launched_task.get("runtime_workflow_type") is not None,
+        "launched_task.runtime_workflow_type must be present",
+    )
+    _require_privacy_safe_symbol(launched_task, "runtime_workflow_type")
+    _require(
+        task_status.get("runtime_workflow_type") == launched_task.get("runtime_workflow_type"),
+        "task_status.runtime_workflow_type must match launched_task.runtime_workflow_type",
+    )
     _require_privacy_safe_symbol(launched_task, "workflow_type")
+    _require_privacy_safe_symbol(launched_task, "launch_source")
     _require_privacy_safe_symbol(launched_task, "initial_status")
 
 
@@ -339,6 +740,61 @@ def _verify_task_workflow_selection(payload: dict) -> None:
     )
 
 
+def _verify_workflow_metadata(
+    metadata: object,
+    *,
+    workflow_type: object,
+    runtime_workflow_type: object,
+    runtime_source: str,
+    prefix: str,
+) -> None:
+    _require(isinstance(metadata, dict), f"{prefix}.workflow_metadata must be present")
+    _require(
+        metadata.get("workflow_type") == workflow_type,
+        f"{prefix}.workflow_metadata.workflow_type must match workflow_type",
+    )
+    _require_privacy_safe_symbol(metadata, "workflow_type")
+    _require_privacy_safe_symbol(metadata, "runtime_workflow_type")
+    _require(
+        metadata.get("runtime_workflow_type") == runtime_workflow_type,
+        f"{prefix}.workflow_metadata.runtime_workflow_type must match {runtime_source}.runtime_workflow_type",
+    )
+    for key in ("workflow_family", "workflow_role"):
+        _require_privacy_safe_symbol(metadata, key)
+    display_name = metadata.get("display_name")
+    _require(isinstance(display_name, str) and bool(display_name), f"{prefix}.workflow_metadata.display_name must be present")
+    _require(
+        display_name != workflow_type,
+        f"{prefix}.workflow_metadata.display_name must not equal workflow_type",
+    )
+    capability_summary = metadata.get("capability_summary")
+    _require(
+        isinstance(capability_summary, str) and bool(capability_summary),
+        f"{prefix}.workflow_metadata.capability_summary must be present",
+    )
+    pipeline_stages = metadata.get("pipeline_stages")
+    _require(
+        isinstance(pipeline_stages, list)
+        and bool(pipeline_stages)
+        and all(isinstance(stage, dict) and stage.get("name") and stage.get("purpose") for stage in pipeline_stages),
+        f"{prefix}.workflow_metadata.pipeline_stages must be present",
+    )
+    for key in ("primary_outputs", "qc_outputs", "report_outputs", "limitations"):
+        value = metadata.get(key)
+        _require(
+            isinstance(value, list) and bool(value) and all(isinstance(item, str) and bool(item) for item in value),
+            f"{prefix}.workflow_metadata.{key} must be present",
+        )
+    _require(
+        metadata.get("is_report_only") is False,
+        f"{prefix}.workflow_metadata.is_report_only must be false for strict production launch evidence",
+    )
+    _require(
+        metadata.get("agent_selectable") is True,
+        f"{prefix}.workflow_metadata.agent_selectable must be true for strict production launch evidence",
+    )
+
+
 def _verify_task_result_summary(payload: dict, gate: dict) -> None:
     _require_status(payload, "task_result_summary_status")
     task_status = payload.get("task_status")
@@ -358,6 +814,13 @@ def _verify_task_result_summary(payload: dict, gate: dict) -> None:
         "task_result_summary.workflow_type must match task_status.workflow_type",
     )
     _require_privacy_safe_symbol(summary, "workflow_type")
+    _verify_workflow_metadata(
+        summary.get("workflow_metadata"),
+        workflow_type=summary.get("workflow_type"),
+        runtime_workflow_type=task_status.get("runtime_workflow_type"),
+        runtime_source="task_status",
+        prefix="task_result_summary",
+    )
     _require_privacy_safe_symbol(summary, "modality")
     feature_groups = summary.get("feature_groups")
     _require(
@@ -435,6 +898,33 @@ def _verify_upload_completion(payload: dict) -> None:
     )
 
 
+def _verify_workflow_eligibility_metadata_evidence(payload: dict, *, prefix: str, task_workflow_type: str) -> dict:
+    status_key = f"{prefix}_workflow_eligibility_metadata_status"
+    required_fields_key = f"{prefix}_workflow_eligibility_metadata_required_fields"
+    workflow_types_key = f"{prefix}_workflow_eligibility_metadata_workflow_types"
+    item_count_key = f"{prefix}_workflow_eligibility_metadata_item_count"
+    _require_status(payload, status_key)
+    required_fields = payload.get(required_fields_key)
+    _require(
+        isinstance(required_fields, list)
+        and all(field in required_fields for field in WORKFLOW_ELIGIBILITY_METADATA_REQUIRED_FIELDS),
+        f"{required_fields_key} must include workflow metadata required fields",
+    )
+    workflow_types = payload.get(workflow_types_key)
+    _require(
+        isinstance(workflow_types, list) and task_workflow_type in workflow_types,
+        f"{workflow_types_key} must include task_status.workflow_type",
+    )
+    item_count = _require_positive_int_metric(payload, item_count_key)
+    return {
+        "status": payload[status_key],
+        "required_field_count": len(required_fields),
+        "workflow_types": workflow_types,
+        "task_workflow_type_included": True,
+        "item_count": item_count,
+    }
+
+
 def _verify_agent_project_context(payload: dict, gate: dict) -> None:
     _require_status(payload, "agent_project_context_status")
     project_id = payload.get("agent_run_project_id")
@@ -486,6 +976,19 @@ def _verify_agent_workflow_confirmation(payload: dict, gate: dict) -> None:
         confirmation.get("workflow_type") == task_status.get("workflow_type"),
         "agent_workflow_confirmation.workflow_type must match task_status.workflow_type",
     )
+    launched_task = payload.get("launched_task") if isinstance(payload.get("launched_task"), dict) else {}
+    _require(
+        launched_task.get("runtime_workflow_type") is not None,
+        "launched_task.runtime_workflow_type must be present",
+    )
+    _require_privacy_safe_symbol(launched_task, "runtime_workflow_type")
+    _verify_workflow_metadata(
+        confirmation.get("workflow_metadata"),
+        workflow_type=confirmation.get("workflow_type"),
+        runtime_workflow_type=launched_task.get("runtime_workflow_type"),
+        runtime_source="launched_task",
+        prefix="agent_workflow_confirmation",
+    )
 
 
 def _verify_agent_workflow_resume(payload: dict, gate: dict) -> None:
@@ -523,11 +1026,116 @@ def _verify_agent_workflow_resume(payload: dict, gate: dict) -> None:
         resume.get("workflow_type") == task_status.get("workflow_type"),
         "agent_workflow_resume.workflow_type must match task_status.workflow_type",
     )
+    launched_task = payload.get("launched_task") if isinstance(payload.get("launched_task"), dict) else {}
+    _require(
+        resume.get("runtime_workflow_type") is not None,
+        "agent_workflow_resume.runtime_workflow_type must be present",
+    )
+    _require_privacy_safe_symbol(resume, "runtime_workflow_type")
+    _require(
+        resume.get("runtime_workflow_type") == launched_task.get("runtime_workflow_type"),
+        "agent_workflow_resume.runtime_workflow_type must match launched_task.runtime_workflow_type",
+    )
+    _require(
+        resume.get("runtime_workflow_type") == task_status.get("runtime_workflow_type"),
+        "agent_workflow_resume.runtime_workflow_type must match task_status.runtime_workflow_type",
+    )
 
 
-def _verify_agent_model_gateway(payload: dict) -> None:
+def _verify_agent_workflow_fingerprint_negative(payload: dict) -> dict:
+    _require_status(payload, "agent_workflow_fingerprint_negative_status")
+    negative = payload.get("agent_workflow_fingerprint_negative")
+    _require(isinstance(negative, dict), "agent_workflow_fingerprint_negative must be present")
+    _require_privacy_safe_symbol(negative, "agent_run_id")
+    _require_privacy_safe_symbol(negative, "thread_id")
+    _require(
+        negative.get("status") == "blocked",
+        "agent_workflow_fingerprint_negative.status must be blocked",
+    )
+    _require(
+        negative.get("production_task_created") is False,
+        "agent_workflow_fingerprint_negative.production_task_created must be false",
+    )
+    _require(
+        negative.get("confirmation_gate") == "fingerprint_mismatch",
+        "agent_workflow_fingerprint_negative.confirmation_gate must be fingerprint_mismatch",
+    )
+    _require(
+        negative.get("task_created") is False,
+        "agent_workflow_fingerprint_negative.task_created must be false",
+    )
+    return negative
+
+
+def _verify_unknown_workflow_incubation(payload: dict) -> dict:
+    _require_status(payload, "unknown_workflow_incubation_status")
+    incubation = payload.get("unknown_workflow_incubation")
+    _require(isinstance(incubation, dict), "unknown_workflow_incubation must be present")
+    _require_prefixed_privacy_safe_symbol(incubation, "agent_run_id", prefix="unknown_workflow_incubation")
+    if incubation.get("thread_id") is not None:
+        _require_prefixed_privacy_safe_symbol(incubation, "thread_id", prefix="unknown_workflow_incubation")
+    _require_prefixed_privacy_safe_symbol(incubation, "proposal_id", prefix="unknown_workflow_incubation")
+    _require(
+        incubation.get("status") == "toolchain_proposed",
+        "unknown_workflow_incubation.status must be toolchain_proposed",
+    )
+    _require(
+        incubation.get("action_lane") == "toolchain_incubation",
+        "unknown_workflow_incubation.action_lane must be toolchain_incubation",
+    )
+    _require(
+        incubation.get("task_created") is False,
+        "unknown_workflow_incubation.task_created must be false",
+    )
+    _require(
+        incubation.get("confirmation_created") is False,
+        "unknown_workflow_incubation.confirmation_created must be false",
+    )
+    _require(
+        incubation.get("task_creation_allowed") is False,
+        "unknown_workflow_incubation.task_creation_allowed must be false",
+    )
+    forbidden_actions = incubation.get("forbidden_actions")
+    _require(
+        isinstance(forbidden_actions, list)
+        and {"confirmation_creation", "production_task_creation", "pipeline_runner_launch"}.issubset(
+            set(forbidden_actions)
+        ),
+        "unknown_workflow_incubation.forbidden_actions must include confirmation_creation, production_task_creation, and pipeline_runner_launch",
+    )
+    _require(
+        incubation.get("production_task_created") is False,
+        "unknown_workflow_incubation.production_task_created must be false",
+    )
+    _require(
+        incubation.get("proposal_production_task_created") is False,
+        "unknown_workflow_incubation.proposal_production_task_created must be false",
+    )
+    for key in ("proposal_status", "proposal_contract_version", "proposal_promotion_status"):
+        if incubation.get(key) is not None:
+            _require_prefixed_privacy_safe_symbol(incubation, key, prefix="unknown_workflow_incubation")
+    return incubation
+
+
+def _verify_agent_model_gateway(payload: dict, gate: dict) -> None:
     _require_status(payload, "agent_model_gateway_status")
     _require_privacy_safe_symbol(payload, "agent_model_gateway_access")
+    if payload.get("agent_model_transport_access") is not None:
+        _require_privacy_safe_symbol(payload, "agent_model_transport_access")
+    if payload.get("agent_model_trust_env_proxy") is not None:
+        _require(
+            isinstance(payload.get("agent_model_trust_env_proxy"), bool),
+            "agent_model_trust_env_proxy must be boolean",
+        )
+    if _requires_direct_model_gateway(payload.get("model_status") or {}, gate.get("expected_model_provider_profile")):
+        _require(
+            payload.get("agent_model_transport_access") == "direct",
+            "agent_model_transport_access must be direct for rawchat direct acceptance",
+        )
+        _require(
+            payload.get("agent_model_trust_env_proxy") is False,
+            "agent_model_trust_env_proxy must be false for rawchat direct acceptance",
+        )
     safe_metadata = payload.get("agent_safe_metadata")
     _require(isinstance(safe_metadata, dict), "agent_safe_metadata must be an object")
     _require(
@@ -647,6 +1255,285 @@ def _verify_vendor_pointer_integrity(payload: dict) -> None:
     )
     _require(integrity.get("raw_source_manifest_exists") is True, "rag_vendor_pointer_integrity.raw_source_manifest_exists must be true")
     _require(integrity.get("curated_provenance_ok") is True, "rag_vendor_pointer_integrity.curated_provenance_ok must be true")
+
+
+def _verify_elasticsearch_hybrid_rag(payload: dict) -> None:
+    _require_status(payload, "rag_elasticsearch_hybrid_status")
+    hybrid = (
+        payload.get("rag_elasticsearch_hybrid")
+        if isinstance(payload.get("rag_elasticsearch_hybrid"), dict)
+        else {}
+    )
+    rebuild_hybrid = (
+        payload.get("rag_rebuild_elasticsearch_hybrid")
+        if isinstance(payload.get("rag_rebuild_elasticsearch_hybrid"), dict)
+        else {}
+    )
+    _require(rebuild_hybrid, "rag_rebuild_elasticsearch_hybrid must be present")
+    _require(hybrid.get("engine") == "elasticsearch", "rag_elasticsearch_hybrid.engine must be elasticsearch")
+    _require(hybrid.get("configured") is True, "rag_elasticsearch_hybrid.configured must be true")
+    _require(hybrid.get("persisted") is True, "rag_elasticsearch_hybrid.persisted must be true")
+    _require(hybrid.get("mode") == "connected", "rag_elasticsearch_hybrid.mode must be connected")
+    index_name = hybrid.get("index")
+    _require(_is_privacy_safe_symbol(index_name), "rag_elasticsearch_hybrid.index must be privacy-safe")
+    indexed_chunk_count = hybrid.get("indexed_chunk_count")
+    _require(
+        isinstance(indexed_chunk_count, int) and not isinstance(indexed_chunk_count, bool) and indexed_chunk_count > 0,
+        "rag_elasticsearch_hybrid.indexed_chunk_count must be greater than zero",
+    )
+    _require(
+        rebuild_hybrid.get("engine") == "elasticsearch",
+        "rag_rebuild_elasticsearch_hybrid.engine must be elasticsearch",
+    )
+    _require(
+        rebuild_hybrid.get("configured") is True,
+        "rag_rebuild_elasticsearch_hybrid.configured must be true",
+    )
+    _require(
+        rebuild_hybrid.get("persisted") is True,
+        "rag_rebuild_elasticsearch_hybrid.persisted must be true",
+    )
+    _require(
+        rebuild_hybrid.get("mode") == "connected",
+        "rag_rebuild_elasticsearch_hybrid.mode must be connected",
+    )
+    _require(
+        rebuild_hybrid.get("index") == index_name,
+        "rag_rebuild_elasticsearch_hybrid.index must match status",
+    )
+    _require(
+        rebuild_hybrid.get("indexed_chunk_count") == indexed_chunk_count,
+        "rag_rebuild_elasticsearch_hybrid.indexed_chunk_count must match status",
+    )
+    dense_vector_dims = hybrid.get("dense_vector_dims")
+    _require(
+        isinstance(dense_vector_dims, int) and not isinstance(dense_vector_dims, bool) and dense_vector_dims > 0,
+        "rag_elasticsearch_hybrid.dense_vector_dims must be greater than zero",
+    )
+    rebuild_dense_vector_dims = rebuild_hybrid.get("dense_vector_dims")
+    _require(
+        isinstance(rebuild_dense_vector_dims, int)
+        and not isinstance(rebuild_dense_vector_dims, bool)
+        and rebuild_dense_vector_dims > 0,
+        "rag_rebuild_elasticsearch_hybrid.dense_vector_dims must be greater than zero",
+    )
+    _require(
+        rebuild_dense_vector_dims == dense_vector_dims,
+        "rag_rebuild_elasticsearch_hybrid.dense_vector_dims must match status",
+    )
+    _require(not hybrid.get("error"), "rag_elasticsearch_hybrid.error must be absent")
+    _require(not rebuild_hybrid.get("error"), "rag_rebuild_elasticsearch_hybrid.error must be absent")
+    _require(not hybrid.get("embedding_error"), "rag_elasticsearch_hybrid.embedding_error must be absent")
+    _require(
+        not rebuild_hybrid.get("embedding_error"),
+        "rag_rebuild_elasticsearch_hybrid.embedding_error must be absent",
+    )
+    _require(
+        hybrid.get("lexical_retriever") == "standard",
+        "rag_elasticsearch_hybrid.lexical_retriever must be standard",
+    )
+    _require(hybrid.get("vector_retriever") == "knn", "rag_elasticsearch_hybrid.vector_retriever must be knn")
+    _require(
+        hybrid.get("dense_vector_field") == "embedding",
+        "rag_elasticsearch_hybrid.dense_vector_field must be embedding",
+    )
+    _require(
+        rebuild_hybrid.get("lexical_retriever") == hybrid.get("lexical_retriever"),
+        "rag_rebuild_elasticsearch_hybrid.lexical_retriever must match status",
+    )
+    _require(
+        rebuild_hybrid.get("vector_retriever") == hybrid.get("vector_retriever"),
+        "rag_rebuild_elasticsearch_hybrid.vector_retriever must match status",
+    )
+    _require(
+        rebuild_hybrid.get("dense_vector_field") == hybrid.get("dense_vector_field"),
+        "rag_rebuild_elasticsearch_hybrid.dense_vector_field must match status",
+    )
+    embedding_provider = str(hybrid.get("embedding_provider") or "").strip()
+    _require(
+        embedding_provider and embedding_provider.lower() not in LOCAL_EMBEDDING_PROVIDERS,
+        "rag_elasticsearch_hybrid.embedding_provider must be production configured",
+    )
+    embedding_model = str(hybrid.get("embedding_model") or "").strip()
+    _require(
+        embedding_model,
+        "rag_elasticsearch_hybrid.embedding_model must be present",
+    )
+    embedding_transport = str(hybrid.get("embedding_transport") or "").strip()
+    _require(
+        embedding_transport,
+        "rag_elasticsearch_hybrid.embedding_transport must be present",
+    )
+    _require(
+        embedding_transport in {"sdk", "openai_compatible_http"},
+        "rag_elasticsearch_hybrid.embedding_transport must be production-safe",
+    )
+    _require(
+        hybrid.get("embedding_endpoint_configured") is True,
+        "rag_elasticsearch_hybrid.embedding_endpoint_configured must be true",
+    )
+    _require(
+        hybrid.get("embedding_production_ready") is True,
+        "rag_elasticsearch_hybrid.embedding_production_ready must be true",
+    )
+    _require(
+        rebuild_hybrid.get("embedding_provider") == embedding_provider,
+        "rag_rebuild_elasticsearch_hybrid.embedding_provider must match status",
+    )
+    rebuild_embedding_model = str(rebuild_hybrid.get("embedding_model") or "").strip()
+    _require(
+        rebuild_embedding_model,
+        "rag_rebuild_elasticsearch_hybrid.embedding_model must be present",
+    )
+    _require(
+        rebuild_embedding_model == embedding_model,
+        "rag_rebuild_elasticsearch_hybrid.embedding_model must match status",
+    )
+    rebuild_embedding_transport = str(rebuild_hybrid.get("embedding_transport") or "").strip()
+    _require(
+        rebuild_embedding_transport,
+        "rag_rebuild_elasticsearch_hybrid.embedding_transport must be present",
+    )
+    _require(
+        rebuild_embedding_transport == embedding_transport,
+        "rag_rebuild_elasticsearch_hybrid.embedding_transport must match status",
+    )
+    _require(
+        rebuild_embedding_transport in {"sdk", "openai_compatible_http"},
+        "rag_rebuild_elasticsearch_hybrid.embedding_transport must be production-safe",
+    )
+    _require(
+        rebuild_hybrid.get("embedding_endpoint_configured") == hybrid.get("embedding_endpoint_configured"),
+        "rag_rebuild_elasticsearch_hybrid.embedding_endpoint_configured must match status",
+    )
+    _require(
+        rebuild_hybrid.get("embedding_endpoint_configured") is True,
+        "rag_rebuild_elasticsearch_hybrid.embedding_endpoint_configured must be true",
+    )
+    _require(
+        rebuild_hybrid.get("embedding_production_ready") is True,
+        "rag_rebuild_elasticsearch_hybrid.embedding_production_ready must be true",
+    )
+    fusion, rrf_unavailable_reason = _require_elasticsearch_fusion(
+        hybrid,
+        context="rag_elasticsearch_hybrid",
+    )
+    _require(
+        rebuild_hybrid.get("fusion") == fusion,
+        "rag_rebuild_elasticsearch_hybrid.fusion must match status",
+    )
+    _require(
+        _rrf_unavailable_reason(rebuild_hybrid) == (rrf_unavailable_reason or ""),
+        "rag_rebuild_elasticsearch_hybrid.rrf_unavailable_reason must match status",
+    )
+    _require(
+        "official_sources" not in hybrid,
+        "rag_elasticsearch_hybrid.official_sources must not be saved",
+    )
+    _require(
+        hybrid.get("official_rrf_source_present") is True,
+        "rag_elasticsearch_hybrid.official_rrf_source_present must be true",
+    )
+    _require_status(payload, "rag_elasticsearch_hybrid_query_status")
+    _require(
+        payload.get("rag_elasticsearch_hybrid_query_mode") == "elasticsearch_hybrid",
+        "rag_elasticsearch_hybrid_query_mode must be elasticsearch_hybrid",
+    )
+    _require(
+        payload.get("rag_elasticsearch_hybrid_query_retrieval_source") == "elasticsearch_hybrid",
+        "rag_elasticsearch_hybrid_query_retrieval_source must be elasticsearch_hybrid",
+    )
+    _require(
+        payload.get("rag_elasticsearch_hybrid_query_source") == ELASTICSEARCH_HYBRID_CONTRACT_SOURCE,
+        "rag_elasticsearch_hybrid_query_source must cite the Elasticsearch hybrid contract",
+    )
+    _require_positive_int_metric(payload, "rag_elasticsearch_hybrid_query_citation_count")
+    _require_positive_numeric_metric(payload, "rag_elasticsearch_hybrid_query_top_score")
+    _require(
+        payload.get("rag_elasticsearch_hybrid_query_index") == index_name,
+        "rag_elasticsearch_hybrid_query_index must match status",
+    )
+    _require(
+        payload.get("rag_elasticsearch_hybrid_query_lexical_retriever") == hybrid.get("lexical_retriever"),
+        "rag_elasticsearch_hybrid_query_lexical_retriever must match status",
+    )
+    _require(
+        payload.get("rag_elasticsearch_hybrid_query_lexical_retriever") == "standard",
+        "rag_elasticsearch_hybrid_query_lexical_retriever must be standard",
+    )
+    _require(
+        payload.get("rag_elasticsearch_hybrid_query_vector_retriever") == hybrid.get("vector_retriever"),
+        "rag_elasticsearch_hybrid_query_vector_retriever must match status",
+    )
+    _require(
+        payload.get("rag_elasticsearch_hybrid_query_vector_retriever") == "knn",
+        "rag_elasticsearch_hybrid_query_vector_retriever must be knn",
+    )
+    _require(
+        payload.get("rag_elasticsearch_hybrid_query_dense_vector_field") == hybrid.get("dense_vector_field"),
+        "rag_elasticsearch_hybrid_query_dense_vector_field must match status",
+    )
+    _require(
+        payload.get("rag_elasticsearch_hybrid_query_dense_vector_field") == "embedding",
+        "rag_elasticsearch_hybrid_query_dense_vector_field must be embedding",
+    )
+    _require(
+        payload.get("rag_elasticsearch_hybrid_query_fusion") == fusion,
+        "rag_elasticsearch_hybrid_query_fusion must match status",
+    )
+    _require(
+        (
+            payload.get("rag_elasticsearch_hybrid_query_fusion") == "rrf"
+            or (
+                payload.get("rag_elasticsearch_hybrid_query_fusion") == "query_plus_knn"
+                and payload.get("rag_elasticsearch_hybrid_query_rrf_unavailable_reason")
+                == ELASTICSEARCH_ACCEPTED_FUSION_FALLBACK_REASON
+                and rrf_unavailable_reason == ELASTICSEARCH_ACCEPTED_FUSION_FALLBACK_REASON
+            )
+        ),
+        "rag_elasticsearch_hybrid_query_fusion must be rrf or query_plus_knn with rrf_unavailable_reason=license_non_compliant",
+    )
+    query_dense_vector_dims = _require_positive_int_metric(
+        payload,
+        "rag_elasticsearch_hybrid_query_dense_vector_dims",
+    )
+    _require(
+        query_dense_vector_dims == dense_vector_dims,
+        "rag_elasticsearch_hybrid_query_dense_vector_dims must match status",
+    )
+    query_embedding_provider = str(payload.get("rag_elasticsearch_hybrid_query_embedding_provider") or "").strip()
+    _require(
+        query_embedding_provider == embedding_provider,
+        "rag_elasticsearch_hybrid_query_embedding_provider must match status",
+    )
+    query_embedding_model = str(payload.get("rag_elasticsearch_hybrid_query_embedding_model") or "").strip()
+    _require(
+        query_embedding_model == embedding_model,
+        "rag_elasticsearch_hybrid_query_embedding_model must match status",
+    )
+    query_embedding_transport = str(payload.get("rag_elasticsearch_hybrid_query_embedding_transport") or "").strip()
+    _require(
+        query_embedding_transport == embedding_transport,
+        "rag_elasticsearch_hybrid_query_embedding_transport must match status",
+    )
+    _require(
+        payload.get("rag_elasticsearch_hybrid_query_embedding_endpoint_configured")
+        == hybrid.get("embedding_endpoint_configured"),
+        "rag_elasticsearch_hybrid_query_embedding_endpoint_configured must match status",
+    )
+    _require(
+        payload.get("rag_elasticsearch_hybrid_query_embedding_endpoint_configured") is True,
+        "rag_elasticsearch_hybrid_query_embedding_endpoint_configured must be true",
+    )
+    _require(
+        payload.get("rag_elasticsearch_hybrid_query_embedding_production_ready")
+        == hybrid.get("embedding_production_ready"),
+        "rag_elasticsearch_hybrid_query_embedding_production_ready must match status",
+    )
+    _require(
+        payload.get("rag_elasticsearch_hybrid_query_embedding_production_ready") is True,
+        "rag_elasticsearch_hybrid_query_embedding_production_ready must be true",
+    )
 
 
 def _verify_vendor_coverage_catalog(payload: dict) -> None:
@@ -1023,6 +1910,7 @@ def verify_acceptance_payload(
     now_utc: datetime | None = None,
 ) -> dict:
     _require(isinstance(payload, dict), "acceptance payload must be a JSON object")
+    _verify_no_saved_official_sources(payload)
     generated_at_utc, effective_max_age_hours = _verify_generated_at_utc(
         payload,
         max_age_hours=max_age_hours,
@@ -1038,10 +1926,11 @@ def verify_acceptance_payload(
     _require(payload.get("agent_run_status") == "answered", "agent_run_status must be answered")
     for key in ("agent_run_id", "intent", "selected_skill"):
         _require_privacy_safe_symbol(payload, key)
-    _verify_agent_model_gateway(payload)
+    _verify_agent_model_gateway(payload, gate)
     _verify_agent_project_context(payload, gate)
     _verify_agent_workflow_confirmation(payload, gate)
-    _verify_agent_workflow_resume(payload, gate)
+    agent_workflow_fingerprint_negative = _verify_agent_workflow_fingerprint_negative(payload)
+    unknown_workflow_incubation = _verify_unknown_workflow_incubation(payload)
     _require_int_metric(payload, "rag_document_count")
     _require_int_metric(payload, "rag_chunk_count")
     _require(payload["rag_document_count"] >= gate["min_documents"], "rag_document_count below smoke gate minimum")
@@ -1049,19 +1938,38 @@ def verify_acceptance_payload(
     _require(payload.get("rag_semantic_index") is True, "rag_semantic_index must be true")
     _verify_raw_source_policy(payload)
     _verify_vendor_pointer_integrity(payload)
+    _verify_elasticsearch_hybrid_rag(payload)
+    fast_launch_rag_check = _verify_fast_launch_readiness(payload)
+    fast_launch_checks = payload["fast_launch_readiness"]["checks"]
+    fast_launch_production_deployment = fast_launch_checks["production_deployment"]
     _verify_vendor_coverage_catalog(payload)
     _verify_real_ids(payload, gate)
     _verify_task_status(payload, gate)
+    runtime_toolchain = _verify_runtime_toolchain(payload)
+    _verify_task_events(payload, gate)
+    _verify_observe_repair(payload, gate)
     _verify_uploaded_series(payload, gate)
     _verify_launched_task(payload, gate)
+    _verify_agent_workflow_resume(payload, gate)
     _verify_task_workflow_selection(payload)
     _verify_task_result_summary(payload, gate)
     _verify_launchability(payload)
     _require_status(payload, "project_contract_status")
     _require_positive_int(payload, "series_with_workflow_eligibility")
+    task_workflow_type = payload["task_status"]["workflow_type"]
+    project_workflow_eligibility_metadata = _verify_workflow_eligibility_metadata_evidence(
+        payload,
+        prefix="project",
+        task_workflow_type=task_workflow_type,
+    )
     _require_status(payload, "upload_inventory_contract_status")
     _verify_upload_completion(payload)
     _require_positive_int(payload, "upload_inventory_series_with_workflow_eligibility")
+    upload_inventory_workflow_eligibility_metadata = _verify_workflow_eligibility_metadata_evidence(
+        payload,
+        prefix="upload_inventory",
+        task_workflow_type=task_workflow_type,
+    )
     _require_status(payload, "task_artifact_manifest_status")
     _require_positive_int(payload, "artifact_manifest_artifact_count")
     _require(isinstance(payload.get("artifact_manifest_preview_kinds"), list) and payload["artifact_manifest_preview_kinds"], "artifact_manifest_preview_kinds must be non-empty")
@@ -1076,20 +1984,240 @@ def verify_acceptance_payload(
             "model_wire_api": payload["model_status"].get("wire_api"),
             "expected_model_provider_profile": gate["expected_model_provider_profile"],
             "model_provider_profile": payload["model_status"].get("provider_profile"),
+            "model_trust_env_proxy": payload["model_status"].get("trust_env_proxy"),
+            "model_gateway_access": payload["model_status"].get("deployment", {}).get("model_gateway_access"),
             "model_tool_loop": payload["model_status"].get("capabilities", {}).get("model_tool_loop"),
             "agent_model_gateway_status": payload["agent_model_gateway_status"],
+            "agent_model_gateway_access": payload["agent_model_gateway_access"],
+            "agent_model_transport_access": payload.get("agent_model_transport_access"),
+            "agent_model_trust_env_proxy": payload.get("agent_model_trust_env_proxy"),
             "agent_project_context_status": payload["agent_project_context_status"],
             "agent_workflow_confirmation_status": payload["agent_workflow_confirmation_status"],
+            "agent_workflow_confirmation_metadata_workflow_type": payload["agent_workflow_confirmation"]["workflow_metadata"]["workflow_type"],
+            "agent_workflow_confirmation_metadata_runtime_workflow_type": payload["agent_workflow_confirmation"]["workflow_metadata"].get("runtime_workflow_type"),
+            "agent_workflow_confirmation_metadata_agent_selectable": payload["agent_workflow_confirmation"]["workflow_metadata"]["agent_selectable"],
+            "agent_workflow_confirmation_metadata_is_report_only": payload["agent_workflow_confirmation"]["workflow_metadata"]["is_report_only"],
             "agent_workflow_resume_status": payload["agent_workflow_resume_status"],
+            "agent_workflow_resume_runtime_workflow_type": payload["agent_workflow_resume"].get("runtime_workflow_type"),
+            "agent_workflow_fingerprint_negative_status": payload["agent_workflow_fingerprint_negative_status"],
+            "agent_workflow_fingerprint_negative_confirmation_gate": agent_workflow_fingerprint_negative.get("confirmation_gate"),
+            "agent_workflow_fingerprint_negative_task_created": agent_workflow_fingerprint_negative.get("task_created"),
+            "agent_workflow_fingerprint_negative_production_task_created": agent_workflow_fingerprint_negative.get(
+                "production_task_created"
+            ),
+            "unknown_workflow_incubation_status": payload["unknown_workflow_incubation_status"],
+            "unknown_workflow_incubation_action_lane": unknown_workflow_incubation.get("action_lane"),
+            "unknown_workflow_incubation_task_created": unknown_workflow_incubation.get("task_created"),
+            "unknown_workflow_incubation_confirmation_created": unknown_workflow_incubation.get(
+                "confirmation_created"
+            ),
+            "unknown_workflow_incubation_task_creation_allowed": unknown_workflow_incubation.get(
+                "task_creation_allowed"
+            ),
+            "unknown_workflow_incubation_forbidden_actions": unknown_workflow_incubation.get("forbidden_actions"),
+            "unknown_workflow_incubation_production_task_created": unknown_workflow_incubation.get(
+                "production_task_created"
+            ),
+            "unknown_workflow_incubation_proposal_production_task_created": unknown_workflow_incubation.get(
+                "proposal_production_task_created"
+            ),
             "deployment_identity_status": payload["deployment_identity_status"],
             "production_readiness_status": payload["production_readiness_status"],
+            "fast_launch_readiness_status": payload["fast_launch_readiness_status"],
+            "fast_launch_production_deployment_status": fast_launch_production_deployment.get("status"),
+            "fast_launch_production_deployment_required": fast_launch_production_deployment.get("required"),
+            "fast_launch_production_deployment_ready": fast_launch_production_deployment.get("ready"),
+            "fast_launch_rag_elasticsearch_hybrid_status": fast_launch_rag_check.get("status"),
+            "fast_launch_rag_elasticsearch_hybrid_mode": fast_launch_rag_check.get("mode"),
+            "fast_launch_rag_elasticsearch_hybrid_index": fast_launch_rag_check.get("index"),
+            "runtime_toolchain_status": payload["runtime_toolchain_status"],
+            "runtime_toolchain_workflow_tool_execution": runtime_toolchain.get("workflow_tool_execution"),
+            "runtime_toolchain_docker_runtime_host": runtime_toolchain.get("docker_runtime_host"),
+            "runtime_toolchain_fs_license_exists": runtime_toolchain.get("fs_license_exists"),
+            "runtime_toolchain_required_workflow_type": runtime_toolchain.get("required_workflow_type"),
+            "runtime_toolchain_required_runtime_workflow_type": runtime_toolchain.get(
+                "required_runtime_workflow_type"
+            )
+            or runtime_toolchain.get("required_workflow_type"),
+            "runtime_toolchain_required_workflow_available": runtime_toolchain.get("required_workflow_available"),
             "remote_evidence_ids_status": payload["remote_evidence_ids_status"],
             "uploaded_series_status": payload["uploaded_series_status"],
             "task_status_status": payload["task_status_status"],
+            "task_status_runtime_workflow_type": payload["task_status"].get("runtime_workflow_type"),
+            "project_workflow_eligibility_metadata_status": project_workflow_eligibility_metadata["status"],
+            "project_workflow_eligibility_metadata_item_count": project_workflow_eligibility_metadata["item_count"],
+            "project_workflow_eligibility_metadata_required_field_count": project_workflow_eligibility_metadata[
+                "required_field_count"
+            ],
+            "project_workflow_eligibility_metadata_workflow_types": project_workflow_eligibility_metadata[
+                "workflow_types"
+            ],
+            "project_workflow_eligibility_metadata_task_workflow_type_included": project_workflow_eligibility_metadata[
+                "task_workflow_type_included"
+            ],
+            "upload_inventory_workflow_eligibility_metadata_status": upload_inventory_workflow_eligibility_metadata[
+                "status"
+            ],
+            "upload_inventory_workflow_eligibility_metadata_item_count": upload_inventory_workflow_eligibility_metadata[
+                "item_count"
+            ],
+            "upload_inventory_workflow_eligibility_metadata_required_field_count": upload_inventory_workflow_eligibility_metadata[
+                "required_field_count"
+            ],
+            "upload_inventory_workflow_eligibility_metadata_workflow_types": upload_inventory_workflow_eligibility_metadata[
+                "workflow_types"
+            ],
+            "upload_inventory_workflow_eligibility_metadata_task_workflow_type_included": upload_inventory_workflow_eligibility_metadata[
+                "task_workflow_type_included"
+            ],
+            "task_events_status": payload["task_events_status"],
+            "task_events_remote_log_count": payload["task_events_remote_log_count"],
+            "observe_repair_status": payload["observe_repair_status"],
+            "observe_repair_policy": payload["observe_repair_policy"],
+            "observe_repair_auto_rerun_allowed": payload["observe_repair_auto_rerun_allowed"],
+            "observe_repair_task_creation_allowed": payload["observe_repair_task_creation_allowed"],
+            "observe_repair_forbidden_actions": payload["observe_repair_forbidden_actions"],
+            "observe_repair_production_task_created": payload["observe_repair_production_task_created"],
+            "observe_repair_requires_preflight_before_retry": payload[
+                "observe_repair_requires_preflight_before_retry"
+            ],
+            "observe_repair_requires_human_confirmation_before_retry": payload[
+                "observe_repair_requires_human_confirmation_before_retry"
+            ],
             "launched_task_status": payload["launched_task_status"],
+            "launched_task_launch_source": payload["launched_task"].get("launch_source"),
+            "launched_task_runtime_workflow_type": payload["launched_task"].get("runtime_workflow_type"),
             "task_workflow_selection_status": payload["task_workflow_selection_status"],
             "task_result_summary_status": payload["task_result_summary_status"],
+            "task_result_summary_metadata_workflow_type": payload["task_result_summary"]["workflow_metadata"]["workflow_type"],
+            "task_result_summary_metadata_runtime_workflow_type": payload["task_result_summary"]["workflow_metadata"].get("runtime_workflow_type"),
+            "task_result_summary_metadata_agent_selectable": payload["task_result_summary"]["workflow_metadata"]["agent_selectable"],
+            "task_result_summary_metadata_is_report_only": payload["task_result_summary"]["workflow_metadata"]["is_report_only"],
             "rag_vendor_pointer_integrity_status": payload["rag_vendor_pointer_integrity_status"],
+            "rag_elasticsearch_hybrid_status": payload["rag_elasticsearch_hybrid_status"],
+            "rag_elasticsearch_hybrid_mode": payload["rag_elasticsearch_hybrid"].get("mode"),
+            "rag_elasticsearch_hybrid_configured": payload["rag_elasticsearch_hybrid"].get("configured"),
+            "rag_elasticsearch_hybrid_index": payload["rag_elasticsearch_hybrid"].get("index"),
+            "rag_elasticsearch_hybrid_indexed_chunk_count": payload["rag_elasticsearch_hybrid"].get(
+                "indexed_chunk_count"
+            ),
+            "rag_elasticsearch_hybrid_dense_vector_dims": payload["rag_elasticsearch_hybrid"].get(
+                "dense_vector_dims"
+            ),
+            "rag_elasticsearch_hybrid_error_absent": not bool(payload["rag_elasticsearch_hybrid"].get("error")),
+            "rag_elasticsearch_hybrid_embedding_error_absent": not bool(
+                payload["rag_elasticsearch_hybrid"].get("embedding_error")
+            ),
+            "rag_elasticsearch_hybrid_embedding_provider": payload["rag_elasticsearch_hybrid"].get(
+                "embedding_provider"
+            ),
+            "rag_elasticsearch_hybrid_embedding_model": payload["rag_elasticsearch_hybrid"].get(
+                "embedding_model"
+            ),
+            "rag_elasticsearch_hybrid_embedding_transport": payload["rag_elasticsearch_hybrid"].get(
+                "embedding_transport"
+            ),
+            "rag_elasticsearch_hybrid_embedding_endpoint_configured": payload["rag_elasticsearch_hybrid"].get(
+                "embedding_endpoint_configured"
+            )
+            is True,
+            "rag_elasticsearch_hybrid_embedding_production_ready": payload["rag_elasticsearch_hybrid"].get(
+                "embedding_production_ready"
+            ),
+            "rag_elasticsearch_hybrid_official_rrf_source_present": payload["rag_elasticsearch_hybrid"].get(
+                "official_rrf_source_present"
+            )
+            is True,
+            "rag_rebuild_elasticsearch_hybrid_indexed_chunk_count": payload[
+                "rag_rebuild_elasticsearch_hybrid"
+            ].get("indexed_chunk_count"),
+            "rag_rebuild_elasticsearch_hybrid_configured": payload[
+                "rag_rebuild_elasticsearch_hybrid"
+            ].get("configured"),
+            "rag_rebuild_elasticsearch_hybrid_index": payload[
+                "rag_rebuild_elasticsearch_hybrid"
+            ].get("index"),
+            "rag_rebuild_elasticsearch_hybrid_dense_vector_dims": payload[
+                "rag_rebuild_elasticsearch_hybrid"
+            ].get("dense_vector_dims"),
+            "rag_rebuild_elasticsearch_hybrid_lexical_retriever": payload[
+                "rag_rebuild_elasticsearch_hybrid"
+            ].get("lexical_retriever"),
+            "rag_rebuild_elasticsearch_hybrid_vector_retriever": payload[
+                "rag_rebuild_elasticsearch_hybrid"
+            ].get("vector_retriever"),
+            "rag_rebuild_elasticsearch_hybrid_dense_vector_field": payload[
+                "rag_rebuild_elasticsearch_hybrid"
+            ].get("dense_vector_field"),
+            "rag_rebuild_elasticsearch_hybrid_error_absent": not bool(
+                payload["rag_rebuild_elasticsearch_hybrid"].get("error")
+            ),
+            "rag_rebuild_elasticsearch_hybrid_embedding_error_absent": not bool(
+                payload["rag_rebuild_elasticsearch_hybrid"].get("embedding_error")
+            ),
+            "rag_rebuild_elasticsearch_hybrid_embedding_provider": payload[
+                "rag_rebuild_elasticsearch_hybrid"
+            ].get("embedding_provider"),
+            "rag_rebuild_elasticsearch_hybrid_embedding_model": payload[
+                "rag_rebuild_elasticsearch_hybrid"
+            ].get("embedding_model"),
+            "rag_rebuild_elasticsearch_hybrid_embedding_transport": payload[
+                "rag_rebuild_elasticsearch_hybrid"
+            ].get("embedding_transport"),
+            "rag_rebuild_elasticsearch_hybrid_embedding_endpoint_configured": payload[
+                "rag_rebuild_elasticsearch_hybrid"
+            ].get("embedding_endpoint_configured")
+            is True,
+            "rag_rebuild_elasticsearch_hybrid_embedding_production_ready": payload[
+                "rag_rebuild_elasticsearch_hybrid"
+            ].get("embedding_production_ready"),
+            "rag_rebuild_elasticsearch_hybrid_fusion": payload["rag_rebuild_elasticsearch_hybrid"].get(
+                "fusion"
+            ),
+            "rag_elasticsearch_hybrid_query_status": payload["rag_elasticsearch_hybrid_query_status"],
+            "rag_elasticsearch_hybrid_query_mode": payload["rag_elasticsearch_hybrid_query_mode"],
+            "rag_elasticsearch_hybrid_query_retrieval_source": payload[
+                "rag_elasticsearch_hybrid_query_retrieval_source"
+            ],
+            "rag_elasticsearch_hybrid_query_source": payload["rag_elasticsearch_hybrid_query_source"],
+            "rag_elasticsearch_hybrid_query_citation_count": payload[
+                "rag_elasticsearch_hybrid_query_citation_count"
+            ],
+            "rag_elasticsearch_hybrid_query_top_score": payload[
+                "rag_elasticsearch_hybrid_query_top_score"
+            ],
+            "rag_elasticsearch_hybrid_query_index": payload["rag_elasticsearch_hybrid_query_index"],
+            "rag_elasticsearch_hybrid_query_lexical_retriever": payload[
+                "rag_elasticsearch_hybrid_query_lexical_retriever"
+            ],
+            "rag_elasticsearch_hybrid_query_vector_retriever": payload[
+                "rag_elasticsearch_hybrid_query_vector_retriever"
+            ],
+            "rag_elasticsearch_hybrid_query_dense_vector_field": payload[
+                "rag_elasticsearch_hybrid_query_dense_vector_field"
+            ],
+            "rag_elasticsearch_hybrid_query_fusion": payload["rag_elasticsearch_hybrid_query_fusion"],
+            "rag_elasticsearch_hybrid_query_rrf_unavailable_reason": payload.get(
+                "rag_elasticsearch_hybrid_query_rrf_unavailable_reason"
+            ),
+            "rag_elasticsearch_hybrid_query_dense_vector_dims": payload[
+                "rag_elasticsearch_hybrid_query_dense_vector_dims"
+            ],
+            "rag_elasticsearch_hybrid_query_embedding_provider": payload[
+                "rag_elasticsearch_hybrid_query_embedding_provider"
+            ],
+            "rag_elasticsearch_hybrid_query_embedding_model": payload[
+                "rag_elasticsearch_hybrid_query_embedding_model"
+            ],
+            "rag_elasticsearch_hybrid_query_embedding_transport": payload[
+                "rag_elasticsearch_hybrid_query_embedding_transport"
+            ],
+            "rag_elasticsearch_hybrid_query_embedding_endpoint_configured": payload[
+                "rag_elasticsearch_hybrid_query_embedding_endpoint_configured"
+            ],
+            "rag_elasticsearch_hybrid_query_embedding_production_ready": payload[
+                "rag_elasticsearch_hybrid_query_embedding_production_ready"
+            ],
             "rag_vendor_coverage_catalog_status": payload["rag_vendor_coverage_catalog_status"],
             "rag_launchability_query_status": payload["rag_launchability_query_status"],
             "project_contract_status": payload["project_contract_status"],

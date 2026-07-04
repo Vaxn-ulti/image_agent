@@ -62,7 +62,7 @@ docker run --rm \
 | Field | Value |
 |---|---|
 | Module | `workflows/qsiprep.py` |
-| Docker image | `pennlinc/qsiprep:latest` |
+| Docker image | `pennlinc/qsiprep:26.0.0` |
 | Input requirement | `series.modality == "DWI"` AND `has_bval` AND `has_bvec` |
 | BIDS subdir | `sub-01/dwi/sub-01_dwi.{nii.gz,bval,bvec}` |
 
@@ -85,7 +85,7 @@ docker run --rm \
 | Field | Value |
 |---|---|
 | Module | `workflows/qsirecon.py` |
-| Docker image | `pennlinc/qsirecon:latest` |
+| Docker image | `pennlinc/qsirecon:26.0.0` |
 | Input requirement | `qsiprep_task_id` must reference completed `dwi_qsiprep` task |
 | BIDS subdir | Reuses QSIPrep output dir as BIDS input |
 

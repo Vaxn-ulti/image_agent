@@ -54,6 +54,150 @@ def test_build_rag_response_uses_persistent_index_citations(tmp_path):
     assert "source_stage" in response["citations"][0]["excerpt"]
 
 
+def test_build_rag_response_exposes_persistent_retrieval_mode(tmp_path, monkeypatch):
+    import app.agent.rag_orchestration as rag
+
+    def fake_retrieve_reference_context(query, *, root=None, filters=None, limit=5):
+        return {
+            "mode": "elasticsearch_hybrid",
+            "results": [
+                {
+                    "source": "docs/rag/contracts/elasticsearch-hybrid-search.md",
+                    "title": "Elasticsearch Hybrid Search Contract",
+                    "snippet": "Elasticsearch hybrid retrieval combines BM25, dense vector kNN, and RRF.",
+                    "score": 12.0,
+                    "metadata": {"source_type": "rag_contract"},
+                }
+            ],
+        }
+
+    monkeypatch.setattr(rag, "retrieve_reference_context", fake_retrieve_reference_context)
+
+    response = rag.build_rag_response("Elasticsearch hybrid RRF evidence", root=tmp_path, backend_context={"tasks": []})
+
+    assert response["retrieval_mode"] == "elasticsearch_hybrid"
+    assert response["retrieval_source"] == "elasticsearch_hybrid"
+    assert response["citations"][0]["source"] == "docs/rag/contracts/elasticsearch-hybrid-search.md"
+
+
+def test_build_rag_response_exposes_elasticsearch_query_embedding_index_evidence(tmp_path, monkeypatch):
+    import app.agent.rag_orchestration as rag
+
+    def fake_retrieve_reference_context(query, *, root=None, filters=None, limit=5):
+        return {
+            "mode": "elasticsearch_hybrid",
+            "elasticsearch_hybrid_query": {
+                "index": "image_agent_rag",
+                "lexical_retriever": "standard",
+                "vector_retriever": "knn",
+                "dense_vector_field": "embedding",
+                "fusion": "rrf",
+                "dense_vector_dims": 1536,
+                "embedding_provider": "openai",
+                "embedding_model": "text-embedding-3-small",
+                "embedding_transport": "openai_compatible_http",
+                "embedding_endpoint_configured": True,
+                "embedding_production_ready": True,
+            },
+            "results": [
+                {
+                    "source": "docs/rag/contracts/elasticsearch-hybrid-search.md",
+                    "title": "Elasticsearch Hybrid Search Contract",
+                    "snippet": "Elasticsearch hybrid query evidence includes index and embedding metadata.",
+                    "score": 12.0,
+                    "metadata": {"source_type": "rag_contract"},
+                }
+            ],
+        }
+
+    monkeypatch.setattr(rag, "retrieve_reference_context", fake_retrieve_reference_context)
+
+    response = rag.build_rag_response("Elasticsearch query evidence", root=tmp_path, backend_context={"tasks": []})
+
+    assert response["retrieval_mode"] == "elasticsearch_hybrid"
+    assert response["elasticsearch_hybrid_query"] == {
+        "index": "image_agent_rag",
+        "lexical_retriever": "standard",
+        "vector_retriever": "knn",
+        "dense_vector_field": "embedding",
+        "fusion": "rrf",
+        "dense_vector_dims": 1536,
+        "embedding_provider": "openai",
+        "embedding_model": "text-embedding-3-small",
+        "embedding_transport": "openai_compatible_http",
+        "embedding_endpoint_configured": True,
+        "embedding_production_ready": True,
+    }
+
+
+def test_build_rag_response_sanitizes_langgraph_elasticsearch_query_evidence(tmp_path, monkeypatch):
+    import app.agent.rag_orchestration as rag
+
+    class FakeApp:
+        def invoke(self, state):
+            return {
+                "answer": "Hybrid retrieval evidence should stay privacy-safe.",
+                "citations": [
+                    {
+                        "source": "docs/rag/contracts/elasticsearch-hybrid-search.md",
+                        "path": "docs/rag/contracts/elasticsearch-hybrid-search.md",
+                        "excerpt": "Elasticsearch hybrid query evidence is safe to show.",
+                    }
+                ],
+                "retrieval_mode": "elasticsearch_hybrid",
+                "retrieval_source": "elasticsearch_hybrid",
+                "elasticsearch_hybrid_query": {
+                    "index": "image_agent_rag_release",
+                    "lexical_retriever": "standard",
+                    "vector_retriever": "knn",
+                    "dense_vector_field": "embedding",
+                    "fusion": "rrf",
+                    "rrf_unavailable_reason": "license_non_compliant",
+                    "dense_vector_dims": 1536,
+                    "embedding_provider": "openai",
+                    "embedding_model": "text-embedding-3-small",
+                    "embedding_transport": "openai_compatible_http",
+                    "embedding_endpoint_configured": True,
+                    "embedding_production_ready": True,
+                    "embedding_base_url": "https://embedding.example/v1",
+                    "embedding_api_key": "sk-secret-token",
+                    "error": "Authorization: Bearer sk-secret-token",
+                },
+            }
+
+    monkeypatch.setattr(rag, "_langgraph_app", lambda: FakeApp())
+    monkeypatch.setattr(
+        rag,
+        "_citation_context",
+        lambda query, root=None, limit=5: {
+            "citations": [],
+            "retrieval_mode": "elasticsearch_hybrid",
+            "retrieval_source": "elasticsearch_hybrid",
+        },
+    )
+
+    response = rag.build_rag_response("Elasticsearch privacy-safe evidence", root=tmp_path, backend_context={"tasks": []})
+
+    assert response["elasticsearch_hybrid_query"] == {
+        "index": "image_agent_rag_release",
+        "lexical_retriever": "standard",
+        "vector_retriever": "knn",
+        "dense_vector_field": "embedding",
+        "fusion": "rrf",
+        "rrf_unavailable_reason": "license_non_compliant",
+        "dense_vector_dims": 1536,
+        "embedding_provider": "openai",
+        "embedding_model": "text-embedding-3-small",
+        "embedding_transport": "openai_compatible_http",
+        "embedding_endpoint_configured": True,
+        "embedding_production_ready": True,
+    }
+    serialized = json.dumps(response)
+    assert "sk-secret-token" not in serialized
+    assert "embedding.example" not in serialized
+    assert "Authorization" not in serialized
+
+
 def test_build_rag_response_exposes_raw_source_evidence_for_curated_vendor_citations(tmp_path):
     vendor_doc = tmp_path / "docs" / "rag" / "vendor" / "fmriprep_official_outputs.md"
     raw_root = vendor_doc.parent / "raw-sources"
@@ -414,6 +558,182 @@ def test_build_rag_response_summarizes_backend_when_docs_do_not_match(tmp_path):
     assert "task 9: dwi_fast_gpu_dti is running (45%)" in response["answer"]
 
 
+def test_build_rag_response_distinguishes_stable_workflow_id_from_runtime_alias(tmp_path):
+    backend_context = {
+        "project_id": 3,
+        "tasks": [
+            {
+                "id": 9,
+                "workflow_type": "t1_deepprep_anat_report",
+                "runtime_workflow_type": "t1_deepprep",
+                "status": "completed",
+                "progress": 100,
+            }
+        ],
+        "outputs": [],
+    }
+
+    response = build_rag_response("current task state", root=tmp_path, backend_context=backend_context)
+
+    assert "task 9: t1_deepprep_anat_report" in response["answer"]
+    assert "runtime runner t1_deepprep" in response["answer"]
+
+
+def test_build_rag_response_summarizes_supported_workflow_capabilities_from_backend_context(tmp_path):
+    backend_context = {
+        "project_id": 3,
+        "tasks": [],
+        "outputs": [],
+        "supported_workflows": [
+            {
+                "workflow_type": "t1_deepprep_anat_report",
+                "runtime_workflow_type": "t1_deepprep",
+                "lane": "fixed_workflow",
+                "display_name": "T1 DeepPrep anatomical processing, QC, and report",
+                "capability_summary": "Runs anatomical T1 processing, QC, and report outputs.",
+                "requires_confirmation": True,
+                "is_report_only": False,
+            },
+            {
+                "workflow_type": "toolchain_proposal",
+                "runtime_workflow_type": None,
+                "lane": "toolchain_incubation",
+                "display_name": "Incubating toolchain proposal",
+                "capability_summary": "Captures unknown workflow proposals for human review.",
+                "requires_confirmation": False,
+                "is_report_only": False,
+            },
+        ],
+    }
+
+    response = build_rag_response("What fixed workflows can Image Agent run?", root=tmp_path, backend_context=backend_context)
+
+    assert "Supported workflow capabilities" in response["answer"]
+    assert "t1_deepprep_anat_report" in response["answer"]
+    assert "T1 DeepPrep anatomical processing, QC, and report" in response["answer"]
+    assert "runtime runner t1_deepprep" in response["answer"]
+    assert "toolchain_proposal is toolchain_incubation" in response["answer"]
+
+
+def test_build_rag_response_marks_complete_fixed_workflow_as_not_report_only(tmp_path):
+    backend_context = {
+        "project_id": 3,
+        "tasks": [],
+        "outputs": [],
+        "supported_workflows": [
+            {
+                "workflow_type": "bold_fmriprep_xcpd_report",
+                "runtime_workflow_type": "bold_fmriprep_xcpd_report",
+                "lane": "fixed_workflow",
+                "display_name": "BOLD fMRIPrep + XCP-D processing, metrics, QC, and report",
+                "capability_summary": "Runs BOLD preprocessing, XCP-D metrics, QC, and report outputs.",
+                "requires_confirmation": True,
+                "is_report_only": False,
+            }
+        ],
+    }
+
+    response = build_rag_response("Is bold_fmriprep_xcpd_report only a report workflow?", root=tmp_path, backend_context=backend_context)
+
+    assert "bold_fmriprep_xcpd_report is fixed_workflow" in response["answer"]
+    assert "not report-only" in response["answer"]
+    assert "requires human confirmation" in response["answer"]
+
+
+def test_build_rag_response_preserves_t1_stable_workflow_id_and_runtime_alias(tmp_path):
+    backend_context = {
+        "project_id": 3,
+        "tasks": [],
+        "outputs": [],
+        "supported_workflows": [
+            {
+                "workflow_type": "t1_deepprep_anat_report",
+                "runtime_workflow_type": "t1_deepprep",
+                "lane": "fixed_workflow",
+                "display_name": "T1 DeepPrep anatomical processing, QC, and report",
+                "capability_summary": "Runs anatomical T1 processing, QC, summaries, and report artifacts.",
+                "requires_confirmation": True,
+                "is_report_only": False,
+            }
+        ],
+    }
+
+    response = build_rag_response("Is t1_deepprep_anat_report only a report workflow?", root=tmp_path, backend_context=backend_context)
+
+    assert "t1_deepprep_anat_report is fixed_workflow" in response["answer"]
+    assert "runtime runner t1_deepprep" in response["answer"]
+    assert "not report-only" in response["answer"]
+    assert "requires human confirmation" in response["answer"]
+
+
+def test_build_rag_response_marks_dwi_fixed_workflow_as_not_report_only(tmp_path):
+    backend_context = {
+        "project_id": 3,
+        "tasks": [],
+        "outputs": [],
+        "supported_workflows": [
+            {
+                "workflow_type": "dwi_fast_gpu_dti",
+                "runtime_workflow_type": "dwi_fast_gpu_dti",
+                "lane": "fixed_workflow",
+                "display_name": "DWI fast GPU DTI maps, atlas metrics, QC, and report",
+                "capability_summary": "Runs DWI correction, tensor maps, atlas metrics, QC, summaries, and report artifacts.",
+                "requires_confirmation": True,
+                "is_report_only": False,
+            }
+        ],
+    }
+
+    response = build_rag_response("Is dwi_fast_gpu_dti just a report workflow?", root=tmp_path, backend_context=backend_context)
+
+    assert "dwi_fast_gpu_dti is fixed_workflow" in response["answer"]
+    assert "not report-only" in response["answer"]
+    assert "requires human confirmation" in response["answer"]
+
+
+def test_build_rag_response_uses_result_summary_workflow_metadata(tmp_path):
+    backend_context = {
+        "project_id": 3,
+        "tasks": [
+            {
+                "id": 41,
+                "workflow_type": "t1_deepprep",
+                "runtime_workflow_type": "t1_deepprep",
+                "status": "completed",
+                "progress": 100,
+            }
+        ],
+        "outputs": [],
+        "result_summaries": [
+            {
+                "task_id": 41,
+                "workflow_type": "t1_deepprep",
+                "modality": "T1",
+                "spaces": ["T1w"],
+                "feature_groups": ["quality_control"],
+                "outputs": {},
+                "provenance": {},
+                "workflow_metadata": {
+                    "workflow_type": "t1_deepprep_anat_report",
+                    "runtime_workflow_type": "t1_deepprep",
+                    "display_name": "T1 DeepPrep anatomical processing, QC, and report",
+                    "capability_summary": "Runs anatomical T1 processing, QC, summaries, and report artifacts.",
+                    "is_report_only": False,
+                },
+            }
+        ],
+    }
+
+    response = build_rag_response("show task 41 result-summary report", root=tmp_path, backend_context=backend_context)
+
+    assert "Result summaries" in response["answer"]
+    assert "task 41" in response["answer"]
+    assert "T1 DeepPrep anatomical processing, QC, and report" in response["answer"]
+    assert "stable workflow id t1_deepprep" in response["answer"]
+    assert "public workflow metadata t1_deepprep_anat_report" in response["answer"]
+    assert "not report-only" in response["answer"]
+
+
 def test_build_rag_response_exposes_intent_and_next_step_hint(tmp_path):
     response = build_rag_response("我想看状态并理解下一步", root=tmp_path, backend_context={"tasks": []})
 
@@ -471,6 +791,54 @@ def test_agent_tool_chain_reads_reports_from_result_summary_contract(tmp_path):
     assert tools["inspect_scientific_reports"]["result_summary_reports"][0]["task_id"] == 41
     assert tools["inspect_scientific_reports"]["result_summary_reports"][0]["figure_count"] == 1
     assert "Review the result-summary report figures" in tools["recommend_next_action"]["recommended_action"]
+
+
+def test_agent_tool_chain_failed_task_repair_advice_is_read_only():
+    backend_context = {
+        "tasks": [
+            {
+                "id": 9,
+                "workflow_type": "bold_fmriprep_xcpd_report",
+                "status": "failed",
+                "progress": 42,
+                "error_message": "container exited",
+            }
+        ],
+        "outputs": [],
+    }
+
+    invocations = run_agent_tool_chain("task failed, retry it", backend_context)
+    tools = {item["tool"]: item["result"] for item in invocations}
+    recommendation = tools["recommend_next_action"]["recommended_action"].lower()
+
+    assert tools["recommend_next_action"]["policy"].startswith("read-only")
+    assert "preflight" in recommendation
+    assert "human confirmation" in recommendation
+    assert "automatically" not in recommendation
+    assert "choose a targeted retry" not in recommendation
+
+
+def test_agent_tool_chain_missing_report_repair_advice_does_not_rerun_automatically(tmp_path):
+    backend_context = {
+        "tasks": [{"id": 41, "workflow_type": "t1_deepprep", "status": "completed", "progress": 100}],
+        "outputs": [
+            {
+                "task_id": 41,
+                "output_type": "json",
+                "path": str(tmp_path / "summary" / "t1_result_summary.json"),
+                "metadata_json": '{"kind":"result_summary"}',
+            }
+        ],
+    }
+
+    invocations = run_agent_tool_chain("show task status and report", backend_context)
+    tools = {item["tool"]: item["result"] for item in invocations}
+    recommendation = tools["recommend_next_action"]["recommended_action"].lower()
+
+    assert tools["recommend_next_action"]["policy"].startswith("read-only")
+    assert "repair" in recommendation
+    assert "human confirmation" in recommendation
+    assert "rerun the report generator" not in recommendation
 
 
 def test_chinese_task_status_query_is_classified_as_status(tmp_path):

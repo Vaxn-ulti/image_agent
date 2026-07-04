@@ -111,7 +111,15 @@ def test_bold_fmriprep_xcpd_summary_registration_is_idempotent(monkeypatch, tmp_
     monkeypatch.setattr(
         pipeline,
         "_rows",
-        lambda sql, params=(): [{"id": 1}] if "FROM outputs" in sql and str(params[1]).endswith("bold_result_summary.json") else [],
+        lambda sql, params=(): [
+            {"id": 1}
+        ]
+        if "FROM outputs" in sql
+        and (
+            str(params[1]).endswith("bold_result_summary.json")
+            or str(params[1]).endswith("bold_scientific_report_summary.json")
+        )
+        else [],
     )
     monkeypatch.setattr(pipeline, "_insert_output", lambda *args, **kwargs: inserted.append((args, kwargs)))
 

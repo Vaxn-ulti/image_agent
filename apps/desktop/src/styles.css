@@ -35,6 +35,7 @@ pre { white-space: pre-wrap; background: #0f172a; color: #e5edf8; padding: 10px;
 .chat { grid-column: 1 / -1; }
 .messages { display: grid; gap: 8px; max-height: 260px; overflow: auto; padding-bottom: 8px; }
 .msg { padding: 9px 10px; border-radius: 8px; max-width: 760px; }
+.msg > div:first-child { white-space: pre-wrap; overflow-wrap: anywhere; }
 .msg.user { margin-left: auto; background: #2454d6; color: white; }
 .msg.assistant { background: #eef2f7; color: #18212f; }
 .msg small { display: block; margin-top: 5px; color: #647086; font-size: 11px; }
@@ -57,12 +58,20 @@ pre { white-space: pre-wrap; background: #0f172a; color: #e5edf8; padding: 10px;
 .login { width: min(420px, calc(100vw - 32px)); background: white; border: 1px solid #dfe7f3; border-radius: 8px; padding: 22px; display: grid; gap: 12px; }
 .login .brand { color: #111827; font-size: 20px; margin-bottom: 4px; }
 @media (max-width: 900px) { .app { grid-template-columns: 1fr; } .sidebar { position: static; } .workspace { grid-template-columns: 1fr; } .row { grid-template-columns: 1fr; } }
-.dwi-upload { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 10px; align-items: end; }
+.dwi-upload { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; align-items: end; }
 .dwi-upload .panel-title { grid-column: 1 / -1; margin-bottom: 0; }
 .dwi-upload label { color: #41506a; font-size: 13px; display: grid; gap: 5px; }
 .workflow-buttons { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
 .workflow-buttons button { font-size: 12px; line-height: 1.2; max-width: 220px; padding: 7px 8px; overflow-wrap: anywhere; text-align: left; }
 .button-row { display: flex; gap: 8px; }
+.task-events { margin-top: 10px; border: 1px solid #d9e1ec; border-radius: 8px; background: #f8fafc; padding: 12px; }
+.event-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; margin-top: 10px; }
+.event-card, .log-tail, .remote-log { border: 1px solid #d9e1ec; border-radius: 7px; background: white; padding: 10px; min-width: 0; }
+.event-card strong, .log-tail strong, .remote-log-list > strong { color: #18212f; font-size: 13px; }
+.log-tail, .remote-log-list { margin-top: 10px; }
+.log-tail pre, .remote-log pre { margin: 8px 0 0; max-height: 150px; }
+.remote-log { margin-top: 8px; }
+.remote-log div { color: #334155; font-size: 13px; overflow-wrap: anywhere; }
 .inventory-panel { grid-column: 1 / -1; }
 .inventory-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
 .inventory-grid > div, .inventory-columns > div { display: flex; flex-direction: column; gap: 4px; padding: 10px; border: 1px solid #d9e1ec; border-radius: 8px; background: #f8fafc; min-width: 0; }
@@ -75,6 +84,7 @@ pre { white-space: pre-wrap; background: #0f172a; color: #e5edf8; padding: 10px;
 .result-summary { margin-top: 10px; border: 1px solid #d9e1ec; border-radius: 8px; background: #f8fafc; padding: 12px; }
 .summary-head { display: flex; justify-content: space-between; gap: 10px; align-items: center; color: #18212f; }
 .summary-head span { color: #647086; font-size: 12px; }
+.workflow-capability { margin: 8px 0 0; color: #475569; font-size: 13px; line-height: 1.4; }
 .summary-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
 .summary-chips span { border: 1px solid #d9e1ec; border-radius: 999px; background: white; color: #334155; font-size: 12px; padding: 4px 8px; }
 .scientific-report { margin-top: 12px; display: grid; gap: 10px; }

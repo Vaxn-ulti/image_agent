@@ -1,9 +1,35 @@
 ---
 source_type: rag_workflow
 workflow_type: bold_fmriprep_xcpd_report
+runtime_workflow_type: bold_fmriprep_xcpd_report
+display_name: BOLD fMRIPrep + XCP-D processing, metrics, QC, and report
+workflow_family: bold
+workflow_role: complete_processing
+capability_summary: Runs full BOLD preprocessing and XCP-D postprocessing, producing derived metrics, container-native QC artifacts, structured result summaries, and a scientific report.
+agent_selectable: true
+is_report_only: false
 modality: BOLD
-status: incubation_reference
+status: production_supported
 retrieved_date: 2026-06-06
+pipeline_stages:
+  - BIDS preparation: Prepare supported BOLD NIfTI/BIDS input with required same-project T1/anat context.
+  - fMRIPrep preprocessing: Run motion/coregistration/normalization-oriented BOLD preprocessing.
+  - XCP-D postprocessing: Generate denoised derivatives and single-subject BOLD metrics.
+  - result packaging: Register metrics, native QC artifacts, result summary, and report artifacts.
+primary_outputs:
+  - preprocessed BOLD derivatives
+  - ALFF/fALFF/ReHo and connectivity metrics
+  - result-summary.json
+qc_outputs:
+  - container-native fMRIPrep and XCP-D QC artifacts
+  - HTML reports
+  - QC figures
+report_outputs:
+  - HTML scientific report
+  - report figures
+  - report manifest
+limitations:
+  - Not report-only; requires BOLD-compatible input, same-project T1/anat data, configured scripts, containers, and FreeSurfer license.
 official_grounding:
   - docs/rag/vendor/fmriprep_official_container_usage.md
   - docs/rag/vendor/fmriprep_official_outputs.md
@@ -16,9 +42,10 @@ expected_artifacts:
   - XCP-D denoised BOLD outputs
   - XCP-D QC time series and reports
   - parcellated time series and connectivity matrices
-  - task-scoped result-summary and artifact-manifest entries after promotion
+  - task-scoped result-summary and artifact-manifest entries from the fixed workflow pipeline runner
 unsupported_boundaries:
-  - not production-ready without real remote-wrapper task evidence
+  - not report-only; this is a complete fixed workflow with preprocessing, postprocessing, QC, summary, and report outputs
+  - do not bypass registry, preflight, human confirmation, confirmation fingerprint, task_service.create_series_task(), or the pipeline runner
   - XCP-D input is fMRIPrep-compatible derivatives, not raw BIDS
   - do not pass API keys, sudo passwords, or fixed evidence-project paths into child scripts
   - do not infer diagnosis, cognition, psychiatric status, or group effects from BOLD metrics
@@ -28,11 +55,13 @@ unsupported_boundaries:
 
 ## Scope / 范围
 
-Use this document when the user asks about a BOLD/fMRI preprocessing and postprocessing chain, especially `bold_fmriprep_xcpd`, `bold_fmriprep`, XCP-D, denoising, functional connectivity, ALFF/fALFF/ReHo, or BOLD QC.
+Use this document when the user asks about the fixed workflow `bold_fmriprep_xcpd_report`, the BOLD/fMRI preprocessing and postprocessing chain, fMRIPrep, XCP-D, denoising, functional connectivity, ALFF/fALFF/ReHo, or BOLD QC.
 
 Note: in this repo, BOLD preprocessing may also be implemented as `bold_deepprep` plus downstream metrics. Always trust the backend task record and workflow registry over this document.
 
-Production remote runtime: the backend launches this workflow through a remote-script wrapper. The wrapper passes task-specific BIDS/output/work/log/license paths with `IMAGE_AGENT_TASK_*` environment variables. The fMRIPrep and XCP-D scripts must prefer these variables over fixed evidence-project paths before the workflow is accepted as production-ready.
+Image Agent workflow identity: `bold_fmriprep_xcpd_report` is a fixed workflow and stable public `workflow_type`. Its runtime runner is also `bold_fmriprep_xcpd_report`. `workflow_metadata.is_report_only=false`; the workflow is not just a report generator. It runs preprocessing/postprocessing, registers container-native QC and structured result evidence, and may also produce report artifacts. Creating a task for this workflow must pass registry, preflight, human confirmation, confirmation fingerprint, `task_service.create_series_task()`, and the pipeline runner.
+
+Production remote runtime: the backend launches this workflow through a remote-script wrapper. The wrapper passes task-specific BIDS/output/work/log/license paths with `IMAGE_AGENT_TASK_*` environment variables. The fMRIPrep and XCP-D scripts must prefer these variables over fixed evidence-project paths for strict production acceptance evidence.
 
 The wrapper applies `IMAGE_AGENT_REMOTE_SCRIPT_TIMEOUT_SEC` to each script. A `TimeoutExpired` result is reported as remote script timed out, with a redacted log tail for partial stdout retention. Script paths must be regular files, not directories, raised wrapper errors should use path-safe script labels rather than full host paths, success summaries use path-safe script labels, and public preflight check summaries use path-safe labels. The child script environment is a safe child environment allowlist plus task paths; do not pass `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, or `IMAGE_AGENT_SUDO_PASSWORD`. Script stdout/stderr must be redacted before task logs or RAG-facing summaries mention it.
 
@@ -41,7 +70,9 @@ Current XCP-D remote-wrapper contract:
 - `run_xcpd_deepprep_115.sh` is the task-115 evidence wrapper for XCP-D after DeepPrep.
 - The XCP-D handoff is a DeepPrep-derived fMRIPrep-compatible input; it is not raw BIDS.
 - The wrapper writes XCP-D derivatives under `IMAGE_AGENT_TASK_XCPD_DIR`.
+- The fixed fMRIPrep/XCP-D production path requires a same-project T1/anat companion for the BOLD series. If no supported T1/anat series is available, task creation must be blocked before production launch instead of letting fMRIPrep fail with missing T1w inputs.
 - The wrapper passes TemplateFlow through `IMAGE_AGENT_TASK_TEMPLATEFLOW_DIR`; TemplateFlow cache is a support mount, not user input data.
+- Full production preflight checks the shared TemplateFlow cache before human confirmation: the cache must be writable and the fixed prewarmed `MNI152NLin2009cAsym`, `MNI152NLin6Asym`, and `OASIS30ANTs` files must exist with non-zero size. The two MNI templates require res-01/res-02 T1w and brain-mask files; `MNI152NLin2009cAsym` additionally requires the fMRIPrep BOLD-reference, brain-probseg, and carpet-dseg files used by BOLD reference skull-stripping and carpet-plot generation. XCP-D QC and atlas resampling require the TemplateFlow H5 transforms in both directions between `MNI152NLin6Asym` and `MNI152NLin2009cAsym`. `OASIS30ANTs` is limited to the official res-01 T1w, brain T1w, and brain-mask files used by fMRIPrep brain extraction. Missing TemplateFlow files are runtime setup blockers, not scan pathology.
 - The expected XCP-D flags for this wrapper are `--mode linc`, `--input-type fmriprep`, `--file-format nifti`, `--linc-qc y`, and `--abcc-qc y`.
 
 ## Workflow Purpose / 流程目的

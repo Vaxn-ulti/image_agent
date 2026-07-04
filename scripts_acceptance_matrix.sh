@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # Final Acceptance Matrix Script for Image Agent
 # Runs all validate-mode checks and unit tests.
-# Real container processing for DWI is GATED behind eddy_cuda availability.
-# Do NOT run long real DWI until a CUDA-enabled QSIPrep image is available.
+# Real container processing for DWI is GATED behind fixed-image eddy_cuda availability.
+# Do NOT run long real DWI unless the pinned QSIPrep image exposes eddy_cuda*.
 set -euo pipefail
 
 ROOT="/home/yyf/project/image_agent"
 API="http://127.0.0.1:8000"
+QSIPREP_IMAGE="${IMAGE_AGENT_QSIPREP_IMAGE:-pennlinc/qsiprep:26.0.0}"
+QSIRECON_IMAGE="${IMAGE_AGENT_QSIRECON_IMAGE:-pennlinc/qsirecon:26.0.0}"
+SUDO_PASSWORD="${IMAGE_AGENT_SUDO_PASSWORD:?IMAGE_AGENT_SUDO_PASSWORD must be set for Docker acceptance checks}"
 LOG_DIR="$ROOT/logs/acceptance"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 LOG="$LOG_DIR/acceptance_matrix_${TIMESTAMP}.log"
@@ -265,11 +268,11 @@ report ""
 
 report "### Container eddy_cuda Checks"
 report ""
-EDDY_CHECK=$(echo "yyf123" | sudo -S docker run --rm --entrypoint "" pennlinc/qsiprep:latest bash -c "which eddy_cuda 2>&1 || echo 'NOT_FOUND'; which eddy 2>&1" 2>/dev/null || echo "docker_failed")
+EDDY_CHECK=$(printf '%s\n' "$SUDO_PASSWORD" | sudo -S docker run --rm --entrypoint "" "$QSIPREP_IMAGE" bash -c "command -v eddy_cuda 2>&1 || ls /app/.pixi/envs/qsiprep/bin/eddy_cuda* 2>&1 || echo 'NOT_FOUND'; command -v eddy 2>&1" 2>/dev/null || echo "docker_failed")
 log "eddy check: $EDDY_CHECK"
 
 if echo "$EDDY_CHECK" | grep -q "NOT_FOUND"; then
-  report "- **eddy_cuda: BLOCKED** - pennlinc/qsiprep:latest does NOT contain eddy_cuda"
+  report "- **eddy_cuda: BLOCKED** - $QSIPREP_IMAGE does not expose eddy_cuda*"
   report "- eddy (CPU): Available in container"
   report "- **DWI QSIPrep real processing is BLOCKED pending CUDA-enabled image**"
 else
@@ -288,7 +291,7 @@ done <<< "$GPU_INFO"
 report ""
 report "### QSIRecon GPU Visibility (--gpus all)"
 report ""
-QSIRECON_GPU=$(echo "yyf123" | sudo -S docker run --rm --gpus all --entrypoint "python" pennlinc/qsirecon:latest -c "import os; devices=[n for n in os.listdir('/dev') if n.startswith('nvidia')]; print(f'GPU_devices_found={len(devices)}: {devices}')" 2>/dev/null || echo "docker_failed")
+QSIRECON_GPU=$(printf '%s\n' "$SUDO_PASSWORD" | sudo -S docker run --rm --gpus all --entrypoint "python" "$QSIRECON_IMAGE" -c "import os; devices=[n for n in os.listdir('/dev') if n.startswith('nvidia')]; print(f'GPU_devices_found={len(devices)}: {devices}')" 2>/dev/null || echo "docker_failed")
 log "QSIRecon GPU: $QSIRECON_GPU"
 report "- $QSIRECON_GPU"
 report ""
@@ -298,7 +301,7 @@ log "=== Phase 6: Hanging Container Audit ==="
 report "## Phase 6: Hanging Container Audit"
 report ""
 
-HANGING=$(echo "yyf123" | sudo -S docker ps --format '{{.ID}} {{.Image}} {{.Status}} {{.Names}}' 2>/dev/null | grep qsiprep || echo "none")
+HANGING=$(printf '%s\n' "$SUDO_PASSWORD" | sudo -S docker ps --format '{{.ID}} {{.Image}} {{.Status}} {{.Names}}' 2>/dev/null | grep qsiprep || echo "none")
 log "Hanging containers: $HANGING"
 report '```'
 echo "$HANGING" >> "$REPORT"
@@ -379,11 +382,11 @@ report "# Case 2 (sub02 BOLD) - already completed (task 45)"
 report '```'
 report ""
 
-report "### DWI QSIPrep (BLOCKED - requires CUDA-enabled QSIPrep image)"
+report "### DWI QSIPrep (GATED - requires pinned QSIPrep eddy_cuda* probe)"
 report ""
-report "**Current image pennlinc/qsiprep:latest lacks eddy_cuda. DO NOT run real DWI until resolved.**"
+report "**Pinned image $QSIPREP_IMAGE must expose eddy_cuda* before any real DWI run.**"
 report ""
-report "Once resolved, run:"
+report "After the fixed-image probe passes, run:"
 report '```bash'
 report "# Case 1 (sub01 DWI + T1 co-registration)"
 report "curl -s -X POST http://127.0.0.1:8000/series/24/run -H 'Content-Type: application/json' -d '{\"workflow_type\":\"dwi_qsiprep\"}'"
@@ -447,13 +450,13 @@ report ""
 
 report "### BLOCKED"
 report ""
-report "1. **DWI QSIPrep real processing** - pennlinc/qsiprep:latest does not contain eddy_cuda"
+report "1. **DWI QSIPrep real processing** - gated on $QSIPREP_IMAGE eddy_cuda* probe and a fresh real validation run"
 report "2. **QSIRecon real processing** - Transitively blocked by QSIPrep dependency"
 report ""
 
 report "### Required for Full Acceptance"
 report ""
-report "1. **CUDA-enabled QSIPrep image** containing eddy_cuda (e.g., cookpa/qsiprep_cuda or custom build)"
+report "1. **Pinned QSIPrep image** $QSIPREP_IMAGE exposing eddy_cuda*"
 report "2. **Real DWI processing** on case1 (sub01) and case3 (sub03 DWI-only)"
 report "3. **Real QSIRecon processing** chained after successful QSIPrep"
 report "4. **Real DICOM dataset** test with actual scanner zip (not yet tested with real DICOM)"

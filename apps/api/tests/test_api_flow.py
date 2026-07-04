@@ -103,6 +103,201 @@ def test_upload_responses_omit_backend_storage_paths(tmp_path, monkeypatch):
     assert uploaded_storage_path(database, standard['file']['id']).exists()
 
 
+def test_single_file_upload_creates_completed_upload_session(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
+    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
+    from app.db import database
+    import app.main as main
+    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(main, 'PROJECTS_ROOT', tmp_path / 'projects')
+
+    database.init_db()
+    client = TestClient(app)
+    project = client.post('/projects', json={'name': 'P-upload-session-contract'}).json()
+    nifti = tmp_path / 'sub-001_T1w.nii.gz'
+    make_nifti(nifti)
+
+    with nifti.open('rb') as f:
+        uploaded = client.post(
+            f"/projects/{project['id']}/upload",
+            files={'file': (nifti.name, f, 'application/gzip')},
+        ).json()
+
+    upload_session_id = uploaded['upload_session_id']
+    assert isinstance(upload_session_id, int) and upload_session_id > 0
+    assert uploaded['series']['upload_session_id'] == upload_session_id
+    inventory = client.get(f"/projects/{project['id']}/datasets/{upload_session_id}/inventory").json()
+    assert inventory['status'] == 'completed'
+    assert inventory['progress'] == 100
+    assert inventory['inventory']['inventory_status'] == 'completed'
+    assert inventory['inventory']['series'][0]['series_id'] == uploaded['series']['id']
+    assert inventory['inventory']['series'][0]['workflow_eligibility']['policy_version'] == 'workflow_eligibility_v1'
+    assert str(tmp_path / 'projects') not in json.dumps({'uploaded': uploaded, 'inventory': inventory})
+
+
+def test_arbitrary_file_upload_is_saved_as_attachment_not_imaging_series(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
+    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
+    from app.db import database
+    import app.main as main
+    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(main, 'PROJECTS_ROOT', tmp_path / 'projects')
+
+    database.init_db()
+    client = TestClient(app)
+    project = client.post('/projects', json={'name': 'P-upload-attachments'}).json()
+    note = tmp_path / 'operator-notes.txt'
+    note.write_text('scan notes and acquisition caveats\n', encoding='utf-8')
+
+    with note.open('rb') as f:
+        uploaded = client.post(
+            f"/projects/{project['id']}/upload",
+            files={'file': (note.name, f, 'text/plain')},
+        ).json()
+
+    assert uploaded['file']['original_name'] == 'operator-notes.txt'
+    assert uploaded['series'] is None
+    upload_session_id = uploaded['upload_session_id']
+    inventory = client.get(f"/projects/{project['id']}/datasets/{upload_session_id}/inventory").json()
+    assert inventory['status'] == 'completed'
+    assert inventory['inventory']['inventory_status'] == 'completed'
+    assert inventory['inventory']['total_files'] == 1
+    assert inventory['inventory']['series'] == []
+    assert inventory['inventory']['attachments'][0]['original_name'] == 'operator-notes.txt'
+    assert inventory['inventory']['attachments'][0]['file_type'] == 'TXT'
+    assert client.get(f"/projects/{project['id']}/series").json() == []
+    assert str(tmp_path / 'projects') not in json.dumps({'uploaded': uploaded, 'inventory': inventory})
+
+
+def test_project_files_endpoint_lists_uploads_with_linked_detection_without_paths(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
+    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
+    from app.db import database
+    import app.main as main
+    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(main, 'PROJECTS_ROOT', tmp_path / 'projects')
+
+    database.init_db()
+    client = TestClient(app)
+    project = client.post('/projects', json={'name': 'P-file-list'}).json()
+    t1 = tmp_path / 'sub-001_T1w.nii.gz'
+    note = tmp_path / 'operator-notes.txt'
+    make_nifti(t1)
+    note.write_text('notes\n', encoding='utf-8')
+
+    with t1.open('rb') as f:
+        client.post(f"/projects/{project['id']}/upload", files={'file': (t1.name, f, 'application/gzip')})
+    with note.open('rb') as f:
+        client.post(f"/projects/{project['id']}/upload", files={'file': (note.name, f, 'text/plain')})
+
+    files = client.get(f"/projects/{project['id']}/files").json()
+
+    assert [item['original_name'] for item in files] == ['operator-notes.txt', 'sub-001_T1w.nii.gz']
+    t1_file = next(item for item in files if item['original_name'] == 'sub-001_T1w.nii.gz')
+    assert t1_file['linked_series'][0]['modality'] == 'T1'
+    assert t1_file['linked_series'][0]['sequence_label'] == 'T1w_MPRAGE'
+    note_file = next(item for item in files if item['original_name'] == 'operator-notes.txt')
+    assert note_file['linked_series'] == []
+    assert 'storage_path' not in json.dumps(files)
+    assert str(tmp_path / 'projects') not in json.dumps(files)
+
+
+def test_project_file_delete_removes_unstarted_upload_and_linked_series(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
+    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
+    from app.db import database
+    import app.main as main
+    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(main, 'PROJECTS_ROOT', tmp_path / 'projects')
+
+    database.init_db()
+    client = TestClient(app)
+    project = client.post('/projects', json={'name': 'P-delete-file'}).json()
+    t1 = tmp_path / 'sub-001_T1w.nii.gz'
+    make_nifti(t1)
+    with t1.open('rb') as f:
+        uploaded = client.post(f"/projects/{project['id']}/upload", files={'file': (t1.name, f, 'application/gzip')}).json()
+
+    storage_path = uploaded_storage_path(database, uploaded['file']['id'])
+    response = client.delete(f"/projects/{project['id']}/files/{uploaded['file']['id']}")
+
+    assert response.status_code == 200
+    assert response.json()['deleted_file']['original_name'] == 'sub-001_T1w.nii.gz'
+    assert response.json()['deleted_series_ids'] == [uploaded['series']['id']]
+    assert not storage_path.exists()
+    assert client.get(f"/projects/{project['id']}/files").json() == []
+    assert client.get(f"/projects/{project['id']}/series").json() == []
+
+
+def test_project_file_delete_blocks_when_referenced_by_task(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
+    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
+    from app.db import database
+    import app.main as main
+    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(main, 'PROJECTS_ROOT', tmp_path / 'projects')
+
+    database.init_db()
+    client = TestClient(app)
+    project = client.post('/projects', json={'name': 'P-delete-protected'}).json()
+    t1 = tmp_path / 'sub-001_T1w.nii.gz'
+    make_nifti(t1)
+    with t1.open('rb') as f:
+        uploaded = client.post(f"/projects/{project['id']}/upload", files={'file': (t1.name, f, 'application/gzip')}).json()
+    with database.connect() as conn:
+        conn.execute(
+            "INSERT INTO tasks(project_id, series_id, workflow_type, status, progress, log_path, created_at) VALUES(?,?,?,?,?,?,?)",
+            (project['id'], uploaded['series']['id'], 't1_deepprep_anat_report', 'queued', 0, str(tmp_path / 'task.log'), '2026-06-22T00:00:00'),
+        )
+
+    response = client.delete(f"/projects/{project['id']}/files/{uploaded['file']['id']}")
+
+    assert response.status_code == 409
+    assert 'referenced by existing tasks' in response.json()['detail']
+    assert uploaded_storage_path(database, uploaded['file']['id']).exists()
+
+
+def test_dwi_sidecar_upload_rejects_clear_bold_or_t1_nifti(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
+    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
+    from app.db import database
+    import app.main as main
+    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(main, 'PROJECTS_ROOT', tmp_path / 'projects')
+
+    database.init_db()
+    client = TestClient(app)
+    project = client.post('/projects', json={'name': 'P-dwi-conflict'}).json()
+    bold = tmp_path / 'sub-001_task-rest_bold.nii.gz'
+    bval = tmp_path / 'sub-001_task-rest_bold.bval'
+    bvec = tmp_path / 'sub-001_task-rest_bold.bvec'
+    sidecar = tmp_path / 'sub-001_task-rest_bold.json'
+    make_nifti(bold, shape=(8, 8, 8, 120))
+    bval.write_text('0 1000\n', encoding='utf-8')
+    bvec.write_text('1 0\n0 1\n0 0\n', encoding='utf-8')
+    sidecar.write_text(json.dumps({'TaskName': 'rest', 'RepetitionTime': 2.0}), encoding='utf-8')
+
+    with bold.open('rb') as nii_f, bval.open('rb') as bval_f, bvec.open('rb') as bvec_f, sidecar.open('rb') as json_f:
+        response = client.post(
+            f"/projects/{project['id']}/upload-dwi",
+            files={
+                'nifti': (bold.name, nii_f, 'application/gzip'),
+                'bval': (bval.name, bval_f, 'text/plain'),
+                'bvec': (bvec.name, bvec_f, 'text/plain'),
+                'json_sidecar': (sidecar.name, json_f, 'application/json'),
+            },
+        )
+
+    assert response.status_code == 400
+    assert 'BOLD' in response.json()['detail']
+
+
 def test_pipeline_bids_preserves_uncompressed_nifti_and_sidecars(tmp_path, monkeypatch):
     monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
     monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
@@ -403,6 +598,38 @@ def test_bold_bids_includes_project_t1_when_available(tmp_path, monkeypatch):
 
     assert (dirs['bids'] / 'sub-01' / 'anat' / 'sub-01_T1w.nii.gz').exists()
     assert (dirs['bids'] / 'sub-01' / 'func' / 'sub-01_task-rest_bold.nii.gz').exists()
+    bold_sidecar = dirs['bids'] / 'sub-01' / 'func' / 'sub-01_task-rest_bold.json'
+    assert json.loads(bold_sidecar.read_text(encoding='utf-8'))['RepetitionTime'] == 1.0
+
+
+def test_bold_fmriprep_xcpd_requires_project_t1_companion(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
+    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
+    from app.db import database
+    from app.schemas import RunRequest
+    from app.services import task_service
+    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(task_service, 'submit_background', lambda *args, **kwargs: None)
+
+    database.init_db()
+    client = TestClient(app)
+    project = client.post('/projects', json={'name': 'P-bold-requires-t1'}).json()
+    bold = tmp_path / 'sub-001_task-rest_bold.nii'
+    make_nifti(bold, shape=(8, 8, 8, 12))
+    with bold.open('rb') as f:
+        uploaded = client.post(f"/projects/{project['id']}/upload", files={'file': (bold.name, f, 'application/octet-stream')}).json()
+
+    with pytest.raises(Exception) as exc:
+        task_service.create_series_task(
+            uploaded['series']['id'],
+            RunRequest(workflow_type='bold_fmriprep_xcpd_report'),
+            confirmed_agent_gate=True,
+        )
+
+    assert "requires T1/anat data in the same project" in str(exc.value)
+    with database.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM tasks WHERE workflow_type='bold_fmriprep_xcpd_report'").fetchone()[0] == 0
 
 
 def test_workflow_catalog_exposes_implemented_workflows():
@@ -498,14 +725,17 @@ def test_bold_metric_command_uses_completed_deepprep_outputs(tmp_path, monkeypat
     assert str(confounds) in cmd
 
 
-def test_dwi_fast_gpu_dti_validate_is_fixed_production_dwi_workflow(tmp_path, monkeypatch):
+def test_dwi_fast_gpu_dti_validate_requires_agent_confirmation_for_task_creation(tmp_path, monkeypatch):
     monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
     monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
     monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
     from app.db import database
     import app.main as main
+    from app.schemas import RunRequest
+    from app.services import task_service
     monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
     monkeypatch.setattr(main, 'run_pipeline_task', lambda task_id, qsiprep_task_id=None: None)
+    monkeypatch.setattr(task_service, 'submit_background', lambda *args, **kwargs: None)
 
     database.init_db()
     client = TestClient(app)
@@ -531,13 +761,188 @@ def test_dwi_fast_gpu_dti_validate_is_fixed_production_dwi_workflow(tmp_path, mo
     assert uploaded['series']['metadata']['has_json'] is True
     assert uploaded['series']['metadata']['has_dwi_eddy_metadata'] is True
 
-    accepted = client.post(
+    rejected = client.post(
         f"/series/{uploaded['series']['id']}/run",
         json={'workflow_type': 'dwi_fast_gpu_dti_validate'},
     )
 
-    assert accepted.status_code == 200
-    assert accepted.json()['workflow_type'] == 'dwi_fast_gpu_dti_validate'
+    assert rejected.status_code == 403
+    assert "/agent/runs" in rejected.json()['detail']
+    with database.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM tasks WHERE workflow_type='dwi_fast_gpu_dti_validate'").fetchone()[0] == 0
+
+    task = task_service.create_series_task(
+        uploaded['series']['id'],
+        RunRequest(workflow_type='dwi_fast_gpu_dti_validate'),
+        confirmed_agent_gate=True,
+    )
+
+    assert task['workflow_type'] == 'dwi_fast_gpu_dti_validate'
+
+
+def test_production_direct_series_run_requires_agent_confirmation(tmp_path, monkeypatch):
+    monkeypatch.setenv("IMAGE_AGENT_ENV", "production")
+    monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
+    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
+    from app.db import database
+    from app.services import task_service
+    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(task_service, 'submit_background', lambda *args, **kwargs: None)
+
+    database.init_db()
+    client = TestClient(app)
+    project = client.post('/projects', json={'name': 'P-production-direct-run'}).json()
+    nii = tmp_path / 'sub-001_T1w.nii.gz'
+    make_nifti(nii)
+    with nii.open('rb') as f:
+        uploaded = client.post(f"/projects/{project['id']}/upload", files={'file': (nii.name, f, 'application/gzip')}).json()
+
+    rejected = client.post(
+        f"/series/{uploaded['series']['id']}/run",
+        json={'workflow_type': 't1_deepprep_anat_report'},
+    )
+
+    assert rejected.status_code == 403
+    assert "/agent/runs" in rejected.json()['detail']
+
+
+def test_direct_series_run_requires_agent_confirmation_for_agent_selectable_workflow(tmp_path, monkeypatch):
+    monkeypatch.delenv("IMAGE_AGENT_ENV", raising=False)
+    monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
+    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
+    from app.db import database
+    from app.services import task_service
+    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(task_service, 'submit_background', lambda *args, **kwargs: None)
+
+    database.init_db()
+    client = TestClient(app)
+    project = client.post('/projects', json={'name': 'P-agent-selectable-direct-run'}).json()
+    nii = tmp_path / 'sub-001_T1w.nii.gz'
+    make_nifti(nii)
+    with nii.open('rb') as f:
+        uploaded = client.post(f"/projects/{project['id']}/upload", files={'file': (nii.name, f, 'application/gzip')}).json()
+
+    rejected = client.post(
+        f"/series/{uploaded['series']['id']}/run",
+        json={'workflow_type': 't1_deepprep_anat_report'},
+    )
+    diagnostic = client.post(
+        f"/series/{uploaded['series']['id']}/run",
+        json={'workflow_type': 't1_deepprep_mock'},
+    )
+
+    assert rejected.status_code == 403
+    assert "/agent/runs" in rejected.json()['detail']
+    assert diagnostic.status_code == 200
+    assert diagnostic.json()['workflow_type'] == 't1_deepprep_mock'
+    with database.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM tasks WHERE workflow_type='t1_deepprep_anat_report'").fetchone()[0] == 0
+
+
+def test_direct_series_run_requires_agent_confirmation_for_fixed_validate_workflow(tmp_path, monkeypatch):
+    monkeypatch.delenv("IMAGE_AGENT_ENV", raising=False)
+    monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
+    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
+    from app.db import database
+    from app.services import task_service
+    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(task_service, 'submit_background', lambda *args, **kwargs: None)
+
+    database.init_db()
+    client = TestClient(app)
+    project = client.post('/projects', json={'name': 'P-fixed-validate-direct-run'}).json()
+    dwi = tmp_path / 'sub-001_dwi.nii.gz'
+    bval = tmp_path / 'sub-001_dwi.bval'
+    bvec = tmp_path / 'sub-001_dwi.bvec'
+    sidecar = tmp_path / 'sub-001_dwi.json'
+    make_nifti(dwi, shape=(8, 8, 8, 3))
+    bval.write_text('0 1000 1000\n', encoding='utf-8')
+    bvec.write_text('1 0 0\n0 1 0\n0 0 1\n', encoding='utf-8')
+    sidecar.write_text(json.dumps({'PhaseEncodingDirection': 'j-', 'TotalReadoutTime': 0.095}), encoding='utf-8')
+    with dwi.open('rb') as f, bval.open('rb') as bval_f, bvec.open('rb') as bvec_f, sidecar.open('rb') as json_f:
+        uploaded = client.post(
+            f"/projects/{project['id']}/upload-dwi",
+            files={
+                'nifti': (dwi.name, f, 'application/gzip'),
+                'bval': (bval.name, bval_f, 'text/plain'),
+                'bvec': (bvec.name, bvec_f, 'text/plain'),
+                'json_sidecar': (sidecar.name, json_f, 'application/json'),
+            },
+        ).json()
+
+    rejected = client.post(
+        f"/series/{uploaded['series']['id']}/run",
+        json={'workflow_type': 'dwi_fast_gpu_dti_validate'},
+    )
+
+    assert rejected.status_code == 403
+    assert "/agent/runs" in rejected.json()['detail']
+    with database.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM tasks WHERE workflow_type='dwi_fast_gpu_dti_validate'").fetchone()[0] == 0
+
+
+def test_direct_series_run_rejects_runtime_alias_without_registered_workflow_type(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
+    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
+    from app.db import database
+    from app.services import task_service
+    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(task_service, 'submit_background', lambda *args, **kwargs: None)
+
+    database.init_db()
+    client = TestClient(app)
+    project = client.post('/projects', json={'name': 'P-runtime-alias-spoof'}).json()
+    nii = tmp_path / 'sub-001_T1w.nii.gz'
+    make_nifti(nii)
+    with nii.open('rb') as f:
+        uploaded = client.post(f"/projects/{project['id']}/upload", files={'file': (nii.name, f, 'application/gzip')}).json()
+
+    rejected = client.post(
+        f"/series/{uploaded['series']['id']}/run",
+        json={
+            'workflow_type': 'T1 DeepPrep anatomical processing, QC, and report',
+            'runtime_workflow_type': 't1_deepprep',
+        },
+    )
+
+    assert rejected.status_code == 400
+    assert 'Unknown workflow_type' in rejected.json()['detail']
+    with database.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0] == 0
+
+
+def test_production_create_series_task_blocks_incubation_debug_workflow_even_with_agent_gate(tmp_path, monkeypatch):
+    monkeypatch.setenv("IMAGE_AGENT_ENV", "production")
+    monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
+    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
+    from app.db import database
+    from app.schemas import RunRequest
+    from app.services import task_service
+    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(task_service, 'submit_background', lambda *args, **kwargs: None)
+
+    database.init_db()
+    client = TestClient(app)
+    project = client.post('/projects', json={'name': 'P-production-debug-block'}).json()
+    nii = tmp_path / 'sub-001_T1w.nii.gz'
+    make_nifti(nii)
+    with nii.open('rb') as f:
+        uploaded = client.post(f"/projects/{project['id']}/upload", files={'file': (nii.name, f, 'application/gzip')}).json()
+
+    with pytest.raises(Exception) as excinfo:
+        task_service.create_series_task(
+            uploaded['series']['id'],
+            RunRequest(workflow_type='t1_deepprep_mock'),
+        )
+
+    assert getattr(excinfo.value, "status_code", None) == 403
+    assert "Incubation" in str(getattr(excinfo.value, "detail", ""))
 
 
 def test_dwi_fast_gpu_dti_rejects_missing_json_sidecar(tmp_path, monkeypatch):
@@ -545,6 +950,8 @@ def test_dwi_fast_gpu_dti_rejects_missing_json_sidecar(tmp_path, monkeypatch):
     monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
     monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
     from app.db import database
+    from app.schemas import RunRequest
+    from app.services import task_service
     monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
 
     database.init_db()
@@ -571,8 +978,18 @@ def test_dwi_fast_gpu_dti_rejects_missing_json_sidecar(tmp_path, monkeypatch):
         json={'workflow_type': 'dwi_fast_gpu_dti_validate'},
     )
 
-    assert rejected.status_code == 400
-    assert 'JSON sidecar' in rejected.json()['detail']
+    assert rejected.status_code == 403
+    assert '/agent/runs' in rejected.json()['detail']
+
+    with pytest.raises(Exception) as excinfo:
+        task_service.create_series_task(
+            uploaded['series']['id'],
+            RunRequest(workflow_type='dwi_fast_gpu_dti_validate'),
+            confirmed_agent_gate=True,
+        )
+
+    assert getattr(excinfo.value, 'status_code', None) == 400
+    assert 'JSON sidecar' in str(getattr(excinfo.value, 'detail', ''))
 
 
 def test_dwi_fast_gpu_dti_validate_checks_lightweight_toolbox_not_full_qsiprep(monkeypatch, tmp_path):
@@ -608,6 +1025,53 @@ def test_dwi_fast_gpu_dti_validate_checks_lightweight_toolbox_not_full_qsiprep(m
     assert "qsiprep /data /out participant" not in command_text
     assert "--eddy-config" not in command_text
     assert "app.workflows.dwi_fast_dti run" in command_text
+
+
+def test_pipeline_runner_uses_runtime_workflow_type_when_task_keeps_canonical_id(monkeypatch, tmp_path):
+    from app.workflows import pipeline
+
+    monkeypatch.setattr(pipeline, "PROJECTS_ROOT", tmp_path / "projects")
+    monkeypatch.setattr(pipeline, "_isolate_stale_task_workspace", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        pipeline,
+        "_build_bids",
+        lambda task, series: {
+            "root": tmp_path,
+            "bids": tmp_path / "bids",
+            "output": tmp_path / "output",
+            "work": tmp_path / "work",
+        },
+    )
+    monkeypatch.setattr(pipeline, "_docker_image_exists", lambda image: (True, "deepprep image ok"))
+    monkeypatch.setattr(pipeline, "_insert_output", lambda *args, **kwargs: None)
+    updates = []
+    monkeypatch.setattr(pipeline, "_update", lambda task_id, **values: updates.append(values))
+
+    def fake_row(sql, params=()):
+        if "FROM tasks" in sql:
+            return {
+                "id": 77,
+                "project_id": 1,
+                "series_id": 11,
+                "workflow_type": "t1_deepprep_anat_report",
+                "runtime_workflow_type": "t1_deepprep_validate",
+                "log_path": str(tmp_path / "task.log"),
+                "qsiprep_task_id": None,
+            }
+        if "FROM imaging_series" in sql:
+            return {"id": 11, "project_id": 1, "modality": "T1", "metadata_json": "{}"}
+        return None
+
+    monkeypatch.setattr(pipeline, "_row", fake_row)
+
+    pipeline.run_pipeline_task(77)
+
+    assert any(item.get("status") == "completed" for item in updates)
+    log_text = (tmp_path / "task.log").read_text(encoding="utf-8")
+    manifest_line = next(line for line in log_text.splitlines() if "RUNTIME_MANIFEST " in line)
+    manifest = json.loads(manifest_line.split("RUNTIME_MANIFEST ", 1)[1])
+    assert manifest["workflow_type"] == "t1_deepprep_validate"
+    assert manifest["runtime_workflow"] == "t1_deepprep"
 
 
 def test_task_result_summary_endpoint_returns_frontend_contract(tmp_path, monkeypatch):
@@ -659,6 +1123,10 @@ def test_task_result_summary_endpoint_returns_frontend_contract(tmp_path, monkey
     payload = result.json()
     assert payload['project_id'] == project['id']
     assert payload['workflow_type'] == 't1_deepprep'
+    assert payload['workflow_metadata']['workflow_type'] == 't1_deepprep_anat_report'
+    assert payload['workflow_metadata']['runtime_workflow_type'] == 't1_deepprep'
+    assert payload['workflow_metadata']['display_name'] == 'T1 DeepPrep anatomical processing, QC, and report'
+    assert payload['workflow_metadata']['is_report_only'] is False
     assert payload['spaces'] == ['T1w', 'MNI152']
     assert 'summary_path' not in payload
 
@@ -999,7 +1467,7 @@ def test_pipeline_runtime_images_are_version_pinned():
     }
 
     assert runtime_images["t1_deepprep"] == "pbfslab/deepprep:25.1.0"
-    assert runtime_images["dwi_qsiprep"] == "pennlinc/qsiprep:1.0.2"
+    assert runtime_images["dwi_qsiprep"] == "pennlinc/qsiprep:26.0.0"
     assert runtime_images["dwi_qsirecon"] == "pennlinc/qsirecon:26.0.0"
     assert runtime_images["bold_fmriprep"] == "nipreps/fmriprep:25.2.5"
     assert runtime_images["bold_fmriprep_xcpd_report_xcpd"] == "pennlinc/xcp_d:26.0.2"
@@ -1313,6 +1781,101 @@ def test_task_logs_redact_secrets_and_backend_paths(tmp_path, monkeypatch):
     assert 'remote qc continued' in payload['remote_logs'][0]['tail']
     assert 'path' not in payload['remote_logs'][0]
 
+    events_payload = client.get('/tasks/77/events').json()
+    events_serialized = json.dumps(events_payload)
+    assert events_payload['status'] == 'ok'
+    assert events_payload['task']['id'] == 77
+    assert events_payload['task']['status'] == 'running'
+    assert 'log_path' not in events_payload['task']
+    assert any(event['type'] == 'task.status' and event['status'] == 'running' for event in events_payload['events'])
+    assert any(event['type'] == 'task.remote_log' and event['source_stage'] == 'fmriprep' for event in events_payload['events'])
+    assert 'processing continued' in events_payload['main_log']['tail']
+    assert events_payload['remote_logs'][0]['name'] == 'fmriprep.log'
+    assert 'remote qc continued' in events_payload['remote_logs'][0]['tail']
+    assert 'sk-test-secret' not in events_serialized
+    assert 'super-secret' not in events_serialized
+    assert 'remote-secret' not in events_serialized
+    assert 'C:/Users/A/private' not in events_serialized
+    assert '/home/yyf/project/image_agent' not in events_serialized
+    assert 'log_path' not in events_serialized
+
+
+def test_task_observe_repair_endpoint_is_read_only_and_redacted(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
+    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
+    from app.db import database
+    import app.main as main
+    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(main, 'PROJECTS_ROOT', tmp_path / 'projects')
+
+    database.init_db()
+    client = TestClient(app)
+    project = client.post('/projects', json={'name': 'P-observe-repair'}).json()
+    nii = tmp_path / 'sub-001_T1w.nii.gz'
+    make_nifti(nii)
+    with nii.open('rb') as f:
+        series = client.post(f"/projects/{project['id']}/upload", files={'file': (nii.name, f, 'application/gzip')}).json()['series']
+    log_path = tmp_path / 'projects' / str(project['id']) / 'logs' / '118.log'
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.write_text(
+        'OPENAI_API_KEY=sk-observe-secret failed at C:/Users/A/private/patient-118\n',
+        encoding='utf-8',
+    )
+    remote_log = tmp_path / 'projects' / str(project['id']) / 'derivatives' / '118' / 'output' / 'logs' / 'fmriprep.log'
+    remote_log.parent.mkdir(parents=True, exist_ok=True)
+    remote_log.write_text(
+        'remote TOKEN=repair-secret wrote /home/yyf/project/image_agent/private\n',
+        encoding='utf-8',
+    )
+    now = database.now_iso()
+    with database.connect() as conn:
+        conn.execute(
+            'INSERT INTO tasks(id, project_id, series_id, workflow_type, status, progress, log_path, created_at) VALUES(?,?,?,?,?,?,?,?)',
+            (118, project['id'], series['id'], 't1_deepprep_mock', 'failed', 20, str(log_path), now),
+        )
+        conn.execute(
+            'INSERT INTO outputs(task_id, output_type, path, metadata_json, created_at) VALUES(?,?,?,?,?)',
+            (118, 'json', str(tmp_path / 'missing_result_summary.json'), '{"kind":"result_summary"}', now),
+        )
+        before_tasks = conn.execute('SELECT COUNT(*) AS count FROM tasks').fetchone()['count']
+        before_outputs = conn.execute('SELECT COUNT(*) AS count FROM outputs').fetchone()['count']
+
+    response = client.get('/tasks/118/observe-repair')
+
+    assert response.status_code == 200
+    payload = response.json()
+    serialized = json.dumps(payload)
+    assert payload['status'] == 'ok'
+    assert payload['policy'] == 'read_only_observe_repair'
+    assert payload['task']['id'] == 118
+    assert payload['task']['status'] == 'failed'
+    assert any(item['kind'] == 'failed_task_repair_plan' for item in payload['repair_suggestions'])
+    assert any(item['kind'] == 'result_summary_repair_plan' for item in payload['repair_suggestions'])
+    assert payload['auto_rerun_allowed'] is False
+    assert payload['production_task_created'] is False
+    assert payload['requires_preflight_before_retry'] is True
+    assert payload['requires_human_confirmation_before_retry'] is True
+    assert any(event['type'] == 'task.status' and event['status'] == 'failed' for event in payload['events'])
+    assert 'failed at' in payload['main_log']['tail']
+    assert payload['remote_logs'][0]['name'] == 'fmriprep.log'
+    assert 'log_path' not in serialized
+    assert 'path' not in payload['remote_logs'][0]
+    assert 'sk-observe-secret' not in serialized
+    assert 'repair-secret' not in serialized
+    assert 'patient-118' not in serialized
+    assert 'C:/Users/A/private' not in serialized
+    assert '/home/yyf/project/image_agent' not in serialized
+    with database.connect() as conn:
+        after_tasks = conn.execute('SELECT COUNT(*) AS count FROM tasks').fetchone()['count']
+        after_outputs = conn.execute('SELECT COUNT(*) AS count FROM outputs').fetchone()['count']
+        task = conn.execute('SELECT status, progress, log_path FROM tasks WHERE id=?', (118,)).fetchone()
+    assert after_tasks == before_tasks
+    assert after_outputs == before_outputs
+    assert task['status'] == 'failed'
+    assert task['progress'] == 20
+    assert task['log_path'] == str(log_path)
+
 
 def test_bold_deepprep_validate_allowed_for_fmri(tmp_path, monkeypatch):
     monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
@@ -1320,8 +1883,11 @@ def test_bold_deepprep_validate_allowed_for_fmri(tmp_path, monkeypatch):
     monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
     from app.db import database
     import app.main as main
+    from app.schemas import RunRequest
+    from app.services import task_service
     monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
     monkeypatch.setattr(main, 'run_pipeline_task', lambda task_id, qsiprep_task_id=None: None)
+    monkeypatch.setattr(task_service, 'submit_background', lambda *args, **kwargs: None)
 
     database.init_db()
     client = TestClient(app)
@@ -1332,11 +1898,22 @@ def test_bold_deepprep_validate_allowed_for_fmri(tmp_path, monkeypatch):
         uploaded = client.post(f"/projects/{project['id']}/upload", files={'file': (nii.name, f, 'application/gzip')}).json()
     assert uploaded['series']['modality'] == 'BOLD'
 
-    accepted = client.post(
+    rejected = client.post(
         f"/series/{uploaded['series']['id']}/run",
         json={'workflow_type': 'bold_deepprep_validate'},
     )
-    assert accepted.status_code == 200
+    assert rejected.status_code == 403
+    assert "/agent/runs" in rejected.json()['detail']
+    with database.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM tasks WHERE workflow_type='bold_deepprep_validate'").fetchone()[0] == 0
+
+    task = task_service.create_series_task(
+        uploaded['series']['id'],
+        RunRequest(workflow_type='bold_deepprep_validate'),
+        confirmed_agent_gate=True,
+    )
+
+    assert task['workflow_type'] == 'bold_deepprep_validate'
 
 
 def test_bold_report_routes_dispatch_through_result_service(tmp_path, monkeypatch):
@@ -1644,6 +2221,96 @@ def test_chat_status_uses_requested_task_ids_beyond_recent_limit(tmp_path, monke
     assert res['tool_invocations']
 
 
+def test_chat_inventory_capability_question_returns_full_read_only_answer(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
+    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
+    from app.db import database
+    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
+
+    database.init_db()
+    client = TestClient(app)
+    project = client.post('/projects', json={'name': 'P-chat-inventory'}).json()
+    with database.connect() as conn:
+        conn.execute(
+            "INSERT INTO files(id, project_id, original_name, storage_path, file_type, size, sha256, created_at) VALUES(?,?,?,?,?,?,?,?)",
+            (51, project['id'], 'sub-01_T1w.nii.gz', str(tmp_path / 'sub-01_T1w.nii.gz'), 'NIFTI', 1024, 'sha-t1', database.now_iso()),
+        )
+        conn.execute(
+            "INSERT INTO imaging_series(id, project_id, file_id, sequence_label, supported_for_processing, modality, format, confidence, metadata_json, status, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            (61, project['id'], 51, 'T1w_MPRAGE', 1, 'T1', 'NIFTI', 0.98, '{}', 'ready', database.now_iso()),
+        )
+
+    payload = client.post(
+        '/chat',
+        json={'project_id': project['id'], 'message': '\u6211\u4e0a\u4f20\u4e86\u4ec0\u4e48\u6587\u4ef6\uff0c\u53ef\u4ee5\u8dd1\u4ec0\u4e48\u4efb\u52a1'},
+    ).json()
+
+    assert payload['provider'] == 'rules'
+    assert payload['intent'] == 'inventory_capability'
+    assert 'Uploaded files' in payload['reply']
+    assert 'sub-01_T1w.nii.gz' in payload['reply']
+    assert 'Detected series' in payload['reply']
+    assert 'Runnable fixed workflows' in payload['reply']
+    assert 't1_deepprep_anat_report' in payload['reply']
+    assert 'No approval request has been created' in payload['reply']
+    assert 'Approval required' not in payload['reply']
+
+
+def test_chat_result_analysis_includes_observations_outputs_and_reports(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
+    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
+    from app.db import database
+    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
+
+    database.init_db()
+    client = TestClient(app)
+    project = client.post('/projects', json={'name': 'P-chat-results'}).json()
+    output_dir = tmp_path / 'projects' / str(project['id']) / 'derivatives' / '118' / 'output'
+    summary_dir = output_dir / 'summary'
+    summary_dir.mkdir(parents=True)
+    summary_path = summary_dir / 't1_result_summary.json'
+    summary_path.write_text(json.dumps({
+        'task_id': 118,
+        'workflow_type': 't1_deepprep_anat_report',
+        'modality': 'T1',
+        'outputs': {
+            'reports': [
+                {'relative_path': 'reports/index.html', 'content_type': 'text/html'},
+                {'relative_path': 'reports/t1_brain_measures_overview.png', 'content_type': 'image/png'},
+            ],
+            'qc': [
+                {'relative_path': 'QC/sub-01/figures/sub-01_desc-volparc_T1w.svg', 'content_type': 'image/svg+xml'},
+            ],
+        },
+    }), encoding='utf-8')
+    with database.connect() as conn:
+        conn.execute(
+            "INSERT INTO tasks(id, project_id, series_id, workflow_type, status, progress, log_path, created_at, finished_at) VALUES(?,?,?,?,?,?,?,?,?)",
+            (118, project['id'], 1, 't1_deepprep_anat_report', 'completed', 100, str(tmp_path / '118.log'), database.now_iso(), database.now_iso()),
+        )
+        conn.execute(
+            "INSERT INTO outputs(task_id, output_type, path, preview_path, metadata_json, created_at) VALUES(?,?,?,?,?,?)",
+            (118, 'json', str(summary_path), None, json.dumps({'kind': 'result_summary'}), database.now_iso()),
+        )
+
+    payload = client.post(
+        '/chat',
+        json={'project_id': project['id'], 'message': 'analyze results for task 118 and explain the reports'},
+    ).json()
+
+    assert payload['provider'] == 'rules'
+    assert payload['intent'] == 'status'
+    assert 'Observation summary' in payload['reply']
+    assert 'task 118' in payload['reply']
+    assert 'completed' in payload['reply']
+    assert 'Result artifacts' in payload['reply']
+    assert 'reports/index.html' in payload['reply']
+    assert 'QC observations' in payload['reply']
+    assert 'No workflow was launched' in payload['reply']
+
+
 def test_chat_mentions_real_bold_metric_outputs_after_implementation(tmp_path, monkeypatch):
     monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
     monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
@@ -1687,7 +2354,7 @@ def test_eddy_cuda_detection_accepts_versioned_binary(monkeypatch):
     monkeypatch.setenv("IMAGE_AGENT_SUDO_PASSWORD", "pw")
     monkeypatch.setattr(pipeline.subprocess, "run", lambda *args, **kwargs: Proc())
 
-    ok, detail = pipeline._docker_image_has_eddy_cuda("pennlinc/qsiprep:latest")
+    ok, detail = pipeline._docker_image_has_eddy_cuda("pennlinc/qsiprep:26.0.0")
 
     assert ok is True
     assert "eddy_cuda11.0" in detail
@@ -1703,7 +2370,7 @@ def test_eddy_cuda_detection_rejects_missing_binary(monkeypatch):
     monkeypatch.setenv("IMAGE_AGENT_SUDO_PASSWORD", "pw")
     monkeypatch.setattr(pipeline.subprocess, "run", lambda *args, **kwargs: Proc())
 
-    ok, detail = pipeline._docker_image_has_eddy_cuda("pennlinc/qsiprep:latest")
+    ok, detail = pipeline._docker_image_has_eddy_cuda("pennlinc/qsiprep:26.0.0")
 
     assert ok is False
     assert "eddy_cuda*" in detail
@@ -1880,6 +2547,34 @@ def test_health_can_report_deployment_version_from_environment(monkeypatch):
     resp = client.get("/health").json()
 
     assert resp["version"] == "codex-new-release"
+
+
+def test_auth_required_rejects_missing_token_and_validates_login(monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+    from app.app_factory import create_app
+    from app.core import config
+    from app.db import database
+
+    monkeypatch.setattr(config, "DATA_ROOT", tmp_path)
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(config, "PROJECTS_ROOT", tmp_path / "projects")
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setenv("IMAGE_AGENT_REQUIRE_AUTH", "true")
+    monkeypatch.setenv("IMAGE_AGENT_CONSOLE_USERNAME", "operator")
+    monkeypatch.setenv("IMAGE_AGENT_CONSOLE_PASSWORD", "correct-password")
+    monkeypatch.setenv("IMAGE_AGENT_CONSOLE_TOKEN", "operator-token")
+    database.init_db()
+    client = TestClient(create_app())
+
+    assert client.get("/projects").status_code == 401
+    assert client.post("/auth/login", json={"username": "operator", "password": "wrong"}).status_code == 401
+
+    login = client.post("/auth/login", json={"username": "operator", "password": "correct-password"})
+    assert login.status_code == 200
+    assert login.json()["access_token"] == "operator-token"
+
+    protected = client.get("/projects", headers={"Authorization": "Bearer operator-token"})
+    assert protected.status_code == 200
 
 
 # ── Recovery safety checks ───────────────────────────────────────────────────

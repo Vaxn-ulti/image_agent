@@ -6,6 +6,51 @@ from pathlib import Path
 import pytest
 
 
+def _strict_workflow_metadata(**overrides):
+    metadata = {
+        "workflow_type": "t1_deepprep_anat_report",
+        "runtime_workflow_type": "t1_deepprep",
+        "display_name": "T1 DeepPrep anatomical processing, QC, and report",
+        "workflow_family": "t1",
+        "workflow_role": "anat_processing",
+        "capability_summary": "Runs anatomical T1 processing, QC, and report outputs.",
+        "pipeline_stages": [
+            {"name": "BIDS preparation", "purpose": "Prepare supported T1 input."},
+            {"name": "DeepPrep anatomical processing", "purpose": "Generate anatomical derivatives."},
+        ],
+        "primary_outputs": ["anatomical derivatives", "result-summary.json"],
+        "qc_outputs": ["DeepPrep QC artifacts"],
+        "report_outputs": ["HTML scientific report"],
+        "limitations": ["Requires supported T1 input"],
+        "agent_selectable": True,
+        "is_report_only": False,
+    }
+    metadata.update(overrides)
+    return metadata
+
+
+def _strict_workflow_metadata_without(*keys):
+    metadata = _strict_workflow_metadata()
+    for key in keys:
+        metadata.pop(key, None)
+    return metadata
+
+
+WORKFLOW_ELIGIBILITY_METADATA_REQUIRED_FIELDS = [
+    "display_name",
+    "capability_summary",
+    "workflow_family",
+    "workflow_role",
+    "pipeline_stages",
+    "primary_outputs",
+    "qc_outputs",
+    "report_outputs",
+    "limitations",
+    "agent_selectable",
+    "is_report_only",
+]
+
+
 def _load_verifier_module():
     script = Path(__file__).resolve().parents[1] / "scripts" / "verify_remote_smoke_acceptance.py"
     spec = importlib.util.spec_from_file_location("verify_remote_smoke_acceptance", script)
@@ -30,13 +75,19 @@ def _strict_smoke_payload():
             "require_project_agent_context": True,
             "require_agent_workflow_confirmation": True,
             "require_agent_workflow_resume": True,
+            "require_agent_workflow_fingerprint_negative": True,
+            "require_unknown_workflow_incubation": True,
             "require_raw_source_policy": True,
             "require_vendor_pointer_integrity": True,
+            "require_elasticsearch_hybrid_rag": True,
             "require_real_evidence_ids": True,
             "require_completed_upload": True,
             "require_uploaded_series": True,
             "require_launchability_matrix": True,
+            "require_task_events": True,
+            "require_observe_repair": True,
             "require_launched_task": True,
+            "require_runtime_toolchain": True,
             "require_container_native_qc": True,
             "min_native_qc_images": 1,
             "require_scientific_report_artifacts": True,
@@ -62,10 +113,15 @@ def _strict_smoke_payload():
             "provider_profile": "rawchat",
             "model": "gpt-5.5",
             "wire_api": "responses",
+            "trust_env_proxy": False,
             "capabilities": {
                 "text": True,
                 "structured_json": True,
                 "model_tool_loop": True,
+            },
+            "deployment": {
+                "backend_runtime_mode": "remote",
+                "model_gateway_access": "direct",
             },
         },
         "model_smoke_status": "passed",
@@ -76,10 +132,62 @@ def _strict_smoke_payload():
             "required": True,
             "status": "ready",
         },
+        "fast_launch_readiness_status": "pre_acceptance",
+        "fast_launch_readiness": {
+            "blocking_reasons": [
+                "Strict remote acceptance evidence has not been verified for the upload-agent-workflow-result chain."
+            ],
+            "ready": False,
+            "status": "blocked",
+            "checks": {
+                "model_gateway_target": {"status": "passed"},
+                "production_deployment": {
+                    "status": "passed",
+                    "required": True,
+                    "ready": True,
+                    "readiness_status": "ready",
+                    "blocking_reasons": [],
+                },
+                "agent_task_boundary": {"status": "passed"},
+                "upload_workflow_result_contract": {"status": "passed"},
+                "strict_remote_acceptance": {"status": "missing"},
+                "rag_elasticsearch_hybrid": {
+                    "status": "passed",
+                    "engine": "elasticsearch",
+                    "configured": True,
+                    "persisted": True,
+                    "mode": "connected",
+                    "index": "image_agent_rag",
+                    "indexed_chunk_count": 260,
+                    "dense_vector_dims": 1536,
+                    "embedding_provider": "openai",
+                    "embedding_model": "text-embedding-3-small",
+                    "embedding_transport": "openai_compatible_http",
+                    "embedding_endpoint_configured": True,
+                    "embedding_production_ready": True,
+                    "fusion": "rrf",
+                },
+            },
+        },
+        "runtime_toolchain_status": "passed",
+        "runtime_toolchain": {
+            "workflow_tool_execution": "deployment_server_local",
+            "docker_runtime_host": "api_server",
+            "docker_requires_sudo": True,
+            "fs_license_exists": True,
+            "workflow_count": 2,
+            "available_workflow_count": 2,
+            "required_workflow_type": "t1_deepprep_anat_report",
+            "required_workflow_available": True,
+            "unavailable_workflows": [],
+            "workflow_types": ["bold_fmriprep_xcpd_report", "t1_deepprep_anat_report"],
+        },
         "agent_run_status": "answered",
         "agent_run_id": "agent_run_123",
         "agent_model_gateway_status": "passed",
         "agent_model_gateway_access": "openai_sdk_gateway",
+        "agent_model_transport_access": "direct",
+        "agent_model_trust_env_proxy": False,
         "agent_safe_metadata": {},
         "agent_project_context_status": "passed",
         "agent_run_project_id": 7,
@@ -92,6 +200,7 @@ def _strict_smoke_payload():
             "project_id": 7,
             "series_id": 1,
             "workflow_type": "t1_deepprep_anat_report",
+            "workflow_metadata": _strict_workflow_metadata(),
             "selected_skill": "image-agent-workflow-runner",
             "production_task_created": False,
         },
@@ -103,10 +212,37 @@ def _strict_smoke_payload():
             "project_id": 7,
             "series_id": 1,
             "workflow_type": "t1_deepprep_anat_report",
+            "runtime_workflow_type": "t1_deepprep",
             "task_id": 114,
             "initial_status": "queued",
             "production_task_created": True,
             "confirmation_gate": "fingerprint_verified",
+        },
+        "agent_workflow_fingerprint_negative_status": "passed",
+        "agent_workflow_fingerprint_negative": {
+            "agent_run_id": "agent_run_tampered",
+            "thread_id": "agent_thread_confirm",
+            "status": "blocked",
+            "production_task_created": False,
+            "confirmation_gate": "fingerprint_mismatch",
+            "task_created": False,
+        },
+        "unknown_workflow_incubation_status": "passed",
+        "unknown_workflow_incubation": {
+            "agent_run_id": "agent_run_unknown",
+            "thread_id": "agent_thread_unknown",
+            "status": "toolchain_proposed",
+            "action_lane": "toolchain_incubation",
+            "proposal_id": "inc_codex_unknown",
+            "proposal_status": "draft",
+            "proposal_contract_version": "toolchain_proposal.v1",
+            "proposal_promotion_status": "blocked_by_gaps",
+            "task_created": False,
+            "confirmation_created": False,
+            "task_creation_allowed": False,
+            "forbidden_actions": ["confirmation_creation", "production_task_creation", "pipeline_runner_launch"],
+            "production_task_created": False,
+            "proposal_production_task_created": False,
         },
         "intent": "answer_question",
         "selected_skill": "image-agent-operator",
@@ -119,7 +255,25 @@ def _strict_smoke_payload():
             "status": "completed",
             "task_id": 114,
             "workflow_type": "t1_deepprep_anat_report",
+            "runtime_workflow_type": "t1_deepprep",
         },
+        "task_events_status": "passed",
+        "task_events_task_id": 114,
+        "task_events_event_types": ["task.remote_log", "task.status"],
+        "task_events_status_event_status": "completed",
+        "task_events_remote_log_count": 1,
+        "task_events_remote_log_source_stages": ["deepprep"],
+        "task_events_main_log_tail_present": True,
+        "observe_repair_status": "passed",
+        "observe_repair_task_id": 114,
+        "observe_repair_policy": "read_only_observe_repair",
+        "observe_repair_auto_rerun_allowed": False,
+        "observe_repair_task_creation_allowed": False,
+        "observe_repair_forbidden_actions": ["auto_retry", "auto_rerun", "task_creation"],
+        "observe_repair_production_task_created": False,
+        "observe_repair_requires_preflight_before_retry": True,
+        "observe_repair_requires_human_confirmation_before_retry": True,
+        "observe_repair_repair_suggestion_count": 1,
         "launched_task_status": "passed",
         "launched_task": {
             "initial_status": "queued",
@@ -127,6 +281,8 @@ def _strict_smoke_payload():
             "series_id": 1,
             "task_id": 114,
             "workflow_type": "t1_deepprep_anat_report",
+            "runtime_workflow_type": "t1_deepprep",
+            "launch_source": "agent_workflow_resume",
         },
         "task_workflow_selection_status": "passed",
         "task_workflow_selection": {
@@ -137,6 +293,61 @@ def _strict_smoke_payload():
         "rag_document_count": 72,
         "rag_chunk_count": 260,
         "rag_semantic_index": True,
+        "rag_rebuild_elasticsearch_hybrid": {
+            "engine": "elasticsearch",
+            "configured": True,
+            "persisted": True,
+            "mode": "connected",
+            "index": "image_agent_rag",
+            "indexed_chunk_count": 260,
+            "lexical_retriever": "standard",
+            "vector_retriever": "knn",
+            "dense_vector_field": "embedding",
+            "dense_vector_dims": 1536,
+            "embedding_provider": "openai",
+            "embedding_model": "text-embedding-3-small",
+            "embedding_transport": "openai_compatible_http",
+            "embedding_endpoint_configured": True,
+            "embedding_production_ready": True,
+            "fusion": "rrf",
+        },
+        "rag_elasticsearch_hybrid_status": "passed",
+        "rag_elasticsearch_hybrid": {
+            "engine": "elasticsearch",
+            "configured": True,
+            "persisted": True,
+            "mode": "connected",
+            "index": "image_agent_rag",
+            "indexed_chunk_count": 260,
+            "lexical_retriever": "standard",
+            "vector_retriever": "knn",
+            "dense_vector_field": "embedding",
+            "dense_vector_dims": 1536,
+            "embedding_provider": "openai",
+            "embedding_model": "text-embedding-3-small",
+            "embedding_transport": "openai_compatible_http",
+            "embedding_endpoint_configured": True,
+            "embedding_production_ready": True,
+            "fusion": "rrf",
+            "official_rrf_source_present": True,
+        },
+        "rag_elasticsearch_hybrid_query_status": "passed",
+        "rag_elasticsearch_hybrid_query_mode": "elasticsearch_hybrid",
+        "rag_elasticsearch_hybrid_query_retrieval_source": "elasticsearch_hybrid",
+        "rag_elasticsearch_hybrid_query_source": "docs/rag/contracts/elasticsearch-hybrid-search.md",
+        "rag_elasticsearch_hybrid_query_citation_count": 1,
+        "rag_elasticsearch_hybrid_query_top_score": 12.5,
+        "rag_elasticsearch_hybrid_query_index": "image_agent_rag",
+        "rag_elasticsearch_hybrid_query_lexical_retriever": "standard",
+        "rag_elasticsearch_hybrid_query_vector_retriever": "knn",
+        "rag_elasticsearch_hybrid_query_dense_vector_field": "embedding",
+        "rag_elasticsearch_hybrid_query_fusion": "rrf",
+        "rag_elasticsearch_hybrid_query_dense_vector_dims": 1536,
+        "rag_elasticsearch_hybrid_query_embedding_provider": "openai",
+        "rag_elasticsearch_hybrid_query_embedding_model": "text-embedding-3-small",
+        "rag_elasticsearch_hybrid_query_embedding_transport": "openai_compatible_http",
+        "rag_elasticsearch_hybrid_query_embedding_endpoint_configured": True,
+        "rag_elasticsearch_hybrid_query_embedding_production_ready": True,
         "rag_raw_sources": {
             "manifest_exists": True,
             "manifest_schema_version": 1,
@@ -253,11 +464,19 @@ def _strict_smoke_payload():
         "rag_launchability_query_source": "docs/rag/workflows/workflow_launchability_matrix.md",
         "project_contract_status": "passed",
         "series_with_workflow_eligibility": 1,
+        "project_workflow_eligibility_metadata_status": "passed",
+        "project_workflow_eligibility_metadata_required_fields": WORKFLOW_ELIGIBILITY_METADATA_REQUIRED_FIELDS,
+        "project_workflow_eligibility_metadata_workflow_types": ["t1_deepprep_anat_report"],
+        "project_workflow_eligibility_metadata_item_count": 2,
         "upload_inventory_contract_status": "passed",
         "upload_inventory_completion_status": "passed",
         "upload_inventory_status": "completed",
         "upload_inventory_series_with_workflow_eligibility": 1,
         "upload_inventory_series_ids": [1],
+        "upload_inventory_workflow_eligibility_metadata_status": "passed",
+        "upload_inventory_workflow_eligibility_metadata_required_fields": WORKFLOW_ELIGIBILITY_METADATA_REQUIRED_FIELDS,
+        "upload_inventory_workflow_eligibility_metadata_workflow_types": ["t1_deepprep_anat_report"],
+        "upload_inventory_workflow_eligibility_metadata_item_count": 2,
         "uploaded_series_status": "passed",
         "uploaded_series": {
             "project_id": 7,
@@ -271,6 +490,7 @@ def _strict_smoke_payload():
             "contract_version": "1.0",
             "task_id": 114,
             "workflow_type": "t1_deepprep_anat_report",
+            "workflow_metadata": _strict_workflow_metadata(),
             "modality": "T1",
             "feature_groups": ["anat"],
             "output_group_count": 1,
@@ -404,17 +624,146 @@ def test_verify_remote_smoke_acceptance_accepts_strict_payload():
     assert report["checked"]["model_wire_api"] == "responses"
     assert report["checked"]["expected_model_provider_profile"] == "rawchat"
     assert report["checked"]["model_provider_profile"] == "rawchat"
+    assert report["checked"]["model_trust_env_proxy"] is False
+    assert report["checked"]["model_gateway_access"] == "direct"
     assert report["checked"]["model_tool_loop"] is True
+    assert report["checked"]["fast_launch_readiness_status"] == "pre_acceptance"
+    assert report["checked"]["fast_launch_production_deployment_status"] == "passed"
+    assert report["checked"]["fast_launch_production_deployment_required"] is True
+    assert report["checked"]["fast_launch_production_deployment_ready"] is True
+    assert report["checked"]["fast_launch_rag_elasticsearch_hybrid_status"] == "passed"
+    assert report["checked"]["fast_launch_rag_elasticsearch_hybrid_mode"] == "connected"
+    assert report["checked"]["fast_launch_rag_elasticsearch_hybrid_index"] == "image_agent_rag"
+    assert report["checked"]["runtime_toolchain_status"] == "passed"
+    assert report["checked"]["runtime_toolchain_workflow_tool_execution"] == "deployment_server_local"
+    assert report["checked"]["runtime_toolchain_docker_runtime_host"] == "api_server"
+    assert report["checked"]["runtime_toolchain_fs_license_exists"] is True
+    assert report["checked"]["runtime_toolchain_required_workflow_type"] == "t1_deepprep_anat_report"
+    assert report["checked"]["runtime_toolchain_required_workflow_available"] is True
     assert report["checked"]["agent_project_context_status"] == "passed"
     assert report["checked"]["agent_workflow_confirmation_status"] == "passed"
+    assert report["checked"]["agent_workflow_confirmation_metadata_workflow_type"] == "t1_deepprep_anat_report"
+    assert report["checked"]["agent_workflow_confirmation_metadata_runtime_workflow_type"] == "t1_deepprep"
+    assert report["checked"]["agent_workflow_confirmation_metadata_agent_selectable"] is True
+    assert report["checked"]["agent_workflow_confirmation_metadata_is_report_only"] is False
+    assert report["checked"]["agent_workflow_resume_runtime_workflow_type"] == "t1_deepprep"
+    assert report["checked"]["agent_workflow_fingerprint_negative_status"] == "passed"
+    assert report["checked"]["agent_workflow_fingerprint_negative_confirmation_gate"] == "fingerprint_mismatch"
+    assert report["checked"]["agent_workflow_fingerprint_negative_task_created"] is False
+    assert report["checked"]["agent_workflow_fingerprint_negative_production_task_created"] is False
+    assert report["checked"]["unknown_workflow_incubation_status"] == "passed"
+    assert report["checked"]["unknown_workflow_incubation_action_lane"] == "toolchain_incubation"
+    assert report["checked"]["unknown_workflow_incubation_task_created"] is False
+    assert report["checked"]["unknown_workflow_incubation_confirmation_created"] is False
+    assert report["checked"]["unknown_workflow_incubation_task_creation_allowed"] is False
+    assert report["checked"]["unknown_workflow_incubation_forbidden_actions"] == [
+        "confirmation_creation",
+        "production_task_creation",
+        "pipeline_runner_launch",
+    ]
+    assert report["checked"]["unknown_workflow_incubation_production_task_created"] is False
+    assert report["checked"]["unknown_workflow_incubation_proposal_production_task_created"] is False
+    assert report["checked"]["task_status_runtime_workflow_type"] == "t1_deepprep"
+    assert report["checked"]["launched_task_runtime_workflow_type"] == "t1_deepprep"
+    assert report["checked"]["launched_task_launch_source"] == "agent_workflow_resume"
+    assert report["checked"]["observe_repair_requires_preflight_before_retry"] is True
+    assert report["checked"]["observe_repair_requires_human_confirmation_before_retry"] is True
     assert report["checked"]["rag_vendor_pointer_integrity_status"] == "passed"
+    assert report["checked"]["rag_elasticsearch_hybrid_mode"] == "connected"
+    assert report["checked"]["rag_elasticsearch_hybrid_configured"] is True
+    assert report["checked"]["rag_elasticsearch_hybrid_index"] == "image_agent_rag"
+    assert report["checked"]["rag_elasticsearch_hybrid_indexed_chunk_count"] == 260
+    assert report["checked"]["rag_elasticsearch_hybrid_dense_vector_dims"] == 1536
+    assert report["checked"]["rag_elasticsearch_hybrid_error_absent"] is True
+    assert report["checked"]["rag_elasticsearch_hybrid_embedding_error_absent"] is True
+    assert report["checked"]["rag_elasticsearch_hybrid_embedding_provider"] == "openai"
+    assert report["checked"]["rag_elasticsearch_hybrid_embedding_model"] == "text-embedding-3-small"
+    assert report["checked"]["rag_elasticsearch_hybrid_embedding_transport"] == "openai_compatible_http"
+    assert report["checked"]["rag_elasticsearch_hybrid_embedding_endpoint_configured"] is True
+    assert report["checked"]["rag_elasticsearch_hybrid_embedding_production_ready"] is True
+    assert report["checked"]["rag_elasticsearch_hybrid_official_rrf_source_present"] is True
+    assert report["checked"]["launched_task_launch_source"] == "agent_workflow_resume"
+    assert report["checked"]["rag_rebuild_elasticsearch_hybrid_indexed_chunk_count"] == 260
+    assert report["checked"]["rag_rebuild_elasticsearch_hybrid_configured"] is True
+    assert report["checked"]["rag_rebuild_elasticsearch_hybrid_index"] == "image_agent_rag"
+    assert report["checked"]["rag_rebuild_elasticsearch_hybrid_error_absent"] is True
+    assert report["checked"]["rag_rebuild_elasticsearch_hybrid_embedding_error_absent"] is True
+    assert report["checked"]["rag_rebuild_elasticsearch_hybrid_lexical_retriever"] == "standard"
+    assert report["checked"]["rag_rebuild_elasticsearch_hybrid_vector_retriever"] == "knn"
+    assert report["checked"]["rag_rebuild_elasticsearch_hybrid_dense_vector_field"] == "embedding"
+    assert report["checked"]["rag_rebuild_elasticsearch_hybrid_embedding_provider"] == "openai"
+    assert report["checked"]["rag_rebuild_elasticsearch_hybrid_embedding_model"] == "text-embedding-3-small"
+    assert report["checked"]["rag_rebuild_elasticsearch_hybrid_embedding_transport"] == "openai_compatible_http"
+    assert report["checked"]["rag_rebuild_elasticsearch_hybrid_embedding_endpoint_configured"] is True
+    assert report["checked"]["rag_rebuild_elasticsearch_hybrid_embedding_production_ready"] is True
+    assert report["checked"]["rag_rebuild_elasticsearch_hybrid_fusion"] == "rrf"
+    assert report["checked"]["rag_elasticsearch_hybrid_query_mode"] == "elasticsearch_hybrid"
+    assert report["checked"]["rag_elasticsearch_hybrid_query_retrieval_source"] == "elasticsearch_hybrid"
+    assert report["checked"]["rag_elasticsearch_hybrid_query_source"] == "docs/rag/contracts/elasticsearch-hybrid-search.md"
+    assert report["checked"]["rag_elasticsearch_hybrid_query_citation_count"] == 1
+    assert report["checked"]["rag_elasticsearch_hybrid_query_top_score"] == 12.5
+    assert report["checked"]["rag_elasticsearch_hybrid_query_index"] == "image_agent_rag"
+    assert report["checked"]["rag_elasticsearch_hybrid_query_lexical_retriever"] == "standard"
+    assert report["checked"]["rag_elasticsearch_hybrid_query_vector_retriever"] == "knn"
+    assert report["checked"]["rag_elasticsearch_hybrid_query_dense_vector_field"] == "embedding"
+    assert report["checked"]["rag_elasticsearch_hybrid_query_fusion"] == "rrf"
+    assert report["checked"]["rag_elasticsearch_hybrid_query_embedding_model"] == "text-embedding-3-small"
     assert report["checked"]["rag_vendor_coverage_catalog_status"] == "complete"
     assert report["checked"]["container_native_qc_status"] == "passed"
     assert report["checked"]["scientific_report_artifacts_status"] == "passed"
     assert report["checked"]["task_status_status"] == "passed"
+    assert report["checked"]["observe_repair_status"] == "passed"
+    assert report["checked"]["observe_repair_policy"] == "read_only_observe_repair"
+    assert report["checked"]["observe_repair_auto_rerun_allowed"] is False
+    assert report["checked"]["observe_repair_production_task_created"] is False
     assert report["checked"]["task_workflow_selection_status"] == "passed"
     assert report["checked"]["task_result_summary_status"] == "passed"
+    assert report["checked"]["task_result_summary_metadata_workflow_type"] == "t1_deepprep_anat_report"
+    assert report["checked"]["task_result_summary_metadata_runtime_workflow_type"] == "t1_deepprep"
+    assert report["checked"]["task_result_summary_metadata_agent_selectable"] is True
+    assert report["checked"]["task_result_summary_metadata_is_report_only"] is False
     assert report["checked"]["uploaded_series_status"] == "passed"
+    assert report["checked"]["project_workflow_eligibility_metadata_status"] == "passed"
+    assert report["checked"]["project_workflow_eligibility_metadata_item_count"] == 2
+    assert report["checked"]["project_workflow_eligibility_metadata_required_field_count"] == len(
+        WORKFLOW_ELIGIBILITY_METADATA_REQUIRED_FIELDS
+    )
+    assert report["checked"]["project_workflow_eligibility_metadata_workflow_types"] == ["t1_deepprep_anat_report"]
+    assert report["checked"]["project_workflow_eligibility_metadata_task_workflow_type_included"] is True
+    assert report["checked"]["upload_inventory_workflow_eligibility_metadata_status"] == "passed"
+    assert report["checked"]["upload_inventory_workflow_eligibility_metadata_item_count"] == 2
+    assert report["checked"]["upload_inventory_workflow_eligibility_metadata_required_field_count"] == len(
+        WORKFLOW_ELIGIBILITY_METADATA_REQUIRED_FIELDS
+    )
+    assert report["checked"]["upload_inventory_workflow_eligibility_metadata_workflow_types"] == [
+        "t1_deepprep_anat_report"
+    ]
+    assert report["checked"]["upload_inventory_workflow_eligibility_metadata_task_workflow_type_included"] is True
+
+
+def test_verify_remote_smoke_acceptance_accepts_runtime_toolchain_resolved_runtime_workflow():
+    verifier = _load_verifier_module()
+    payload = _strict_smoke_payload()
+    payload["runtime_toolchain"]["required_runtime_workflow_type"] = "t1_deepprep"
+    payload["runtime_toolchain"]["workflow_types"] = ["bold_fmriprep_xcpd_report", "t1_deepprep"]
+
+    report = verifier.verify_acceptance_payload(payload)
+
+    assert report["checked"]["runtime_toolchain_required_workflow_type"] == "t1_deepprep_anat_report"
+    assert report["checked"]["runtime_toolchain_required_runtime_workflow_type"] == "t1_deepprep"
+    assert report["checked"]["runtime_toolchain_required_workflow_available"] is True
+
+
+def test_verify_remote_smoke_acceptance_accepts_unknown_workflow_incubation_without_thread_id():
+    verifier = _load_verifier_module()
+    payload = _strict_smoke_payload()
+    payload["unknown_workflow_incubation"]["thread_id"] = None
+
+    report = verifier.verify_acceptance_payload(payload)
+
+    assert report["checked"]["unknown_workflow_incubation_status"] == "passed"
+    assert report["checked"]["unknown_workflow_incubation_task_created"] is False
+    assert report["checked"]["unknown_workflow_incubation_confirmation_created"] is False
 
 
 def test_verify_remote_smoke_acceptance_rejects_stale_saved_evidence():
@@ -448,6 +797,14 @@ def test_verify_remote_smoke_acceptance_rejects_stale_saved_evidence():
         (
             {"model_status": {"capabilities": {"model_tool_loop": False}}},
             "model_status.capabilities.model_tool_loop must be true",
+        ),
+        (
+            {"model_status": {"trust_env_proxy": True}},
+            "rawchat model_status.trust_env_proxy must be false",
+        ),
+        (
+            {"model_status": {"deployment": {"backend_runtime_mode": "remote", "model_gateway_access": "ssh_reverse_tunnel"}}},
+            "rawchat model_status.deployment.model_gateway_access must be direct",
         ),
         (
             {"smoke_gate": {"expected_model_wire_api": "chat/completions"}},
@@ -486,9 +843,44 @@ def test_verify_remote_smoke_acceptance_rejects_stale_saved_evidence():
         ({"deployment_identity_status": "skipped"}, "deployment_identity_status must be passed"),
         ({"production_readiness_status": "blocked"}, "production_readiness_status must be passed"),
         ({"production_readiness": {"ready": False}}, "production_readiness.ready must be true"),
+        ({"smoke_gate": {"require_runtime_toolchain": False}}, "smoke_gate.require_runtime_toolchain must be true"),
+        ({"runtime_toolchain_status": "skipped"}, "runtime_toolchain_status must be passed"),
+        ({"runtime_toolchain": None}, "runtime_toolchain must be present"),
+        (
+            {"runtime_toolchain": {"workflow_tool_execution": "external_worker"}},
+            "runtime_toolchain.workflow_tool_execution must be deployment_server_local",
+        ),
+        (
+            {"runtime_toolchain": {"docker_runtime_host": "worker"}},
+            "runtime_toolchain.docker_runtime_host must be api_server",
+        ),
+        (
+            {"runtime_toolchain": {"fs_license_exists": False}},
+            "runtime_toolchain.fs_license_exists must be true",
+        ),
+        (
+            {"runtime_toolchain": {"required_workflow_available": False}},
+            "runtime_toolchain.required_workflow_available must be true",
+        ),
+        (
+            {"runtime_toolchain": {"required_workflow_type": "dwi_fast_gpu_dti"}},
+            "runtime_toolchain.required_workflow_type must match task_status.workflow_type",
+        ),
+        (
+            {"runtime_toolchain": {"fs_license_path": "C:/Users/A/license.txt"}},
+            "runtime_toolchain must not expose fs_license_path",
+        ),
         ({"agent_run_id": "agent_run_123 C:/Users/A/private"}, "agent_run_id must be privacy-safe"),
         ({"agent_model_gateway_status": "fallback"}, "agent_model_gateway_status must be passed"),
         ({"agent_model_gateway_access": None}, "agent_model_gateway_access must be privacy-safe"),
+        (
+            {"agent_model_transport_access": "ssh_reverse_tunnel"},
+            "agent_model_transport_access must be direct for rawchat direct acceptance",
+        ),
+        (
+            {"agent_model_trust_env_proxy": True},
+            "agent_model_trust_env_proxy must be false for rawchat direct acceptance",
+        ),
         (
             {"agent_safe_metadata": {"fallback_reason": "model_gateway_unconfigured"}},
             "agent_safe_metadata must not report model_gateway_unconfigured",
@@ -507,6 +899,100 @@ def test_verify_remote_smoke_acceptance_rejects_stale_saved_evidence():
         (
             {"agent_workflow_confirmation": {"workflow_type": "dwi_fast_gpu_dti"}},
             "agent_workflow_confirmation.workflow_type must match task_status.workflow_type",
+        ),
+        (
+            {"agent_workflow_confirmation": {"workflow_metadata": None}},
+            "agent_workflow_confirmation.workflow_metadata must be present",
+        ),
+        (
+            {
+                "agent_workflow_confirmation": {
+                    "workflow_metadata": _strict_workflow_metadata(
+                        workflow_type="T1 DeepPrep anatomical processing, QC, and report"
+                    )
+                }
+            },
+            "agent_workflow_confirmation.workflow_metadata.workflow_type must match workflow_type",
+        ),
+        (
+            {
+                "agent_workflow_confirmation": {
+                    "workflow_metadata": _strict_workflow_metadata(display_name="t1_deepprep_anat_report")
+                }
+            },
+            "agent_workflow_confirmation.workflow_metadata.display_name must not equal workflow_type",
+        ),
+        (
+            {
+                "agent_workflow_confirmation": {
+                    "workflow_metadata": _strict_workflow_metadata(is_report_only=True)
+                }
+            },
+            "agent_workflow_confirmation.workflow_metadata.is_report_only must be false for strict production launch evidence",
+        ),
+        (
+            {
+                "agent_workflow_confirmation": {
+                    "workflow_metadata": _strict_workflow_metadata(agent_selectable=False)
+                }
+            },
+            "agent_workflow_confirmation.workflow_metadata.agent_selectable must be true for strict production launch evidence",
+        ),
+        (
+            {
+                "agent_workflow_confirmation": {
+                    "workflow_metadata": _strict_workflow_metadata_without("agent_selectable")
+                }
+            },
+            "agent_workflow_confirmation.workflow_metadata.agent_selectable must be true for strict production launch evidence",
+        ),
+        (
+            {
+                "agent_workflow_confirmation": {
+                    "workflow_metadata": _strict_workflow_metadata_without("capability_summary")
+                }
+            },
+            "agent_workflow_confirmation.workflow_metadata.capability_summary must be present",
+        ),
+        (
+            {
+                "agent_workflow_confirmation": {
+                    "workflow_metadata": _strict_workflow_metadata_without("pipeline_stages")
+                }
+            },
+            "agent_workflow_confirmation.workflow_metadata.pipeline_stages must be present",
+        ),
+        (
+            {
+                "agent_workflow_confirmation": {
+                    "workflow_metadata": _strict_workflow_metadata(primary_outputs=[])
+                }
+            },
+            "agent_workflow_confirmation.workflow_metadata.primary_outputs must be present",
+        ),
+        (
+            {
+                "agent_workflow_confirmation": {
+                    "workflow_metadata": _strict_workflow_metadata(qc_outputs=[])
+                }
+            },
+            "agent_workflow_confirmation.workflow_metadata.qc_outputs must be present",
+        ),
+        (
+            {
+                "agent_workflow_confirmation": {
+                    "workflow_metadata": _strict_workflow_metadata(report_outputs=[])
+                }
+            },
+            "agent_workflow_confirmation.workflow_metadata.report_outputs must be present",
+        ),
+        (
+            {
+                "agent_workflow_confirmation": {
+                    "workflow_metadata": _strict_workflow_metadata(limitations=[])
+                }
+            },
+            "agent_workflow_confirmation.workflow_metadata.limitations must be present",
         ),
         (
             {"smoke_gate": {"require_agent_workflow_confirmation": False}},
@@ -529,26 +1015,162 @@ def test_verify_remote_smoke_acceptance_rejects_stale_saved_evidence():
             {"smoke_gate": {"require_agent_workflow_resume": False}},
             "smoke_gate.require_agent_workflow_resume must be true",
         ),
+        (
+            {"smoke_gate": {"require_agent_workflow_fingerprint_negative": False}},
+            "smoke_gate.require_agent_workflow_fingerprint_negative must be true",
+        ),
+        (
+            {"agent_workflow_fingerprint_negative_status": "skipped"},
+            "agent_workflow_fingerprint_negative_status must be passed",
+        ),
+        (
+            {"agent_workflow_fingerprint_negative": {"status": "task_created"}},
+            "agent_workflow_fingerprint_negative.status must be blocked",
+        ),
+        (
+            {"agent_workflow_fingerprint_negative": {"production_task_created": True}},
+            "agent_workflow_fingerprint_negative.production_task_created must be false",
+        ),
+        (
+            {"agent_workflow_fingerprint_negative": {"confirmation_gate": "fingerprint_verified"}},
+            "agent_workflow_fingerprint_negative.confirmation_gate must be fingerprint_mismatch",
+        ),
+        (
+            {"agent_workflow_fingerprint_negative": {"task_created": True}},
+            "agent_workflow_fingerprint_negative.task_created must be false",
+        ),
+        (
+            {"smoke_gate": {"require_unknown_workflow_incubation": False}},
+            "smoke_gate.require_unknown_workflow_incubation must be true",
+        ),
+        (
+            {"unknown_workflow_incubation_status": "skipped"},
+            "unknown_workflow_incubation_status must be passed",
+        ),
+        (
+            {"unknown_workflow_incubation": {"status": "confirmation_required"}},
+            "unknown_workflow_incubation.status must be toolchain_proposed",
+        ),
+        (
+            {"unknown_workflow_incubation": {"action_lane": "production_task"}},
+            "unknown_workflow_incubation.action_lane must be toolchain_incubation",
+        ),
+        (
+            {"unknown_workflow_incubation": {"task_created": True}},
+            "unknown_workflow_incubation.task_created must be false",
+        ),
+        (
+            {"unknown_workflow_incubation": {"confirmation_created": True}},
+            "unknown_workflow_incubation.confirmation_created must be false",
+        ),
+        (
+            {"unknown_workflow_incubation": {"task_creation_allowed": True}},
+            "unknown_workflow_incubation.task_creation_allowed must be false",
+        ),
+        (
+            {"unknown_workflow_incubation": {"forbidden_actions": ["production_task_creation"]}},
+            "unknown_workflow_incubation.forbidden_actions must include confirmation_creation, production_task_creation, and pipeline_runner_launch",
+        ),
+        (
+            {"unknown_workflow_incubation": {"production_task_created": True}},
+            "unknown_workflow_incubation.production_task_created must be false",
+        ),
+        (
+            {"unknown_workflow_incubation": {"proposal_production_task_created": True}},
+            "unknown_workflow_incubation.proposal_production_task_created must be false",
+        ),
+        (
+            {"unknown_workflow_incubation": {"proposal_id": "C:/private/proposal"}},
+            "unknown_workflow_incubation.proposal_id must be privacy-safe",
+        ),
         ({"selected_skill": "image-agent-operator sk-test-secret"}, "selected_skill must be privacy-safe"),
         ({"remote_evidence_ids_status": "skipped"}, "remote_evidence_ids_status must be passed"),
         ({"upload_inventory_completion_status": "skipped"}, "upload_inventory_completion_status must be passed"),
         ({"upload_inventory_status": "running"}, "upload_inventory_status must be completed"),
         ({"upload_inventory_series_ids": []}, "upload_inventory_series_ids must include task_status.series_id"),
         ({"upload_inventory_series_ids": [2]}, "upload_inventory_series_ids must include task_status.series_id"),
+        ({"project_workflow_eligibility_metadata_status": "skipped"}, "project_workflow_eligibility_metadata_status must be passed"),
+        (
+            {"project_workflow_eligibility_metadata_required_fields": ["display_name"]},
+            "project_workflow_eligibility_metadata_required_fields must include workflow metadata required fields",
+        ),
+        (
+            {"project_workflow_eligibility_metadata_workflow_types": ["bold_fmriprep_xcpd_report"]},
+            "project_workflow_eligibility_metadata_workflow_types must include task_status.workflow_type",
+        ),
+        ({"upload_inventory_workflow_eligibility_metadata_status": "skipped"}, "upload_inventory_workflow_eligibility_metadata_status must be passed"),
+        (
+            {"upload_inventory_workflow_eligibility_metadata_required_fields": ["display_name"]},
+            "upload_inventory_workflow_eligibility_metadata_required_fields must include workflow metadata required fields",
+        ),
+        (
+            {"upload_inventory_workflow_eligibility_metadata_workflow_types": ["bold_fmriprep_xcpd_report"]},
+            "upload_inventory_workflow_eligibility_metadata_workflow_types must include task_status.workflow_type",
+        ),
         ({"uploaded_series_status": "skipped"}, "uploaded_series_status must be passed"),
         ({"uploaded_series": {"series_id": 2}}, "uploaded_series.series_id must match task_status.series_id"),
         ({"uploaded_series": {"project_id": 8}}, "uploaded_series.project_id must match smoke_gate.project_id"),
         ({"task_status_status": "skipped"}, "task_status_status must be passed"),
         ({"task_status": {"status": "running"}}, "task_status.status must be completed"),
         ({"task_status": {"task_id": 115}}, "task_status.task_id must match smoke_gate.task_id"),
+        ({"task_status": {"runtime_workflow_type": None}}, "task_status.runtime_workflow_type must be present"),
+        (
+            {"task_status": {"runtime_workflow_type": "t1_deepprep_validate"}},
+            "task_status.runtime_workflow_type must match launched_task.runtime_workflow_type",
+        ),
+        (
+            {"agent_workflow_resume": {"runtime_workflow_type": None}},
+            "agent_workflow_resume.runtime_workflow_type must be present",
+        ),
+        (
+            {"agent_workflow_resume": {"runtime_workflow_type": "t1_deepprep_validate"}},
+            "agent_workflow_resume.runtime_workflow_type must match launched_task.runtime_workflow_type",
+        ),
         ({"launched_task_status": "skipped"}, "launched_task_status must be passed"),
         ({"launched_task": {"task_id": 115}}, "launched_task.task_id must match smoke_gate.task_id"),
         ({"launched_task": {"series_id": 2}}, "launched_task.series_id must match task_status.series_id"),
         ({"launched_task": {"workflow_type": "dwi_fast_gpu_dti"}}, "launched_task.workflow_type must match task_status.workflow_type"),
         ({"launched_task": {"project_id": 8}}, "launched_task.project_id must match smoke_gate.project_id"),
+        (
+            {"launched_task": {"launch_source": "direct_series_run"}},
+            "launched_task.launch_source must be agent_workflow_resume",
+        ),
         ({"task_result_summary_status": "skipped"}, "task_result_summary_status must be passed"),
         ({"task_result_summary": {"task_id": 115}}, "task_result_summary.task_id must match smoke_gate.task_id"),
         ({"task_result_summary": {"workflow_type": "dwi_fast_gpu_dti"}}, "task_result_summary.workflow_type must match task_status.workflow_type"),
+        ({"task_result_summary": {"workflow_metadata": None}}, "task_result_summary.workflow_metadata must be present"),
+        (
+            {"task_result_summary": {"workflow_metadata": _strict_workflow_metadata(workflow_type="dwi_fast_gpu_dti")}},
+            "task_result_summary.workflow_metadata.workflow_type must match workflow_type",
+        ),
+        (
+            {"task_result_summary": {"workflow_metadata": _strict_workflow_metadata(runtime_workflow_type="t1_deepprep_validate")}},
+            "task_result_summary.workflow_metadata.runtime_workflow_type must match task_status.runtime_workflow_type",
+        ),
+        (
+            {"task_result_summary": {"workflow_metadata": _strict_workflow_metadata(display_name="t1_deepprep_anat_report")}},
+            "task_result_summary.workflow_metadata.display_name must not equal workflow_type",
+        ),
+        (
+            {"task_result_summary": {"workflow_metadata": _strict_workflow_metadata_without("capability_summary")}},
+            "task_result_summary.workflow_metadata.capability_summary must be present",
+        ),
+        (
+            {"task_result_summary": {"workflow_metadata": _strict_workflow_metadata(primary_outputs=[])}},
+            "task_result_summary.workflow_metadata.primary_outputs must be present",
+        ),
+        (
+            {"task_result_summary": {"workflow_metadata": _strict_workflow_metadata(is_report_only=True)}},
+            "task_result_summary.workflow_metadata.is_report_only must be false for strict production launch evidence",
+        ),
+        (
+            {"task_result_summary": {"workflow_metadata": _strict_workflow_metadata(agent_selectable=False)}},
+            "task_result_summary.workflow_metadata.agent_selectable must be true for strict production launch evidence",
+        ),
+        (
+            {"task_result_summary": {"workflow_metadata": _strict_workflow_metadata_without("agent_selectable")}},
+            "task_result_summary.workflow_metadata.agent_selectable must be true for strict production launch evidence",
+        ),
         ({"task_result_summary": {"output_item_count": 0}}, "task_result_summary.output_item_count must be greater than zero"),
         ({"task_result_summary": {"downloadable_output_count": 0}}, "task_result_summary.downloadable_output_count must be greater than zero"),
         ({"task_result_summary": {"downloadable_output_paths": []}}, "task_result_summary.downloadable_output_paths must match downloadable_output_count"),
@@ -570,13 +1192,123 @@ def test_verify_remote_smoke_acceptance_rejects_stale_saved_evidence():
         ({"smoke_gate": {"require_launched_task": False}}, "smoke_gate.require_launched_task must be true"),
         ({"smoke_gate": {"require_deployment_identity": False}}, "smoke_gate.require_deployment_identity must be true"),
         ({"smoke_gate": {"require_production_readiness": False}}, "smoke_gate.require_production_readiness must be true"),
+        ({"fast_launch_readiness_status": "skipped"}, "fast_launch_readiness_status must be passed or pre_acceptance"),
+        ({"fast_launch_readiness": {"ready": True}}, "fast_launch_readiness.ready must be false before acceptance"),
+        ({"fast_launch_readiness": {"blocking_reasons": []}}, "fast_launch_readiness.blocking_reasons must explain missing strict remote acceptance evidence"),
+        (
+            {
+                "fast_launch_readiness": {
+                    "checks": {
+                        "rag_elasticsearch_hybrid": {
+                            "status": "blocked",
+                            "mode": "local_contract",
+                        }
+                    }
+                }
+            },
+            "fast_launch_readiness.checks.rag_elasticsearch_hybrid.status must be passed",
+        ),
         ({"smoke_gate": {"require_completed_task": False}}, "smoke_gate.require_completed_task must be true"),
+        ({"smoke_gate": {"require_task_events": False}}, "smoke_gate.require_task_events must be true"),
+        ({"task_events_status": "skipped"}, "task_events_status must be passed"),
+        ({"task_events_task_id": 115}, "task_events_task_id must match smoke_gate.task_id"),
+        ({"task_events_event_types": ["task.status"]}, "task_events_event_types must include task.remote_log"),
+        ({"task_events_status_event_status": "running"}, "task_events_status_event_status must be completed"),
+        ({"task_events_remote_log_count": 0}, "task_events_remote_log_count must be greater than zero"),
+        ({"smoke_gate": {"require_observe_repair": False}}, "smoke_gate.require_observe_repair must be true"),
+        ({"observe_repair_status": "skipped"}, "observe_repair_status must be passed"),
+        ({"observe_repair_task_id": 115}, "observe_repair_task_id must match smoke_gate.task_id"),
+        ({"observe_repair_policy": "auto_repair"}, "observe_repair_policy must be read_only_observe_repair"),
+        ({"observe_repair_auto_rerun_allowed": True}, "observe_repair_auto_rerun_allowed must be false"),
+        ({"observe_repair_task_creation_allowed": True}, "observe_repair_task_creation_allowed must be false"),
+        (
+            {"observe_repair_forbidden_actions": ["auto_retry", "auto_rerun"]},
+            "observe_repair_forbidden_actions must include auto_retry, auto_rerun, and task_creation",
+        ),
+        ({"observe_repair_production_task_created": True}, "observe_repair_production_task_created must be false"),
+        (
+            {"observe_repair_requires_preflight_before_retry": False},
+            "observe_repair_requires_preflight_before_retry must be true",
+        ),
+        (
+            {"observe_repair_requires_human_confirmation_before_retry": False},
+            "observe_repair_requires_human_confirmation_before_retry must be true",
+        ),
         ({"smoke_gate": {"require_project_agent_context": False}}, "smoke_gate.require_project_agent_context must be true"),
         ({"task_status": {"workflow_type": "t1_deepprep_mock"}}, "strict deployment acceptance cannot use debug-only workflow"),
         ({"launched_task": {"workflow_type": "t1_deepprep_mock"}}, "strict deployment acceptance cannot use debug-only workflow"),
         ({"agent_workflow_confirmation": {"workflow_type": "t1_deepprep_mock"}}, "strict deployment acceptance cannot use debug-only workflow"),
+        (
+            {"agent_workflow_confirmation": {"workflow_metadata": _strict_workflow_metadata(runtime_workflow_type="t1_deepprep_validate")}},
+            "agent_workflow_confirmation.workflow_metadata.runtime_workflow_type must match launched_task.runtime_workflow_type",
+        ),
+        ({"launched_task": {"runtime_workflow_type": None}}, "launched_task.runtime_workflow_type must be present"),
         ({"smoke_gate": {"deployment_id": "C:/srv/image_agent"}}, "deployment_id must be privacy-safe"),
         ({"smoke_gate": {"require_vendor_pointer_integrity": False}}, "smoke_gate.require_vendor_pointer_integrity must be true"),
+        ({"smoke_gate": {"require_elasticsearch_hybrid_rag": False}}, "smoke_gate.require_elasticsearch_hybrid_rag must be true"),
+        ({"rag_elasticsearch_hybrid_status": "skipped"}, "rag_elasticsearch_hybrid_status must be passed"),
+        ({"rag_rebuild_elasticsearch_hybrid": None}, "rag_rebuild_elasticsearch_hybrid must be present"),
+        ({"rag_rebuild_elasticsearch_hybrid": {"indexed_chunk_count": 259}}, "rag_rebuild_elasticsearch_hybrid.indexed_chunk_count must match status"),
+        ({"rag_elasticsearch_hybrid": {"configured": False}}, "rag_elasticsearch_hybrid.configured must be true"),
+        ({"rag_elasticsearch_hybrid": {"persisted": False}}, "rag_elasticsearch_hybrid.persisted must be true"),
+        ({"rag_elasticsearch_hybrid": {"mode": "local_contract"}}, "rag_elasticsearch_hybrid.mode must be connected"),
+        ({"rag_elasticsearch_hybrid": {"index": "C:/private/image_agent_rag"}}, "rag_elasticsearch_hybrid.index must be privacy-safe"),
+        ({"rag_rebuild_elasticsearch_hybrid": {"index": "other_index"}}, "rag_rebuild_elasticsearch_hybrid.index must match status"),
+        ({"rag_elasticsearch_hybrid": {"indexed_chunk_count": 0}}, "rag_elasticsearch_hybrid.indexed_chunk_count must be greater than zero"),
+        ({"rag_elasticsearch_hybrid": {"dense_vector_dims": 0}}, "rag_elasticsearch_hybrid.dense_vector_dims must be greater than zero"),
+        ({"rag_rebuild_elasticsearch_hybrid": {"dense_vector_dims": 768}}, "rag_rebuild_elasticsearch_hybrid.dense_vector_dims must match status"),
+        ({"rag_rebuild_elasticsearch_hybrid": {"lexical_retriever": "match"}}, "rag_rebuild_elasticsearch_hybrid.lexical_retriever must match status"),
+        ({"rag_rebuild_elasticsearch_hybrid": {"vector_retriever": "dense_vector"}}, "rag_rebuild_elasticsearch_hybrid.vector_retriever must match status"),
+        ({"rag_rebuild_elasticsearch_hybrid": {"dense_vector_field": "vector"}}, "rag_rebuild_elasticsearch_hybrid.dense_vector_field must match status"),
+        ({"rag_rebuild_elasticsearch_hybrid": {"fusion": "dbsf"}}, "rag_rebuild_elasticsearch_hybrid.fusion must match status"),
+        ({"rag_elasticsearch_hybrid": {"error": "[redacted-secret] connection refused"}}, "rag_elasticsearch_hybrid.error must be absent"),
+        ({"rag_elasticsearch_hybrid": {"fusion": "dbsf"}}, "rag_elasticsearch_hybrid.fusion must be rrf"),
+        ({"rag_elasticsearch_hybrid": {"embedding_provider": "local_hashing"}}, "rag_elasticsearch_hybrid.embedding_provider must be production configured"),
+        ({"rag_elasticsearch_hybrid": {"embedding_provider": "local-token-hash-v1"}}, "rag_elasticsearch_hybrid.embedding_provider must be production configured"),
+        ({"rag_elasticsearch_hybrid": {"embedding_provider": None}}, "rag_elasticsearch_hybrid.embedding_provider must be production configured"),
+        ({"rag_elasticsearch_hybrid": {"embedding_model": ""}}, "rag_elasticsearch_hybrid.embedding_model must be present"),
+        ({"rag_elasticsearch_hybrid": {"embedding_transport": ""}}, "rag_elasticsearch_hybrid.embedding_transport must be present"),
+        ({"rag_elasticsearch_hybrid": {"embedding_transport": "local"}}, "rag_elasticsearch_hybrid.embedding_transport must be production-safe"),
+        ({"rag_rebuild_elasticsearch_hybrid": {"embedding_model": "text-embedding-3-large"}}, "rag_rebuild_elasticsearch_hybrid.embedding_model must match status"),
+        ({"rag_rebuild_elasticsearch_hybrid": {"embedding_transport": "sdk"}}, "rag_rebuild_elasticsearch_hybrid.embedding_transport must match status"),
+        ({"rag_elasticsearch_hybrid": {"embedding_endpoint_configured": False}}, "rag_elasticsearch_hybrid.embedding_endpoint_configured must be true"),
+        ({"rag_elasticsearch_hybrid": {"embedding_endpoint_configured": None}}, "rag_elasticsearch_hybrid.embedding_endpoint_configured must be true"),
+        ({"rag_rebuild_elasticsearch_hybrid": {"embedding_endpoint_configured": False}}, "rag_rebuild_elasticsearch_hybrid.embedding_endpoint_configured must match status"),
+        ({"rag_rebuild_elasticsearch_hybrid": {"embedding_endpoint_configured": None}}, "rag_rebuild_elasticsearch_hybrid.embedding_endpoint_configured must match status"),
+        ({"rag_elasticsearch_hybrid": {"embedding_production_ready": False}}, "rag_elasticsearch_hybrid.embedding_production_ready must be true"),
+        ({"rag_elasticsearch_hybrid": {"embedding_error": "[redacted-secret]"}}, "rag_elasticsearch_hybrid.embedding_error must be absent"),
+        ({"rag_rebuild_elasticsearch_hybrid": {"embedding_provider": "local_hashing"}}, "rag_rebuild_elasticsearch_hybrid.embedding_provider must match status"),
+        ({"rag_rebuild_elasticsearch_hybrid": {"embedding_error": "[redacted-secret]"}}, "rag_rebuild_elasticsearch_hybrid.embedding_error must be absent"),
+        ({"rag_elasticsearch_hybrid": {"official_rrf_source_present": False}}, "rag_elasticsearch_hybrid.official_rrf_source_present must be true"),
+        (
+            {
+                "rag_elasticsearch_hybrid": {
+                    "official_rrf_source_present": True,
+                    "official_sources": [
+                        "https://www.elastic.co/docs/reference/elasticsearch/rest-apis/reciprocal-rank-fusion",
+                        "https://internal.example.local/private-rag-notes",
+                    ],
+                }
+            },
+            "rag_elasticsearch_hybrid.official_sources must not be saved",
+        ),
+        ({"rag_elasticsearch_hybrid_query_status": "skipped"}, "rag_elasticsearch_hybrid_query_status must be passed"),
+        ({"rag_elasticsearch_hybrid_query_mode": "elasticsearch_hybrid_fallback"}, "rag_elasticsearch_hybrid_query_mode must be elasticsearch_hybrid"),
+        ({"rag_elasticsearch_hybrid_query_retrieval_source": "persistent_index"}, "rag_elasticsearch_hybrid_query_retrieval_source must be elasticsearch_hybrid"),
+        ({"rag_elasticsearch_hybrid_query_source": "docs/rag/workflows/workflow_launchability_matrix.md"}, "rag_elasticsearch_hybrid_query_source must cite the Elasticsearch hybrid contract"),
+        ({"rag_elasticsearch_hybrid_query_citation_count": 0}, "rag_elasticsearch_hybrid_query_citation_count must be greater than zero"),
+        ({"rag_elasticsearch_hybrid_query_top_score": 0}, "rag_elasticsearch_hybrid_query_top_score must be greater than zero"),
+        ({"rag_elasticsearch_hybrid_query_index": "other_index"}, "rag_elasticsearch_hybrid_query_index must match status"),
+        ({"rag_elasticsearch_hybrid_query_lexical_retriever": "match"}, "rag_elasticsearch_hybrid_query_lexical_retriever must match status"),
+        ({"rag_elasticsearch_hybrid_query_vector_retriever": "dense_vector"}, "rag_elasticsearch_hybrid_query_vector_retriever must match status"),
+        ({"rag_elasticsearch_hybrid_query_dense_vector_field": "vector"}, "rag_elasticsearch_hybrid_query_dense_vector_field must match status"),
+        ({"rag_elasticsearch_hybrid_query_fusion": "dbsf"}, "rag_elasticsearch_hybrid_query_fusion must match status"),
+        ({"rag_elasticsearch_hybrid_query_dense_vector_dims": 768}, "rag_elasticsearch_hybrid_query_dense_vector_dims must match status"),
+        ({"rag_elasticsearch_hybrid_query_embedding_model": "text-embedding-3-large"}, "rag_elasticsearch_hybrid_query_embedding_model must match status"),
+        ({"rag_elasticsearch_hybrid_query_embedding_provider": "local_hashing"}, "rag_elasticsearch_hybrid_query_embedding_provider must match status"),
+        ({"rag_elasticsearch_hybrid_query_embedding_transport": "sdk"}, "rag_elasticsearch_hybrid_query_embedding_transport must match status"),
+        ({"rag_elasticsearch_hybrid_query_embedding_endpoint_configured": False}, "rag_elasticsearch_hybrid_query_embedding_endpoint_configured must match status"),
+        ({"rag_elasticsearch_hybrid_query_embedding_production_ready": False}, "rag_elasticsearch_hybrid_query_embedding_production_ready must match status"),
         ({"smoke_gate": {"require_scientific_report_artifacts": False}}, "smoke_gate.require_scientific_report_artifacts must be true"),
         ({"rag_document_count": True}, "rag_document_count must be an integer"),
         ({"smoke_gate": {"project_id": ""}, "remote_evidence_ids": {"project_id": ""}}, "smoke_gate.project_id must be a positive integer"),
@@ -630,6 +1362,54 @@ def test_verify_remote_smoke_acceptance_rejects_weak_evidence(override, expected
         verifier.verify_acceptance_payload(payload)
 
     assert expected_message in str(exc.value)
+
+
+def test_verify_remote_smoke_acceptance_rejects_raw_official_sources_in_saved_rag_summaries():
+    verifier = _load_verifier_module()
+    payload = _strict_smoke_payload()
+    payload["rag_before"] = {
+        "engine": "elasticsearch_hybrid",
+        "hybrid_search": {
+            "official_rrf_source_present": True,
+            "official_sources": [
+                "https://www.elastic.co/docs/reference/elasticsearch/rest-apis/reciprocal-rank-fusion",
+                "https://internal.example.local/private-rag-notes",
+            ],
+        },
+    }
+
+    with pytest.raises(SystemExit) as exc:
+        verifier.verify_acceptance_payload(payload)
+
+    message = str(exc.value)
+    assert "rag_before.hybrid_search.official_sources must not be saved" in message
+    assert "internal.example.local" not in message
+
+
+def test_verify_remote_smoke_acceptance_rejects_pre_acceptance_with_strict_acceptance_passed():
+    verifier = _load_verifier_module()
+    payload = _strict_smoke_payload()
+    payload["fast_launch_readiness"]["checks"]["strict_remote_acceptance"]["status"] = "passed"
+
+    with pytest.raises(SystemExit) as exc:
+        verifier.verify_acceptance_payload(payload)
+
+    assert "fast_launch_readiness.checks.strict_remote_acceptance.status must be missing before acceptance" in str(exc.value)
+
+
+def test_verify_remote_smoke_acceptance_requires_fast_launch_production_deployment_gate():
+    verifier = _load_verifier_module()
+    payload = _strict_smoke_payload()
+    payload["fast_launch_readiness"]["checks"].pop("production_deployment")
+
+    with pytest.raises(SystemExit) as exc:
+        verifier.verify_acceptance_payload(
+            payload,
+            max_age_hours=24,
+            now_utc=datetime(2026, 6, 8, 12, 30, tzinfo=timezone.utc),
+        )
+
+    assert "fast_launch_readiness.checks.production_deployment must be present" in str(exc.value)
 
 
 @pytest.mark.parametrize(

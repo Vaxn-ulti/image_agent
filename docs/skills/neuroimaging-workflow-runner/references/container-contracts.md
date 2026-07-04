@@ -35,14 +35,14 @@ Use resolved absolute paths:
 Current image contracts:
 
 - DeepPrep: `pbfslab/deepprep:25.1.0`
-- QSIPrep toolbox / legacy QSIPrep: `pennlinc/qsiprep:latest`
-- QSIRecon: `pennlinc/qsirecon:latest`
+- QSIPrep toolbox / legacy QSIPrep: `pennlinc/qsiprep:26.0.0`
+- QSIRecon: `pennlinc/qsirecon:26.0.0`
 
-Pin images in implementation when reproducibility matters. If `latest` remains in MVP, surface it clearly in validation output.
+Pin images in implementation and validation output; strict acceptance rejects floating `latest` tags.
 
-`pennlinc/qsiprep:latest` exposes `eddy_cuda11.0` at `/app/.pixi/envs/qsiprep/bin/eddy_cuda11.0`. Detection uses `eddy_cuda*` glob to accept versioned binaries (`eddy_cuda11.0`, `eddy_cuda10.2`, etc.), not only an exact `eddy_cuda` name. If the image changes and no `eddy_cuda*` executable exists, QSIPrep validation must fail quickly and say a CUDA-enabled QSIPrep/FSL image is required.
+`pennlinc/qsiprep:26.0.0` exposes `eddy_cuda11.0` at `/app/.pixi/envs/qsiprep/bin/eddy_cuda11.0`. Detection uses `eddy_cuda*` glob to accept versioned binaries (`eddy_cuda11.0`, `eddy_cuda10.2`, etc.), not only an exact `eddy_cuda` name. If the image changes and no `eddy_cuda*` executable exists, QSIPrep validation must fail quickly and say a CUDA-enabled QSIPrep/FSL image is required.
 
-Production `dwi_fast_gpu_dti` does not use that image as a full QSIPrep workflow. It uses host FSL at `/home/yyf/project/MCI_project/tools/fsl` for GPU `eddy_cuda` and FSL registration commands, and uses `pennlinc/qsiprep:latest` only to access MRtrix commands.
+Production `dwi_fast_gpu_dti` does not use that image as a full QSIPrep workflow. It uses host FSL at `/home/yyf/project/MCI_project/tools/fsl` for GPU `eddy_cuda` and FSL registration commands, and uses `pennlinc/qsiprep:26.0.0` only to access MRtrix commands.
 
 ## Commands
 
@@ -63,7 +63,7 @@ Use implementation-specific DeepPrep BOLD flags if the repository adds them; kee
 Production fast GPU DTI:
 
 ```text
-python -m app.workflows.dwi_fast_dti run --bids {bids} --out {output} --work {work} --resources {resources} --fsl-dir /home/yyf/project/MCI_project/tools/fsl --mrtrix-image pennlinc/qsiprep:latest --max-runtime-sec 2100 --require-gpu-eddy
+python -m app.workflows.dwi_fast_dti run --bids {bids} --out {output} --work {work} --resources {resources} --fsl-dir /home/yyf/project/MCI_project/tools/fsl --mrtrix-image pennlinc/qsiprep:26.0.0 --max-runtime-sec 2100 --require-gpu-eddy
 ```
 
 Runtime must validate host FSL commands, GPU visibility, and MRtrix toolbox commands. The production fast DTI path must not execute:
@@ -80,7 +80,7 @@ Known-good production evidence: task `107` on project 22 / series 38 completed i
 QSIPrep:
 
 ```text
-docker run --rm --gpus all -v {bids}:/data:ro -v {output}:/output -v {work}:/work -v {fs_license}:/opt/freesurfer/license.txt:ro -v {eddy_cuda_config}:/eddy_cuda_config.json:ro pennlinc/qsiprep:latest /data /output participant --eddy-config /eddy_cuda_config.json
+docker run --rm --gpus all -v {bids}:/data:ro -v {output}:/output -v {work}:/work -v {fs_license}:/opt/freesurfer/license.txt:ro -v {eddy_cuda_config}:/eddy_cuda_config.json:ro pennlinc/qsiprep:26.0.0 /data /output participant --eddy-config /eddy_cuda_config.json
 ```
 
 QSIPrep validation must confirm `eddy_cuda_config.json` exists, is mounted at `/eddy_cuda_config.json`, and contains `use_cuda: true`, `num_threads >= 4`, `dont_peas: true`, `cnr_maps: true`, and `niter: 3` by default. Do not silently fall back to `eddy_cpu`. QSIPrep source forces CUDA eddy to 1 thread; verify CUDA usage by `eddy_cuda*` binary and logs/GPU visibility, not by requiring a specific eddy `--nthr` value at runtime. This QSIPrep version rejects `cnr_maps: false`, so speed tuning uses `dont_peas: true` and the configurable `IMAGE_AGENT_DWI_QSIPREP_EDDY_NITER` instead. The backend must infer `is_shelled` from b-values and set it false for q-space/many-b-value DWI.
@@ -90,7 +90,7 @@ QSIPrep detection uses `eddy_cuda*` glob (not exact `eddy_cuda`) to find version
 QSIRecon:
 
 ```text
-docker run --rm --gpus all -v {qsiprep_output}:/data:ro -v {output}:/output -v {work}:/work -v {fs_license}:/opt/freesurfer/license.txt:ro pennlinc/qsirecon:latest /data /output participant --recon-spec {recon_spec}
+docker run --rm --gpus all -v {qsiprep_output}:/data:ro -v {output}:/output -v {work}:/work -v {fs_license}:/opt/freesurfer/license.txt:ro pennlinc/qsirecon:26.0.0 /data /output participant --recon-spec {recon_spec}
 ```
 
 `--recon-spec` selects the reconstruction pipeline. Official built-in values include QSIRecon workflow names such as `dipy_dki` and `mrtrix_multishell_msmt_noACT`; official custom workflow specs are YAML authoring references. Current Image Agent production is policy-limited to backend-approved profiles, not arbitrary user-supplied custom specs in production. Validation must fail fast when `--recon-spec` is missing, undefined, or references an unsupported pipeline.

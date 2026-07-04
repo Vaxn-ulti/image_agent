@@ -20,22 +20,16 @@ import {
   Workflow,
   X,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { StatusBadge } from '../components/StatusBadge';
+import { AuthenticatedArtifactImageLink, artifactRelativePath } from '../components/results/AuthenticatedArtifact';
 import { Button } from '../components/ui/Button';
-import { api, getApiBase } from '../lib/api';
+import { api } from '../lib/api';
+import { formatAgentText } from '../lib/agentText';
 import { queryKeys } from '../lib/query';
-import { artifactUrl } from '../lib/resultArtifacts';
-import type { AgentRunResponse, ArtifactManifest, DwiUploadFiles, Inventory, OutputItem, ResultSummary, Series, Task } from '../lib/types';
+import type { AgentConfirmation, AgentRunResponse, ArtifactManifest, DwiUploadFiles, Inventory, OutputItem, ProjectFile, ResultSummary, Series, Task, WorkflowCatalogItem } from '../lib/types';
 import { getWorkflowEligibility, normalizeWorkflowCatalog, selectQsiprepTaskId, workflowGroup } from '../lib/workflows';
-
-const t1ReferencePreviews = [
-  { alt: 'T1w axial MRI preview', src: '/neuro-assets/mri-axial.png', title: 'T1w (Axial)' },
-  { alt: 'T1w sagittal MRI preview', src: '/neuro-assets/mri-sagittal.png', title: 'T1w (Sagittal)' },
-  { alt: 'T1w coronal MRI preview', src: '/neuro-assets/mri-coronal.png', title: 'T1w (Coronal)' },
-  { alt: 'Axial tissue segmentation preview', src: '/neuro-assets/mri-segmentation.png', title: 'Segmentation (Axial)' },
-];
 
 type DashboardAgentMessage = {
   role: 'user' | 'agent';
@@ -43,17 +37,6 @@ type DashboardAgentMessage = {
   meta?: 'initial-greeting';
   response?: AgentRunResponse;
 };
-
-const segmentationLegend = [
-  { label: 'Background', color: 'bg-slate-700' },
-  { label: 'Gray Matter', color: 'bg-emerald-600' },
-  { label: 'White Matter', color: 'bg-emerald-200' },
-  { label: 'CSF', color: 'bg-blue-400' },
-  { label: 'Deep Gray Matter', color: 'bg-fuchsia-500' },
-  { label: 'Brainstem', color: 'bg-rose-400' },
-  { label: 'Cerebellum', color: 'bg-pink-500' },
-  { label: 'Other', color: 'bg-slate-200' },
-];
 
 function completedTask(task: Task) {
   return task.status === 'completed' || task.status === 'completed_with_partial_failures';
@@ -64,13 +47,23 @@ function activeTask(task: Task) {
 }
 
 function dashboardAgentMessage(data: AgentRunResponse) {
+  let message: string;
   if (data.status === 'task_created' && data.task?.id) {
-    return `Task ${data.task.id} created for ${data.task.workflow_type}.`;
+    message = `Task ${data.task.id} created for ${data.task.workflow_type}.`;
+  } else if (data.status === 'confirmation_required' && data.confirmation?.workflow_type) {
+    message = data.answer || `Approval required for ${data.confirmation.workflow_type}. Open the Agent page to review and approve.`;
+  } else {
+    message = data.answer || data.message || 'Agent run completed.';
   }
-  if (data.status === 'confirmation_required' && data.confirmation?.workflow_type) {
-    return data.answer || `Approval required for ${data.confirmation.workflow_type}. Open the Agent page to review and approve.`;
+  return formatAgentText(message);
+}
+
+function workflowMetadataFromConfirmation(confirmation: AgentConfirmation | undefined): Partial<WorkflowCatalogItem> {
+  const value = confirmation?.workflow_metadata;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
   }
-  return data.answer || data.message || 'Agent run completed.';
+  return value as Partial<WorkflowCatalogItem>;
 }
 
 function taskTimestamp(task: Task) {
@@ -81,7 +74,7 @@ type DashboardUploadResponse = {
   file?: unknown;
   files?: unknown[];
   inventory?: Inventory;
-  series?: Series;
+  series?: Series | null;
   status?: string;
   upload_session_id?: number;
 };
@@ -132,15 +125,31 @@ function selectDwiFiles(files: File[]): DwiUploadFiles | null {
 function selectFileUpload(projectId: number, files: File[]): Promise<DashboardUploadResponse> {
   if (files.length > 1) {
     const dwiFiles = selectDwiFiles(files);
-    if (!dwiFiles) {
-      throw new Error('Select one DICOM zip, one NIfTI file, or a complete DWI set with NIfTI, bval, bvec, and JSON sidecar.');
+    if (dwiFiles) {
+      return api.uploadDwi(projectId, dwiFiles);
     }
-    return api.uploadDwi(projectId, dwiFiles);
+    return Promise.all(files.map((file) => selectFileUpload(projectId, [file]))).then((responses) => {
+      const last = responses[responses.length - 1];
+      const series = [...responses].reverse().find((response) => response.series?.id)?.series ?? null;
+      const attachments = responses.flatMap((response) => response.inventory?.attachments || []);
+      return {
+        files: responses.map((response) => response.file).filter(Boolean),
+        inventory: {
+          attachments,
+          inventory_status: 'completed',
+          series: responses.flatMap((response) => response.inventory?.series || []),
+          total_files: responses.length,
+        },
+        series,
+        status: 'completed',
+        upload_session_id: last?.upload_session_id,
+      };
+    });
   }
 
   const file = files[0];
   if (!file) {
-    throw new Error('Select an imaging file before uploading.');
+    throw new Error('Select a file before uploading.');
   }
   const name = file.name.toLowerCase();
   if (name.endsWith('.zip')) {
@@ -149,10 +158,18 @@ function selectFileUpload(projectId: number, files: File[]): Promise<DashboardUp
       return { ...ingest, upload_session_id: session.id };
     });
   }
-  if (!isNiftiFile(file)) {
-    throw new Error('Supported uploads are DICOM zip, NIfTI, or complete DWI sidecar sets.');
+  return isNiftiFile(file) ? api.uploadNifti(projectId, file) : api.uploadFile(projectId, file);
+}
+
+function projectFileDetection(file: ProjectFile) {
+  const linked = file.linked_series?.[0];
+  if (linked) {
+    return `${linked.modality || 'unknown'} / ${linked.sequence_label || 'unlabeled'}`;
   }
-  return api.uploadNifti(projectId, file);
+  if ((file.file_type || '').toUpperCase() === 'JSON') {
+    return file.json_summary && Object.keys(file.json_summary).length ? 'JSON sidecar' : 'JSON attachment';
+  }
+  return file.file_type ? `${file.file_type} attachment` : 'Attachment';
 }
 
 export function DashboardPage() {
@@ -168,12 +185,15 @@ export function DashboardPage() {
   const [chatInput, setChatInput] = useState('');
   const [messages, setMessages] = useState<DashboardAgentMessage[]>([]);
   const [agentDrawerOpen, setAgentDrawerOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const { data: workflowPayload } = useQuery({ queryFn: api.listWorkflows, queryKey: queryKeys.workflows });
   const seriesQuery = useQuery({ enabled: Boolean(projectId), queryFn: () => api.listSeries(projectId), queryKey: queryKeys.series(projectId) });
   const tasksQuery = useQuery({ enabled: Boolean(projectId), queryFn: () => api.listProjectTasks(projectId), queryKey: queryKeys.tasks(projectId), refetchInterval: 5000 });
+  const projectFilesQuery = useQuery({ enabled: Boolean(projectId), queryFn: () => api.listProjectFiles(projectId), queryKey: queryKeys.projectFiles(projectId), retry: false });
   const series = seriesQuery.data || [];
   const tasks = tasksQuery.data || [];
+  const projectFiles = projectFilesQuery.data || [];
   const { data: uploadInventoryData } = useQuery({
     enabled: Boolean(projectId && lastUploadSessionId),
     queryFn: () => api.getInventory(projectId, lastUploadSessionId!),
@@ -230,6 +250,7 @@ export function DashboardPage() {
       setMessages((prev) => [...prev, { role: 'agent', content: dashboardAgentMessage(data), response: data }]);
       queryClient.invalidateQueries({ queryKey: queryKeys.tasks(projectId) });
       if (data.task?.id) {
+        setLastStartedTask(data.task);
         queryClient.invalidateQueries({ queryKey: queryKeys.task(data.task.id) });
       }
     },
@@ -248,7 +269,11 @@ export function DashboardPage() {
   const workflowOptions = workflowCatalog.workflows;
   const selectedSeries = series.find((item) => item.id === selectedSeriesId) || series[0];
   const effectiveWorkflow = selectedWorkflow || defaultWorkflowForSeries(selectedSeries, workflowOptions);
-  const effectiveWorkflowLabel = workflowCatalog.items[effectiveWorkflow]?.display_name || effectiveWorkflow;
+  const workflowDisplayName = (workflowType: string | null | undefined) => {
+    if (!workflowType) return '';
+    return workflowCatalog.items[workflowType]?.display_name || workflowType;
+  };
+  const effectiveWorkflowLabel = workflowDisplayName(effectiveWorkflow);
   const latestTask = latestCompletedTask(tasks);
   const displayedStartedTask = latestStartedTask || lastStartedTask;
   const resultTask = displayedStartedTask && completedTask(displayedStartedTask) ? displayedStartedTask : latestTask;
@@ -265,6 +290,8 @@ export function DashboardPage() {
     queryKey: resultTask?.id ? ['artifact-manifest', resultTask.id] : ['artifact-manifest', 'none'],
     retry: false,
   });
+  const resultWorkflowType = resultSummary?.workflow_type || resultTask?.workflow_type || effectiveWorkflow;
+  const resultWorkflowLabel = resultWorkflowType ? workflowDisplayName(resultWorkflowType) : '--';
 
   const uploadFile = useMutation<DashboardUploadResponse, Error, File[]>({
     mutationFn: (files: File[]) => selectFileUpload(projectId, files),
@@ -277,18 +304,45 @@ export function DashboardPage() {
       }
       setSelectedWorkflow('');
       queryClient.invalidateQueries({ queryKey: queryKeys.series(projectId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.projectFiles(projectId) });
+    },
+  });
+
+  const deleteProjectFile = useMutation({
+    mutationFn: (file: ProjectFile) => api.deleteProjectFile(projectId, file.id),
+    onError: (err) => setError(err instanceof Error ? err.message : 'Uploaded file could not be deleted.'),
+    onSuccess: (data) => {
+      setError('');
+      if (selectedSeriesId && data.deleted_series_ids?.includes(selectedSeriesId)) {
+        setSelectedSeriesId(null);
+        setSelectedWorkflow('');
+      }
+      queryClient.invalidateQueries({ queryKey: queryKeys.projectFiles(projectId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.series(projectId) });
     },
   });
 
   const runPipeline = useMutation({
-    mutationFn: ({ qsiprepTaskId, seriesId, workflowType }: { qsiprepTaskId?: number | null; seriesId: number; workflowType: string }) =>
-      qsiprepTaskId == null ? api.runSeries(seriesId, workflowType) : api.runSeries(seriesId, workflowType, qsiprepTaskId),
+    mutationFn: ({ qsiprepTaskId, seriesId, workflowType }: { qsiprepTaskId?: number | null; seriesId: number; workflowType: string }) => {
+      const dependencyNote = qsiprepTaskId == null ? '' : ` Use completed QSIPrep task ${qsiprepTaskId} as the QSIRecon prerequisite.`;
+      return api.runAgent(
+        projectId,
+        `Prepare workflow ${workflowType} for series ${seriesId}. Return confirmation only and do not create a task yet.${dependencyNote}`,
+      );
+    },
     onError: (err) => setError(err instanceof Error ? err.message : 'Pipeline launch failed'),
-    onSuccess: (task) => {
+    onSuccess: (data) => {
       setError('');
-      setLastStartedTask(task);
+      setMessages((prev) => [...prev, { role: 'agent', content: dashboardAgentMessage(data), response: data }]);
+      if (data.status === 'confirmation_required') {
+        setAgentDrawerOpen(true);
+      }
+      if (data.status !== 'task_created' || !data.task?.id) {
+        return;
+      }
+      setLastStartedTask(data.task);
       queryClient.invalidateQueries({ queryKey: queryKeys.tasks(projectId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.task(task.id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.task(data.task.id) });
     },
   });
 
@@ -306,17 +360,21 @@ export function DashboardPage() {
         .slice(0, 4),
     [outputs],
   );
-  const showReferenceT1Preview = projectId === 1 && previewImages.length === 0;
   const eligibility = getWorkflowEligibility(selectedSeries || ({} as Series), effectiveWorkflow, tasks);
   const canRun = Boolean(selectedSeries?.id && effectiveWorkflow && eligibility.runnable && !runPipeline.isPending);
   const uploadInventory = uploadInventoryData?.inventory;
   const uploadInventoryStatus = uploadInventory?.inventory_status;
   const uploadInventoryComplete = uploadInventoryStatus === 'completed';
-  const latestAgentResponse = [...messages].reverse().find((message) => message.response)?.response;
+  const uploadAttachmentCount = uploadInventory?.attachments?.length || 0;
+  const latestMessage = messages[messages.length - 1];
+  const latestAgentResponse = latestMessage?.role === 'agent' ? latestMessage.response : undefined;
   const pendingConfirmation =
     latestAgentResponse?.status === 'confirmation_required' && latestAgentResponse.thread_id && latestAgentResponse.confirmation
       ? latestAgentResponse
       : null;
+  const pendingConfirmationMetadata = workflowMetadataFromConfirmation(pendingConfirmation?.confirmation);
+  const pendingConfirmationWorkflowType = String(pendingConfirmation?.confirmation?.workflow_type || 'unknown');
+  const pendingConfirmationDisplayName = pendingConfirmationMetadata.display_name || pendingConfirmationWorkflowType;
 
   function handleRun() {
     if (!selectedSeries?.id || !effectiveWorkflow) {
@@ -340,6 +398,22 @@ export function DashboardPage() {
     uploadFile.mutate(files);
   }
 
+  function handleUploadInputChange(event: React.ChangeEvent<HTMLInputElement>) {
+    handleFiles(event.target.files);
+    event.target.value = '';
+  }
+
+  function openFilePicker() {
+    fileInputRef.current?.click();
+  }
+
+  function handleDeleteProjectFile(file: ProjectFile) {
+    if (deleteProjectFile.isPending) return;
+    const ok = window.confirm(`Delete uploaded file "${file.original_name}"? This cannot be undone.`);
+    if (!ok) return;
+    deleteProjectFile.mutate(file);
+  }
+
   function handleSeriesChange(seriesId: number) {
     setSelectedSeriesId(seriesId);
     setSelectedWorkflow('');
@@ -350,8 +424,8 @@ export function DashboardPage() {
     : "I haven't found any brain imaging data yet. Please upload DICOM or NIfTI files to get started.";
 
   const recommendation = selectedSeries
-    ? `Based on the ${selectedSeries.modality} modality, I recommend running the ${effectiveWorkflow} pipeline. This will perform automated preprocessing, skull stripping, and tissue segmentation.`
-    : "Once you upload your data, I will analyze the scans and recommend the appropriate processing workflow.";
+    ? `Based on the ${selectedSeries.modality} modality, the selected eligible workflow is ${effectiveWorkflow}. It will prepare the registered processing, QC, and report outputs after you explicitly start it.`
+    : "Once you upload data, I can explain the detected files and the workflows that may fit them.";
 
   useEffect(() => {
     const canRefreshGreeting = messages.length === 0 || messages.every((message) => message.meta === 'initial-greeting');
@@ -367,6 +441,7 @@ export function DashboardPage() {
   useEffect(() => {
     if (uploadInventoryComplete) {
       queryClient.invalidateQueries({ queryKey: queryKeys.series(projectId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.projectFiles(projectId) });
     }
   }, [projectId, queryClient, uploadInventoryComplete]);
 
@@ -446,7 +521,8 @@ export function DashboardPage() {
               <div className="rounded-md border border-emerald-100 bg-white px-3 py-2 text-xs text-gray-700">
                 <div className="font-semibold text-gray-900">Task #{displayedStartedTask.id} {displayedStartedTask.status}</div>
                 <div className="mt-0.5">Progress: {displayedStartedTask.progress}%</div>
-                <div className="mt-0.5">Workflow: {displayedStartedTask.workflow_type}</div>
+                <div className="mt-0.5">Workflow: {workflowDisplayName(displayedStartedTask.workflow_type)}</div>
+                <div className="mt-0.5 text-[11px] text-gray-500">Stable workflow ID: {displayedStartedTask.workflow_type}</div>
                 {completedTask(displayedStartedTask) ? (
                   <Link className="mt-1 inline-flex text-[#065F46] hover:underline" to={`/projects/${projectId}/results/${displayedStartedTask.id}`}>
                     View task results
@@ -454,7 +530,7 @@ export function DashboardPage() {
                 ) : null}
               </div>
             ) : (
-              <div className="text-xs text-emerald-800/80">{series.length ? 'Ready for the next backend-backed action.' : 'Upload data to let the agent recommend a workflow.'}</div>
+              <div className="text-xs text-emerald-800/80">{series.length ? 'Data are ready for workflow review.' : 'Upload data to review workflow eligibility.'}</div>
             )}
           </div>
         </div>
@@ -467,24 +543,44 @@ export function DashboardPage() {
                 <UploadCloud className="w-4 h-4 text-[#065F46]" /> Upload Data
               </div>
               <div className="p-3 flex-1 flex flex-col">
-                <label className="min-h-[126px] border-2 border-dashed border-gray-200 rounded-lg flex flex-col items-center justify-center p-4 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer group">
+                <div
+                  aria-label="Open file picker area"
+                  className="min-h-[126px] border-2 border-dashed border-gray-200 rounded-lg flex flex-col items-center justify-center p-4 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer group"
+                  role="button"
+                  tabIndex={0}
+                  onClick={(event) => {
+                    if ((event.target as HTMLElement).closest('button')) return;
+                    openFilePicker();
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      openFilePicker();
+                    }
+                  }}
+                >
                   <UploadCloud className="w-7 h-7 text-gray-400 mb-2 group-hover:text-[#065F46] transition-colors" />
-                  <div className="text-sm font-medium text-gray-700 mb-1">Drag & drop DICOM, NIfTI, or DWI sidecar files here</div>
+                  <div className="text-sm font-medium text-gray-700 mb-1">Drag & drop files here</div>
                   <div className="text-xs text-gray-500 mb-3">or click to browse from your computer</div>
-                  <span className="bg-[#065F46] text-white px-4 py-1.5 rounded-md text-xs font-medium shadow-sm hover:bg-[#044E3A] transition-colors">
+                  <button
+                    className="bg-[#065F46] text-white px-4 py-1.5 rounded-md text-xs font-medium shadow-sm hover:bg-[#044E3A] transition-colors"
+                    type="button"
+                    onClick={openFilePicker}
+                  >
                     Browse Files
-                  </span>
+                  </button>
                   <input
-                    aria-label="Upload DICOM, NIfTI, or DWI sidecar set"
+                    aria-label="Upload files"
                     className="sr-only"
+                    ref={fileInputRef}
                     type="file"
-                    accept=".nii,.nii.gz,.zip,.bval,.bvec,.json"
                     multiple
-                    onChange={(event) => handleFiles(event.target.files)}
+                    onClick={(event) => event.stopPropagation()}
+                    onChange={handleUploadInputChange}
                   />
-                </label>
+                </div>
                 <div className="mt-2 flex justify-between items-center gap-3 text-[11px]">
-                  <span className="text-gray-500">Supported: DICOM archives, NIfTI, or DWI set (.nii.gz + .bval + .bvec + .json)</span>
+                  <span className="text-gray-500">Medical imaging is detected for workflows; other files are saved as project attachments.</span>
                   <Link className="text-[#065F46] hover:underline font-medium inline-flex items-center gap-1" to={`/projects/${projectId}/ingest`}>
                     Advanced Ingest <ExternalLink className="w-3 h-3" />
                   </Link>
@@ -496,10 +592,45 @@ export function DashboardPage() {
                       <div className="mt-1 space-y-0.5 text-[11px] text-emerald-700/80">
                         <div>Ingest {uploadInventoryComplete ? 'completed' : uploadInventoryStatus}</div>
                         {typeof uploadInventory?.total_files === 'number' ? <div>{uploadInventory.total_files} files inventoried</div> : null}
+                        {uploadAttachmentCount ? <div>{uploadAttachmentCount} attachment{uploadAttachmentCount === 1 ? '' : 's'} saved</div> : null}
                       </div>
                     ) : null}
                   </div>
                 ) : null}
+                <div className="mt-3 rounded-md border border-gray-200 bg-white">
+                  <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2">
+                    <div className="text-xs font-semibold text-gray-800">Uploaded files</div>
+                    <div className="text-[11px] text-gray-500">{projectFiles.length} total</div>
+                  </div>
+                  {projectFiles.length ? (
+                    <div className="max-h-40 overflow-auto divide-y divide-gray-100">
+                      {projectFiles.map((file) => (
+                        <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2 px-3 py-2 text-xs" key={file.id}>
+                          <div className="min-w-0">
+                            <div className="truncate font-medium text-gray-800" title={file.original_name}>{file.original_name}</div>
+                            <div className="text-[11px] text-gray-500">{file.file_type || 'unknown file'}</div>
+                          </div>
+                          <div className="self-center rounded bg-gray-100 px-2 py-1 text-[11px] font-medium text-gray-700">
+                            {projectFileDetection(file)}
+                          </div>
+                          <button
+                            aria-label={`Delete ${file.original_name}`}
+                            className="inline-flex items-center gap-1 self-center rounded border border-red-200 bg-red-50 px-2 py-1 text-[11px] font-semibold text-red-700 transition-colors hover:bg-red-100 hover:text-red-800 disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={deleteProjectFile.isPending}
+                            title={`Delete ${file.original_name}`}
+                            type="button"
+                            onClick={() => handleDeleteProjectFile(file)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            <span>Delete</span>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="px-3 py-3 text-xs text-gray-500">No uploaded files recorded yet.</div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -521,7 +652,7 @@ export function DashboardPage() {
                     title="Preprocessing"
                     description="Bias correction, skull stripping, normalization"
                     status={completedCount ? 'completed' : active ? 'active' : 'pending'}
-                    meta={active?.workflow_type || (completedCount ? 'Completed' : 'Pending')}
+                    meta={active?.workflow_type ? workflowDisplayName(active.workflow_type) : completedCount ? 'Completed' : 'Pending'}
                   />
                   <WorkflowStep
                     title="Segmentation"
@@ -664,10 +795,16 @@ export function DashboardPage() {
                   <tbody className="divide-y divide-gray-100 text-gray-700">
                     {tasks.slice(0, 3).map((task) => {
                       const taskSeries = series.find((item) => item.id === task.series_id);
+                      const taskWorkflowLabel = workflowDisplayName(task.workflow_type);
                       return (
                         <tr className="hover:bg-gray-50 transition-colors" key={task.id}>
                           <td className="px-4 py-2 font-mono text-[11px] text-gray-500">RUN-{task.id}</td>
-                          <td className="px-4 py-2 truncate max-w-[150px]">{taskSeries?.sequence_label || task.workflow_type}</td>
+                          <td className="px-4 py-2 max-w-[220px]">
+                            <div className="truncate">{taskSeries?.sequence_label || taskWorkflowLabel}</div>
+                            {!taskSeries?.sequence_label ? (
+                              <div className="mt-0.5 truncate text-[10px] text-gray-400">Stable workflow ID: {task.workflow_type}</div>
+                            ) : null}
+                          </td>
                           <td className="px-4 py-2">
                             <StatusBadge status={task.status} />
                           </td>
@@ -716,7 +853,7 @@ export function DashboardPage() {
                 <div className="w-full md:w-[170px] flex-shrink-0 space-y-3 text-sm border-b md:border-b-0 md:border-r border-gray-100 pb-4 md:pb-0 md:pr-5">
                   <MetaItem label="Dataset" value={selectedSeries?.sequence_label || 'No dataset'} />
                   <MetaItem label="Date" value={resultTask ? formatCompleted(resultTask) : '--'} />
-                  <MetaItem label="Pipeline" value={resultSummary?.workflow_type || resultTask?.workflow_type || effectiveWorkflow || '--'} />
+                  <MetaItem label="Pipeline" value={resultWorkflowLabel} />
                   <MetaItem label="Duration" value={resultSummary?.provenance?.runtime_sec ? `${resultSummary.provenance.runtime_sec}s` : '--'} />
                   <div className="pt-2">
                     <Link
@@ -738,42 +875,18 @@ export function DashboardPage() {
                             {image.relative_path || image.feature_group || 'QC preview'}
                           </span>
                           <div className="w-full aspect-square bg-gray-950 rounded-lg overflow-hidden relative shadow-inner group">
-                            <img
-                              src={resultTask ? artifactUrl(resultTask.id, image, getApiBase()) : image.download_url}
-                              alt={image.relative_path || image.download_url}
-                              className="w-full h-full object-contain opacity-90 transition-opacity group-hover:opacity-100"
-                            />
+                            {resultTask ? (
+                              <AuthenticatedArtifactImageLink
+                                alt={image.relative_path || image.download_url || 'QC preview'}
+                                className="w-full h-full object-contain opacity-90 transition-opacity group-hover:opacity-100"
+                                relativePath={artifactRelativePath(image)}
+                                taskId={resultTask.id}
+                              />
+                            ) : null}
                           </div>
                         </div>
                       ))}
                     </div>
-                  ) : showReferenceT1Preview ? (
-                    <>
-                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-                        {t1ReferencePreviews.map((image) => (
-                          <div className="flex flex-col items-center" key={image.src}>
-                            <span className="text-[11px] font-medium text-gray-700 mb-1.5 truncate w-full text-center">
-                              {image.title}
-                            </span>
-                            <div className="w-full aspect-square bg-gray-950 rounded-lg overflow-hidden relative shadow-inner group">
-                              <img
-                                src={image.src}
-                                alt={image.alt}
-                                className="w-full h-full object-cover opacity-90 transition-opacity group-hover:opacity-100"
-                              />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="flex flex-wrap justify-center gap-x-4 gap-y-1.5 text-[11px] text-gray-600 px-2 mb-4">
-                        {segmentationLegend.map((item) => (
-                          <div className="flex items-center gap-1.5" key={item.label}>
-                            <span className={`w-2.5 h-2.5 rounded-full ${item.color}`} />
-                            {item.label}
-                          </div>
-                        ))}
-                      </div>
-                    </>
                   ) : (
                     <div className="mb-6 text-center py-6 text-gray-400 text-xs bg-gray-50 rounded-lg border border-dashed border-gray-200">
                       No native QC preview images available for this run.
@@ -894,10 +1007,18 @@ export function DashboardPage() {
                 <Info className="w-3.5 h-3.5 shrink-0" />
                 Approval required
               </div>
+              <div className="mt-2 font-semibold leading-5 text-amber-950">
+                {pendingConfirmationDisplayName}
+              </div>
+              {pendingConfirmationMetadata.capability_summary ? (
+                <div className="mt-1 leading-5 text-amber-800">
+                  {pendingConfirmationMetadata.capability_summary}
+                </div>
+              ) : null}
               <div className="mt-2 grid grid-cols-2 gap-2">
-                <span className="text-amber-700">Workflow</span>
+                <span className="text-amber-700">Stable workflow ID</span>
                 <span className="truncate text-right font-semibold">
-                  {String(pendingConfirmation.confirmation.workflow_type || 'unknown')}
+                  {pendingConfirmationWorkflowType}
                 </span>
                 <span className="text-amber-700">Series</span>
                 <span className="text-right font-semibold">
@@ -951,7 +1072,7 @@ export function DashboardPage() {
               ) : (
                 <Play className="w-3 h-3 fill-current" />
               )}
-              Start recommended pipeline
+              Prepare selected workflow
             </Button>
 
             <form onSubmit={handleChatSubmit} className="flex gap-2">

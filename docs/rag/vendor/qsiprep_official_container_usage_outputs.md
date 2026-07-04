@@ -19,7 +19,7 @@ This source documents QSIPrep container expectations and native QC/report artifa
 Image Agent legacy QSIPrep uses a Docker image such as:
 
 ```text
-pennlinc/qsiprep:latest
+pennlinc/qsiprep:26.0.0
 ```
 
 Backend command shape:
@@ -31,7 +31,7 @@ docker run --rm --gpus all \
   -v {work}:/work \
   -v {fs_license}:/opt/freesurfer/license.txt:ro \
   -v {eddy_cuda_config}:/eddy_cuda_config.json:ro \
-  pennlinc/qsiprep:latest \
+  pennlinc/qsiprep:26.0.0 \
   /data /output participant \
   --eddy-config /eddy_cuda_config.json
 ```
