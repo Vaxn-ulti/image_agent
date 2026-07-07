@@ -1460,6 +1460,11 @@ def test_langgraph_agent_runner_matches_fixed_workflow_from_capability_metadata_
     assert result["safe_metadata"]["lane"] == "fixed_workflow"
     assert result["confirmation"]["workflow_type"] == "bold_fmriprep_xcpd_report"
     assert result["graph_state"]["workflow_match"]["status"] == "capability_fixed_match"
+    assert result["graph_state"]["curated_workflow_registry"]["agent_selectable_count"] >= 3
+    assert result["graph_state"]["capability_matcher"]["status"] == "matched"
+    assert result["graph_state"]["capability_matcher"]["matched_workflow_type"] == "bold_fmriprep_xcpd_report"
+    assert result["graph_state"]["fixed_workflow_recommendation"]["status"] == "recommended"
+    assert result["graph_state"]["fixed_workflow_recommendation"]["workflow_type"] == "bold_fmriprep_xcpd_report"
     assert result["production_task_created"] is False
 
 
@@ -1495,6 +1500,9 @@ def test_langgraph_agent_runner_matches_dwi_fixed_workflow_from_capability_metad
     assert result["confirmation"]["workflow_metadata"]["workflow_family"] == "dwi"
     assert result["confirmation"]["workflow_metadata"]["workflow_role"] == "complete_processing"
     assert result["graph_state"]["workflow_match"]["status"] == "capability_fixed_match"
+    assert result["graph_state"]["capability_matcher"]["series_modality"] == "DWI"
+    assert result["graph_state"]["capability_matcher"]["matched_workflow_type"] == "dwi_fast_gpu_dti"
+    assert result["graph_state"]["fixed_workflow_recommendation"]["status"] == "recommended"
     assert result["production_task_created"] is False
 
 
@@ -1575,6 +1583,10 @@ def test_langgraph_agent_runner_does_not_capability_match_non_agent_selectable_w
     assert result["status"] == "toolchain_proposed"
     assert result["safe_metadata"]["lane"] == INCUBATION_LANE
     assert result["graph_state"]["workflow_match"]["status"] == "no_fixed_match"
+    assert result["graph_state"]["curated_workflow_registry"]["non_agent_selectable_count"] == 1
+    assert result["graph_state"]["capability_matcher"]["status"] == "no_match"
+    assert "t1_deepprep_validate" in result["graph_state"]["capability_matcher"]["excluded_workflow_types"]
+    assert result["graph_state"]["fixed_workflow_recommendation"]["status"] == "incubation_required"
     assert result["production_task_created"] is False
 
 
@@ -2130,6 +2142,9 @@ def test_langgraph_compiled_graph_includes_requirement_completeness_before_task_
     assert "clarification_interrupt" in graph.nodes
     assert "neuroimaging_data_intake_validation" in graph.nodes
     assert "sequence_metadata_normalization" in graph.nodes
+    assert "curated_workflow_registry" in graph.nodes
+    assert "capability_matcher" in graph.nodes
+    assert "fixed_workflow_recommendation" in graph.nodes
     assert graph.conditional_edges["select_skill"][1]["tool_task"] == "requirement_completeness"
     assert graph.conditional_edges["requirement_completeness"][1]["needs_clarification"] == "clarification_interrupt"
     assert (
@@ -2138,6 +2153,10 @@ def test_langgraph_compiled_graph_includes_requirement_completeness_before_task_
     )
     assert graph.edges["neuroimaging_data_intake_validation"] == "sequence_metadata_normalization"
     assert graph.edges["sequence_metadata_normalization"] == "task_planning"
+    assert graph.edges["task_planning"] == "curated_workflow_registry"
+    assert graph.edges["curated_workflow_registry"] == "capability_matcher"
+    assert graph.edges["capability_matcher"] == "fixed_workflow_recommendation"
+    assert graph.conditional_edges["fixed_workflow_recommendation"][1]["fixed_workflow"] == "fixed_workflow"
 
 
 def test_langgraph_agent_runner_clarifies_incomplete_tool_task_before_confirmation(tmp_path, monkeypatch):

@@ -131,6 +131,9 @@ class LangGraphAgentRunner(AgentRunner):
         graph.add_node("neuroimaging_data_intake_validation", self._node_neuroimaging_data_intake_validation)
         graph.add_node("sequence_metadata_normalization", self._node_sequence_metadata_normalization)
         graph.add_node("task_planning", self._node_task_planning)
+        graph.add_node("curated_workflow_registry", self._node_curated_workflow_registry)
+        graph.add_node("capability_matcher", self._node_capability_matcher)
+        graph.add_node("fixed_workflow_recommendation", self._node_fixed_workflow_recommendation)
         graph.add_node("read_only", self._node_read_only)
         graph.add_node("fixed_workflow", self._node_fixed_workflow)
         graph.add_node("incubation", self._node_incubation)
@@ -161,8 +164,11 @@ class LangGraphAgentRunner(AgentRunner):
         )
         graph.add_edge("neuroimaging_data_intake_validation", "sequence_metadata_normalization")
         graph.add_edge("sequence_metadata_normalization", "task_planning")
+        graph.add_edge("task_planning", "curated_workflow_registry")
+        graph.add_edge("curated_workflow_registry", "capability_matcher")
+        graph.add_edge("capability_matcher", "fixed_workflow_recommendation")
         graph.add_conditional_edges(
-            "task_planning",
+            "fixed_workflow_recommendation",
             self._route_lane,
             {
                 READ_ONLY_LANE: "read_only",
@@ -198,6 +204,9 @@ class LangGraphAgentRunner(AgentRunner):
             state.update(self._node_neuroimaging_data_intake_validation(state))
             state.update(self._node_sequence_metadata_normalization(state))
             state.update(self._node_task_planning(state))
+            state.update(self._node_curated_workflow_registry(state))
+            state.update(self._node_capability_matcher(state))
+            state.update(self._node_fixed_workflow_recommendation(state))
             lane = self._route_lane(state)
             if lane == FIXED_WORKFLOW:
                 state.update(self._node_fixed_workflow(state))
@@ -599,18 +608,113 @@ class LangGraphAgentRunner(AgentRunner):
             "exploratory_toolchain_requires_fixed_rejection": True,
             "observe_repair_inside_execution_loop": True,
         }
-        state_for_match = {**state, "task_planning": planning}
-        update = self._node_match_workflow(state_for_match)
         return {
-            **update,
             "task_planning": planning,
             "events": self._append_event(
-                {**state, "events": update.get("events") or state.get("events") or []},
+                state,
                 {
                     "type": "agent.graph.task_planning",
-                    "status": str((update.get("workflow_match") or {}).get("status") or "ok"),
+                    "status": "ok",
                     "message": "Planned tool-task path with fixed-workflow-first policy.",
                     "metadata": planning,
+                },
+            ),
+        }
+
+    def _node_curated_workflow_registry(self, state: ImageAgentState) -> dict[str, Any]:
+        registry = [workflow for workflow in state.get("workflow_registry") or [] if isinstance(workflow, dict)]
+        fixed = [workflow for workflow in registry if workflow.get("lane") == FIXED_WORKFLOW]
+        agent_selectable = [workflow for workflow in fixed if workflow.get("agent_selectable") is True]
+        non_agent_selectable = [workflow for workflow in fixed if workflow.get("agent_selectable") is not True]
+        summary = {
+            "status": "available" if registry else "empty",
+            "workflow_count": len(registry),
+            "fixed_workflow_count": len(fixed),
+            "agent_selectable_count": len(agent_selectable),
+            "non_agent_selectable_count": len(non_agent_selectable),
+            "agent_selectable_workflow_types": [str(workflow.get("type")) for workflow in agent_selectable if workflow.get("type")],
+            "non_agent_selectable_workflow_types": [
+                str(workflow.get("type")) for workflow in non_agent_selectable if workflow.get("type")
+            ],
+            "production_task_created": False,
+        }
+        return {
+            "curated_workflow_registry": summary,
+            "events": self._append_event(
+                state,
+                {
+                    "type": "agent.graph.curated_workflow_registry",
+                    "status": summary["status"],
+                    "message": "Loaded curated workflow registry constraints.",
+                    "metadata": {
+                        "workflow_count": summary["workflow_count"],
+                        "fixed_workflow_count": summary["fixed_workflow_count"],
+                        "agent_selectable_count": summary["agent_selectable_count"],
+                    },
+                },
+            ),
+        }
+
+    def _node_capability_matcher(self, state: ImageAgentState) -> dict[str, Any]:
+        update = self._node_match_workflow(state)
+        merged_state = {**state, **update}
+        workflow_match = update.get("workflow_match") or {}
+        capability_matcher = self._capability_matcher_audit(merged_state, workflow_match)
+        events = self._append_event(
+            {**state, "events": update.get("events") or state.get("events") or []},
+            {
+                "type": "agent.graph.capability_matcher",
+                "status": capability_matcher["status"],
+                "message": "Matched request against fixed workflow capabilities.",
+                "metadata": {
+                    "status": capability_matcher["status"],
+                    "matched_workflow_type": capability_matcher.get("matched_workflow_type"),
+                    "series_modality": capability_matcher.get("series_modality"),
+                    "excluded_workflow_types": capability_matcher.get("excluded_workflow_types") or [],
+                },
+            },
+        )
+        return {
+            **update,
+            "capability_matcher": capability_matcher,
+            "events": events,
+        }
+
+    def _node_fixed_workflow_recommendation(self, state: ImageAgentState) -> dict[str, Any]:
+        workflow_match = state.get("workflow_match") or {}
+        lane = state.get("lane")
+        recommendation: dict[str, Any]
+        if lane == FIXED_WORKFLOW:
+            recommendation = {
+                "status": "recommended",
+                "workflow_type": workflow_match.get("workflow_type") or (state.get("decision") or {}).get("workflow_type"),
+                "runtime_workflow_type": workflow_match.get("runtime_workflow_type"),
+                "source": workflow_match.get("status"),
+                "requires_confirmation": True,
+                "production_task_created": False,
+            }
+        elif lane == INCUBATION_LANE:
+            recommendation = {
+                "status": "incubation_required",
+                "workflow_type": workflow_match.get("workflow_type"),
+                "reason": workflow_match.get("reason") or "no fixed workflow recommendation",
+                "production_task_created": False,
+            }
+        else:
+            recommendation = {
+                "status": "not_applicable",
+                "reason": workflow_match.get("reason") or "no tool-task recommendation required",
+                "production_task_created": False,
+            }
+        return {
+            "fixed_workflow_recommendation": recommendation,
+            "events": self._append_event(
+                state,
+                {
+                    "type": "agent.graph.fixed_workflow_recommendation",
+                    "status": recommendation["status"],
+                    "message": "Prepared fixed workflow recommendation boundary.",
+                    "metadata": recommendation,
                 },
             ),
         }
@@ -1045,6 +1149,9 @@ class LangGraphAgentRunner(AgentRunner):
             "requirement_completeness": state.get("requirement_completeness"),
             "neuroimaging_intake": state.get("neuroimaging_intake"),
             "sequence_normalization": state.get("sequence_normalization"),
+            "curated_workflow_registry": state.get("curated_workflow_registry"),
+            "capability_matcher": state.get("capability_matcher"),
+            "fixed_workflow_recommendation": state.get("fixed_workflow_recommendation"),
             "task_planning": state.get("task_planning"),
             "workflow_match": state.get("workflow_match"),
             "preflight": state.get("preflight"),
@@ -1161,6 +1268,49 @@ class LangGraphAgentRunner(AgentRunner):
             return get_workflow(workflow_type)
         except Exception:
             return None
+
+    def _capability_matcher_audit(
+        self,
+        state: ImageAgentState,
+        workflow_match: dict[str, Any],
+    ) -> dict[str, Any]:
+        decision = state.get("decision") or {}
+        query = " ".join(
+            str(part or "")
+            for part in (
+                state.get("message"),
+                decision.get("summary"),
+                decision.get("modality"),
+            )
+        )
+        query_tokens = sorted(self._match_tokens(self._normalize_match_text(query)))
+        registry = [workflow for workflow in state.get("workflow_registry") or [] if isinstance(workflow, dict)]
+        fixed = [workflow for workflow in registry if workflow.get("lane") == FIXED_WORKFLOW]
+        excluded = [
+            str(workflow.get("type"))
+            for workflow in fixed
+            if workflow.get("agent_selectable") is not True and workflow.get("type")
+        ]
+        match_status = str(workflow_match.get("status") or "unknown")
+        if match_status in {"exact_fixed_match", "capability_fixed_match"}:
+            status = "matched"
+        elif match_status == "not_applicable":
+            status = "not_applicable"
+        else:
+            status = "no_match"
+        return {
+            "status": status,
+            "matched_by": match_status,
+            "matched_workflow_type": workflow_match.get("workflow_type"),
+            "runtime_workflow_type": workflow_match.get("runtime_workflow_type"),
+            "series_modality": self._decision_series_modality(state),
+            "query_tokens": query_tokens,
+            "registry_workflow_count": len(registry),
+            "fixed_workflow_count": len(fixed),
+            "agent_selectable_count": len([workflow for workflow in fixed if workflow.get("agent_selectable") is True]),
+            "excluded_workflow_types": excluded,
+            "production_task_created": False,
+        }
 
     def _match_fixed_workflow_by_capability(self, state: ImageAgentState) -> dict[str, Any] | None:
         decision = state.get("decision") or {}

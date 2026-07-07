@@ -143,3 +143,25 @@
   - GREEN：`python -m pytest apps/api/tests/test_agent_graph.py::test_langgraph_compiled_graph_includes_requirement_completeness_before_task_planning apps/api/tests/test_agent_graph.py::test_langgraph_agent_runner_normalizes_neuroimaging_series_before_task_planning apps/api/tests/test_agent_graph.py::test_langgraph_agent_runner_records_unsupported_sequence_boundary -q` -> `3 passed`。
   - Graph regression：`python -m pytest apps/api/tests/test_agent_graph.py -q` -> `58 passed`。
 - 本 checkpoint 没有远程 workflow run、没有 API restart、没有生产任务创建、没有远程部署配置变更。
+
+### Checkpoint 6: Target Graph Slice 3 Capability Matcher And Registry Recommendation
+
+- 按 target graph 实施计划完成第三段代码切片：将原本隐式藏在 `task_planning` 内的 workflow matching 拆成显式 graph stages：
+  - `curated_workflow_registry`
+  - `capability_matcher`
+  - `fixed_workflow_recommendation`
+- 生产边界：
+  - fixed workflow 推荐必须来自 curated registry，不允许 LLM 自由提升未注册 workflow。
+  - `agent_selectable=False` 的 registry entry 即使 capability 文本匹配，也只能记录为 excluded evidence，不能进入 fixed production recommendation。
+  - capability matcher 暴露 matched workflow、series modality、query tokens、registry 规模、excluded workflow types，供后续 policy gate / eval 使用。
+  - 本切片仍只到 confirmation 前推荐边界，不创建 production task。
+- 代码落点：
+  - `apps/api/app/agent/langgraph_runner.py`：新增三个 target graph nodes、graph/fallback 顺序、matcher audit helper、public graph_state 字段；`task_planning` 只保留策略规划，不再隐式执行 workflow matching。
+  - `apps/api/app/agent/state.py`：新增 registry/matcher/recommendation state fields。
+  - `apps/api/tests/test_agent_graph.py`：升级 graph topology、capability evidence、DWI match、non-agent-selectable exclusion 测试。
+- TDD / verification 记录：
+  - RED：compiled graph test 因缺少 `curated_workflow_registry` / `capability_matcher` / `fixed_workflow_recommendation` nodes 失败。
+  - RED：capability tests 因缺少 registry/matcher/recommendation graph_state 失败。
+  - GREEN：`python -m pytest apps/api/tests/test_agent_graph.py::test_langgraph_compiled_graph_includes_requirement_completeness_before_task_planning apps/api/tests/test_agent_graph.py::test_langgraph_agent_runner_matches_fixed_workflow_from_capability_metadata_when_planner_omits_type apps/api/tests/test_agent_graph.py::test_langgraph_agent_runner_matches_dwi_fixed_workflow_from_capability_metadata apps/api/tests/test_agent_graph.py::test_langgraph_agent_runner_does_not_capability_match_non_agent_selectable_workflow -q` -> `4 passed`。
+  - Graph regression：`python -m pytest apps/api/tests/test_agent_graph.py -q` -> `58 passed`。
+- 本 checkpoint 没有远程 workflow run、没有 API restart、没有生产任务创建、没有远程部署配置变更。
