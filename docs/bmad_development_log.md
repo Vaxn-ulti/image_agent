@@ -29,3 +29,22 @@
 ### Next Iteration Scope
 
 下一轮优先实现：`IntentDecision` 模型、规则优先意图识别、置信度门控、运行策略预算，并把 LangGraph 主图中的意图节点从字符串启发式升级为可测试的结构化决策。
+
+### Checkpoint 1: Structured Intent Decision Slice
+
+- 基于 `docs/image_agent_production_implementation_spec.md` Phase 2 和本日志上一轮 `Next Iteration Scope`，完成第一片结构化意图决策能力：
+  - 新增 `apps/api/app/agent/intent.py`，提供 `IntentDecision` Pydantic 模型和 `normalize_intent_decision()`。
+  - 将 inventory/capability 解释问题、显式 fixed workflow launch、低置信度 run 请求、toolchain incubation 请求归一化为带 `intent_decision` 元数据的结构化决策。
+  - `apps/api/app/agent/graph.py` 的 `_plan()` 现在在模型 planner 输出后统一调用 intent normalizer，再进入 read-only、fixed workflow confirmation 或 incubation 分支。
+  - 保留 LangGraph/AgentRunner 现有执行边界：没有创建生产任务，没有运行远程 workflow，没有改动远程部署配置。
+- TDD 记录：
+  - RED：`python -m pytest apps/api/tests/test_agent_intent.py -q` -> 预期失败，`ModuleNotFoundError: No module named 'app.agent.intent'`。
+  - GREEN：`python -m pytest apps/api/tests/test_agent_intent.py -q` -> `4 passed`。
+  - RED：`python -m pytest apps/api/tests/test_agent_graph.py::test_agent_plan_uses_structured_intent_guard_for_inventory_question apps/api/tests/test_agent_graph.py::test_agent_plan_preserves_explicit_fixed_workflow_launch -q` -> 预期失败，旧 `_plan()` 缺少 `intent_decision` 且误判中文“立即运行”。
+  - GREEN：`python -m pytest apps/api/tests/test_agent_intent.py apps/api/tests/test_agent_graph.py::test_agent_plan_uses_structured_intent_guard_for_inventory_question apps/api/tests/test_agent_graph.py::test_agent_plan_preserves_explicit_fixed_workflow_launch -q` -> `6 passed`。
+  - Graph regression：`python -m pytest apps/api/tests/test_agent_graph.py -q` -> `52 passed`。
+- Checkpoint commits：
+  - `67ed5d7d feat: add structured agent intent decision`
+  - `1b97bdbe refactor: route agent planning through intent decision`
+- 下一步建议：
+  - 继续 Phase 2 的 `ContextGrounder` / `PolicySnapshot` / loop budget，不要扩大到远程 smoke 或 workflow rerun，除非先有新的 BMAD scope 和验证计划。
