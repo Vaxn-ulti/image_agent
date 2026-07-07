@@ -12,6 +12,7 @@ from app.agent.chat import (
     _status_reply,
 )
 from app.agent.incubation import IncubationLedger
+from app.agent.intent import classify_rule_intent, extract_llm_intent_signal, normalize_intent_decision
 from app.agent.model_gateway import ModelGateway
 from app.agent.rag_orchestration import retrieve_reference_context
 from app.agent.skill_loader import select_skill
@@ -117,7 +118,9 @@ class LangGraphAgentRunner(AgentRunner):
         graph = StateGraph(ImageAgentState)
         graph.add_node("run_intake", self._node_run_intake)
         graph.add_node("safety_risk_router", self._node_safety_risk_router)
-        graph.add_node("classify_intent", self._node_classify_intent)
+        graph.add_node("rule_intent_classifier", self._node_rule_intent_classifier)
+        graph.add_node("llm_intent_planner", self._node_llm_intent_planner)
+        graph.add_node("intent_fusion_gate", self._node_intent_fusion_gate)
         graph.add_node("answer_or_task_router", self._node_answer_or_task_router)
         graph.add_node("retrieve_rag", self._node_retrieve_rag)
         graph.add_node("select_skill", self._node_select_skill)
@@ -128,8 +131,10 @@ class LangGraphAgentRunner(AgentRunner):
         graph.add_node("observe_repair", self._node_observe_repair)
         graph.set_entry_point("run_intake")
         graph.add_edge("run_intake", "safety_risk_router")
-        graph.add_edge("safety_risk_router", "classify_intent")
-        graph.add_edge("classify_intent", "answer_or_task_router")
+        graph.add_edge("safety_risk_router", "rule_intent_classifier")
+        graph.add_edge("rule_intent_classifier", "llm_intent_planner")
+        graph.add_edge("llm_intent_planner", "intent_fusion_gate")
+        graph.add_edge("intent_fusion_gate", "answer_or_task_router")
         graph.add_edge("answer_or_task_router", "retrieve_rag")
         graph.add_edge("retrieve_rag", "select_skill")
         graph.add_conditional_edges(
@@ -160,7 +165,9 @@ class LangGraphAgentRunner(AgentRunner):
         for node in (
             self._node_run_intake,
             self._node_safety_risk_router,
-            self._node_classify_intent,
+            self._node_rule_intent_classifier,
+            self._node_llm_intent_planner,
+            self._node_intent_fusion_gate,
             self._node_answer_or_task_router,
             self._node_retrieve_rag,
             self._node_select_skill,
@@ -229,14 +236,18 @@ class LangGraphAgentRunner(AgentRunner):
         }
 
     def _node_classify_intent(self, state: ImageAgentState) -> dict[str, Any]:
-        decision, planner_tool_trace = self._plan(
-            message=state.get("message", ""),
-            project_context=state.get("project_context") or {},
-        )
+        merged = {**state}
+        for node in (self._node_rule_intent_classifier, self._node_llm_intent_planner, self._node_intent_fusion_gate):
+            merged.update(node(merged))
+        decision = merged.get("decision") or {}
+        planner_tool_trace = merged.get("planner_tool_trace") or []
         intent = str(decision.get("intent") or "answer_question")
         return {
             "intent": intent,
             "decision": decision,
+            "rule_intent_signal": merged.get("rule_intent_signal") or {},
+            "llm_intent_signal": merged.get("llm_intent_signal") or {},
+            "intent_decision": merged.get("intent_decision") or {},
             "planner_tool_trace": planner_tool_trace,
             "events": self._append_event(
                 state,
@@ -248,6 +259,85 @@ class LangGraphAgentRunner(AgentRunner):
                         "intent": intent,
                         "action_lane": decision.get("action_lane") or decision.get("lane"),
                         "requires_confirmation": decision.get("requires_confirmation"),
+                    },
+                },
+            ),
+        }
+
+    def _node_rule_intent_classifier(self, state: ImageAgentState) -> dict[str, Any]:
+        signal = classify_rule_intent(
+            message=state.get("message", ""),
+            project_context=state.get("project_context") or {},
+        )
+        return {
+            "rule_intent_signal": signal,
+            "events": self._append_event(
+                state,
+                {
+                    "type": "agent.graph.rule_intent_classifier",
+                    "status": str(signal.get("gate") or "unknown"),
+                    "message": f"Rule intent classifier selected {signal.get('category')}.",
+                    "metadata": {
+                        "category": signal.get("category"),
+                        "gate": signal.get("gate"),
+                        "confidence": signal.get("confidence"),
+                        "authoritative": signal.get("authoritative"),
+                    },
+                },
+            ),
+        }
+
+    def _node_llm_intent_planner(self, state: ImageAgentState) -> dict[str, Any]:
+        decision, planner_tool_trace = self._planner_model_decision(
+            message=state.get("message", ""),
+            project_context=state.get("project_context") or {},
+        )
+        llm_signal = extract_llm_intent_signal(decision if isinstance(decision, dict) else {})
+        return {
+            "decision": decision,
+            "llm_intent_signal": llm_signal,
+            "planner_tool_trace": planner_tool_trace,
+            "events": self._append_event(
+                state,
+                {
+                    "type": "agent.graph.llm_intent_planner",
+                    "status": "ok" if llm_signal.get("valid") else "incomplete",
+                    "message": f"LLM planner classified intent as {llm_signal.get('category')}.",
+                    "metadata": {
+                        "category": llm_signal.get("category"),
+                        "confidence": llm_signal.get("confidence"),
+                        "valid": llm_signal.get("valid"),
+                        "route_recommendation": llm_signal.get("route_recommendation"),
+                    },
+                },
+            ),
+        }
+
+    def _node_intent_fusion_gate(self, state: ImageAgentState) -> dict[str, Any]:
+        decision, intent_trace = normalize_intent_decision(
+            message=state.get("message", ""),
+            model_decision=state.get("decision") or {},
+        )
+        audit = decision.get("intent_decision") or {}
+        intent = str(decision.get("intent") or "answer_question")
+        return {
+            "intent": intent,
+            "decision": decision,
+            "rule_intent_signal": audit.get("rule_signal") or state.get("rule_intent_signal") or {},
+            "llm_intent_signal": audit.get("llm_signal") or state.get("llm_intent_signal") or {},
+            "intent_decision": audit,
+            "planner_tool_trace": [*(state.get("planner_tool_trace") or []), *intent_trace],
+            "events": self._append_event(
+                state,
+                {
+                    "type": "agent.graph.intent_fusion_gate",
+                    "status": str(audit.get("final_gate") or "unknown"),
+                    "message": f"Fused intent as {intent}.",
+                    "metadata": {
+                        "intent": intent,
+                        "category": audit.get("final_category"),
+                        "gate": audit.get("final_gate"),
+                        "conflict": audit.get("conflict"),
                     },
                 },
             ),
@@ -760,6 +850,9 @@ class LangGraphAgentRunner(AgentRunner):
             "lane": state.get("lane"),
             "router_lane": state.get("router_lane"),
             "risk_assessment": state.get("risk_assessment") or {"level": "unknown", "flags": []},
+            "intent_decision": state.get("intent_decision"),
+            "rule_intent_signal": state.get("rule_intent_signal"),
+            "llm_intent_signal": state.get("llm_intent_signal"),
             "task_planning": state.get("task_planning"),
             "workflow_match": state.get("workflow_match"),
             "preflight": state.get("preflight"),

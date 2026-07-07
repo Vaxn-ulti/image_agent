@@ -11,8 +11,36 @@ from app.agent.thread_store import AgentThreadStore, confirmation_fingerprint
 
 class FakeGateway:
     def __init__(self, decision):
-        self.decision = decision
+        self.decision = self._with_production_intent_defaults(decision)
         self.messages = []
+
+    @staticmethod
+    def _with_production_intent_defaults(decision):
+        if not isinstance(decision, dict):
+            return decision
+        updated = dict(decision)
+        intent = updated.get("intent") or "answer_question"
+        lane = updated.get("action_lane") or updated.get("lane")
+        if "intent_category" not in updated:
+            if intent == "run_workflow" and lane == INCUBATION_LANE:
+                updated["intent_category"] = "toolchain_incubation"
+            elif intent == "run_workflow":
+                updated["intent_category"] = "fixed_workflow_launch"
+            else:
+                updated["intent_category"] = "read_only_answer"
+        updated.setdefault("intent_subcategory", None)
+        updated.setdefault("confidence", 0.9)
+        updated.setdefault("evidence_spans", [])
+        updated.setdefault("risk_level", "medium" if intent == "run_workflow" else "low")
+        updated.setdefault("ambiguities", [])
+        if "route_recommendation" not in updated:
+            if intent == "run_workflow" and lane == INCUBATION_LANE:
+                updated["route_recommendation"] = INCUBATION_LANE
+            elif intent == "run_workflow":
+                updated["route_recommendation"] = "fixed_workflow"
+            else:
+                updated["route_recommendation"] = "read_only"
+        return updated
 
     def complete_structured(self, messages, *, purpose, structured_schema=None):
         self.messages.append((purpose, messages, structured_schema))
@@ -131,6 +159,11 @@ def test_image_agent_state_schema_keeps_langgraph_intermediate_fields():
         "skill_context",
         "result",
     }.issubset(set(IMAGE_AGENT_STATE_FIELDS))
+    assert {
+        "rule_intent_signal",
+        "llm_intent_signal",
+        "intent_decision",
+    }.issubset(set(IMAGE_AGENT_STATE_FIELDS))
 
 
 def test_agent_runner_passes_json_schema_to_tool_enabled_planner():
@@ -173,8 +206,8 @@ def test_agent_plan_uses_structured_intent_guard_for_inventory_question():
     assert decision["intent"] == "answer_question"
     assert decision["intent_decision"]["category"] == "inventory_capability"
     assert decision["intent_decision"]["gate"] == "read_only"
-    assert trace[-1]["stage"] == "intent_decision"
-    assert trace[-1]["status"] == "forced_read_only_inventory_capability_answer"
+    assert trace[-1]["stage"] == "intent_fusion_gate"
+    assert trace[-1]["status"] == "forced_read_only"
     assert trace[-1]["production_task_created"] is False
 
 
@@ -1150,6 +1183,113 @@ def test_langgraph_agent_runner_uses_compiled_stategraph_when_runtime_available(
     assert result["graph_state"]["lane"] == "read_only"
 
 
+def test_langgraph_compiled_graph_exposes_production_intent_stage_nodes(tmp_path, monkeypatch):
+    class FakeCompiledGraph:
+        def __init__(self, graph):
+            self.graph = graph
+
+        def invoke(self, state):
+            return state
+
+    class FakeStateGraph:
+        def __init__(self, state_type):
+            self.state_type = state_type
+            self.nodes = {}
+            self.edges = {}
+            self.conditional_edges = {}
+            self.entry = None
+
+        def add_node(self, name, node):
+            self.nodes[name] = node
+
+        def set_entry_point(self, name):
+            self.entry = name
+
+        def add_edge(self, source, target):
+            self.edges[source] = target
+
+        def add_conditional_edges(self, source, route_fn, mapping):
+            self.conditional_edges[source] = (route_fn, mapping)
+
+        def compile(self):
+            return FakeCompiledGraph(self)
+
+    fake_langgraph = types.ModuleType("langgraph")
+    fake_graph = types.ModuleType("langgraph.graph")
+    fake_graph.END = "__end__"
+    fake_graph.StateGraph = FakeStateGraph
+    monkeypatch.setitem(sys.modules, "langgraph", fake_langgraph)
+    monkeypatch.setitem(sys.modules, "langgraph.graph", fake_graph)
+
+    from app.agent.langgraph_runner import LangGraphAgentRunner
+
+    runner = LangGraphAgentRunner(gateway=FakeGateway({"intent": "answer_question", "confidence": 0.9}), rag_root=tmp_path)
+    graph = runner._compiled_graph.graph
+
+    assert "rule_intent_classifier" in graph.nodes
+    assert "llm_intent_planner" in graph.nodes
+    assert "intent_fusion_gate" in graph.nodes
+    assert graph.edges["safety_risk_router"] == "rule_intent_classifier"
+    assert graph.edges["rule_intent_classifier"] == "llm_intent_planner"
+    assert graph.edges["llm_intent_planner"] == "intent_fusion_gate"
+    assert graph.edges["intent_fusion_gate"] == "answer_or_task_router"
+
+
+def test_langgraph_fallback_exposes_production_intent_audit_state(tmp_path, monkeypatch):
+    from app.agent import langgraph_runner
+    from app.agent.langgraph_runner import LangGraphAgentRunner
+
+    monkeypatch.setattr(langgraph_runner, "_langgraph_runtime_available", lambda: False)
+    gateway = FakeGateway(
+        {
+            "intent": "run_workflow",
+            "intent_category": "fixed_workflow_launch",
+            "intent_subcategory": "t1_processing",
+            "action_lane": "fixed_workflow",
+            "lane": "fixed_workflow",
+            "workflow_type": "t1_deepprep_anat_report",
+            "summary": "Run T1 workflow",
+            "requires_confirmation": True,
+            "confidence": 0.92,
+            "evidence_spans": ["立即运行"],
+            "risk_level": "medium",
+            "ambiguities": [],
+            "route_recommendation": "fixed_workflow",
+        }
+    )
+
+    result = LangGraphAgentRunner(
+        gateway=gateway,
+        incubation_ledger=IncubationLedger(tmp_path / "ledger"),
+        rag_root=tmp_path,
+        thread_store=AgentThreadStore(tmp_path / "threads"),
+    ).run(
+        message="请立即运行 T1 工作流",
+        project_context={
+            "project_id": 7,
+            "series": [{"id": 11, "modality": "T1", "sequence_label": "T1w", "supported_for_processing": 1}],
+            "workflows": [
+                {
+                    "type": "t1_deepprep_anat_report",
+                    "display_name": "T1 DeepPrep anatomical processing, QC, and report",
+                    "modality": "T1",
+                    "lane": "fixed_workflow",
+                    "agent_selectable": True,
+                }
+            ],
+        },
+    )
+
+    event_types = [event["type"] for event in result["events"]]
+    assert "agent.graph.rule_intent_classifier" in event_types
+    assert "agent.graph.llm_intent_planner" in event_types
+    assert "agent.graph.intent_fusion_gate" in event_types
+    assert result["graph_state"]["intent_decision"]["contract_version"] == "intent_decision.v2"
+    assert result["graph_state"]["rule_intent_signal"]["category"] == "fixed_workflow_launch"
+    assert result["graph_state"]["llm_intent_signal"]["category"] == "fixed_workflow_launch"
+    assert "message" not in result["graph_state"]
+
+
 def test_langgraph_agent_runner_read_only_result_exposes_intent_and_answer(tmp_path):
     from app.agent.langgraph_runner import LangGraphAgentRunner
 
@@ -1164,10 +1304,12 @@ def test_langgraph_agent_runner_read_only_result_exposes_intent_and_answer(tmp_p
     assert result["intent"] == "answer_question"
     assert result["decision"]["intent"] == "answer_question"
     assert result["answer"] == "final answer"
-    assert [event["type"] for event in result["events"]][:6] == [
+    assert [event["type"] for event in result["events"]][:8] == [
         "agent.graph.run_intake",
         "agent.graph.safety_risk_router",
-        "agent.graph.classify_intent",
+        "agent.graph.rule_intent_classifier",
+        "agent.graph.llm_intent_planner",
+        "agent.graph.intent_fusion_gate",
         "agent.graph.answer_or_task_router",
         "agent.graph.retrieve_rag",
         "agent.graph.select_skill",
@@ -1928,10 +2070,12 @@ def test_langgraph_agent_runner_records_hierarchical_router_stages_for_task_requ
     )
 
     event_types = [event["type"] for event in result["events"]]
-    assert event_types[:4] == [
+    assert event_types[:6] == [
         "agent.graph.run_intake",
         "agent.graph.safety_risk_router",
-        "agent.graph.classify_intent",
+        "agent.graph.rule_intent_classifier",
+        "agent.graph.llm_intent_planner",
+        "agent.graph.intent_fusion_gate",
         "agent.graph.answer_or_task_router",
     ]
     assert "agent.graph.task_planning" in event_types

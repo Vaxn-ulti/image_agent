@@ -110,26 +110,6 @@ def classify_rule_intent(*, message: str, project_context: dict[str, Any] | None
             matched_rules=matched_rules,
             evidence=evidence,
         ).model_dump()
-    if "status_question" in matched_rules:
-        return RuleIntentSignal(
-            intent="answer_question",
-            category="status_question",
-            gate="read_only",
-            confidence=0.95,
-            authoritative=True,
-            matched_rules=matched_rules,
-            evidence=evidence,
-        ).model_dump()
-    if "result_analysis" in matched_rules:
-        return RuleIntentSignal(
-            intent="answer_question",
-            category="result_analysis",
-            gate="read_only",
-            confidence=0.95,
-            authoritative=True,
-            matched_rules=matched_rules,
-            evidence=evidence,
-        ).model_dump()
     if "negated_launch" in matched_rules:
         return RuleIntentSignal(
             intent="answer_question",
@@ -157,6 +137,26 @@ def classify_rule_intent(*, message: str, project_context: dict[str, Any] | None
             gate="candidate_confirmation",
             confidence=0.9,
             authoritative=False,
+            matched_rules=matched_rules,
+            evidence=evidence,
+        ).model_dump()
+    if "status_question" in matched_rules:
+        return RuleIntentSignal(
+            intent="answer_question",
+            category="status_question",
+            gate="read_only",
+            confidence=0.95,
+            authoritative=True,
+            matched_rules=matched_rules,
+            evidence=evidence,
+        ).model_dump()
+    if "result_analysis" in matched_rules:
+        return RuleIntentSignal(
+            intent="answer_question",
+            category="result_analysis",
+            gate="read_only",
+            confidence=0.95,
+            authoritative=True,
             matched_rules=matched_rules,
             evidence=evidence,
         ).model_dump()
@@ -398,6 +398,11 @@ def _negated_launch_tokens() -> tuple[str, ...]:
 
 def _explicit_launch_tokens() -> tuple[str, ...]:
     return (
+        "run ",
+        "start ",
+        "launch ",
+        "submit ",
+        "execute ",
         "run now",
         "start now",
         "launch now",

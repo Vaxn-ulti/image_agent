@@ -321,6 +321,19 @@ class AgentRunner:
         }
 
     def _plan(self, *, message: str, project_context: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        decision, tool_trace = self._planner_model_decision(message=message, project_context=project_context)
+        if not isinstance(decision, dict):
+            return (
+                {"intent": "answer_question", "summary": "The model did not return a structured decision."},
+                tool_trace,
+            )
+        decision, intent_trace = normalize_intent_decision(message=message, model_decision=decision)
+        tool_trace = [*tool_trace, *intent_trace]
+        return decision, tool_trace
+
+    def _planner_model_decision(
+        self, *, message: str, project_context: dict[str, Any]
+    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         messages = [
             {"role": "system", "content": PLANNER_SYSTEM_PROMPT},
             {
@@ -361,8 +374,6 @@ class AgentRunner:
                 {"intent": "answer_question", "summary": "The model did not return a structured decision."},
                 tool_trace,
             )
-        decision, intent_trace = normalize_intent_decision(message=message, model_decision=decision)
-        tool_trace = [*tool_trace, *intent_trace]
         return decision, tool_trace
 
     @staticmethod
