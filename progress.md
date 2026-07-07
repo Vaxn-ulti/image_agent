@@ -1,5 +1,14 @@
 # Image Agent Progress
 
+## 2026-07-07 Browser Agent UX Test
+
+- Created active goal: real-browser testing for Image Agent upload and agent interaction flows.
+- Loaded relevant skills: superpowers usage, brainstorming, planning-with-files, browser control, debugging, TDD, verification.
+- Recovered browser connection after one timeout and read the complete browser-control documentation.
+- Confirmed repository worktree was clean before starting the browser UX test pass.
+- Added the browser UX test matrix and boundaries to `task_plan.md`.
+- Added initial architecture and route findings to `findings.md`.
+
 ## 2026-07-05
 
 - Recorded the current production target architecture direction for Image Agent:
@@ -2188,3 +2197,28 @@
   - `/deployment` now reports `production_readiness.status=ready`, `production_readiness.deployment_scope=private_network`, `fast_launch_readiness.status=ready`, no blocking reasons, strict remote acceptance `passed`, Elasticsearch hybrid RAG `passed`, and rawchat model gateway target `passed` with `trust_env_proxy=false`;
   - final deployment readiness snapshot is saved at `/tmp/image_agent_private_launch_deployment_ready_20260622.json`;
   - this is a private/local product-usable milestone, not public internet exposure.
+
+## 2026-07-07 Browser Agent UX Test
+
+- Goal set: real browser test for upload and agent interaction, fix high-priority friction, log findings, verify, and commit backup.
+- Local services:
+  - Console available at `http://127.0.0.1:5180/`;
+  - API restarted on `http://127.0.0.1:8000/` after CORS/upload fixes.
+- Browser results:
+  - login reproduced `Failed to fetch`, then passed after CORS fix;
+  - project `20` created through UI;
+  - Dashboard verified after synthetic uploads: one valid T1 series and two NIFTI attachments;
+  - embedded Agent Copilot opened from Dashboard;
+  - full Agent page opened through `Open full chat`;
+  - agent query reproduced structured 502 model-gateway error and raw JSON display.
+- Fixes:
+  - `apps/api/app/app_factory.py`: default dev CORS includes Console port `5180`; CORS wraps auth responses;
+  - `apps/api/app/imaging/detect.py`: invalid NIfTI parse failures return unknown detection instead of 500;
+  - `apps/console/src/lib/api.ts`: structured backend `detail.message` becomes user-facing error text.
+- Tests added:
+  - dev CORS for port `5180`;
+  - invalid gzipped NIfTI upload recorded as attachment;
+  - structured backend error message extraction.
+- Browser/test boundaries:
+  - Browser runtime lacks file attachment API for `input[type=file]`; upload state was seeded via local API with synthetic files and verified in browser UI;
+  - Browser URL policy blocked a later local Agent reload, so no policy workaround was attempted.

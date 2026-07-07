@@ -61,6 +61,31 @@ Continue developing Image Agent until the agent product is mature and stable eno
 
 `codex/image-agent-product-maturity`
 
+## 2026-07-07 Browser Agent UX Test Goal
+
+Status: in_progress
+
+Goal: use a real browser to exercise the Image Agent console upload and agent interaction flows, identify friction that makes the agent inconvenient to use, fix the highest-priority production-facing issues with tests first, and commit scoped backups.
+
+Test matrix:
+
+1. Start local FastAPI backend and React/Vite console.
+2. Browser smoke: page loads, no blank screen, no blocking console errors.
+3. Upload flow: create/select project, upload a small neuroimaging-compatible test file or supported sidecar bundle, verify upload progress and detected series/inventory appear.
+4. Agent read-only flow: ask what was uploaded and what workflows are possible; verify no confirmation or production task is created.
+5. Ambiguous tool-task flow: ask to process the data vaguely; verify clarification interrupt is understandable and offers next choices.
+6. Explicit fixed workflow flow: request a supported workflow for a specific series; verify confirmation card shows workflow, series, preflight, plan gate, authorization boundary, and clear approve/cancel actions.
+7. Resume/cancel flow: cancel and approve paths should be visible and understandable; no task creation before explicit approval.
+8. Record UX friction in `findings.md` and implementation evidence in `progress.md`.
+
+Scope boundaries:
+
+- Use local browser tests for UX and contract evidence.
+- Do not run real remote workflow/container jobs.
+- Do not upload private or real patient data.
+- Do not create production tasks unless the test explicitly reaches an approval boundary using synthetic/local data.
+- Use TDD before any production code change.
+
 ## Open Questions To Resolve From Evidence
 
 - Which existing WIP changes are already intended for the current product-maturity goal?
@@ -301,3 +326,37 @@ Next planning focus:
 - Engineer the intent recognition module as a production-grade subsystem.
 - Start with requirements elicitation before code changes.
 - Resolve hierarchical intent routing, rule-first dispatch, LLM structured understanding, confidence thresholds, clarification behavior, loop limits, observability, evaluation metrics, and stable downstream contracts.
+
+## 2026-07-07 Browser Agent UX Test Goal
+
+Objective: use a real browser to test the Image Agent upload and interaction flow, remove high-priority friction, keep production boundaries explicit, and commit a backup.
+
+Status: in progress.
+
+Completed:
+
+- Started local API/Console and confirmed health.
+- Logged in through the real browser after fixing development CORS for Console port `5180`.
+- Created project `20` through the real browser.
+- Verified Dashboard upload/readiness UI after synthetic upload state:
+  - invalid NIfTI-looking files are listed as attachments;
+  - valid synthetic T1 NIfTI is detected as `T1w_MPRAGE`;
+  - Intake status moves to completed with one series.
+- Entered embedded Agent Copilot and full Agent page through browser interactions.
+- Reproduced slow/failed model-gateway agent interaction and raw JSON error display.
+- Fixed three production-grade issues:
+  - development CORS for port `5180`;
+  - CORS headers on auth rejection;
+  - invalid NIfTI detection crash;
+  - structured backend error display in Console.
+
+Boundaries:
+
+- Browser plugin did not expose automated local file attachment despite visible file input. Upload state was seeded with local synthetic API requests and verified in browser UI.
+- Browser URL policy later blocked local Agent page reload; do not bypass that policy.
+- No remote execution, no real patient data, no diagnosis, no production workflow launch.
+
+Next:
+
+- Final verification and backup commit.
+- Later UX work: make Dashboard `Open Agent Copilot` navigation semantics clearer and add better long-running Agent progress feedback.

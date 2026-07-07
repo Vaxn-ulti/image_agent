@@ -27,6 +27,22 @@ def test_cors_origins_are_configured_from_environment(monkeypatch):
     assert "access-control-allow-origin" not in denied.headers
 
 
+def test_default_dev_cors_allows_console_dev_server_port(monkeypatch):
+    monkeypatch.delenv("IMAGE_AGENT_CORS_ORIGINS", raising=False)
+    monkeypatch.delenv("IMAGE_AGENT_ENV", raising=False)
+    client = TestClient(create_app())
+
+    result = client.options(
+        "/health",
+        headers={
+            "Origin": "http://127.0.0.1:5180",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+
+    assert result.headers["access-control-allow-origin"] == "http://127.0.0.1:5180"
+
+
 def test_auth_rejection_keeps_cors_headers_for_console_origin(monkeypatch):
     monkeypatch.setenv("IMAGE_AGENT_REQUIRE_AUTH", "true")
     monkeypatch.setenv("IMAGE_AGENT_CONSOLE_USERNAME", "fjx")

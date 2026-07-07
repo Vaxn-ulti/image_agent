@@ -171,6 +171,36 @@ def test_arbitrary_file_upload_is_saved_as_attachment_not_imaging_series(tmp_pat
     assert str(tmp_path / 'projects') not in json.dumps({'uploaded': uploaded, 'inventory': inventory})
 
 
+def test_invalid_gzipped_nifti_upload_is_saved_as_attachment_not_500(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
+    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
+    from app.db import database
+    import app.main as main
+    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
+    monkeypatch.setattr(main, 'PROJECTS_ROOT', tmp_path / 'projects')
+
+    database.init_db()
+    client = TestClient(app)
+    project = client.post('/projects', json={'name': 'P-invalid-nifti-attachment'}).json()
+    invalid_nifti = tmp_path / 'synthetic_t1w_browser_ux.nii.gz'
+    invalid_nifti.write_bytes(b'synthetic nifti browser ux smoke')
+
+    with invalid_nifti.open('rb') as f:
+        uploaded = client.post(
+            f"/projects/{project['id']}/upload",
+            files={'file': (invalid_nifti.name, f, 'application/gzip')},
+        )
+
+    assert uploaded.status_code == 200
+    payload = uploaded.json()
+    assert payload['file']['original_name'] == invalid_nifti.name
+    assert payload['series'] is None
+    assert payload['inventory']['attachments'][0]['original_name'] == invalid_nifti.name
+    assert payload['inventory']['files'][0]['detected_as'] == 'attachment'
+    assert client.get(f"/projects/{project['id']}/series").json() == []
+
+
 def test_project_files_endpoint_lists_uploads_with_linked_detection_without_paths(tmp_path, monkeypatch):
     monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
     monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')

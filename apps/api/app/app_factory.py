@@ -14,6 +14,8 @@ from app.security import bearer_auth_middleware
 DEFAULT_CORS_ORIGINS = (
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "http://localhost:5180",
+    "http://127.0.0.1:5180",
 )
 
 
@@ -115,8 +117,8 @@ def production_cors_has_insecure_deployment_origin() -> bool:
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Brain Image Agent API", version="0.2.0")
-    app.add_middleware(CORSMiddleware, allow_origins=cors_origins(), allow_methods=["*"], allow_headers=["*"])
     app.middleware("http")(bearer_auth_middleware)
+    app.add_middleware(CORSMiddleware, allow_origins=cors_origins(), allow_methods=["*"], allow_headers=["*"])
 
     for router in (
         system.router,

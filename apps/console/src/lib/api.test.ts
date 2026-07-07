@@ -663,6 +663,24 @@ describe('api client', () => {
     await expect(api.listSeries(13)).rejects.toMatchObject({ message: 'Project not found' });
   });
 
+  it('uses structured backend detail.message as the user-facing error message', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          detail: {
+            agent_run_id: 'agent_run_f69242d2a72445aba937ffb73569fd2b',
+            code: 'agent_model_call_failed',
+            contract_version: 'agent_api_error.v1',
+            message: 'Agent model call failed.',
+          },
+        }),
+        { status: 502 },
+      ),
+    );
+
+    await expect(api.runAgent(13, 'prepare workflow')).rejects.toMatchObject({ message: 'Agent model call failed.' });
+  });
+
   it('strips backend log paths from task responses before UI code sees them', async () => {
     const task = {
       id: 118,

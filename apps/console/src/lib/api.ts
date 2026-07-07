@@ -145,6 +145,11 @@ function errorMessageFromBody(text: string) {
     if (parsed && typeof parsed === 'object' && 'detail' in parsed) {
       const detail = (parsed as { detail?: unknown }).detail;
       if (typeof detail === 'string') return detail;
+      if (detail && typeof detail === 'object') {
+        const structured = detail as { code?: unknown; message?: unknown };
+        if (typeof structured.message === 'string' && structured.message.trim()) return structured.message;
+        if (typeof structured.code === 'string' && structured.code.trim()) return structured.code;
+      }
     }
   } catch {
     return text;

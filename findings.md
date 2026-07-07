@@ -1,5 +1,15 @@
 # Image Agent Findings
 
+## 2026-07-07 Browser Agent UX Test Findings
+
+- Browser test goal established: exercise local console upload and agent interaction with real browser control, then fix the highest-priority inconvenience found.
+- Initial repo orientation:
+  - Backend: `apps/api`, FastAPI via `uvicorn app.main:app --host 0.0.0.0 --port 8000`.
+  - Console: `apps/console`, Vite via `npm run dev -- --host 0.0.0.0 --port 5180`.
+  - Upload routes include generic upload, DWI sidecar upload, DICOM archive upload, dataset upload-session ingest, and inventory lookup.
+  - Main UI surfaces include `ProjectsPage`, `IngestPage`, `AgentPage`, `TasksPage`, `WorkflowsPage`, and result/report routes.
+- Safety boundary for this test pass: synthetic/local files only; no remote workflow/container execution; no private imaging data.
+
 ## 2026-07-05 Production Target Architecture Decisions
 
 - The product target is a production-grade, single-machine private neuroimaging Agent platform with project-level isolation, not a toy demo and not an initial multi-tenant SaaS.
@@ -444,3 +454,31 @@ Answer contract risk:
 
 - Mostly additive: RAG responses will expose richer `raw_source_evidence` for workflow citations.
 - The biggest care point is changing workflow `status` vocabulary. Align BOLD with launch matrix as `incubation_reference` to avoid accidental production-readiness claims.
+
+## 2026-07-07 Browser Agent UX Test Findings
+
+Scope: local synthetic browser test for login, project creation, upload state, Dashboard workflow readiness, and Agent interaction. No private data, no clinical data, no remote workflow/container execution.
+
+Findings:
+
+- Real browser login initially failed with `Failed to fetch` from Console `http://127.0.0.1:5180` to API `http://127.0.0.1:8000`.
+  - Root cause: default development CORS origins allowed Vite port `5173`, while the active Console dev server used `5180`.
+  - Fix: add `localhost/127.0.0.1:5180` to default development CORS only. Production still requires explicit `IMAGE_AGENT_CORS_ORIGINS` and still rejects wildcard/path origins.
+- Auth rejection responses could lose CORS headers.
+  - Root cause: bearer auth middleware could return before CORS wrapped the response.
+  - Fix: make CORS the outer middleware so browser users receive actionable 401/4xx responses.
+- Browser plugin can see the file input, but its documented locator API does not expose local file attachment.
+  - Boundary: actual browser file selection could not be automated through this Browser surface. Upload state was seeded via local API with synthetic files, then verified through the real browser UI.
+- Invalid `.nii.gz` content produced backend 500 during upload detection.
+  - Root cause: `gzip.BadGzipFile` from NIfTI header parsing was not caught by `detect_series`.
+  - Fix: invalid NIfTI-looking uploads become project attachments instead of crashing or creating series.
+- Valid synthetic T1 NIfTI header uploaded successfully and produced a `T1w_MPRAGE` series.
+  - Browser Dashboard showed `3 total` files, `1 series`, two NIFTI attachments, and Intake completed.
+- Dashboard `Open Agent Copilot` expands the embedded copilot but does not navigate to `/agent`.
+  - Friction: user may think they entered the full agent workspace while still on Dashboard.
+  - Current UI path: click `Open full chat` for the full Agent page.
+- Full Agent query against the configured model gateway returned structured backend error `agent_model_call_failed`.
+  - Friction: Console showed the raw JSON object in the chat bubble.
+  - Fix: structured backend `detail.message` is now used as the user-facing error message.
+- Browser automation was stopped by Browser URL policy during a later local Agent page reload.
+  - Boundary: do not bypass Browser policy; final verification for the error-message fix uses frontend unit tests.

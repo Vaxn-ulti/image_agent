@@ -1,4 +1,5 @@
 import json
+from gzip import BadGzipFile
 from pathlib import Path
 from typing import Any
 
@@ -125,7 +126,18 @@ def detect_series(path: str | Path) -> dict[str, Any]:
     lower = p.name.lower()
     if not (lower.endswith(".nii") or lower.endswith(".nii.gz")):
         return {"modality": "unknown", "format": "UNKNOWN", "confidence": 0.0, "metadata": {"filename": p.name}}
-    metadata = parse_nifti_header(p)
+    try:
+        metadata = parse_nifti_header(p)
+    except (BadGzipFile, EOFError, OSError, UnicodeDecodeError, ValueError) as exc:
+        return {
+            "modality": "unknown",
+            "format": "UNKNOWN",
+            "confidence": 0.0,
+            "metadata": {
+                "filename": p.name,
+                "invalid_reason": f"Invalid NIfTI header: {type(exc).__name__}",
+            },
+        }
     shape = metadata.get("shape", [])
     ndim = int(metadata.get("ndim") or len(shape))
     timepoints = shape[3] if len(shape) >= 4 else 1
