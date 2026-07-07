@@ -48,3 +48,40 @@
   - `1b97bdbe refactor: route agent planning through intent decision`
 - 下一步建议：
   - 继续 Phase 2 的 `ContextGrounder` / `PolicySnapshot` / loop budget，不要扩大到远程 smoke 或 workflow rerun，除非先有新的 BMAD scope 和验证计划。
+
+### Checkpoint 2: Production Intent Routing And LangGraph Stage Split
+
+- 基于用户要求“所有任务都按真实 production 级开发”，将结构化意图从第一版 normalizer 升级为三层生产路由：
+  - 规则层：`classify_rule_intent()` 输出 `RuleIntentSignal`，覆盖 inventory/capability、status、result analysis、显式 launch、否定 launch、incubation/new workflow 语言。
+  - LLM 层：planner schema 现在要求 `intent_category`、`intent_subcategory`、`confidence`、`evidence_spans`、`risk_level`、`ambiguities`、`route_recommendation`。
+  - 融合层：`normalize_intent_decision()` 输出 `intent_decision.v2` audit block，保留 rule signal、LLM signal、final gate、conflict、policy 和 reasons。
+- 新 LangGraph 图设计已落地：
+  - compiled graph 和 deterministic fallback 都按 `run_intake -> safety_risk_router -> rule_intent_classifier -> llm_intent_planner -> intent_fusion_gate -> answer_or_task_router` 执行。
+  - public `graph_state` 暴露安全审计字段：`intent_decision`、`rule_intent_signal`、`llm_intent_signal`。
+  - 旧 `classify_intent` 保留为兼容 wrapper，但新图不依赖它。
+- 安全/产品边界：
+  - 否定启动、只读解释和 inventory/capability 规则优先，LLM 不能推翻。
+  - LLM 缺失 confidence 对 launch-like 请求会进入 clarification/read-only，不再默认视为通过。
+  - unknown/non-production workflow 仍进入 incubation，不创建 confirmation 或 production task。
+  - 本轮没有远程 workflow run、没有 API restart、没有生产任务创建、没有远程部署配置变更。
+- TDD / verification 记录：
+  - RED：规则分类器测试因 `classify_rule_intent` 缺失失败。
+  - GREEN：`python -m pytest apps/api/tests/test_agent_intent.py -q` -> `8 passed`。
+  - RED：v2 fusion audit 测试因缺少 `intent_decision.v2` 字段失败。
+  - GREEN：`python -m pytest apps/api/tests/test_agent_intent.py -q` -> `11 passed`。
+  - RED：planner schema 测试因缺少 production intent fields 失败。
+  - GREEN：`python -m pytest apps/api/tests/test_agent_intent.py apps/api/tests/test_agent_graph.py::test_agent_runner_passes_json_schema_to_tool_enabled_planner apps/api/tests/test_agent_graph.py::test_agent_runner_passes_json_schema_to_no_tools_planner_fallback -q` -> `13 passed`。
+  - RED：LangGraph node/fallback tests 因 state fields 和 graph nodes 缺失失败。
+  - GREEN：`python -m pytest apps/api/tests/test_agent_graph.py -q` -> `54 passed`。
+  - Combined regression：`python -m pytest apps/api/tests/test_agent_intent.py apps/api/tests/test_agent_graph.py apps/api/tests/test_agent_api.py::test_agent_run_unconfigured_model_answers_inventory_without_confirmation apps/api/tests/test_agent_api.py::test_agent_run_forces_unknown_fixed_workflow_into_incubation_without_production_task -q` -> `67 passed, 3 warnings`。
+  - `git diff --check` -> passed.
+- Checkpoint commits：
+  - `9fc56dff docs: specify production intent routing`
+  - `61a862d6 docs: plan production langgraph intent routing`
+  - `bbd681f0 feat: add production intent rule classifier`
+  - `ebe81e91 feat: fuse rule and llm intent decisions`
+  - `b308c7d9 test: require production intent planner contract`
+  - `dd676944 feat: expose production intent stages in langgraph`
+  - `0ee6d0a2 test: align agent api fixture with production intent contract`
+- 下一步建议：
+  - 在下一 BMAD checkpoint 继续 `ContextGrounder`、`PolicySnapshot`、loop budget 和 repeated-failure cutoff，将 graph stage audit 接入更完整的 run ledger/eval 统计。
