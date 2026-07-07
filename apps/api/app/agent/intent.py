@@ -20,6 +20,18 @@ class RuleIntentSignal(BaseModel):
     evidence: list[str] = Field(default_factory=list)
 
 
+class LLMIntentSignal(BaseModel):
+    intent: IntentName
+    category: str
+    subcategory: str | None = None
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    valid: bool = False
+    evidence_spans: list[str] = Field(default_factory=list)
+    risk_level: str | None = None
+    ambiguities: list[str] = Field(default_factory=list)
+    route_recommendation: str | None = None
+
+
 class IntentDecision(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -31,6 +43,36 @@ class IntentDecision(BaseModel):
     summary: str | None = None
     confidence: float = Field(default=0.75, ge=0.0, le=1.0)
     requires_confirmation: bool | None = None
+
+
+def extract_llm_intent_signal(model_decision: dict[str, Any]) -> dict[str, Any]:
+    raw = dict(model_decision or {})
+    intent = raw.get("intent") if raw.get("intent") in ("answer_question", "run_workflow") else "answer_question"
+    confidence_present = "confidence" in raw and raw.get("confidence") is not None
+    confidence = _coerce_confidence(raw.get("confidence")) if confidence_present else None
+    category = str(raw.get("intent_category") or raw.get("category") or "")
+    if not category:
+        lane = raw.get("action_lane") or raw.get("lane")
+        if intent == "run_workflow" and lane == INCUBATION_LANE:
+            category = "toolchain_incubation"
+        elif intent == "run_workflow":
+            category = "fixed_workflow_launch"
+        else:
+            category = "read_only_answer"
+    evidence_spans = raw.get("evidence_spans") if isinstance(raw.get("evidence_spans"), list) else []
+    ambiguities = raw.get("ambiguities") if isinstance(raw.get("ambiguities"), list) else []
+    signal = LLMIntentSignal(
+        intent=intent,
+        category=category,
+        subcategory=raw.get("intent_subcategory"),
+        confidence=confidence,
+        valid=confidence_present,
+        evidence_spans=[str(item) for item in evidence_spans],
+        risk_level=raw.get("risk_level"),
+        ambiguities=[str(item) for item in ambiguities],
+        route_recommendation=raw.get("route_recommendation"),
+    )
+    return signal.model_dump()
 
 
 def classify_rule_intent(*, message: str, project_context: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -138,73 +180,150 @@ def normalize_intent_decision(
     raw = dict(model_decision or {})
     if raw.get("intent") not in ("answer_question", "run_workflow"):
         raw["intent"] = "answer_question"
-    raw["confidence"] = _coerce_confidence(raw.get("confidence"))
+    llm_signal = extract_llm_intent_signal(raw)
+    raw["confidence"] = llm_signal["confidence"] if llm_signal["confidence"] is not None else 0.0
     decision = IntentDecision.model_validate(raw).model_dump()
-    confidence = float(decision.get("confidence") or 0.0)
-
-    if _asks_for_inventory_or_capability_explanation(message):
-        return _force_read_only(
-            decision,
-            category="inventory_capability",
-            confidence=1.0,
-            source="rule_guard",
-            status="forced_read_only_inventory_capability_answer",
-            recommended_next_step=(
-                "Answer the uploaded-file inventory and runnable-workflow question before preparing any workflow confirmation."
-            ),
-        )
-
-    if decision.get("intent") == "run_workflow" and confidence < confidence_threshold:
-        return _force_read_only(
-            decision,
-            category="needs_clarification",
-            confidence=confidence,
-            source="confidence_gate",
-            status="forced_read_only_low_confidence",
-            recommended_next_step="Ask a clarifying question before preparing a workflow confirmation.",
-        )
-
+    rule_signal = classify_rule_intent(message=message, project_context=None)
     lane = decision.get("action_lane") or decision.get("lane")
-    if decision.get("intent") == "run_workflow" and lane == INCUBATION_LANE:
-        decision["intent_decision"] = {
-            "category": "toolchain_incubation",
-            "confidence": confidence,
-            "source": "model_decision",
-            "gate": "incubation",
-        }
-        return decision, []
+    final_intent = str(decision.get("intent") or "answer_question")
+    final_category = str(llm_signal.get("category") or "read_only_answer")
+    final_gate = "read_only"
+    reasons: list[str] = []
+    status = "read_only"
+    confidence = llm_signal.get("confidence")
+    if confidence is None:
+        confidence = float(rule_signal.get("confidence") or 0.0)
 
-    if (
-        decision.get("intent") == "run_workflow"
-        and (lane or FIXED_WORKFLOW) == FIXED_WORKFLOW
-        and not _asks_for_fixed_workflow_confirmation(message)
-    ):
-        return _force_read_only(
-            decision,
-            category="fixed_workflow_readiness",
-            confidence=confidence,
-            source="rule_guard",
-            status="forced_read_only_until_explicit_fixed_workflow_launch",
-            recommended_next_step=(
-                "Explain the current project, uploaded files, possible workflows, and ask before preparing confirmation."
-            ),
-        )
-
-    if decision.get("intent") == "run_workflow" and (lane or FIXED_WORKFLOW) == FIXED_WORKFLOW:
-        decision["intent_decision"] = {
-            "category": "fixed_workflow_launch",
-            "confidence": confidence,
-            "source": "rule_guard",
-            "gate": "confirmation_required",
-        }
+    if rule_signal.get("authoritative"):
+        final_intent = str(rule_signal["intent"])
+        final_category = str(rule_signal["category"])
+        final_gate = str(rule_signal["gate"])
+        confidence = float(rule_signal.get("confidence") or confidence or 0.0)
+        status = "forced_read_only" if final_gate == "read_only" else str(final_gate)
+        reasons.append("authoritative_rule")
+        if llm_signal.get("intent") != rule_signal.get("intent") or llm_signal.get("category") != rule_signal.get("category"):
+            reasons.append("authoritative_rule_overrode_llm")
+    elif final_intent == "run_workflow" and not llm_signal.get("valid"):
+        final_intent = "answer_question"
+        final_category = "needs_clarification"
+        final_gate = "read_only"
+        status = "forced_read_only"
+        reasons.append("missing_llm_confidence")
+    elif final_intent == "run_workflow" and float(confidence) < confidence_threshold:
+        final_intent = "answer_question"
+        final_category = "needs_clarification"
+        final_gate = "read_only"
+        status = "forced_read_only"
+        reasons.append("low_llm_confidence")
+    elif rule_signal.get("gate") == "incubation" or lane == INCUBATION_LANE:
+        final_intent = "run_workflow"
+        final_category = "toolchain_incubation"
+        final_gate = "incubation"
+        status = "incubation"
+        reasons.append("incubation_route")
+    elif final_intent == "run_workflow" and (lane or FIXED_WORKFLOW) == FIXED_WORKFLOW:
+        if rule_signal.get("category") == "fixed_workflow_launch" or _asks_for_fixed_workflow_confirmation(message):
+            final_category = "fixed_workflow_launch"
+            final_gate = "confirmation_required"
+            status = "candidate_confirmation"
+            reasons.append("explicit_launch_candidate")
+        else:
+            final_intent = "answer_question"
+            final_category = "fixed_workflow_readiness"
+            final_gate = "read_only"
+            status = "forced_read_only"
+            reasons.append("missing_explicit_launch_rule")
     else:
-        decision["intent_decision"] = {
-            "category": "read_only_answer",
-            "confidence": confidence,
-            "source": "model_decision",
-            "gate": "read_only",
-        }
-    return decision, []
+        final_intent = "answer_question"
+        final_category = str(rule_signal.get("category") or "read_only_answer")
+        final_gate = "read_only"
+        reasons.append("read_only_route")
+
+    conflict = bool(
+        llm_signal.get("intent") != rule_signal.get("intent")
+        or (rule_signal.get("confidence", 0.0) >= 0.8 and llm_signal.get("category") != rule_signal.get("category"))
+    )
+    decision = {
+        **decision,
+        "intent": final_intent,
+        "requires_confirmation": final_gate == "confirmation_required",
+        "intent_decision": _intent_audit(
+            final_intent=final_intent,
+            final_category=final_category,
+            final_gate=final_gate,
+            confidence=float(confidence),
+            rule_signal=rule_signal,
+            llm_signal=llm_signal,
+            conflict=conflict,
+            reasons=reasons,
+        ),
+    }
+    if final_gate == "read_only":
+        decision["action_lane"] = None
+        decision["lane"] = None
+        decision["requires_confirmation"] = False
+        decision["recommended_next_step"] = _recommended_next_step(final_category)
+    elif final_gate == "incubation":
+        decision["action_lane"] = INCUBATION_LANE
+        decision["lane"] = INCUBATION_LANE
+        decision["requires_confirmation"] = True
+    else:
+        decision["action_lane"] = FIXED_WORKFLOW
+        decision["lane"] = FIXED_WORKFLOW
+        decision["requires_confirmation"] = True
+    trace = [
+        {
+            "stage": "intent_rule_classifier",
+            "status": str(rule_signal.get("gate") or "unknown"),
+            "category": rule_signal.get("category"),
+            "confidence": rule_signal.get("confidence"),
+            "production_task_created": False,
+        },
+        {
+            "stage": "intent_fusion_gate",
+            "status": status,
+            "category": final_category,
+            "confidence": float(confidence),
+            "production_task_created": False,
+        },
+    ]
+    return decision, trace
+
+
+def _intent_audit(
+    *,
+    final_intent: str,
+    final_category: str,
+    final_gate: str,
+    confidence: float,
+    rule_signal: dict[str, Any],
+    llm_signal: dict[str, Any],
+    conflict: bool,
+    reasons: list[str],
+) -> dict[str, Any]:
+    return {
+        "contract_version": "intent_decision.v2",
+        "final_intent": final_intent,
+        "final_category": final_category,
+        "final_gate": final_gate,
+        "confidence": confidence,
+        "rule_signal": rule_signal,
+        "llm_signal": llm_signal,
+        "conflict": conflict,
+        "policy": "rules_override_safety_and_read_only_conflicts",
+        "reasons": reasons,
+        "category": final_category,
+        "gate": final_gate,
+        "source": "fusion_gate",
+    }
+
+
+def _recommended_next_step(category: str) -> str:
+    if category == "inventory_capability":
+        return "Answer the uploaded-file inventory and runnable-workflow question before preparing any workflow confirmation."
+    if category == "needs_clarification":
+        return "Ask a clarifying question before preparing a workflow confirmation."
+    return "Explain the current project, uploaded files, possible workflows, and ask before preparing confirmation."
 
 
 def _coerce_confidence(value: Any) -> float:
