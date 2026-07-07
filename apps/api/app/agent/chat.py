@@ -145,6 +145,49 @@ def _workflow_id(workflow: dict) -> str:
     return str(workflow.get("workflow_type") or workflow.get("type") or "unknown_workflow")
 
 
+def _workflow_display_item(workflow: dict) -> dict:
+    metadata = workflow.get("workflow_metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+    return {**metadata, **workflow}
+
+
+def _runnable_fixed_workflows(project_context: dict) -> list[dict]:
+    series = project_context.get("series") or []
+    modalities = {str(item.get("modality") or "").upper() for item in series if item.get("modality")}
+    workflows: list[dict] = []
+    seen: set[str] = set()
+
+    def add_workflow(workflow: object, *, require_modality_match: bool = False) -> None:
+        if not isinstance(workflow, dict):
+            return
+        display_item = _workflow_display_item(workflow)
+        lane = display_item.get("lane")
+        modality = str(display_item.get("modality") or "").upper()
+        if lane and lane != "fixed_workflow":
+            return
+        if display_item.get("agent_selectable") is False:
+            return
+        if require_modality_match and modalities and modality and modality not in modalities:
+            return
+        workflow_id = _workflow_id(display_item)
+        if workflow_id in seen:
+            return
+        seen.add(workflow_id)
+        workflows.append(display_item)
+
+    for item in series:
+        eligibility = item.get("workflow_eligibility")
+        if not isinstance(eligibility, dict):
+            continue
+        for workflow in eligibility.get("runnable_workflows") or []:
+            add_workflow(workflow)
+
+    for workflow in project_context.get("supported_workflows") or project_context.get("workflows") or []:
+        add_workflow(workflow, require_modality_match=True)
+    return workflows
+
+
 def _looks_chinese(message: str) -> bool:
     return any("\u4e00" <= char <= "\u9fff" for char in str(message or ""))
 
@@ -152,18 +195,7 @@ def _looks_chinese(message: str) -> bool:
 def _inventory_capability_reply(project_context: dict, *, message: str = "") -> str:
     files = project_context.get("project_files") or []
     series = project_context.get("series") or []
-    modalities = {str(item.get("modality") or "").upper() for item in series if item.get("modality")}
-    workflows = []
-    for workflow in project_context.get("supported_workflows") or []:
-        lane = workflow.get("lane")
-        modality = str(workflow.get("modality") or "").upper()
-        if lane and lane != "fixed_workflow":
-            continue
-        if workflow.get("agent_selectable") is False:
-            continue
-        if modalities and modality and modality not in modalities:
-            continue
-        workflows.append(workflow)
+    workflows = _runnable_fixed_workflows(project_context)
     file_items = [
         f"{item.get('original_name')} ({item.get('file_type') or 'unknown'}, id {item.get('id')})"
         for item in files[:10]

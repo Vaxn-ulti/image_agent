@@ -763,7 +763,29 @@ def test_agent_run_unconfigured_model_answers_inventory_without_confirmation(tmp
                 {"id": 32, "original_name": "sub-01_T1w.json", "file_type": "JSON"},
             ],
             "series": [
-                {"id": 11, "modality": "T1", "sequence_label": "T1w_MPRAGE", "supported_for_processing": 1}
+                {
+                    "id": 11,
+                    "modality": "T1",
+                    "sequence_label": "T1w_MPRAGE",
+                    "supported_for_processing": 1,
+                    "workflow_eligibility": {
+                        "policy_version": "workflow_eligibility_v1",
+                        "production_task_created": False,
+                        "runnable_workflows": [
+                            {
+                                "workflow_type": "t1_deepprep_anat_report",
+                                "label": "T1 DeepPrep anat-only with full features and HTML report",
+                                "modality": "T1",
+                                "workflow_metadata": {
+                                    "lane": "fixed_workflow",
+                                    "agent_selectable": True,
+                                    "display_name": "T1 DeepPrep anatomical processing, QC, and report",
+                                    "capability_summary": "Runs anatomical T1 processing with QC and report outputs.",
+                                },
+                            }
+                        ],
+                    },
+                }
             ],
             "workflows": workflows,
         },
@@ -780,12 +802,10 @@ def test_agent_run_unconfigured_model_answers_inventory_without_confirmation(tmp
     assert body["intent"] == "inventory_capability"
     assert "confirmation" not in body
     assert body["production_task_created"] is False
-    assert "Uploaded files" in body["answer"]
     assert "sub-01_T1w.nii.gz" in body["answer"]
-    assert "Detected series" in body["answer"]
     assert "T1w_MPRAGE" in body["answer"]
-    assert "Runnable fixed workflows" in body["answer"]
-    assert "No approval request has been created" in body["answer"]
+    assert "t1_deepprep_anat_report" in body["answer"]
+    assert "T1 DeepPrep anatomical processing" in body["answer"]
 
 
 def test_agent_run_unconfigured_model_returns_complete_result_analysis(tmp_path, monkeypatch):

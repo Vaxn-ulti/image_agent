@@ -2356,3 +2356,31 @@
   - `node node_modules/typescript/bin/tsc -b`: passed;
   - `node node_modules/vite/bin/vite.js build`: passed, Vite transformed 1666 modules;
   - `node node_modules/vitest/vitest.mjs run src/lib/api.test.ts src/routes/AgentPage.test.tsx --run`: 46 passed.
+
+## 2026-07-07 Upload-To-Agent Interaction Hardening
+
+- Goal: continue practical Agent interaction testing with an upload-oriented scenario and remove friction found in the real UI path.
+- Frontend upload fix:
+  - added a regression test for standard NIfTI upload returning `upload_session_id`;
+  - fixed `uploadNifti.onSuccess` to activate the returned upload session and invalidate the matching inventory query;
+  - added `aria-label={label}` to upload inputs so `NIfTI upload`, `DICOM zip`, and mixed dataset upload controls are reachable by automated browser/accessibility tooling.
+- Backend Agent fix:
+  - browser/API testing found the Agent fallback said no fixed workflow was runnable even though the uploaded T1 series had `workflow_eligibility.primary_recommendation=t1_deepprep_anat_report`;
+  - fixed `read_project_context` to include the series fields needed by workflow eligibility and attach `workflow_eligibility` to Agent context series;
+  - changed the inventory/capability fallback to prefer `series.workflow_eligibility.runnable_workflows` before falling back to registry workflows;
+  - tightened Agent API tests so the response must include `t1_deepprep_anat_report`.
+- Browser evidence:
+  - started isolated API/frontend services on `8013/5182` with a temporary `IMAGE_AGENT_ROOT`;
+  - uploaded a minimal T1 NIfTI through the real `/projects/{id}/upload` API;
+  - opened the real Agent page in the in-app browser and sent `我现在上传了什么数据？有没有BOLD或DWI？可以运行什么流程？`;
+  - verified the rendered answer listed `sub-01_T1w.nii`, `T1w_MPRAGE`, and runnable workflow `t1_deepprep_anat_report`.
+- Tooling limitation:
+  - the in-app browser tool exposed page navigation/click/type/evaluate, but not a working file chooser or `setInputFiles` equivalent;
+  - DOM file injection also failed in this tool environment because browser constructors such as `File`/typed-array helpers were unavailable in `evaluate`;
+  - therefore true file-picker automation remains a test harness task, while upload state behavior is covered by component tests and API-plus-browser verification.
+- Verification:
+  - `node node_modules/vitest/vitest.mjs run src/routes/IngestPage.test.tsx --run`: 6 passed;
+  - `node node_modules/vitest/vitest.mjs run src/routes/IngestPage.test.tsx src/routes/AgentPage.test.tsx src/lib/api.test.ts --run`: 52 passed;
+  - `node node_modules/typescript/bin/tsc -b`: passed;
+  - `node node_modules/vite/bin/vite.js build`: passed, Vite transformed 1666 modules;
+  - `python -m pytest apps/api/tests/test_agent_tools.py::test_read_project_context_enriches_series_workflow_eligibility apps/api/tests/test_agent_api.py::test_agent_run_unconfigured_model_answers_inventory_without_confirmation -q`: 2 passed.

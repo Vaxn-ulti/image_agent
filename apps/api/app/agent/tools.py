@@ -31,6 +31,7 @@ from app.workflows.registry import (
     workflow_public_metadata,
     workflow_public_metadata_for_record,
 )
+from app.workflows.eligibility import build_workflow_eligibility
 from app.workflows.task_logs import collect_remote_task_logs
 
 
@@ -101,7 +102,7 @@ def read_project_context(
         projects = rows_fn("SELECT * FROM projects WHERE id=?", (project_id,))
         project = projects[0] if projects else None
         series = rows_fn(
-            "SELECT id, project_id, modality, sequence_label, supported_for_processing, unsupported_reason, status, confidence, metadata_json "
+            "SELECT id, project_id, file_id, bids_path, modality, format, sequence_label, supported_for_processing, unsupported_reason, status, confidence, metadata_json, created_at "
             "FROM imaging_series WHERE project_id=? ORDER BY id DESC LIMIT 50",
             (project_id,),
         )
@@ -164,6 +165,7 @@ def _parse_series(series: dict[str, Any]) -> dict[str, Any]:
     except json.JSONDecodeError:
         parsed["metadata"] = {}
     parsed["supported_for_processing"] = bool(parsed.get("supported_for_processing", 1))
+    parsed["workflow_eligibility"] = build_workflow_eligibility(parsed)
     return parsed
 
 

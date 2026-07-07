@@ -579,3 +579,24 @@ Findings:
 - Remaining product work:
   - run a browser upload flow with real file selection and post-upload Agent interaction;
   - add a reusable browser smoke harness or Playwright-style script that can seed data, start isolated services, and assert chat outcomes consistently.
+
+## 2026-07-07 Upload-To-Agent Interaction Findings
+
+- Interaction issue:
+  - a standard NIfTI upload returned a valid `upload_session_id`, but the ingest page did not make that session active;
+  - the user could see detected series after refresh, but the inventory panel could still say there was no active ingest session.
+- Implemented frontend boundary:
+  - NIfTI upload success now activates the returned session and refreshes its inventory;
+  - upload inputs now have stable accessible names, so automation can target `NIfTI upload` directly.
+- Agent correctness issue:
+  - the upload API and inventory API correctly computed `workflow_eligibility` for T1;
+  - Agent `read_project_context` used raw database series rows without `workflow_eligibility`;
+  - the fallback answer therefore looked only at registry/modalities and could incorrectly say no fixed workflow was runnable.
+- Implemented backend boundary:
+  - Agent context series are enriched with `workflow_eligibility`;
+  - inventory/capability fallback answers prefer `series.workflow_eligibility.runnable_workflows`;
+  - this aligns Agent answers with the production launchability contract and prevents divergent product behavior.
+- Browser/tooling finding:
+  - the current in-app browser automation can navigate, type, click, and read rendered UI;
+  - it did not provide a usable file chooser or file-input setter in this session;
+  - full browser file-picker automation should be moved to a Playwright-style harness or another browser tool with `setInputFiles`.

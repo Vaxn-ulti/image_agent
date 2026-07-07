@@ -44,6 +44,45 @@ def test_read_project_context_includes_series_tasks_outputs_and_workflows(tmp_pa
     assert recorded_queries
 
 
+def test_read_project_context_enriches_series_workflow_eligibility(tmp_path, monkeypatch):
+    monkeypatch.setattr(tools, "PROJECTS_ROOT", tmp_path / "projects")
+
+    def fake_rows(sql, params=()):
+        if "FROM projects" in sql:
+            return [{"id": 7, "name": "demo"}]
+        if "FROM imaging_series" in sql:
+            return [
+                {
+                    "id": 11,
+                    "project_id": 7,
+                    "file_id": 31,
+                    "bids_path": None,
+                    "modality": "T1",
+                    "format": "NIFTI",
+                    "sequence_label": "T1w_MPRAGE",
+                    "supported_for_processing": 1,
+                    "unsupported_reason": "",
+                    "status": "detected",
+                    "confidence": 0.9,
+                    "metadata_json": json.dumps({"filename": "sub-01_T1w.nii"}),
+                    "created_at": "2026-07-07T00:00:00",
+                }
+            ]
+        if "FROM tasks" in sql or "FROM outputs" in sql or "FROM files" in sql:
+            return []
+        return []
+
+    context = tools.read_project_context(project_id=7, rows_fn=fake_rows, workflows=[])
+
+    eligibility = context["series"][0]["workflow_eligibility"]
+    assert eligibility["policy_version"] == "workflow_eligibility_v1"
+    assert eligibility["production_task_created"] is False
+    assert eligibility["primary_recommendation"]["workflow_type"] == "t1_deepprep_anat_report"
+    assert {
+        item["workflow_type"] for item in eligibility["runnable_workflows"]
+    } == {"t1_deepprep_anat_report"}
+
+
 def test_preflight_workflow_blocks_modality_mismatch():
     context = {
         "series": [{"id": 11, "modality": "T1", "supported_for_processing": 1}],

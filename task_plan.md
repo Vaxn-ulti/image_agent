@@ -521,3 +521,29 @@ Next:
 
 - Browser-test the upload path with actual file picker interaction.
 - Convert the manual browser smoke into a reusable smoke script once the preferred test runner is selected.
+
+## 2026-07-07 Upload-To-Agent Interaction Hardening
+
+Objective: make a freshly uploaded NIfTI visible in the ingest inventory and make Agent capability answers use the same workflow eligibility boundary as the upload/workflow APIs.
+
+Status: completed locally as a subtask; overall interaction-intelligence goal remains active.
+
+Completed:
+
+- Added a failing frontend test for standard NIfTI upload returning an `upload_session_id`.
+- Fixed NIfTI upload success to activate the returned upload session and refresh its inventory.
+- Added an accessible `aria-label` to upload inputs so browser tests and assistive tooling can target them reliably.
+- Browser-tested a seeded T1 upload chain through the real Agent page.
+- Found and fixed a backend context bug where Agent fallback answers ignored `series.workflow_eligibility`.
+- Enriched `read_project_context` series with `workflow_eligibility`, matching the production series/inventory contract.
+- Strengthened backend tests so the Agent must mention `t1_deepprep_anat_report` when a T1 series is runnable.
+
+Boundaries:
+
+- The in-app browser tool did not expose a working OS file chooser or file-input injection API in this session, so true file picker automation remains a harness gap.
+- The browser verification used the real upload API plus real Agent UI interaction; the frontend file input behavior is covered by component tests.
+
+Next:
+
+- Build a reusable browser/upload smoke harness with a tool that supports file inputs.
+- Improve the Agent answer wording so Chinese questions receive fully Chinese, less cluttered prose while preserving evidence labels.

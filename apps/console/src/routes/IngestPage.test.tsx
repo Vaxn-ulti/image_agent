@@ -110,4 +110,36 @@ describe('IngestPage', () => {
     expect(api.createUploadSession).not.toHaveBeenCalled();
     expect(await screen.findByText('T1w')).toBeInTheDocument();
   });
+
+  it('shows the completed inventory after a standard NIfTI upload returns a session id', async () => {
+    vi.mocked(api.listSeries)
+      .mockResolvedValueOnce([])
+      .mockResolvedValue(mockSeries);
+    vi.mocked(api.uploadNifti).mockResolvedValue({
+      file: { id: 31, original_name: 'sub-01_T1w.nii.gz' },
+      inventory: { inventory_status: 'completed', total_files: 1 },
+      series: mockSeries[0],
+      status: 'completed',
+      upload_session_id: 44,
+    });
+    vi.mocked(api.getInventory).mockResolvedValue({
+      inventory: {
+        dicom: { conversion_status: 'not_applicable', found_files: 0 },
+        inventory_status: 'completed',
+        post_conversion_counts: { by_modality: { T1: 1 } },
+        total_files: 1,
+      },
+    });
+    renderPage();
+
+    const niftiInput = await screen.findByLabelText('NIfTI upload');
+    const nifti = new File(['nifti-bytes'], 'sub-01_T1w.nii.gz', { type: 'application/gzip' });
+    await userEvent.upload(niftiInput, nifti);
+
+    await waitFor(() => expect(api.uploadNifti).toHaveBeenCalledWith(13, nifti));
+    await waitFor(() => expect(api.getInventory).toHaveBeenCalledWith(13, 44));
+    expect(await screen.findByText('Completed')).toBeInTheDocument();
+    expect(await screen.findByText('T1:')).toBeInTheDocument();
+    expect(await screen.findByText('T1w')).toBeInTheDocument();
+  });
 });

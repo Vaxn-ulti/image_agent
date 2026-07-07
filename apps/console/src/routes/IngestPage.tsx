@@ -57,6 +57,13 @@ export function IngestPage() {
     }
   };
 
+  function activateUploadSession(uploadSessionId: number | undefined | null) {
+    if (!uploadSessionId) return;
+    setActiveSessionId(uploadSessionId);
+    refreshedCompletedSessionRef.current = null;
+    queryClient.invalidateQueries({ queryKey: ['inventory', projectId, uploadSessionId] });
+  }
+
   useEffect(() => {
     if (!activeSessionId || inventory?.inventory_status !== 'completed') return;
     if (refreshedCompletedSessionRef.current === activeSessionId) return;
@@ -67,7 +74,10 @@ export function IngestPage() {
 
   const uploadNifti = useMutation({
     mutationFn: (file: File) => api.uploadNifti(projectId, file),
-    onSuccess: refreshData,
+    onSuccess: (data) => {
+      activateUploadSession(data.upload_session_id);
+      refreshData();
+    },
     onError: (err) => setError(err instanceof Error ? err.message : 'NIfTI upload failed'),
   });
 
@@ -359,7 +369,7 @@ function UploadSlot({ label, description, accept, onUpload, loading }: { label: 
           <div className="text-[10px] text-gray-500 uppercase tracking-tight">{description}</div>
         </div>
       </div>
-      <input type="file" className="sr-only" accept={accept} onChange={(e) => e.target.files?.[0] && onUpload(e.target.files[0])} />
+      <input aria-label={label} type="file" className="sr-only" accept={accept} onChange={(e) => e.target.files?.[0] && onUpload(e.target.files[0])} />
       <span className="text-[10px] font-bold text-[#065F46] opacity-0 group-hover:opacity-100 transition-opacity">CHOOSE FILE</span>
       {loading && <div className="absolute bottom-0 left-0 h-0.5 bg-[#065F46] animate-pulse" style={{ width: '100%' }} />}
     </label>
