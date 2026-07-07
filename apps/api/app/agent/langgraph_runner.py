@@ -136,6 +136,8 @@ class LangGraphAgentRunner(AgentRunner):
         graph.add_node("fixed_workflow_recommendation", self._node_fixed_workflow_recommendation)
         graph.add_node("execution_plan_candidate", self._node_execution_plan_candidate)
         graph.add_node("plan_policy_gate", self._node_plan_policy_gate)
+        graph.add_node("authorization_scope_classifier", self._node_authorization_scope_classifier)
+        graph.add_node("execution_control_boundary", self._node_execution_control_boundary)
         graph.add_node("read_only", self._node_read_only)
         graph.add_node("fixed_workflow", self._node_fixed_workflow)
         graph.add_node("incubation", self._node_incubation)
@@ -171,8 +173,10 @@ class LangGraphAgentRunner(AgentRunner):
         graph.add_edge("capability_matcher", "fixed_workflow_recommendation")
         graph.add_edge("fixed_workflow_recommendation", "execution_plan_candidate")
         graph.add_edge("execution_plan_candidate", "plan_policy_gate")
+        graph.add_edge("plan_policy_gate", "authorization_scope_classifier")
+        graph.add_edge("authorization_scope_classifier", "execution_control_boundary")
         graph.add_conditional_edges(
-            "plan_policy_gate",
+            "execution_control_boundary",
             self._route_lane,
             {
                 READ_ONLY_LANE: "read_only",
@@ -213,6 +217,8 @@ class LangGraphAgentRunner(AgentRunner):
             state.update(self._node_fixed_workflow_recommendation(state))
             state.update(self._node_execution_plan_candidate(state))
             state.update(self._node_plan_policy_gate(state))
+            state.update(self._node_authorization_scope_classifier(state))
+            state.update(self._node_execution_control_boundary(state))
             lane = self._route_lane(state)
             if lane == FIXED_WORKFLOW:
                 state.update(self._node_fixed_workflow(state))
@@ -811,6 +817,89 @@ class LangGraphAgentRunner(AgentRunner):
             ),
         }
 
+    def _node_authorization_scope_classifier(self, state: ImageAgentState) -> dict[str, Any]:
+        candidate = state.get("execution_plan_candidate") or {}
+        gate = state.get("plan_policy_gate") or {}
+        recommendation = state.get("fixed_workflow_recommendation") or {}
+        if gate.get("status") == "passed" and recommendation.get("status") == "recommended":
+            scope = {
+                "status": "authorization_required",
+                "permission_scope": "fixed_mature_workflow",
+                "authorization_status": "pending_human_confirmation",
+                "ttl_seconds": 3600,
+                "task_bound": {
+                    "project_id": candidate.get("project_id"),
+                    "series_id": candidate.get("series_id"),
+                    "workflow_type": candidate.get("workflow_type"),
+                },
+                "production_task_created": False,
+            }
+        elif recommendation.get("status") == "incubation_required":
+            scope = {
+                "status": "sandbox_review_required",
+                "permission_scope": "sandbox_new_tool",
+                "authorization_status": "not_authorized_for_production",
+                "ttl_seconds": None,
+                "task_bound": {},
+                "production_task_created": False,
+            }
+        elif gate.get("status") == "blocked":
+            scope = {
+                "status": "blocked",
+                "permission_scope": "fixed_mature_workflow",
+                "authorization_status": "blocked_before_confirmation",
+                "ttl_seconds": None,
+                "task_bound": {},
+                "production_task_created": False,
+            }
+        else:
+            scope = {
+                "status": "not_applicable",
+                "permission_scope": "read_only_or_observe",
+                "authorization_status": "not_required",
+                "ttl_seconds": None,
+                "task_bound": {},
+                "production_task_created": False,
+            }
+        return {
+            "authorization_scope": scope,
+            "events": self._append_event(
+                state,
+                {
+                    "type": "agent.graph.authorization_scope_classifier",
+                    "status": scope["status"],
+                    "message": "Classified task-bound authorization scope.",
+                    "metadata": scope,
+                },
+            ),
+        }
+
+    def _node_execution_control_boundary(self, state: ImageAgentState) -> dict[str, Any]:
+        scope = state.get("authorization_scope") or {}
+        boundary = {
+            "status": "awaiting_authorization"
+            if scope.get("authorization_status") == "pending_human_confirmation"
+            else scope.get("status") or "not_applicable",
+            "adapter": "create_workflow_task_after_resume"
+            if scope.get("permission_scope") == "fixed_mature_workflow"
+            else "sandbox_review_or_read_only",
+            "task_creation_allowed": False,
+            "requires_resume": scope.get("authorization_status") == "pending_human_confirmation",
+            "production_task_created": False,
+        }
+        return {
+            "execution_control_boundary": boundary,
+            "events": self._append_event(
+                state,
+                {
+                    "type": "agent.graph.execution_control_boundary",
+                    "status": boundary["status"],
+                    "message": "Stopped before execution control plane until authorization is satisfied.",
+                    "metadata": boundary,
+                },
+            ),
+        }
+
     def _node_match_workflow(self, state: ImageAgentState) -> dict[str, Any]:
         decision = state.get("decision") or {}
         workflow_type = str(decision.get("workflow_type") or "")
@@ -1243,17 +1332,42 @@ class LangGraphAgentRunner(AgentRunner):
         annotated = dict(result)
         production_task_created = annotated.get("production_task_created") is True
         lane = gate_state.get("lane")
+        confirmation_gate = gate_state.get("confirmation_gate")
+        permission_scope = (
+            "fixed_mature_workflow"
+            if lane == FIXED_WORKFLOW
+            else "sandbox_new_tool"
+            if lane == INCUBATION_LANE
+            else "unknown"
+        )
+        authorization_status = "human_approved" if confirmation_gate == "fingerprint_verified" else str(confirmation_gate)
+        task_creation_allowed = confirmation_gate == "fingerprint_verified" and lane == FIXED_WORKFLOW
+        authorization_scope = {
+            "status": "approved" if authorization_status == "human_approved" else "blocked",
+            "permission_scope": permission_scope,
+            "authorization_status": authorization_status,
+            "confirmation_gate": confirmation_gate,
+            "production_task_created": production_task_created,
+        }
+        execution_control_boundary = {
+            "status": "task_created" if production_task_created else "ready_to_launch" if task_creation_allowed else "blocked",
+            "adapter": annotated.get("backend_tool") or "create_workflow_task",
+            "task_creation_allowed": task_creation_allowed,
+            "production_task_created": production_task_created,
+        }
         annotated["safe_metadata"] = {
             **(annotated.get("safe_metadata") or {}),
             "agent_engine": "langgraph",
             "graph_runtime": self.graph_runtime,
             "lane": lane,
-            "confirmation_gate": gate_state.get("confirmation_gate"),
+            "confirmation_gate": confirmation_gate,
         }
         annotated["graph_state"] = {
             **(annotated.get("graph_state") or {}),
             "lane": lane,
-            "confirmation_gate": gate_state.get("confirmation_gate"),
+            "confirmation_gate": confirmation_gate,
+            "authorization_scope": authorization_scope,
+            "execution_control_boundary": execution_control_boundary,
             "production_task_created": production_task_created,
         }
         annotated.setdefault("production_task_created", production_task_created)
@@ -1276,6 +1390,8 @@ class LangGraphAgentRunner(AgentRunner):
             "fixed_workflow_recommendation": state.get("fixed_workflow_recommendation"),
             "execution_plan_candidate": state.get("execution_plan_candidate"),
             "plan_policy_gate": state.get("plan_policy_gate"),
+            "authorization_scope": state.get("authorization_scope"),
+            "execution_control_boundary": state.get("execution_control_boundary"),
             "task_planning": state.get("task_planning"),
             "workflow_match": state.get("workflow_match"),
             "preflight": state.get("preflight"),

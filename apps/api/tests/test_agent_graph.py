@@ -1471,6 +1471,11 @@ def test_langgraph_agent_runner_matches_fixed_workflow_from_capability_metadata_
     assert result["graph_state"]["execution_plan_candidate"]["input_manifest"]["series_id"] == 11
     assert result["graph_state"]["execution_plan_candidate"]["container_images"]
     assert result["graph_state"]["plan_policy_gate"]["status"] == "passed"
+    assert result["graph_state"]["authorization_scope"]["permission_scope"] == "fixed_mature_workflow"
+    assert result["graph_state"]["authorization_scope"]["authorization_status"] == "pending_human_confirmation"
+    assert result["graph_state"]["authorization_scope"]["ttl_seconds"] == 3600
+    assert result["graph_state"]["execution_control_boundary"]["task_creation_allowed"] is False
+    assert result["graph_state"]["execution_control_boundary"]["adapter"] == "create_workflow_task_after_resume"
     assert result["production_task_created"] is False
 
 
@@ -1966,6 +1971,10 @@ def test_langgraph_agent_runner_resume_marks_fixed_workflow_graph_gate(tmp_path)
     assert result["safe_metadata"]["agent_engine"] == "langgraph"
     assert result["safe_metadata"]["lane"] == "fixed_workflow"
     assert result["graph_state"]["confirmation_gate"] == "fingerprint_verified"
+    assert result["graph_state"]["authorization_scope"]["authorization_status"] == "human_approved"
+    assert result["graph_state"]["authorization_scope"]["permission_scope"] == "fixed_mature_workflow"
+    assert result["graph_state"]["execution_control_boundary"]["task_creation_allowed"] is True
+    assert result["graph_state"]["execution_control_boundary"]["adapter"] == "create_workflow_task"
     assert result["graph_state"]["production_task_created"] is True
     assert created == [{"id": 99, "series_id": 11, "workflow_type": "t1_deepprep", "status": "queued"}]
 
@@ -2199,6 +2208,8 @@ def test_langgraph_compiled_graph_includes_requirement_completeness_before_task_
     assert "fixed_workflow_recommendation" in graph.nodes
     assert "execution_plan_candidate" in graph.nodes
     assert "plan_policy_gate" in graph.nodes
+    assert "authorization_scope_classifier" in graph.nodes
+    assert "execution_control_boundary" in graph.nodes
     assert graph.conditional_edges["select_skill"][1]["tool_task"] == "requirement_completeness"
     assert graph.conditional_edges["requirement_completeness"][1]["needs_clarification"] == "clarification_interrupt"
     assert (
@@ -2212,7 +2223,9 @@ def test_langgraph_compiled_graph_includes_requirement_completeness_before_task_
     assert graph.edges["capability_matcher"] == "fixed_workflow_recommendation"
     assert graph.edges["fixed_workflow_recommendation"] == "execution_plan_candidate"
     assert graph.edges["execution_plan_candidate"] == "plan_policy_gate"
-    assert graph.conditional_edges["plan_policy_gate"][1]["fixed_workflow"] == "fixed_workflow"
+    assert graph.edges["plan_policy_gate"] == "authorization_scope_classifier"
+    assert graph.edges["authorization_scope_classifier"] == "execution_control_boundary"
+    assert graph.conditional_edges["execution_control_boundary"][1]["fixed_workflow"] == "fixed_workflow"
 
 
 def test_langgraph_agent_runner_clarifies_incomplete_tool_task_before_confirmation(tmp_path, monkeypatch):

@@ -187,3 +187,25 @@
   - GREEN：`python -m pytest apps/api/tests/test_agent_graph.py::test_langgraph_compiled_graph_includes_requirement_completeness_before_task_planning apps/api/tests/test_agent_graph.py::test_langgraph_agent_runner_matches_fixed_workflow_from_capability_metadata_when_planner_omits_type apps/api/tests/test_agent_graph.py::test_langgraph_agent_runner_blocks_unpinned_execution_plan_before_confirmation -q` -> `3 passed`。
   - Graph regression：`python -m pytest apps/api/tests/test_agent_graph.py -q` -> `59 passed`。
 - 本 checkpoint 没有远程 workflow run、没有 API restart、没有生产任务创建、没有远程部署配置变更。
+
+### Checkpoint 8: Target Graph Slice 5 Authorization And Execution Control Boundary
+
+- 按 target graph 实施计划完成第五段代码切片：在 policy gate 之后、fixed workflow confirmation 之前加入：
+  - `authorization_scope_classifier`
+  - `execution_control_boundary`
+- 生产边界：
+  - 初次 graph run 只能到 `pending_human_confirmation`，`task_creation_allowed=false`，不允许创建 production task。
+  - fixed mature workflow 的授权范围明确为 `fixed_mature_workflow`，TTL 固定为 3600 秒，并绑定 project/series/workflow。
+  - resume 时只有 server-side pending confirmation、未过期、fingerprint verified 才标记 `human_approved` 并进入 `create_workflow_task` execution-control adapter。
+  - incubation/sandbox/new tool 不允许通过 fixed workflow confirmation 进入 production task。
+- 代码落点：
+  - `apps/api/app/agent/langgraph_runner.py`：新增 authorization scope / execution boundary nodes、graph/fallback 顺序、public graph_state；增强 resume annotation，暴露 approved 后的 execution-control boundary。
+  - `apps/api/app/agent/state.py`：新增 `authorization_scope` 和 `execution_control_boundary` state fields。
+  - `apps/api/tests/test_agent_graph.py`：新增 graph topology、初次 run pending authorization、resume approved adapter boundary 断言。
+- TDD / verification 记录：
+  - RED：compiled graph test 因缺少 authorization / execution-control nodes 失败。
+  - RED：fixed workflow confirmation graph_state 因缺少 pending authorization / task_creation_allowed=false 失败。
+  - RED：resume approved graph_state 因缺少 human-approved execution-control boundary 失败。
+  - GREEN：`python -m pytest apps/api/tests/test_agent_graph.py::test_langgraph_compiled_graph_includes_requirement_completeness_before_task_planning apps/api/tests/test_agent_graph.py::test_langgraph_agent_runner_matches_fixed_workflow_from_capability_metadata_when_planner_omits_type apps/api/tests/test_agent_graph.py::test_langgraph_agent_runner_resume_marks_fixed_workflow_graph_gate -q` -> `3 passed`。
+  - Graph regression：`python -m pytest apps/api/tests/test_agent_graph.py -q` -> `59 passed`。
+- 本 checkpoint 没有远程 workflow run、没有 API restart、没有未授权生产任务创建、没有远程部署配置变更。
