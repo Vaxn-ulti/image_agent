@@ -23,6 +23,7 @@ from app.workflows.registry import FIXED_WORKFLOW, INCUBATION_LANE, get_workflow
 
 
 READ_ONLY_LANE = "read_only"
+TOOL_TASK_ROUTER_LANE = "tool_task"
 OBSERVE_REPAIR_LANE = "observe_repair"
 TOOLCHAIN_PROPOSAL_CONTRACT_VERSION = "toolchain_proposal.v1"
 
@@ -114,22 +115,33 @@ class LangGraphAgentRunner(AgentRunner):
             return None
 
         graph = StateGraph(ImageAgentState)
-        graph.add_node("load_context", self._node_load_context)
+        graph.add_node("run_intake", self._node_run_intake)
+        graph.add_node("safety_risk_router", self._node_safety_risk_router)
         graph.add_node("classify_intent", self._node_classify_intent)
+        graph.add_node("answer_or_task_router", self._node_answer_or_task_router)
         graph.add_node("retrieve_rag", self._node_retrieve_rag)
         graph.add_node("select_skill", self._node_select_skill)
-        graph.add_node("match_workflow", self._node_match_workflow)
+        graph.add_node("task_planning", self._node_task_planning)
         graph.add_node("read_only", self._node_read_only)
         graph.add_node("fixed_workflow", self._node_fixed_workflow)
         graph.add_node("incubation", self._node_incubation)
         graph.add_node("observe_repair", self._node_observe_repair)
-        graph.set_entry_point("load_context")
-        graph.add_edge("load_context", "classify_intent")
-        graph.add_edge("classify_intent", "retrieve_rag")
+        graph.set_entry_point("run_intake")
+        graph.add_edge("run_intake", "safety_risk_router")
+        graph.add_edge("safety_risk_router", "classify_intent")
+        graph.add_edge("classify_intent", "answer_or_task_router")
+        graph.add_edge("answer_or_task_router", "retrieve_rag")
         graph.add_edge("retrieve_rag", "select_skill")
-        graph.add_edge("select_skill", "match_workflow")
         graph.add_conditional_edges(
-            "match_workflow",
+            "select_skill",
+            self._route_after_skill_selection,
+            {
+                READ_ONLY_LANE: "read_only",
+                TOOL_TASK_ROUTER_LANE: "task_planning",
+            },
+        )
+        graph.add_conditional_edges(
+            "task_planning",
             self._route_lane,
             {
                 READ_ONLY_LANE: "read_only",
@@ -146,25 +158,30 @@ class LangGraphAgentRunner(AgentRunner):
 
     def _run_fallback_graph(self, state: ImageAgentState) -> ImageAgentState:
         for node in (
-            self._node_load_context,
+            self._node_run_intake,
+            self._node_safety_risk_router,
             self._node_classify_intent,
+            self._node_answer_or_task_router,
             self._node_retrieve_rag,
             self._node_select_skill,
-            self._node_match_workflow,
         ):
             state.update(node(state))
-        lane = self._route_lane(state)
-        if lane == FIXED_WORKFLOW:
-            state.update(self._node_fixed_workflow(state))
-        elif lane == INCUBATION_LANE:
-            state.update(self._node_incubation(state))
-        elif lane == OBSERVE_REPAIR_LANE:
-            state.update(self._node_observe_repair(state))
+        if self._route_after_skill_selection(state) == TOOL_TASK_ROUTER_LANE:
+            state.update(self._node_task_planning(state))
+            lane = self._route_lane(state)
+            if lane == FIXED_WORKFLOW:
+                state.update(self._node_fixed_workflow(state))
+            elif lane == INCUBATION_LANE:
+                state.update(self._node_incubation(state))
+            elif lane == OBSERVE_REPAIR_LANE:
+                state.update(self._node_observe_repair(state))
+            else:
+                state.update(self._node_read_only(state))
         else:
             state.update(self._node_read_only(state))
         return state
 
-    def _node_load_context(self, state: ImageAgentState) -> dict[str, Any]:
+    def _node_run_intake(self, state: ImageAgentState) -> dict[str, Any]:
         return {
             "project_id": state.get("project_context", {}).get("project_id"),
             "workflow_registry": state.get("project_context", {}).get("workflows") or [],
@@ -172,14 +189,41 @@ class LangGraphAgentRunner(AgentRunner):
             "events": self._append_event(
                 state,
                 {
-                    "type": "agent.graph.load_context",
+                    "type": "agent.graph.run_intake",
                     "status": "ok",
-                    "message": "Loaded project context.",
+                    "message": "Loaded request and project context.",
                     "metadata": {
                         "project_id": state.get("project_context", {}).get("project_id"),
                         "series_count": len(state.get("project_context", {}).get("series") or []),
                         "task_count": len(state.get("project_context", {}).get("tasks") or []),
                     },
+                },
+            ),
+        }
+
+    def _node_safety_risk_router(self, state: ImageAgentState) -> dict[str, Any]:
+        message = state.get("message", "")
+        lowered = message.lower()
+        risk_flags = []
+        if any(token in lowered for token in ("delete", "remove", "overwrite", "删除", "覆盖")):
+            risk_flags.append("destructive_action_language")
+        if any(token in lowered for token in ("diagnose", "diagnosis", "确诊", "诊断")):
+            risk_flags.append("clinical_diagnostic_language")
+        level = "high" if risk_flags else "low"
+        risk_assessment = {
+            "level": level,
+            "flags": risk_flags,
+            "policy": "non_diagnostic_human_confirmed_execution",
+        }
+        return {
+            "risk_assessment": risk_assessment,
+            "events": self._append_event(
+                state,
+                {
+                    "type": "agent.graph.safety_risk_router",
+                    "status": level,
+                    "message": "Classified request risk before intent routing.",
+                    "metadata": risk_assessment,
                 },
             ),
         }
@@ -205,6 +249,30 @@ class LangGraphAgentRunner(AgentRunner):
                         "action_lane": decision.get("action_lane") or decision.get("lane"),
                         "requires_confirmation": decision.get("requires_confirmation"),
                     },
+                },
+            ),
+        }
+
+    def _node_answer_or_task_router(self, state: ImageAgentState) -> dict[str, Any]:
+        decision = state.get("decision") or {}
+        if self._looks_like_observe_repair(state):
+            router_lane = TOOL_TASK_ROUTER_LANE
+            reason = "task observation request"
+        elif decision.get("intent") == "run_workflow":
+            router_lane = TOOL_TASK_ROUTER_LANE
+            reason = "workflow execution intent"
+        else:
+            router_lane = READ_ONLY_LANE
+            reason = "read-only answer intent"
+        return {
+            "router_lane": router_lane,
+            "events": self._append_event(
+                state,
+                {
+                    "type": "agent.graph.answer_or_task_router",
+                    "status": "ok",
+                    "message": f"Routed request to {router_lane}.",
+                    "metadata": {"router_lane": router_lane, "reason": reason},
                 },
             ),
         }
@@ -247,6 +315,29 @@ class LangGraphAgentRunner(AgentRunner):
                     "status": "ok",
                     "message": f"Selected skill {selected_skill}.",
                     "metadata": {"selected_skill": selected_skill},
+                },
+            ),
+        }
+
+    def _node_task_planning(self, state: ImageAgentState) -> dict[str, Any]:
+        planning = {
+            "mode": "fixed_first",
+            "fixed_workflow_preferred": True,
+            "exploratory_toolchain_requires_fixed_rejection": True,
+            "observe_repair_inside_execution_loop": True,
+        }
+        state_for_match = {**state, "task_planning": planning}
+        update = self._node_match_workflow(state_for_match)
+        return {
+            **update,
+            "task_planning": planning,
+            "events": self._append_event(
+                {**state, "events": update.get("events") or state.get("events") or []},
+                {
+                    "type": "agent.graph.task_planning",
+                    "status": str((update.get("workflow_match") or {}).get("status") or "ok"),
+                    "message": "Planned tool-task path with fixed-workflow-first policy.",
+                    "metadata": planning,
                 },
             ),
         }
@@ -491,7 +582,7 @@ class LangGraphAgentRunner(AgentRunner):
         message = state.get("message", "")
         project_context = self._chat_style_project_context(state)
         if _is_inventory_capability_question(message):
-            return _inventory_capability_reply(project_context)
+            return _inventory_capability_reply(project_context, message=message)
         if _is_result_analysis_question(message):
             recommended_next_step = (
                 (state.get("decision") or {}).get("recommended_next_step")
@@ -595,6 +686,11 @@ class LangGraphAgentRunner(AgentRunner):
             return lane
         return READ_ONLY_LANE
 
+    def _route_after_skill_selection(self, state: ImageAgentState) -> str:
+        if state.get("router_lane") == TOOL_TASK_ROUTER_LANE:
+            return TOOL_TASK_ROUTER_LANE
+        return READ_ONLY_LANE
+
     def _state_to_result(self, state: ImageAgentState) -> dict[str, Any]:
         result = dict(state.get("result") or {})
         result.setdefault("status", "answered")
@@ -662,6 +758,9 @@ class LangGraphAgentRunner(AgentRunner):
         return {
             "intent": state.get("intent"),
             "lane": state.get("lane"),
+            "router_lane": state.get("router_lane"),
+            "risk_assessment": state.get("risk_assessment") or {"level": "unknown", "flags": []},
+            "task_planning": state.get("task_planning"),
             "workflow_match": state.get("workflow_match"),
             "preflight": state.get("preflight"),
             "proposal_id": (state.get("proposal") or {}).get("proposal_id") if state.get("proposal") else None,

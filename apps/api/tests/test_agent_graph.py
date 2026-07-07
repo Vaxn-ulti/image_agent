@@ -863,13 +863,13 @@ def test_langgraph_agent_runner_inventory_answer_is_complete_even_if_model_stops
     assert result["status"] == "answered"
     assert result["safe_metadata"]["lane"] == "read_only"
     assert "confirmation" not in result
-    assert "Uploaded files" in result["answer"]
+    assert "已上传文件" in result["answer"]
     assert "sub-01_T1w.nii.gz" in result["answer"]
-    assert "Detected series" in result["answer"]
+    assert "识别到的序列" in result["answer"]
     assert "T1w_MPRAGE" in result["answer"]
-    assert "Runnable fixed workflows" in result["answer"]
+    assert "可运行的固定工作流" in result["answer"]
     assert "t1_deepprep_anat_report" in result["answer"]
-    assert "No approval request has been created" in result["answer"]
+    assert "没有创建审批请求" in result["answer"]
     assert "Approval required" not in result["answer"]
 
 
@@ -963,10 +963,10 @@ def test_langgraph_agent_runner_explains_uploads_when_user_negates_launch(tmp_pa
     assert result["safe_metadata"]["lane"] == "read_only"
     assert result["production_task_created"] is False
     assert "confirmation" not in result
-    assert "Uploaded files" in result["answer"]
+    assert "已上传文件" in result["answer"]
     assert "sub-01_T1w.nii.gz" in result["answer"]
-    assert "Runnable fixed workflows" in result["answer"]
-    assert "No approval request has been created" in result["answer"]
+    assert "可运行的固定工作流" in result["answer"]
+    assert "没有创建审批请求" in result["answer"]
 
 
 def test_langgraph_agent_runner_treats_negated_chinese_launch_as_read_only(tmp_path):
@@ -1096,12 +1096,13 @@ def test_langgraph_agent_runner_read_only_result_exposes_intent_and_answer(tmp_p
     assert result["intent"] == "answer_question"
     assert result["decision"]["intent"] == "answer_question"
     assert result["answer"] == "final answer"
-    assert [event["type"] for event in result["events"]][:5] == [
-        "agent.graph.load_context",
+    assert [event["type"] for event in result["events"]][:6] == [
+        "agent.graph.run_intake",
+        "agent.graph.safety_risk_router",
         "agent.graph.classify_intent",
+        "agent.graph.answer_or_task_router",
         "agent.graph.retrieve_rag",
         "agent.graph.select_skill",
-        "agent.graph.match_workflow",
     ]
 
 
@@ -1824,3 +1825,48 @@ def test_langgraph_agent_runner_resume_blocks_incubation_with_graph_gate_metadat
     assert result["safe_metadata"]["lane"] == INCUBATION_LANE
     assert result["graph_state"]["confirmation_gate"] == "incubation_blocked"
     assert called is False
+
+
+def test_langgraph_agent_runner_records_hierarchical_router_stages_for_task_request(tmp_path):
+    from app.agent.langgraph_runner import LangGraphAgentRunner
+
+    gateway = FakeGateway(
+        {
+            "intent": "run_workflow",
+            "action_lane": "fixed_workflow",
+            "series_id": 11,
+            "workflow_type": "t1_deepprep_anat_report",
+            "summary": "Prepare T1 workflow",
+        }
+    )
+    context = {
+        "project_id": 7,
+        "series": [{"id": 11, "modality": "T1", "supported_for_processing": 1}],
+        "workflows": [
+            {
+                "type": "t1_deepprep_anat_report",
+                "display_name": "T1 DeepPrep anatomical processing, QC, and report",
+                "capability_summary": "Runs T1 anatomical preprocessing, segmentation, QC, and report generation.",
+                "modality": "T1",
+                "lane": "fixed_workflow",
+                "agent_selectable": True,
+            }
+        ],
+    }
+
+    result = LangGraphAgentRunner(gateway=gateway, rag_root=tmp_path).run(
+        message="请启动 T1 DeepPrep，创建任务前先给我确认卡片",
+        project_context=context,
+    )
+
+    event_types = [event["type"] for event in result["events"]]
+    assert event_types[:4] == [
+        "agent.graph.run_intake",
+        "agent.graph.safety_risk_router",
+        "agent.graph.classify_intent",
+        "agent.graph.answer_or_task_router",
+    ]
+    assert "agent.graph.task_planning" in event_types
+    assert result["graph_state"]["router_lane"] == "tool_task"
+    assert result["graph_state"]["risk_assessment"]["level"] in {"low", "medium", "high"}
+    assert result["graph_state"]["task_planning"]["mode"] == "fixed_first"

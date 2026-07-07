@@ -152,7 +152,11 @@ def _workflow_id(workflow: dict) -> str:
     return str(workflow.get("workflow_type") or workflow.get("type") or "unknown_workflow")
 
 
-def _inventory_capability_reply(project_context: dict) -> str:
+def _looks_chinese(message: str) -> bool:
+    return any("\u4e00" <= char <= "\u9fff" for char in str(message or ""))
+
+
+def _inventory_capability_reply(project_context: dict, *, message: str = "") -> str:
     files = project_context.get("project_files") or []
     series = project_context.get("series") or []
     modalities = {str(item.get("modality") or "").upper() for item in series if item.get("modality")}
@@ -188,6 +192,16 @@ def _inventory_capability_reply(project_context: dict) -> str:
         )
         for workflow in workflows[:8]
     ] or ["No fixed workflow is currently runnable from the registered series."]
+    if _looks_chinese(message):
+        return (
+            "已上传文件\n"
+            + _line_items(file_items)
+            + "\n\n识别到的序列\n"
+            + _line_items(series_items)
+            + "\n\n可运行的固定工作流\n"
+            + _line_items(workflow_items)
+            + "\n\n没有创建审批请求。请告诉我要准备哪个工作流和哪条序列，我会先生成确认卡片供你审核。"
+        )
     return (
         "Uploaded files\n"
         + _line_items(file_items)
@@ -352,7 +366,7 @@ def handle_legacy_chat(req, *, repo_root: Path, projects_root: Path, workflows: 
         workflows=workflows,
     )
     if _is_inventory_capability_question(req.message):
-        reply = _inventory_capability_reply(project_context)
+        reply = _inventory_capability_reply(project_context, message=req.message)
         _persist_chat_messages(req.project_id, req.message, reply)
         return build_chat_compatibility_response(
             {

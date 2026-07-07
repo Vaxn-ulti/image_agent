@@ -82,6 +82,56 @@ CREATE TABLE IF NOT EXISTS tasks (
   FOREIGN KEY(project_id) REFERENCES projects(id),
   FOREIGN KEY(series_id) REFERENCES imaging_series(id)
 );
+CREATE TABLE IF NOT EXISTS execution_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_id INTEGER NOT NULL UNIQUE,
+  project_id INTEGER NOT NULL,
+  series_id INTEGER NOT NULL,
+  workflow_type TEXT NOT NULL,
+  runtime_workflow_type TEXT NOT NULL,
+  status TEXT NOT NULL,
+  queue TEXT,
+  celery_task_id TEXT,
+  approved_plan_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  started_at TEXT,
+  finished_at TEXT,
+  FOREIGN KEY(task_id) REFERENCES tasks(id),
+  FOREIGN KEY(project_id) REFERENCES projects(id),
+  FOREIGN KEY(series_id) REFERENCES imaging_series(id)
+);
+CREATE TABLE IF NOT EXISTS execution_attempts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id INTEGER NOT NULL,
+  task_id INTEGER NOT NULL,
+  attempt_no INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  queue TEXT,
+  celery_task_id TEXT,
+  worker_id TEXT,
+  lease_expires_at TEXT,
+  heartbeat_at TEXT,
+  error_message TEXT,
+  created_at TEXT NOT NULL,
+  started_at TEXT,
+  finished_at TEXT,
+  FOREIGN KEY(run_id) REFERENCES execution_runs(id),
+  FOREIGN KEY(task_id) REFERENCES tasks(id)
+);
+CREATE TABLE IF NOT EXISTS execution_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id INTEGER,
+  task_id INTEGER NOT NULL,
+  attempt_id INTEGER,
+  event_type TEXT NOT NULL,
+  status TEXT NOT NULL,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(run_id) REFERENCES execution_runs(id),
+  FOREIGN KEY(task_id) REFERENCES tasks(id),
+  FOREIGN KEY(attempt_id) REFERENCES execution_attempts(id)
+);
 CREATE TABLE IF NOT EXISTS outputs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   task_id INTEGER NOT NULL,

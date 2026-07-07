@@ -1,5 +1,37 @@
 # Image Agent Findings
 
+## 2026-07-05 Production Target Architecture Decisions
+
+- The product target is a production-grade, single-machine private neuroimaging Agent platform with project-level isolation, not a toy demo and not an initial multi-tenant SaaS.
+- The architecture must not be framed as T1/BOLD/DWI-only. T1, BOLD/fMRI, and DWI are initial validation workflows; the target routing layer should be open to all mature brain imaging sequences and processing tasks with auditable software/toolchains.
+- The target graph should use `Open Neuroimaging Task Router` and `Curated Workflow Registry` language rather than modality-limited routing language.
+- Checkpointing is a layered architecture:
+  - LangGraph checkpointing is for graph state, interrupts, and resume.
+  - Execution DB is for Celery/worker/Docker state.
+  - Authorization ledger is for confirmation, fingerprint, project scope, and TTL.
+  - Artifact provenance is for result files, logs, QC, checksums, and software versions.
+  - Evaluation records are for paper/product metrics.
+- Runtime policy is a separate layer from checkpointing. Checkpoints record what happened; policy decides whether the system may continue.
+- Production policy should include built-in safety defaults, policy DB, per-run policy snapshots, effective policy resolution, TTL, loop budgets, retry budgets, repeated-failure cutoff, resource limits, and filesystem/network scope.
+- The first production deployment model is single-machine/private with local operator assumptions. Do not add complex RBAC now; keep project boundary, scoped authorization, audit logs, input manifests, and project-scoped artifacts.
+- Recovery should be evidence-based: attempt lineage, evidence collection, failure classification, recovery checkpoint, repair advisor, retry budget gate, and one-click safe retry only when no permissions/tools/data scope change.
+
+## 2026-07-05 Intent Recognition Planning Scope
+
+- The next requirements phase should focus on the intent recognition module.
+- The module should be designed as a hierarchical router rather than a single LLM classification call.
+- Expected production concerns include deterministic rule dispatch, structured LLM fallback, confidence scoring, clarification, refusal/blocked states, repeated-failure loop cutoff, evaluation sets, telemetry, and stable contracts for downstream graph nodes.
+- Intent router decision 1: the top-level route is strictly two-way, `Answer` vs `Tool Task`, matching the target graph. Subtypes such as result explanation, system help, observe/repair, data management, exploratory tools, and unsafe/blocked requests must live inside the relevant subgraph rather than becoming first-level routes.
+- Intent router decision 2: the `Answer / RAG Subgraph` uses five read-only answer subtypes: `project_status_answer`, `rag_knowledge_answer`, `result_explanation`, `system_help`, and `non_diagnostic_boundary`.
+- Intent router decision 3: the `Tool Task` branch uses six task subtypes: `fixed_workflow_request`, `data_preparation_task`, `observe_repair_task`, `exploratory_tool_request`, `artifact_generation_task`, and `blocked_or_unsafe_task`.
+- Intent router decision 4: intent recognition uses rule-first routing before LLM classification: `Rule Guard -> Context Grounding -> LLM Structured Intent -> Confidence Gate -> Clarification/Route`.
+- Intent router decision 5: confidence gating uses `>=0.85` to proceed, `0.60-0.85` to recommend with confirmation/clarification, and `<0.60` to require clarification. Strong clarification conditions override confidence for ambiguous data scope, multiple candidate series/workflows, destructive actions, non-fixed real execution, diagnosis-like requests, and vague "process this" requests.
+- Intent router decision 6: clarification uses `max_clarification_rounds=3`, option-first prompts with free-text supplementation, and a `clarification_exhausted` safe terminal state when required execution details remain missing.
+- Intent router decision 7: project context may be used to recommend and preselect candidate series/workflows, but it must not auto-authorize execution. Any auto-selected candidate must be explicitly shown in confirmation with data scope, workflow, expected outputs, and risks.
+- Intent router decision 8: safety/rule guard recognizes seven blocking or downgrade classes: diagnostic conclusion requests, destructive delete/overwrite/clear requests, out-of-project path access, unsandboxed new-tool real execution, network-scope expansion, secret/license/token leakage, and ambiguous long-running broad data scope. These should route to non-diagnostic answer, blocked task, sandbox/authorization, clarification, or refusal as appropriate.
+- Intent router decision 9: intent recognition loop budget defaults to `max_tool_calls_per_intent_run=6`, `max_registry_queries=3`, `max_rag_queries=3`, `max_project_context_reads=2`, `same_tool_same_args_failure_limit=2`, and `same_error_signature_limit=2`. Exhaustion returns `intent_resolution_failed` with a safe clarification or manual-review next step.
+- Intent router decision 10: intent recognition acceptance targets are production/paper oriented: top-level `Answer` vs `Tool Task` accuracy `>=95%`, answer subtype accuracy `>=90%`, tool-task subtype accuracy `>=88%`, clarification recall `>=95%`, high-risk block recall `>=98%`, fixed-workflow recommendation Top-1 `>=85%`, Top-3 `>=95%`, real-task misfire rate `<1%`, non-fixed real-execution misfire `0%`, and repeated-failure cutoff success `>=95%`, evaluated on at least 100-150 mostly Chinese realistic requests.
+
 ## 2026-06-09 Repository Setup
 
 - The Image Agent Git repository is now the workspace root: `C:\Users\A\Documents\New project 2`.

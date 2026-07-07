@@ -1,5 +1,18 @@
 # Image Agent Progress
 
+## 2026-07-05
+
+- Recorded the current production target architecture direction for Image Agent:
+  - single-machine private production deployment;
+  - project-level isolation without complex first-version RBAC;
+  - open neuroimaging sequence/task coverage beyond T1/BOLD/DWI;
+  - layered state/checkpoint/provenance storage;
+  - production runtime policy layer;
+  - loop control, retry budgets, authorization TTL, and repeated-failure cutoff;
+  - evidence-based recovery and one-click safe retry.
+- Next user-facing step: ask 10 sequential engineering requirements questions for the intent recognition module before implementation.
+- Completed the 10-question intent recognition requirements pass. Decisions now cover strict two-way top-level routing, answer/task subtypes, rule-first routing, confidence thresholds, clarification limits, context-based candidate recommendation, safety downgrade/block rules, loop budgets, repeated-failure cutoff, and production/paper-oriented acceptance metrics.
+
 ## 2026-06-09
 
 - Established the long-running goal in Codex for Image Agent product maturity.

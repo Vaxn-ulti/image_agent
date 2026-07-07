@@ -11,7 +11,11 @@ from app.db.database import connect, now_iso
 from app.db.queries import fetch_rows
 from app.imaging.dwi_sidecars import dwi_has_required_sidecars
 from app.imaging.series_records import parse_series_row
-from app.services.background import submit_background
+from app.execution.contracts import ApprovedExecutionPlan
+from app.execution.queueing import resource_for_workflow
+from app.execution.records import record_execution_queued, record_plan_approved
+from app.execution.task_executor import CeleryTaskExecutor, LocalThreadTaskExecutor
+from app.services.background import submit_background  # Backward-compatible monkeypatch seam for legacy tests.
 from app.services.project_service import require_project
 from app.services.runtime_overrides import main_patch_attr, main_projects_root
 from app.workflows.deepprep import run_mock_deepprep
@@ -46,6 +50,16 @@ def _projects_root() -> Path:
 
 def _production_mode() -> bool:
     return os.environ.get("IMAGE_AGENT_ENV", "").strip().lower() in {"prod", "production"}
+
+
+def get_task_executor() -> CeleryTaskExecutor | LocalThreadTaskExecutor:
+    if os.environ.get("IMAGE_AGENT_EXECUTOR", "").strip().lower() == "thread":
+        return LocalThreadTaskExecutor()
+    try:
+        import celery  # noqa: F401
+    except ImportError:
+        return LocalThreadTaskExecutor()
+    return CeleryTaskExecutor()
 
 
 def public_task(task):
@@ -196,12 +210,24 @@ def create_series_task(series_id, req, *, confirmed_agent_gate: bool = False):
         final_log = _projects_root() / str(project_id) / "logs" / f"{task_id}.log"
         conn.execute("UPDATE tasks SET log_path=? WHERE id=?", (str(final_log), task_id))
         task = dict(conn.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone())
-    if runtime_workflow_type == "t1_deepprep_mock":
-        runner = main_patch_attr("run_mock_deepprep", run_mock_deepprep)
-        submit_background(runner, task_id)
-    else:
-        runner = main_patch_attr("run_pipeline_task", run_pipeline_task)
-        submit_background(runner, task_id, req.qsiprep_task_id)
+    plan = ApprovedExecutionPlan(
+        project_id=int(project_id),
+        series_id=int(series_id),
+        task_id=int(task_id),
+        workflow_type=str(canonical_workflow_type),
+        runtime_workflow_type=str(runtime_workflow_type),
+        resource=resource_for_workflow(
+            workflow_type=str(canonical_workflow_type),
+            runtime_workflow_type=str(runtime_workflow_type),
+        ),
+        qsiprep_task_id=req.qsiprep_task_id,
+        approved_by="human",
+        confirmation_id="agent_confirmed_gate" if confirmed_agent_gate else "direct_api_run",
+        confirmation_fingerprint="agent_confirmed_gate" if confirmed_agent_gate else "direct_api_run_fingerprint",
+    )
+    record_plan_approved(plan)
+    handle = get_task_executor().submit(plan)
+    record_execution_queued(plan, handle=handle)
     return task
 
 

@@ -266,3 +266,38 @@ Continue developing Image Agent until the agent product is mature and stable eno
 | Error | Attempt | Resolution |
 | --- | --- | --- |
 | BMAD/subagent unavailable and no longer aligned with current goal wording. | Spawned a Workflow Gate Reviewer explorer (`019eda3f-4357-7d40-b9a8-f027f6b32387`), which returned a 503 from the local responses service. The active objective was then updated to explicitly not use BMAD-METHOD for multi-subagent coordination. | Closed the failed subagent and continued locally with TDD on the fixed-workflow task boundary. |
+
+## 2026-07-05 Production Target Architecture Planning
+
+Current product direction:
+
+- Image Agent is a single-machine, private, production-grade neuroimaging Agent system, not a demo.
+- The target scope is not limited to T1, BOLD, or DWI. These are first validation scenarios only. The architecture should cover all brain imaging sequences and processing tasks that have mature, documented, auditable software/toolchains.
+- The target graph is registry-first, policy-gated, checkpointed, Celery-backed, and project-isolated.
+- The target graph uses `Open Neuroimaging Task Router` and `Curated Workflow Registry` rather than modality-limited routing.
+- Checkpointing is layered:
+  - `LangGraph Checkpointer` for graph state, thread state, interrupt, and resume.
+  - `Execution State DB` for execution runs, attempts, heartbeat, and events.
+  - `Authorization & Audit Ledger` for confirmation, fingerprint, project scope, TTL, and local operator evidence.
+  - `Artifact & Result Provenance Store` for manifest, checksum, logs, QC, and software provenance.
+  - `Evaluation Records` for benchmark metrics, traces, and failure cases.
+- Runtime policy is separate from checkpointing:
+  - checkpoints record what happened;
+  - policy decides whether the system may continue.
+- Production runtime policy should include built-in safety defaults, policy DB, per-run policy snapshots, effective policy resolution, authorization TTL, loop control, retry budget, repeated-failure cutoff, resource budget, and network/filesystem scope.
+- Deployment direction:
+  - single-machine private deployment first;
+  - no complex multi-user RBAC in the first production design;
+  - keep project-level isolation, task-level authorization, execution audit, policy snapshot, data scope control, and artifact provenance;
+  - use project-scoped storage and input manifests so workers do not receive unconstrained filesystem access.
+- Recovery design:
+  - failures should produce attempt lineage, evidence collection, failure classification, recovery checkpoint, repair advice, retry budget decision, and final failure report when needed;
+  - fixed mature workflows may expose one-click safe retry, but should not silently auto-rerun long tasks;
+  - non-fixed real execution should not retry silently;
+  - changing tools, images, network, write scope, data scope, or core workflow parameters must re-enter authorization.
+
+Next planning focus:
+
+- Engineer the intent recognition module as a production-grade subsystem.
+- Start with requirements elicitation before code changes.
+- Resolve hierarchical intent routing, rule-first dispatch, LLM structured understanding, confidence thresholds, clarification behavior, loop limits, observability, evaluation metrics, and stable downstream contracts.
