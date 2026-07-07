@@ -627,8 +627,14 @@ describe('api client', () => {
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
-            reply: 'Legacy evidence under C:/Users/A/private/task.log',
-            tool_invocations: [{ result: { raw_path: '/home/yyf/project/image_agent/private', secret: 'sk-test-secret' }, status: 'ok', tool: 'legacy' }],
+            agent_run_id: 'agent_run_redaction',
+            answer: 'Agent evidence under C:/Users/A/private/task.log',
+            contract_version: 'agent_run_lookup.v1',
+            events: [],
+            retrieved_sources: [],
+            safe_metadata: { secret: 'sk-test-secret' },
+            status: 'answered',
+            tool_invocations: [{ result: { raw_path: '/home/yyf/project/image_agent/private', secret: 'sk-test-secret' }, status: 'ok', tool: 'agent' }],
           }),
           { status: 200 },
         ),
@@ -641,8 +647,8 @@ describe('api client', () => {
     };
 
     const resumed = await api.resumeAgent('thread-abc', true, confirmation);
-    const chat = await api.chat(13, 'Fallback status');
-    const serialized = JSON.stringify({ chat, resumed });
+    const inspected = await api.getAgentRun('agent_run_redaction');
+    const serialized = JSON.stringify({ inspected, resumed });
 
     expect(serialized).toContain('[redacted-host-path]');
     expect(serialized).toContain('[redacted-secret]');

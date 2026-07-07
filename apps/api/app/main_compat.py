@@ -4,7 +4,6 @@ import os
 from pathlib import Path
 from types import ModuleType
 
-from app.agent.deepseek import DeepSeekUnavailable, complete_chat
 from app.agent.graph import AgentRunner
 from app.agent.model_gateway import ModelGateway, ModelGatewayError
 from app.agent.rag_index import build_local_rag_index, local_rag_index_status
@@ -21,7 +20,6 @@ from app.schemas import (
     AgentRunRequest,
     BoldDescriptiveReviewRequest,
     BoldGroupAnalysisRequest,
-    ChatRequest,
     LoginRequest,
     ProjectCreate,
     RagQueryRequest,
@@ -60,8 +58,6 @@ def install_main_compat_exports(module: ModuleType) -> None:
         "ALLOWED_WORKFLOWS": allowed_runtime_workflows(),
         "BoldDescriptiveReviewRequest": BoldDescriptiveReviewRequest,
         "BoldGroupAnalysisRequest": BoldGroupAnalysisRequest,
-        "ChatRequest": ChatRequest,
-        "DeepSeekUnavailable": DeepSeekUnavailable,
         "LoginRequest": LoginRequest,
         "ModelGateway": ModelGateway,
         "ModelGatewayError": ModelGatewayError,
@@ -76,7 +72,6 @@ def install_main_compat_exports(module: ModuleType) -> None:
         "build_local_rag_index": build_local_rag_index,
         "build_rag_response": build_rag_response,
         "check_scientific_report_output": check_scientific_report_output,
-        "complete_chat": complete_chat,
         "create_series_task": task_service.create_series_task,
         "get_outputs": result_service.get_outputs,
         "get_result_summary": result_service.get_result_summary,

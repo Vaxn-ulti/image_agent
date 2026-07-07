@@ -47,7 +47,7 @@ PROVIDER_PROFILES: dict[str, dict[str, Any]] = {
     },
     "deepseek": {
         "base_url": "https://api.deepseek.com",
-        "model": "deepseek-chat",
+        "model": "deepseek-v4-pro",
         "wire_api": "chat_completions",
         "api_key_env": ["DEEPSEEK_API_KEY", "OPENAI_API_KEY"],
         "base_url_env": ["DEEPSEEK_BASE_URL", "OPENAI_BASE_URL"],

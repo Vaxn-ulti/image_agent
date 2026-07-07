@@ -1,5 +1,5 @@
 from app.agent import rag_orchestration
-from app.agent.deepseek import SYSTEM_PROMPT
+from app.agent.model_gateway import ModelConfig
 
 
 def test_agent_grounding_policy_prioritizes_backend_records_over_rag():
@@ -19,11 +19,19 @@ def test_agent_dependency_status_reports_langgraph_and_llamaindex_keys():
     assert "available" in status["llama_index"]
 
 
-def test_deepseek_system_prompt_matches_fixed_workflow_support():
-    assert "BOLD/fMRI DeepPrep preprocessing" in SYSTEM_PROMPT
-    assert "ALFF" in SYSTEM_PROMPT
-    assert "dwi_fast_gpu_dti" in SYSTEM_PROMPT
-    assert "Backend DB task/output records outrank retrieved documents" in SYSTEM_PROMPT
+def test_deepseek_model_gateway_profile_uses_current_chat_completions(monkeypatch):
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_PROVIDER", "deepseek")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_API_KEY", "sk-test-redacted")
+    monkeypatch.delenv("IMAGE_AGENT_MODEL_BASE_URL", raising=False)
+    monkeypatch.delenv("IMAGE_AGENT_MODEL_NAME", raising=False)
+    monkeypatch.delenv("IMAGE_AGENT_MODEL_WIRE_API", raising=False)
+
+    config = ModelConfig.from_env()
+
+    assert config.provider_profile == "deepseek"
+    assert config.base_url == "https://api.deepseek.com"
+    assert config.model == "deepseek-v4-pro"
+    assert config.wire_api == "chat_completions"
 
 
 def test_build_rag_response_answers_dwi_workflow_capability_from_workflow_doc(tmp_path):

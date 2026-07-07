@@ -1719,8 +1719,6 @@ def test_full_t1_mock_flow(tmp_path, monkeypatch):
         for artifact in manifest['artifacts']
     )
     assert 'completed' in client.get(f"/tasks/{task['id']}/logs").json()['text'].lower()
-    chat = client.post('/chat', json={'project_id': project['id'], 'message': 'task status'}).json()
-    assert 'Tasks:' in chat['reply']
 
 
 def test_task_status_responses_omit_backend_log_path(tmp_path, monkeypatch):
@@ -2182,34 +2180,8 @@ def test_mixed_dataset_ingest_keeps_nifti_inventory_when_dcm2niix_missing(tmp_pa
     assert inventory['post_conversion_counts']['by_modality']['T1'] == 1
 
 
-def test_deepseek_chat_provider_can_be_used(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
-    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
-    monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
-    from app.db import database
-    import app.main as main
-    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
 
-    def fake_complete_chat(message, context):
-        assert message == '帮我解释当前项目'
-        assert context['project_id'] is not None
-        return 'DeepSeek response'
-
-    class FailingModelGateway:
-        def complete_text(self, messages, *, purpose):
-            raise main.ModelGatewayError("OpenAI gateway intentionally unavailable in fallback test")
-
-    monkeypatch.setattr(main, 'ModelGateway', lambda: FailingModelGateway())
-    monkeypatch.setattr(main, 'complete_chat', fake_complete_chat)
-    database.init_db()
-    client = TestClient(app)
-    project = client.post('/projects', json={'name': 'P-chat'}).json()
-    res = client.post('/chat', json={'project_id': project['id'], 'message': '帮我解释当前项目'}).json()
-    assert res['provider'] == 'deepseek'
-    assert res['reply'] == 'DeepSeek response'
-
-
-def test_chat_status_uses_requested_task_ids_beyond_recent_limit(tmp_path, monkeypatch):
+def test_legacy_chat_endpoint_is_removed(tmp_path, monkeypatch):
     monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
     monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
     monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
@@ -2218,161 +2190,9 @@ def test_chat_status_uses_requested_task_ids_beyond_recent_limit(tmp_path, monke
 
     database.init_db()
     client = TestClient(app)
-    project = client.post('/projects', json={'name': 'P-chat-status'}).json()
-    with database.connect() as conn:
-        for task_id in range(41, 75):
-            conn.execute(
-                "INSERT INTO tasks(id, project_id, series_id, workflow_type, status, progress, log_path, created_at) VALUES(?,?,?,?,?,?,?,?)",
-                (
-                    task_id,
-                    project['id'],
-                    1,
-                    't1_deepprep' if task_id == 41 else 'older_workflow',
-                    'completed',
-                    100,
-                    str(tmp_path / f'{task_id}.log'),
-                    f'2026-05-01T00:{task_id:02d}:00+00:00',
-                ),
-            )
-        for task_id, workflow in ((111, 'bold_second_level'), (114, 'dwi_fast_gpu_dti')):
-            conn.execute(
-                "INSERT INTO tasks(id, project_id, series_id, workflow_type, status, progress, log_path, created_at) VALUES(?,?,?,?,?,?,?,?)",
-                (task_id, project['id'], 1, workflow, 'completed', 100, str(tmp_path / f'{task_id}.log'), '2026-05-02T00:00:00+00:00'),
-            )
+    result = client.post('/chat', json={'project_id': None, 'message': 'hello'})
 
-    res = client.post('/chat', json={'project_id': project['id'], 'message': '查看任务41、111、114的状态，并建议下一步'}).json()
-
-    assert res['provider'] == 'rules'
-    assert res['intent'] == 'status'
-    assert '#41 t1_deepprep completed 100%' in res['reply']
-    assert '#111 bold_second_level completed 100%' in res['reply']
-    assert '#114 dwi_fast_gpu_dti completed 100%' in res['reply']
-    assert res['recommended_next_step']
-    assert res['tool_invocations']
-
-
-def test_chat_inventory_capability_question_returns_full_read_only_answer(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
-    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
-    monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
-    from app.db import database
-    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
-
-    database.init_db()
-    client = TestClient(app)
-    project = client.post('/projects', json={'name': 'P-chat-inventory'}).json()
-    with database.connect() as conn:
-        conn.execute(
-            "INSERT INTO files(id, project_id, original_name, storage_path, file_type, size, sha256, created_at) VALUES(?,?,?,?,?,?,?,?)",
-            (51, project['id'], 'sub-01_T1w.nii.gz', str(tmp_path / 'sub-01_T1w.nii.gz'), 'NIFTI', 1024, 'sha-t1', database.now_iso()),
-        )
-        conn.execute(
-            "INSERT INTO imaging_series(id, project_id, file_id, sequence_label, supported_for_processing, modality, format, confidence, metadata_json, status, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-            (61, project['id'], 51, 'T1w_MPRAGE', 1, 'T1', 'NIFTI', 0.98, '{}', 'ready', database.now_iso()),
-        )
-
-    payload = client.post(
-        '/chat',
-        json={'project_id': project['id'], 'message': '\u6211\u4e0a\u4f20\u4e86\u4ec0\u4e48\u6587\u4ef6\uff0c\u53ef\u4ee5\u8dd1\u4ec0\u4e48\u4efb\u52a1'},
-    ).json()
-
-    assert payload['provider'] == 'rules'
-    assert payload['intent'] == 'inventory_capability'
-    assert 'Uploaded files' in payload['reply']
-    assert 'sub-01_T1w.nii.gz' in payload['reply']
-    assert 'Detected series' in payload['reply']
-    assert 'Runnable fixed workflows' in payload['reply']
-    assert 't1_deepprep_anat_report' in payload['reply']
-    assert 'No approval request has been created' in payload['reply']
-    assert 'Approval required' not in payload['reply']
-
-
-def test_chat_result_analysis_includes_observations_outputs_and_reports(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
-    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
-    monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
-    from app.db import database
-    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
-
-    database.init_db()
-    client = TestClient(app)
-    project = client.post('/projects', json={'name': 'P-chat-results'}).json()
-    output_dir = tmp_path / 'projects' / str(project['id']) / 'derivatives' / '118' / 'output'
-    summary_dir = output_dir / 'summary'
-    summary_dir.mkdir(parents=True)
-    summary_path = summary_dir / 't1_result_summary.json'
-    summary_path.write_text(json.dumps({
-        'task_id': 118,
-        'workflow_type': 't1_deepprep_anat_report',
-        'modality': 'T1',
-        'outputs': {
-            'reports': [
-                {'relative_path': 'reports/index.html', 'content_type': 'text/html'},
-                {'relative_path': 'reports/t1_brain_measures_overview.png', 'content_type': 'image/png'},
-            ],
-            'qc': [
-                {'relative_path': 'QC/sub-01/figures/sub-01_desc-volparc_T1w.svg', 'content_type': 'image/svg+xml'},
-            ],
-        },
-    }), encoding='utf-8')
-    with database.connect() as conn:
-        conn.execute(
-            "INSERT INTO tasks(id, project_id, series_id, workflow_type, status, progress, log_path, created_at, finished_at) VALUES(?,?,?,?,?,?,?,?,?)",
-            (118, project['id'], 1, 't1_deepprep_anat_report', 'completed', 100, str(tmp_path / '118.log'), database.now_iso(), database.now_iso()),
-        )
-        conn.execute(
-            "INSERT INTO outputs(task_id, output_type, path, preview_path, metadata_json, created_at) VALUES(?,?,?,?,?,?)",
-            (118, 'json', str(summary_path), None, json.dumps({'kind': 'result_summary'}), database.now_iso()),
-        )
-
-    payload = client.post(
-        '/chat',
-        json={'project_id': project['id'], 'message': 'analyze results for task 118 and explain the reports'},
-    ).json()
-
-    assert payload['provider'] == 'rules'
-    assert payload['intent'] == 'status'
-    assert 'Observation summary' in payload['reply']
-    assert 'task 118' in payload['reply']
-    assert 'completed' in payload['reply']
-    assert 'Result artifacts' in payload['reply']
-    assert 'reports/index.html' in payload['reply']
-    assert 'QC observations' in payload['reply']
-    assert 'No workflow was launched' in payload['reply']
-
-
-def test_chat_mentions_real_bold_metric_outputs_after_implementation(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
-    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
-    monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
-    from app.db import database
-    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
-
-    database.init_db()
-    client = TestClient(app)
-    reply = client.post('/chat', json={'message': 'Can you compute ALFF and seed connectivity?'}).json()['reply']
-    assert 'ALFF' in reply
-    assert 'seed-to-ROI' in reply
-    assert 'fixed-coordinate spherical seed' in reply
-
-
-def test_chat_exposes_intent_and_next_step_hints(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, 'DATA_ROOT', tmp_path)
-    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'app.db')
-    monkeypatch.setattr(config, 'PROJECTS_ROOT', tmp_path / 'projects')
-    from app.db import database
-    monkeypatch.setattr(database, 'DB_PATH', tmp_path / 'app.db')
-
-    database.init_db()
-    client = TestClient(app)
-    payload = client.post('/chat', json={'message': 'show me task status and next step'}).json()
-    assert payload['intent'] in {'status', 'next_step'}
-    assert payload['recommended_next_step']
-    assert payload['tool_chain_hint']
-    assert any(item['tool'] == 'inspect_task_status' for item in payload['tool_invocations'])
-    assert payload['rag_mode'] in {'langgraph', 'fallback'}
-
-
+    assert result.status_code == 404
 
 def test_eddy_cuda_detection_accepts_versioned_binary(monkeypatch):
     from app.workflows import pipeline

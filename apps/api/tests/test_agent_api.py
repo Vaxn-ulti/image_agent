@@ -1251,10 +1251,7 @@ def test_agent_api_openapi_declares_stable_response_contracts():
         schema["paths"]["/projects/{project_id}/agent-runs"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
         == "#/components/schemas/ProjectAgentRunHistoryResponse"
     )
-    assert (
-        schema["paths"]["/chat"]["post"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
-        == "#/components/schemas/ChatCompatibilityResponse"
-    )
+    assert "/chat" not in schema["paths"]
     for name in ("AgentRunRequest", "AgentResumeRequest"):
         assert schema["components"]["schemas"][name]["additionalProperties"] is False
 
@@ -1335,11 +1332,11 @@ def test_agent_resume_rejects_unknown_confirmation_fields_with_stable_error(tmp_
 def test_agent_request_validation_handler_preserves_default_errors_for_other_routes():
     from app.main import app
 
-    result = TestClient(app).post("/chat", json={"project_id": 1})
+    result = TestClient(app).post("/projects", json={"description": "missing name"})
 
     assert result.status_code == 422
     assert isinstance(result.json()["detail"], list)
-    assert result.json()["detail"][0]["loc"][-1] == "message"
+    assert result.json()["detail"][0]["loc"][-1] == "name"
 
 
 def test_agent_run_contract_normalizes_unknown_runner_status(tmp_path, monkeypatch):
@@ -2195,40 +2192,13 @@ def test_project_agent_runs_empty_history_returns_empty_list(tmp_path, monkeypat
     }
 
 
-def test_legacy_chat_prefers_openai_model_gateway_for_freeform_answers(tmp_path, monkeypatch):
-    from app.core import config
-    from app.db import database
-    from app import main
+
+def test_legacy_chat_endpoint_is_removed_from_runtime():
     from app.main import app
 
-    monkeypatch.setattr(config, "DATA_ROOT", tmp_path)
-    monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
-    monkeypatch.setattr(config, "PROJECTS_ROOT", tmp_path / "projects")
-    monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
+    result = TestClient(app).post("/chat", json={"project_id": 1, "message": "hello"})
 
-    class FakeModelGateway:
-        def complete_text(self, messages, *, purpose):
-            assert purpose == "chat_answer"
-            assert any("Backend project context JSON" in item["content"] for item in messages if item["role"] == "user")
-            return "OpenAI SDK chat response"
-
-    def fail_deepseek(_message, _context):
-        raise AssertionError("DeepSeek fallback should not be called when OpenAI gateway answers")
-
-    monkeypatch.setattr(main, "ModelGateway", lambda: FakeModelGateway())
-    monkeypatch.setattr(main, "complete_chat", fail_deepseek)
-
-    database.init_db()
-    client = TestClient(app)
-    project = client.post("/projects", json={"name": "P-openai-chat"}).json()
-    result = client.post("/chat", json={"project_id": project["id"], "message": "please explain this workspace"}).json()
-
-    assert result["contract_version"] == "chat_compat.v1"
-    assert result["legacy_endpoint"] is True
-    assert result["primary_endpoint"] == "/agent/runs"
-    assert result["provider"] == "OpenAI"
-    assert result["reply"] == "OpenAI SDK chat response"
-
+    assert result.status_code == 404
 
 def test_agent_rag_query_launchability_uses_matrix_citations(tmp_path, monkeypatch):
     from app import main
@@ -2358,54 +2328,6 @@ def test_agent_rag_query_returns_raw_source_evidence_for_vendor_citations(tmp_pa
     assert evidence["sources"][0]["raw_snapshots"][0]["sha256"] == hashlib.sha256(raw_bytes).hexdigest()
     assert evidence["raw_sources_indexed"] is False
 
-
-def test_chat_launchability_uses_rules_and_does_not_call_model_gateway(tmp_path, monkeypatch):
-    from app.core import config
-    from app.db import database
-    from app import main
-    from app.main import app
-
-    monkeypatch.setattr(config, "DATA_ROOT", tmp_path)
-    monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
-    monkeypatch.setattr(config, "PROJECTS_ROOT", tmp_path / "projects")
-    monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
-    monkeypatch.setattr(main, "REPO_ROOT", tmp_path)
-
-    matrix = tmp_path / "docs" / "rag" / "workflows" / "workflow_launchability_matrix.md"
-    matrix.parent.mkdir(parents=True)
-    matrix.write_text(
-        "---\nsource_type: rag_workflow\nworkflow_type: workflow_launchability_matrix\n---\n"
-        "# Workflow Launchability Matrix\n"
-        "MRIQC is `incubation_reference`, DPABI is `unsupported_external`, and QSIPrep is legacy/explicit.\n"
-        "Do not create production tasks from this matrix. `workflow_eligibility` remains authoritative for launchability.\n",
-        encoding="utf-8",
-    )
-
-    class ForbiddenModelGateway:
-        def complete_text(self, messages, *, purpose):
-            raise AssertionError("launchability chat must not call the model gateway")
-
-    def fail_deepseek(_message, _context):
-        raise AssertionError("launchability chat must not call fallback model")
-
-    monkeypatch.setattr(main, "ModelGateway", lambda: ForbiddenModelGateway())
-    monkeypatch.setattr(main, "complete_chat", fail_deepseek)
-
-    database.init_db()
-    client = TestClient(app)
-    project = client.post("/projects", json={"name": "P-launchability-chat"}).json()
-    result = client.post(
-        "/chat",
-        json={"project_id": project["id"], "message": "Can Image Agent run MRIQC DPABI QSIPrep in production?"},
-    ).json()
-
-    assert result["contract_version"] == "chat_compat.v1"
-    assert result["legacy_endpoint"] is True
-    assert result["primary_endpoint"] == "/agent/runs"
-    assert result["provider"] == "rules"
-    assert result["intent"] == "launchability"
-    assert "workflow_eligibility remains authoritative" in result["reply"]
-    assert result["references"][0]["source"].endswith("workflow_launchability_matrix.md")
 
 
 def test_agent_resume_returns_ready_to_launch(tmp_path, monkeypatch):

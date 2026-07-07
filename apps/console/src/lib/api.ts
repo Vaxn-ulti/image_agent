@@ -334,17 +334,4 @@ export const api = {
     request<ProjectAgentRunHistoryResponse>(`/projects/${projectId}/agent-runs`).then(sanitizeAgentResponse),
   resumeAgent: (threadId: string, approved: boolean, confirmation: AgentConfirmation) =>
     jsonRequest<AgentRunResponse>(`/agent/runs/${encodeURIComponent(threadId)}/resume`, { approved, confirmation }).then(sanitizeAgentResponse),
-  chat: (
-    projectId: number | null,
-    message: string,
-  ) =>
-    jsonRequest<{
-      provider?: string;
-      reply: string;
-      intent?: string;
-      recommended_next_step?: string;
-      tool_chain_hint?: string;
-      tool_invocations?: Array<{ tool?: string; status?: string; result?: Record<string, unknown> }>;
-      rag_mode?: string;
-    }>('/chat', { message, project_id: projectId }).then(sanitizeAgentResponse),
 };

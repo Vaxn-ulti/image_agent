@@ -494,3 +494,19 @@ Findings:
 - Remote CORS now allows `Origin: http://10.2.32.14:5180`.
 - Remote login uses custom production credentials from `.env`; default `demo/demo` and `operator/operator` are rejected. This is expected for production-like deployment and blocks authenticated browser upload/Agent testing until the operator logs in with the configured account.
 - Real browser opened the remote Console login page successfully and saw no frontend console errors.
+
+## 2026-07-07 Legacy Chat Removal Findings
+
+- Root cause of confusing Agent answers:
+  - Dashboard still had a silent fallback from `/agent/runs` to legacy `/chat`;
+  - legacy `/chat` could use an older prompt and DeepSeek fallback path, making responses claim they were LLM-generated even when the current target architecture expected the new gateway.
+- Production boundary decision:
+  - `/agent/runs` is the only product Agent entrypoint;
+  - `/chat` is not a compatibility fallback anymore;
+  - DeepSeek must be reached through `ModelGateway` with provider profile `deepseek`, not through the removed standalone fallback client.
+- Safety finding:
+  - the DeepSeek key belongs in runtime environment only;
+  - `.env` is intentionally left untracked and must not be committed.
+- Remaining product work:
+  - add response-source fields to `/agent/runs` so the UI can explicitly show model, rule, DB, RAG, or fallback source;
+  - improve the human-readable Agent answer formatter now that stale chat fallback cannot mask new-agent failures.

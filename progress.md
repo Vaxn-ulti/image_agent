@@ -2251,3 +2251,27 @@
   - real browser opened `http://10.2.32.14:5180/` and saw the `Brain Image Agent Console` login form with no console errors.
 - Boundary:
   - remote production credentials are custom; `demo/demo` and `operator/operator` are rejected, so authenticated upload/Agent browser testing on remote requires the operator's configured credentials.
+
+## 2026-07-07 Remove Legacy Chat And Switch Gateway Env To DeepSeek
+
+- Goal: remove the old `/chat` product path and make DeepSeek available through the unified model gateway only.
+- Removed legacy chat runtime surface:
+  - API no longer registers `apps/api/app/routes/chat.py`;
+  - `/chat` is absent from OpenAPI and returns 404;
+  - `handle_legacy_chat`, `ChatRequest`, `ChatCompatibilityResponse`, and the standalone `app.agent.deepseek` fallback client were removed;
+  - `app.main_compat` no longer exports `complete_chat` or DeepSeek fallback symbols.
+- Frontend changes:
+  - `api.chat` was removed from `apps/console/src/lib/api.ts`;
+  - Dashboard Agent Copilot no longer silently falls back to legacy chat when `/agent/runs` fails;
+  - failures now show the actual Agent run error instead of switching provider paths.
+- DeepSeek environment:
+  - local `.env` was updated to `IMAGE_AGENT_MODEL_PROVIDER=deepseek`, `IMAGE_AGENT_MODEL_BASE_URL=https://api.deepseek.com`, `IMAGE_AGENT_MODEL_NAME=deepseek-v4-pro`, and `IMAGE_AGENT_MODEL_WIRE_API=chat_completions`;
+  - the provided API key was written only to local `.env`, which is not git-tracked and was not staged or committed.
+- Verification:
+  - `python -m compileall -q apps/api/app` passed;
+  - `python -m pytest apps/api/tests/test_agent_api.py -q`: 59 passed;
+  - `python -m pytest apps/api/tests/test_agent_rag.py apps/api/tests/test_model_gateway.py apps/api/tests/test_main_architecture.py -q`: 68 passed;
+  - `python -m pytest apps/api/tests/test_api_flow.py::test_legacy_chat_endpoint_is_removed -q`: 1 passed;
+  - `npm run test -- src/routes/DashboardPage.test.tsx --run`: 31 passed;
+  - `npm run test -- src/lib/api.test.ts --run`: 33 passed;
+  - `npm run build` passed, Vite transformed 1666 modules.

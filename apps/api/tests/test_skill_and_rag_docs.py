@@ -2579,7 +2579,6 @@ def test_product_readiness_documents_fast_launch_main_flow_and_boundaries():
         "`agent_workflow_fingerprint_negative_status=passed`",
         "`agent_workflow_fingerprint_negative.confirmation_gate=fingerprint_mismatch`",
         "`agent_workflow_fingerprint_negative.task_created=false`",
-        "/chat",
         "/agent/rag/query",
         "IMAGE_AGENT_CORS_ORIGINS",
         "Agent may recommend or explain workflows, but task creation must still go through deterministic backend APIs",

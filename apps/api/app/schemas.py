@@ -24,11 +24,6 @@ class RunRequest(BaseModel):
     qsiprep_task_id: int | None = None
 
 
-class ChatRequest(BaseModel):
-    project_id: int | None = None
-    message: str
-
-
 class AgentRunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

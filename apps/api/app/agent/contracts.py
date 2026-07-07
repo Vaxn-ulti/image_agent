@@ -10,7 +10,6 @@ from pydantic import BaseModel, ConfigDict, Field
 AGENT_RUN_CONTRACT_VERSION = "agent_run.v1"
 AGENT_RUN_LOOKUP_CONTRACT_VERSION = "agent_run_lookup.v1"
 PROJECT_AGENT_RUN_HISTORY_CONTRACT_VERSION = "project_agent_run_history.v1"
-CHAT_COMPATIBILITY_CONTRACT_VERSION = "chat_compat.v1"
 AGENT_API_ERROR_CONTRACT_VERSION = "agent_api_error.v1"
 SAFE_NESTED_AGENT_FIELDS = {
     "confirmation": {
@@ -184,23 +183,6 @@ class ProjectAgentRunHistoryResponse(BaseModel):
     agent_runs: list[ProjectAgentRunHistoryItem] = Field(default_factory=list)
 
 
-class ChatCompatibilityResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    contract_version: Literal["chat_compat.v1"] = CHAT_COMPATIBILITY_CONTRACT_VERSION
-    legacy_endpoint: bool = True
-    primary_endpoint: Literal["/agent/runs"] = "/agent/runs"
-    reply: str
-    references: list[dict[str, Any]] = Field(default_factory=list)
-    provider: str
-    provider_error: str = ""
-    intent: str | None = None
-    recommended_next_step: str | None = None
-    tool_chain_hint: str | None = None
-    tool_invocations: list[dict[str, Any]] = Field(default_factory=list)
-    rag_mode: str | None = None
-
-
 def normalize_agent_run_status(value: Any) -> tuple[str, str | None]:
     raw = str(value or "failed").strip() or "failed"
     allowed = {item.value for item in AgentRunStatus}
@@ -341,16 +323,6 @@ def build_project_agent_run_history_response(project_id: int, agent_runs: list[d
         "project_id": project_id,
         "agent_runs": [history_item(item) for item in agent_runs],
     }
-
-
-def build_chat_compatibility_response(payload: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "contract_version": CHAT_COMPATIBILITY_CONTRACT_VERSION,
-        "legacy_endpoint": True,
-        "primary_endpoint": "/agent/runs",
-        **payload,
-    }
-
 
 def _dict_value(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}

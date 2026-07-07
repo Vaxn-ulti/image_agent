@@ -215,13 +215,8 @@ export function DashboardPage() {
 
   const chatMutation = useMutation({
     mutationFn: async (message: string) => {
-      try {
-        const agent = await api.runAgent(projectId, message);
-        return { content: dashboardAgentMessage(agent), response: agent };
-      } catch {
-        const fallback = await api.chat(projectId, message);
-        return { content: fallback.reply };
-      }
+      const agent = await api.runAgent(projectId, message);
+      return { content: dashboardAgentMessage(agent), response: agent };
     },
     onSuccess: (data) => {
       setMessages((prev) => [...prev, { role: 'agent', content: data.content, response: data.response }]);
@@ -232,12 +227,13 @@ export function DashboardPage() {
         }
       }
     },
-    onError: () => {
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : "Agent run unavailable.";
       setMessages((prev) => [
         ...prev,
         {
           role: 'agent',
-          content: "I'm sorry, I couldn't reach the backend chat service. Please check your connection or ensure the server is running. You can still try to upload data or run workflows using the dashboard controls.",
+          content: message,
         },
       ]);
     },

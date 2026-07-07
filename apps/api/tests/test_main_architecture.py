@@ -18,7 +18,6 @@ def test_main_entrypoint_is_thin_and_routes_are_split():
         "tasks",
         "results",
         "reports",
-        "chat",
     ):
         assert (root / "app" / "routes" / f"{route_name}.py").exists()
 
@@ -266,7 +265,7 @@ def test_dwi_sidecar_detection_lives_in_imaging_layer():
 def test_agent_backend_context_queries_live_in_agent_layer():
     root = Path(__file__).resolve().parents[1]
     agent_service = (root / "app" / "services" / "agent_service.py").read_text(encoding="utf-8")
-    agent_chat = (root / "app" / "agent" / "chat.py").read_text(encoding="utf-8")
+    backend_context = (root / "app" / "agent" / "backend_context.py").read_text(encoding="utf-8")
 
     assert (root / "app" / "agent" / "backend_context.py").exists()
     for private_helper in (
@@ -275,7 +274,7 @@ def test_agent_backend_context_queries_live_in_agent_layer():
         "def _result_summary_context(",
     ):
         assert private_helper not in agent_service
-    assert "build_chat_backend_context" in agent_chat
+    assert "build_chat_backend_context" in backend_context
     assert "build_rag_backend_context" in agent_service
 
 
@@ -359,19 +358,17 @@ def test_agent_status_and_rag_health_live_in_agent_layer():
         assert forbidden not in agent_service
 
 
-def test_legacy_chat_runtime_lives_in_agent_layer():
+def test_legacy_chat_runtime_is_removed_from_app_layer():
     root = Path(__file__).resolve().parents[1]
     agent_service = (root / "app" / "services" / "agent_service.py").read_text(encoding="utf-8")
     agent_chat = root / "app" / "agent" / "chat.py"
+    app_factory = (root / "app" / "app_factory.py").read_text(encoding="utf-8")
+    main_compat = (root / "app" / "main_compat.py").read_text(encoding="utf-8")
 
     assert agent_chat.exists()
     chat_source = agent_chat.read_text(encoding="utf-8")
-    for function_name in (
-        "def handle_legacy_chat(",
-        "def _chat_intent(",
-        "def _status_reply(",
-    ):
-        assert function_name in chat_source
+    assert "def _chat_intent(" in chat_source
+    assert "def _status_reply(" in chat_source
 
     for forbidden in (
         "def _chat_intent(",
@@ -385,6 +382,15 @@ def test_legacy_chat_runtime_lives_in_agent_layer():
         "now_iso",
     ):
         assert forbidden not in agent_service
+    for forbidden in (
+        "def handle_legacy_chat(",
+        "complete_chat",
+        "DeepSeekUnavailable",
+        "build_chat_compatibility_response",
+    ):
+        assert forbidden not in chat_source
+        assert forbidden not in main_compat
+    assert "routes import agent, auth, chat" not in app_factory
 
 
 def test_scientific_report_verification_lives_in_agent_layer():

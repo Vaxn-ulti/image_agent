@@ -367,3 +367,40 @@ Remote sync completion:
 - Remote `yyf@10.2.32.14` now runs API `8000` and Console `5180` from release overlay `/home/yyf/project/image_agent_releases/codex-browser-ux-0cfb5bad-20260707T1905`.
 - Remote smoke verified health, CORS for `http://10.2.32.14:5180`, readable 401 login failure, and browser-loadable Console login page.
 - Authenticated remote upload/Agent browser testing remains pending on operator-provided production credentials.
+
+## 2026-07-07 Legacy Chat Removal Task
+
+Objective: delete the old chat fallback path, configure DeepSeek through the unified gateway, verify the behavior, and commit a backup without leaking secrets.
+
+Status: completed locally.
+
+Completed:
+
+- Wrote failing tests for the new contract:
+  - OpenAPI must not expose `/chat`;
+  - Dashboard must not call legacy `api.chat` after Agent run failure;
+  - frontend redaction tests use new Agent run lookup instead of legacy chat.
+- Removed product legacy chat code:
+  - route registration;
+  - route module;
+  - service adapter;
+  - schema request model;
+  - legacy compatibility response contract;
+  - standalone DeepSeek fallback client;
+  - frontend `api.chat`;
+  - Dashboard silent fallback.
+- Updated DeepSeek gateway defaults:
+  - provider profile default model is now `deepseek-v4-pro`;
+  - wire API remains `chat_completions`;
+  - local `.env` points the unified model gateway to DeepSeek.
+- Verified backend and frontend tests and build.
+
+Boundaries:
+
+- `.env` contains the provided DeepSeek key but is untracked and not committed.
+- Remote deployment has not been updated in this task; this is local code plus local environment configuration.
+
+Next:
+
+- Commit code and log changes only.
+- Later: add response-source metadata and human-readable answer formatting on top of `/agent/runs`.

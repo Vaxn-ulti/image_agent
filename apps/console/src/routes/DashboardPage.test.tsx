@@ -29,7 +29,6 @@ vi.mock('../lib/api', () => ({
     getInventory: vi.fn(),
     ingestDataset: vi.fn(),
     deleteProjectFile: vi.fn(),
-    chat: vi.fn(),
   },
   getApiBase: () => 'http://localhost:8000',
 }));
@@ -944,13 +943,12 @@ describe('DashboardPage', () => {
     expect(screen.queryByAltText('reports/t1_brain_measures_overview.png')).not.toBeInTheDocument();
   });
 
-  it('falls back to legacy dashboard chat only when the Agent run fails', async () => {
+  it('shows the Agent run error instead of falling back to legacy chat', async () => {
     vi.mocked(api.getResultSummary).mockResolvedValue(mockT1Summary);
     vi.mocked(api.listWorkflows).mockResolvedValue({ workflows: ['t1_deepprep'] });
     vi.mocked(api.listProjectTasks).mockResolvedValue(mockTasks);
     vi.mocked(api.listSeries).mockResolvedValue(mockSeries);
     vi.mocked(api.runAgent).mockRejectedValue(new Error('Agent run unavailable.'));
-    vi.mocked(api.chat).mockResolvedValue({ reply: 'Legacy chat fallback answer.' });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
     render(
@@ -968,8 +966,7 @@ describe('DashboardPage', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Explain this step' }));
 
     expect(api.runAgent).toHaveBeenCalledWith(13, 'Explain this step');
-    expect(api.chat).toHaveBeenCalledWith(13, 'Explain this step');
-    expect(await screen.findByText('Legacy chat fallback answer.')).toBeInTheDocument();
+    expect(await screen.findByText('Agent run unavailable.')).toBeInTheDocument();
   });
 
   it('clears a stale dashboard approval card when a later chat answer has no Agent confirmation response', async () => {
@@ -995,8 +992,7 @@ describe('DashboardPage', () => {
         status: 'confirmation_required',
         thread_id: 'agent_thread_1',
       })
-      .mockRejectedValueOnce(new Error('Agent run unavailable.'));
-    vi.mocked(api.chat).mockResolvedValue({ reply: '这里是只读回答，不会启动任何任务。' });
+      .mockResolvedValueOnce({ answer: '这里是只读回答，不会启动任何任务。' });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
     render(
@@ -1164,7 +1160,6 @@ describe('DashboardPage', () => {
     vi.mocked(api.listProjectTasks).mockResolvedValue(mockTasks);
     vi.mocked(api.listSeries).mockResolvedValue(mockSeries);
     vi.mocked(api.runAgent).mockResolvedValue({ answer: 'Agent status: project has tasks and workflow evidence.' });
-    vi.mocked(api.chat).mockResolvedValue({ reply: 'Fallback status: project has tasks and workflow evidence.' });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
     render(
@@ -1195,7 +1190,6 @@ describe('DashboardPage', () => {
     // Test quick action
     await userEvent.click(screen.getByRole('button', { name: 'Explain this step' }));
     expect(api.runAgent).toHaveBeenCalledWith(13, 'Explain this step');
-    expect(api.chat).not.toHaveBeenCalled();
     expect(await screen.findByText('Agent status: project has tasks and workflow evidence.')).toBeInTheDocument();
 
     // Test typed message

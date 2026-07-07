@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.app_hooks import register_app_hooks
-from app.routes import agent, auth, chat, projects, reports, results, series, system, tasks, uploads
+from app.routes import agent, auth, projects, reports, results, series, system, tasks, uploads
 from app.security import bearer_auth_middleware
 
 DEFAULT_CORS_ORIGINS = (
@@ -130,7 +130,6 @@ def create_app() -> FastAPI:
         tasks.router,
         results.router,
         reports.router,
-        chat.router,
     ):
         app.include_router(router)
 

@@ -13,7 +13,6 @@ from app.agent.chat import (
     _is_inventory_capability_question,
     _is_result_analysis_question,
     _status_reply,
-    handle_legacy_chat,
 )
 from app.agent.contracts import (
     AGENT_RUN_LOOKUP_CONTRACT_VERSION,
@@ -22,7 +21,6 @@ from app.agent.contracts import (
     build_project_agent_run_history_response,
     normalize_agent_run_result,
 )
-from app.agent.deepseek import provider_status as legacy_chat_provider_status
 from app.agent.graph import AgentRunner
 from app.agent.langgraph_runner import build_langgraph_runner_factory
 from app.agent.rag_orchestration import build_rag_response
@@ -618,7 +616,6 @@ def deployment():
         "api_base_hint": os.environ.get("IMAGE_AGENT_PUBLIC_BASE_URL", ""),
         "execution_scope": _execution_scope(),
         "agent": agent,
-        "legacy_chat_provider": legacy_chat_provider_status(),
         "production_readiness": production_readiness,
         "fast_launch_readiness": _fast_launch_readiness(agent=agent, production_readiness=production_readiness),
     }
@@ -788,12 +785,3 @@ def admin_containers():
 def list_project_agent_run_history(project_id):
     require_project(project_id)
     return build_project_agent_run_history_response(project_id, list_project_agent_runs(project_id))
-
-
-def chat(req):
-    return handle_legacy_chat(
-        req,
-        repo_root=_repo_root(),
-        projects_root=_projects_root(),
-        workflows=main_patch_attr("WORKFLOWS", WORKFLOWS),
-    )
