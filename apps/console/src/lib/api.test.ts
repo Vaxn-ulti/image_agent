@@ -11,11 +11,20 @@ describe('api client', () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     vi.unstubAllGlobals();
   });
 
   it('defaults the API base to the current host on port 8000', () => {
     expect(getApiBase()).toContain(':8000');
+  });
+
+  it('uses the configured Vite API base before falling back to the current host', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', 'http://127.0.0.1:8011/');
+    vi.resetModules();
+    const { getApiBase: getConfiguredApiBase } = await import('./api');
+
+    expect(getConfiguredApiBase()).toBe('http://127.0.0.1:8011');
   });
 
   it('stores a normalized remote API base and resets to the default host', () => {

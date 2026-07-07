@@ -563,3 +563,19 @@ Findings:
 - Remaining product work:
   - add browser acceptance coverage that exercises the real chat UI after a completed T1 task;
   - expand metric-level explanations from one example row to a compact table of major global and regional indicators once the frontend has a suitable display pattern.
+
+## 2026-07-07 Browser Agent Interaction Findings
+
+- Interaction issue:
+  - real browser testing was awkward because the frontend defaulted to `current-host:8000`;
+  - when test or deployment API ports differ, the operator must reach Settings before the app can talk to the correct backend.
+- Implemented boundary:
+  - stored operator overrides in localStorage still win;
+  - otherwise, `VITE_API_BASE_URL` can define the intended backend at build/dev-server start;
+  - if neither is set, the legacy `current-host:8000` behavior remains.
+- Browser smoke result:
+  - real UI login, Agent navigation, message entry, API calls, response rendering, source labels, run history, and evidence panel all worked against the isolated seeded project;
+  - the source label renders uppercase in the page text (`DATABASE AND RULES`), which is visually fine but should be considered when writing exact browser assertions.
+- Remaining product work:
+  - run a browser upload flow with real file selection and post-upload Agent interaction;
+  - add a reusable browser smoke harness or Playwright-style script that can seed data, start isolated services, and assert chat outcomes consistently.

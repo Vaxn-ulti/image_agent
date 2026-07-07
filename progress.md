@@ -2329,3 +2329,30 @@
   - red test first confirmed T1 metric questions still reached the model gateway and failed with a forbidden gateway;
   - `python -m pytest apps/api/tests/test_agent_api.py::test_agent_run_explains_t1_metrics_from_result_summary_without_model_call -q`: 1 passed;
   - `python -m pytest apps/api/tests/test_agent_api.py -q`: 62 passed.
+
+## 2026-07-07 Browser Agent Interaction Smoke Iteration
+
+- Goal: exercise the Agent through the real browser UI instead of only API/unit tests.
+- Test environment:
+  - seeded an isolated local `IMAGE_AGENT_ROOT` under `.tmp/agent-browser-e2e`;
+  - started an isolated API at `http://127.0.0.1:8011`;
+  - started an isolated Vite console at `http://127.0.0.1:5180`;
+  - seeded project `501` with one completed `t1_deepprep_anat_report` task and a T1 result summary.
+- Frontend change:
+  - `apps/console/src/lib/api.ts` now honors `VITE_API_BASE_URL` before falling back to the current host on port 8000;
+  - this removes the need to manually enter Settings before browser tests or port-specific deployments can talk to the intended backend.
+- Browser evidence:
+  - logged in through the real Login page with `demo/demo`;
+  - opened `/projects/501/agent`;
+  - confirmed the footer displayed `API base: http://127.0.0.1:8011`;
+  - sent `你是谁` and saw `DATABASE AND RULES`, `Brain Image Agent`, `项目数据库`, and the no-diagnosis boundary;
+  - sent `你现在是基于规则脚本回答，还是基于LLM在回答` and saw `DATABASE AND RULES`, backend runtime-source wording, and the no model self-certification boundary;
+  - sent `给我分析一下t1提取出来的指标，综合水平怎么样，符不符合正常水平` and saw `DATABASE AND RULES`, `T1 结构化结果解读`, `任务 #140`, `BrainSegVol`, no-normality boundary language, and absent BOLD/DWI clarification.
+- Verification:
+  - red frontend test first showed `VITE_API_BASE_URL` was ignored and defaulted to `http://localhost:8000`;
+  - first `tsc -b` verification caught a missing Vite `ImportMeta.env` type declaration;
+  - added `apps/console/src/vite-env.d.ts`;
+  - `node node_modules/vitest/vitest.mjs run src/lib/api.test.ts --run`: 34 passed;
+  - `node node_modules/typescript/bin/tsc -b`: passed;
+  - `node node_modules/vite/bin/vite.js build`: passed, Vite transformed 1666 modules;
+  - `node node_modules/vitest/vitest.mjs run src/lib/api.test.ts src/routes/AgentPage.test.tsx --run`: 46 passed.

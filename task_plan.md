@@ -492,3 +492,32 @@ Next:
 
 - Add browser regression coverage for real Agent interactions.
 - Decide whether the frontend should render T1 metric evidence as structured UI instead of plain text.
+
+## 2026-07-07 Browser Agent Interaction Smoke Task
+
+Objective: verify the Agent through the actual browser UI and remove one API-base setup friction point.
+
+Status: completed locally as a subtask; overall interaction-intelligence goal remains active.
+
+Completed:
+
+- Seeded an isolated project `501` with a completed T1 task and result summary.
+- Started isolated backend/frontend services on `8011/5180`.
+- Added frontend support for `VITE_API_BASE_URL`.
+- Added a frontend test that fails when the configured Vite API base is ignored.
+- Logged into the browser UI and sent three Agent questions:
+  - identity;
+  - runtime source;
+  - T1 metric/normality interpretation.
+- Verified the UI displayed deterministic backend answers and `DATABASE AND RULES` source labels.
+
+Boundaries:
+
+- This browser run used seeded backend data, not a fresh file upload.
+- This did not yet automate browser assertions as a committed E2E script.
+- This did not mark the overall interaction goal complete.
+
+Next:
+
+- Browser-test the upload path with actual file picker interaction.
+- Convert the manual browser smoke into a reusable smoke script once the preferred test runner is selected.
