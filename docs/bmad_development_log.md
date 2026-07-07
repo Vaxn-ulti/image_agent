@@ -85,3 +85,22 @@
   - `0ee6d0a2 test: align agent api fixture with production intent contract`
 - 下一步建议：
   - 在下一 BMAD checkpoint 继续 `ContextGrounder`、`PolicySnapshot`、loop budget 和 repeated-failure cutoff，将 graph stage audit 接入更完整的 run ledger/eval 统计。
+
+### Checkpoint 3: Target Graph Product Boundaries And Engineering Decisions
+
+- 基于用户纠偏，重新对齐 `docs/image_agent_production_implementation_spec.md` section 8 的完整 LangGraph Target Graph，而不是只围绕当前已落地的 intent 小图推进。
+- 明确当前代码状态：
+  - `apps/api/app/agent/langgraph_runner.py` 目前实现的是 target graph 的前段骨架：intake、safety、rule/LLM/fusion intent、coarse answer/tool route、RAG/skill、read-only/fixed/incubation/observe-repair lane。
+  - 尚未完整实现 target graph 中的 requirement completeness、clarification interrupt、neuroimaging intake validation、sequence normalization、preflight-lite、capability matcher、fixed workflow recommendation、ExecutionPlan candidate、plan policy gate、authorization verification、execution control plane、worker lease/reaper/QC gate 闭环。
+- 新增产品边界与工程决策文档：
+  - `docs/superpowers/specs/2026-07-07-target-graph-product-boundaries.md`
+  - 将 section 9 的 100 个工程问题按部署、隐私、意图/LangGraph、RAG/Registry/KG、脑影像 workflow、执行系统六类收敛为推荐决策和硬边界。
+- 新增 target graph 实施计划：
+  - `docs/superpowers/plans/2026-07-07-target-graph-implementation.md`
+  - 下一代码切片按 target graph 顺序推进：先做 `requirement_completeness` 和 `clarification_interrupt`，再做 neuroimaging intake/normalization、capability matcher、ExecutionPlan/policy gate、authorization/execution-control boundary。
+- 产品边界要点：
+  - Image Agent 是研究脑影像 workflow control plane，不是临床诊断产品，不是自由远程代码执行助手。
+  - fixed mature workflow 必须经过 registry、preflight、policy gate、人类授权。
+  - unknown/non-production workflow 只能进入 incubation/sandbox。
+  - 所有执行必须有 provenance、safe graph state、event log、artifact manifest 和 QC boundary。
+- 本 checkpoint 只更新设计、计划和日志；没有远程 workflow run、没有 API restart、没有生产任务创建、没有远程部署配置变更。
