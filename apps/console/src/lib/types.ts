@@ -368,6 +368,7 @@ export type AgentRunResponse = RagResponse & {
   production_task_created?: boolean | null;
   project_id?: number | null;
   request_type?: string | null;
+  response_source?: string | null;
   retrieved_sources?: Array<Record<string, unknown>>;
   runtime_workflow_type?: string | null;
   safe_metadata?: Record<string, unknown>;

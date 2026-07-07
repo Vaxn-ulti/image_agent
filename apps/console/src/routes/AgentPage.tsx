@@ -15,7 +15,7 @@ import {
 import { useState, useRef, useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../lib/api';
-import { formatAgentText } from '../lib/agentText';
+import { formatAgentText, formatResponseSourceLabel } from '../lib/agentText';
 import { queryKeys } from '../lib/query';
 import { safeEvidenceJson } from '../lib/redaction';
 import type { AgentConfirmation, AgentRunResponse, RagStatus, WorkflowCatalogItem } from '../lib/types';
@@ -288,6 +288,11 @@ export function AgentPage() {
                       ? 'bg-[#065F46] text-white rounded-tr-none'
                       : 'bg-gray-50 text-gray-800 border border-gray-100 rounded-tl-none shadow-sm'
                   }`}>
+                    {m.role === 'agent' && formatResponseSourceLabel(m.response?.response_source) ? (
+                      <div className="mb-2 text-[10px] font-semibold uppercase tracking-normal text-gray-500">
+                        {formatResponseSourceLabel(m.response?.response_source)}
+                      </div>
+                    ) : null}
                     {m.content}
                   </div>
                 </div>

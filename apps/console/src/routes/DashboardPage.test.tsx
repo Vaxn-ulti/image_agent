@@ -1159,7 +1159,7 @@ describe('DashboardPage', () => {
     vi.mocked(api.listWorkflows).mockResolvedValue({ workflows: ['t1_deepprep', 'bold_second_level', 'dwi_fast_gpu_dti'] });
     vi.mocked(api.listProjectTasks).mockResolvedValue(mockTasks);
     vi.mocked(api.listSeries).mockResolvedValue(mockSeries);
-    vi.mocked(api.runAgent).mockResolvedValue({ answer: 'Agent status: project has tasks and workflow evidence.' });
+    vi.mocked(api.runAgent).mockResolvedValue({ answer: 'Agent status: project has tasks and workflow evidence.', response_source: 'backend_context' });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
     render(
@@ -1191,6 +1191,7 @@ describe('DashboardPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Explain this step' }));
     expect(api.runAgent).toHaveBeenCalledWith(13, 'Explain this step');
     expect(await screen.findByText('Agent status: project has tasks and workflow evidence.')).toBeInTheDocument();
+    expect(await screen.findByText('Database and rules')).toBeInTheDocument();
 
     // Test typed message
     const input = screen.getByPlaceholderText('Ask the agent...');

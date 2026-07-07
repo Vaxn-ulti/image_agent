@@ -25,6 +25,7 @@ vi.mock('../lib/api', () => ({
         citations: [],
         intent: 'status',
         recommended_next_step: 'Read backend task/output records first.',
+        response_source: 'model_gateway',
         selected_skill: 'image-agent-operator',
         status: 'answered',
         tool_chain_hint: 'Read backend task/output records first.',
@@ -128,6 +129,7 @@ describe('AgentPage', () => {
     await userEvent.type(screen.getByLabelText('Agent query'), 'What happened to DWI?');
     await userEvent.click(screen.getByRole('button', { name: 'Send' }));
     expect(await screen.findByText('Task 114 completed.')).toBeInTheDocument();
+    expect(await screen.findByText('Model answer')).toBeInTheDocument();
     expect(await screen.findByText('Evidence Review')).toBeInTheDocument();
     expect(await screen.findByText('Intent Detection')).toBeInTheDocument();
     expect(await screen.findByText('status')).toBeInTheDocument();

@@ -510,3 +510,21 @@ Findings:
 - Remaining product work:
   - add response-source fields to `/agent/runs` so the UI can explicitly show model, rule, DB, RAG, or fallback source;
   - improve the human-readable Agent answer formatter now that stale chat fallback cannot mask new-agent failures.
+
+## 2026-07-07 Agent Source Transparency Findings
+
+- Interaction issue:
+  - users cannot trust an Agent answer that says "I am based on an LLM" unless the backend reports how the response was actually produced.
+- Implemented boundary:
+  - `response_source` is now a backend-controlled contract field, not model-generated prose;
+  - the UI renders source as a small label and keeps the answer text separate.
+- Current source vocabulary:
+  - `model_gateway`: model gateway participated in the answer;
+  - `backend_context`: deterministic backend/project context answer;
+  - `rag_fallback`: read-only RAG fallback after model gateway is unavailable;
+  - `workflow_engine`: workflow/task creation result;
+  - `error`: reserved for explicit failure source.
+- Remaining intelligence work:
+  - route "你是规则还是 LLM" to a deterministic runtime-source reporter;
+  - add a T1 metric interpreter for structural outputs and normal-range limitations;
+  - add browser regression cases that verify users see the source label during real interactions.

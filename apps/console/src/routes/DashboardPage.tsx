@@ -26,7 +26,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { AuthenticatedArtifactImageLink, artifactRelativePath } from '../components/results/AuthenticatedArtifact';
 import { Button } from '../components/ui/Button';
 import { api } from '../lib/api';
-import { formatAgentText } from '../lib/agentText';
+import { formatAgentText, formatResponseSourceLabel } from '../lib/agentText';
 import { queryKeys } from '../lib/query';
 import type { AgentConfirmation, AgentRunResponse, ArtifactManifest, DwiUploadFiles, Inventory, OutputItem, ProjectFile, ResultSummary, Series, Task, WorkflowCatalogItem } from '../lib/types';
 import { getWorkflowEligibility, normalizeWorkflowCatalog, selectQsiprepTaskId, workflowGroup } from '../lib/workflows';
@@ -952,6 +952,11 @@ export function DashboardPage() {
                     ? 'bg-[#065F46] text-white rounded-br-none'
                     : 'bg-gray-100 text-gray-800 rounded-bl-none shadow-sm'
                 }`}>
+                  {msg.role === 'agent' && formatResponseSourceLabel(msg.response?.response_source) ? (
+                    <div className="mb-1 text-[10px] font-semibold uppercase tracking-normal text-gray-500">
+                      {formatResponseSourceLabel(msg.response?.response_source)}
+                    </div>
+                  ) : null}
                   {msg.content}
                 </div>
               </div>

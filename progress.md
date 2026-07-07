@@ -2275,3 +2275,25 @@
   - `npm run test -- src/routes/DashboardPage.test.tsx --run`: 31 passed;
   - `npm run test -- src/lib/api.test.ts --run`: 33 passed;
   - `npm run build` passed, Vite transformed 1666 modules.
+
+## 2026-07-07 Agent Interaction Source Transparency Iteration
+
+- Goal: make Agent responses easier to trust during iterative interaction testing by exposing the real answer source instead of relying on model self-description.
+- Backend changes:
+  - added `response_source` to `AgentRunResponse`;
+  - current `/agent/runs` responses now surface `model_gateway`, `backend_context`, `rag_fallback`, or `workflow_engine` when that can be inferred safely;
+  - read-only unconfigured-model fallbacks explicitly mark `backend_context` or `rag_fallback`;
+  - `agent_runs.safe_metadata_json` preserves `response_source` for later lookup.
+- Frontend changes:
+  - added `formatResponseSourceLabel`;
+  - Agent full page and Dashboard Agent Copilot show compact source labels such as `Model answer`, `Database and rules`, and `RAG fallback` above agent responses;
+  - source labels are separate from the answer body, so Markdown cleanup remains focused on user-readable text.
+- Verification:
+  - red tests first confirmed `response_source` and UI labels were missing;
+  - `python -m pytest apps/api/tests/test_agent_api.py::test_agent_run_uses_langgraph_runner_by_default apps/api/tests/test_agent_api.py::test_agent_run_falls_back_to_read_only_backend_answer_when_model_unconfigured -q`: 2 passed;
+  - `npm run test -- src/routes/AgentPage.test.tsx --run`: 12 passed;
+  - `npm run test -- src/routes/DashboardPage.test.tsx --run`: 31 passed;
+  - `python -m pytest apps/api/tests/test_agent_api.py -q`: 59 passed;
+  - `python -m pytest apps/api/tests/test_api_flow.py::test_legacy_chat_endpoint_is_removed -q`: 1 passed;
+  - `npm run test -- src/lib/api.test.ts --run`: 33 passed;
+  - `npm run build` passed, Vite transformed 1666 modules.

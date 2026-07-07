@@ -108,6 +108,7 @@ class AgentRunResponse(BaseModel):
     intent: str | None = None
     action_lane: str | None = None
     selected_skill: str | None = None
+    response_source: str | None = None
     answer: str | None = None
     message: str | None = None
     confirmation: dict[str, Any] | None = None
@@ -224,6 +225,7 @@ def build_agent_run_response_payload(
     forbidden_actions = result.get("forbidden_actions")
     if not isinstance(forbidden_actions, list) and proposed_toolchain:
         forbidden_actions = proposed_toolchain.get("forbidden_actions")
+    response_source = _response_source(result, safe_metadata)
     payload = {
         "contract_version": contract_version,
         "agent_run_id": result.get("agent_run_id") or ledger.get("agent_run_id"),
@@ -267,6 +269,7 @@ def build_agent_run_response_payload(
         "intent": result.get("intent") or _dict_value(result.get("decision")).get("intent") or ledger.get("intent"),
         "action_lane": result.get("action_lane") or _dict_value(result.get("confirmation")).get("action_lane") or ledger.get("action_lane"),
         "selected_skill": result.get("selected_skill") or ledger.get("selected_skill"),
+        "response_source": response_source,
         "answer": result.get("answer"),
         "message": result.get("message"),
         "confirmation": _optional_safe_nested_dict("confirmation", result.get("confirmation")),
@@ -296,6 +299,33 @@ def build_agent_run_response_payload(
             }
         )
     return {key: _sanitize_public_value(value) for key, value in payload.items() if value is not None}
+
+
+def _response_source(result: dict[str, Any], safe_metadata: dict[str, Any]) -> str | None:
+    explicit = _safe_symbol(str(result.get("response_source") or safe_metadata.get("response_source") or ""))
+    if explicit:
+        return explicit
+    selected_skill = str(result.get("selected_skill") or "")
+    fallback_reason = str(safe_metadata.get("fallback_reason") or "")
+    rag_mode = str(safe_metadata.get("rag_mode") or "")
+    if fallback_reason == "model_gateway_unconfigured":
+        if rag_mode:
+            return "rag_fallback"
+        if selected_skill == "backend-context-fallback":
+            return "backend_context"
+        return "backend_context"
+    if safe_metadata.get("agent_engine") == "langgraph":
+        return "model_gateway"
+    if result.get("task"):
+        return "workflow_engine"
+    return None
+
+
+def _safe_symbol(value: str) -> str | None:
+    normalized = value.strip().lower().replace("-", "_")
+    if normalized and len(normalized) <= 80 and all(char.isalnum() or char == "_" for char in normalized):
+        return normalized
+    return None
 
 
 def agent_api_error_detail(code: str, message: str, *, agent_run_id: str | None = None) -> dict[str, Any]:

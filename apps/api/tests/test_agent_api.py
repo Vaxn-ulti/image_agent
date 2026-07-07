@@ -1061,6 +1061,7 @@ def test_agent_run_uses_langgraph_runner_by_default(tmp_path, monkeypatch):
     assert body["contract_version"] == "agent_run.v1"
     assert body["status"] == "answered"
     assert body["answer"] == "langgraph answer"
+    assert body["response_source"] == "model_gateway"
     assert body["production_task_created"] is False
     assert body["safe_metadata"]["agent_engine"] == "langgraph"
     assert body["safe_metadata"]["lane"] == "read_only"
@@ -1100,6 +1101,7 @@ def test_agent_run_falls_back_to_read_only_backend_answer_when_model_unconfigure
     assert body["status"] == "answered"
     assert body["intent"] == "status"
     assert body["selected_skill"] == "backend-status-fallback"
+    assert body["response_source"] == "rag_fallback"
     assert body["safe_metadata"]["fallback_reason"] == "model_gateway_unconfigured"
     assert "Model gateway is not configured" in body["answer"]
     assert "task 41" in body["answer"]

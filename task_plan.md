@@ -404,3 +404,36 @@ Next:
 
 - Commit code and log changes only.
 - Later: add response-source metadata and human-readable answer formatting on top of `/agent/runs`.
+
+## 2026-07-07 Agent Interaction Source Transparency Task
+
+Objective: improve Agent interaction clarity by showing where each answer came from.
+
+Status: completed locally.
+
+Completed:
+
+- Added red tests for backend `response_source` and UI source labels.
+- Implemented `response_source` in the API contract.
+- Added source inference for:
+  - LangGraph/model gateway answers;
+  - backend context fallback;
+  - RAG fallback;
+  - workflow engine task results.
+- Persisted safe `response_source` metadata in the agent run ledger.
+- Added source labels to:
+  - full Agent page chat bubbles;
+  - Dashboard Agent Copilot bubbles.
+- Re-ran backend, frontend, and build verification.
+
+Boundaries:
+
+- This does not yet change Agent reasoning quality or T1 metric interpretation.
+- This does not yet perform a fresh browser acceptance run.
+- The overall interaction-intelligence goal remains active.
+
+Next:
+
+- Add deterministic answers for identity/source questions.
+- Build the T1 metric explanation module.
+- Run authenticated browser tests against the deployed console once credentials/session are available.

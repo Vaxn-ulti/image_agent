@@ -469,6 +469,7 @@ def _read_only_agent_fallback(message: str, *, project_id: int | None, project_c
             "status": "answered",
             "intent": "inventory_capability",
             "selected_skill": "backend-context-fallback",
+            "response_source": "backend_context",
             "answer": _inventory_capability_reply(project_context),
             "retrieved_context": {"mode": "backend_context", "results": []},
             "tool_invocations": [],
@@ -488,6 +489,7 @@ def _read_only_agent_fallback(message: str, *, project_id: int | None, project_c
                 "fallback_reason": "model_gateway_unconfigured",
                 "lane": "read_only",
                 "production_task_created": False,
+                "response_source": "backend_context",
             },
             "events": [
                 {
@@ -507,6 +509,7 @@ def _read_only_agent_fallback(message: str, *, project_id: int | None, project_c
             "status": "answered",
             "intent": "result_analysis",
             "selected_skill": "backend-context-fallback",
+            "response_source": "backend_context",
             "answer": answer,
             "retrieved_context": {"mode": "backend_context", "results": []},
             "tool_invocations": [],
@@ -526,6 +529,7 @@ def _read_only_agent_fallback(message: str, *, project_id: int | None, project_c
                 "fallback_reason": "model_gateway_unconfigured",
                 "lane": "read_only",
                 "production_task_created": False,
+                "response_source": "backend_context",
             },
             "events": [
                 {
@@ -555,6 +559,7 @@ def _read_only_agent_fallback(message: str, *, project_id: int | None, project_c
         "status": "answered",
         "intent": rag_response.get("intent") or "general",
         "selected_skill": "backend-status-fallback",
+        "response_source": "rag_fallback",
         "answer": answer,
         "retrieved_context": {
             "mode": rag_response.get("mode") or "fallback",
@@ -572,6 +577,7 @@ def _read_only_agent_fallback(message: str, *, project_id: int | None, project_c
             "fallback_reason": "model_gateway_unconfigured",
             "lane": "read_only",
             "production_task_created": False,
+            "response_source": "rag_fallback",
         },
         "events": [
             {
