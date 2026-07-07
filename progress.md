@@ -2384,3 +2384,24 @@
   - `node node_modules/typescript/bin/tsc -b`: passed;
   - `node node_modules/vite/bin/vite.js build`: passed, Vite transformed 1666 modules;
   - `python -m pytest apps/api/tests/test_agent_tools.py::test_read_project_context_enriches_series_workflow_eligibility apps/api/tests/test_agent_api.py::test_agent_run_unconfigured_model_answers_inventory_without_confirmation -q`: 2 passed.
+
+## 2026-07-07 DeepSeek Gateway Environment Update
+
+- Goal: replace the expired model API configuration with the new DeepSeek gateway without committing secret material.
+- Environment update:
+  - updated ignored root `.env`;
+  - set provider to `deepseek`;
+  - set model and review model to `deepseek-v4-pro`;
+  - set base URL to `https://api.deepseek.com`;
+  - set wire API to `chat_completions`;
+  - wrote both generic `IMAGE_AGENT_MODEL_*` variables and DeepSeek alias variables for compatibility.
+- Secret handling:
+  - `.env` is ignored by Git;
+  - the API key was not printed in verification output;
+  - the API key was not staged or committed.
+- Verification:
+  - provider status probe reported `configured=true`;
+  - provider was `deepseek`;
+  - model was `deepseek-v4-pro`;
+  - wire API was `chat_completions`;
+  - key status was `set`.
