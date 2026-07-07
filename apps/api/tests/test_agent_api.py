@@ -1113,6 +1113,83 @@ def test_agent_run_falls_back_to_read_only_backend_answer_when_model_unconfigure
     assert "model_gateway_unconfigured" in row["safe_metadata_json"]
 
 
+def test_agent_run_answers_identity_question_without_model_call(tmp_path, monkeypatch):
+    from app.core import config
+    from app.db import database
+    from app import main
+    from app.main import app
+
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_API_KEY", "test-key")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_PROVIDER", "deepseek")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_NAME", "deepseek-v4-pro")
+
+    class ForbiddenGateway:
+        def complete_structured(self, messages, *, purpose, structured_schema=None):
+            raise AssertionError("identity questions must not call the model gateway")
+
+        def complete_text(self, messages, *, purpose):
+            raise AssertionError("identity questions must not call the model gateway")
+
+    monkeypatch.setattr(main, "ModelGateway", lambda: ForbiddenGateway())
+    database.init_db()
+    _insert_project(database, 7)
+
+    result = TestClient(app).post("/agent/runs", json={"project_id": 7, "message": "你是谁"})
+
+    assert result.status_code == 200
+    body = result.json()
+    assert body["status"] == "answered"
+    assert body["intent"] == "agent_identity"
+    assert body["selected_skill"] == "runtime-source-reporter"
+    assert body["response_source"] == "backend_context"
+    assert "Brain Image Agent" in body["answer"]
+    assert "项目数据库" in body["answer"]
+    assert "诊断" in body["answer"]
+    assert body["safe_metadata"]["runtime_reporter"] == "deterministic"
+
+
+def test_agent_run_answers_runtime_source_question_without_model_call(tmp_path, monkeypatch):
+    from app.core import config
+    from app.db import database
+    from app import main
+    from app.main import app
+
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_API_KEY", "test-key")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_PROVIDER", "deepseek")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_NAME", "deepseek-v4-pro")
+
+    class ForbiddenGateway:
+        def complete_structured(self, messages, *, purpose, structured_schema=None):
+            raise AssertionError("runtime source questions must not call the model gateway")
+
+        def complete_text(self, messages, *, purpose):
+            raise AssertionError("runtime source questions must not call the model gateway")
+
+    monkeypatch.setattr(main, "ModelGateway", lambda: ForbiddenGateway())
+    database.init_db()
+    _insert_project(database, 7)
+
+    result = TestClient(app).post(
+        "/agent/runs",
+        json={"project_id": 7, "message": "你现在是基于规则脚本回答，还是基于LLM在回答"},
+    )
+
+    assert result.status_code == 200
+    body = result.json()
+    assert body["status"] == "answered"
+    assert body["intent"] == "runtime_source"
+    assert body["selected_skill"] == "runtime-source-reporter"
+    assert body["response_source"] == "backend_context"
+    assert "这次回答来源：后端规则和运行状态检查" in body["answer"]
+    assert "deepseek-v4-pro" in body["answer"]
+    assert "不会让模型自称来源" in body["answer"]
+    assert body["safe_metadata"]["runtime_reporter"] == "deterministic"
+
+
 def test_agent_run_response_redacts_nested_backend_paths(tmp_path, monkeypatch):
     from app.core import config
     from app.db import database

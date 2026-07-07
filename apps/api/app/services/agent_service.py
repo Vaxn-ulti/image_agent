@@ -463,6 +463,89 @@ def _agent_runner_factory():
     return AgentRunner, True
 
 
+def _compact_question_text(message: str) -> str:
+    return "".join(str(message or "").lower().split())
+
+
+def _is_agent_identity_question(message: str) -> bool:
+    text = _compact_question_text(message)
+    if not text:
+        return False
+    return text in {
+        "你是谁",
+        "你是什么",
+        "介绍一下你自己",
+        "whoyouare",
+        "whoareyou",
+        "whatareyou",
+    }
+
+
+def _is_runtime_source_question(message: str) -> bool:
+    text = _compact_question_text(message)
+    if not text:
+        return False
+    asks_source = any(token in text for token in ("规则", "脚本", "llm", "大语言模型", "大型语言模型", "模型", "source", "runtime"))
+    asks_answering = any(token in text for token in ("回答", "生成", "基于", "用什么", "在回答", "answer", "basedon"))
+    return asks_source and asks_answering
+
+
+def _runtime_reporter_result(message: str) -> dict | None:
+    status = public_model_status()
+    provider = str(status.get("provider") or status.get("provider_profile") or "未配置")
+    model = str(status.get("model") or "未配置")
+    wire_api = str(status.get("wire_api") or "未报告")
+    configured = status.get("configured") is True
+    if _is_agent_identity_question(message):
+        answer = (
+            "我是 Brain Image Agent，用来帮助你查看项目里的影像数据、任务状态和结果文件。 "
+            "我的回答优先依据项目数据库、任务记录和已登记的输出；需要复杂解释时才会进入模型网关。 "
+            "我可以协助说明处理流程和结果证据，但不会给出医学诊断。"
+        )
+        intent = "agent_identity"
+    elif _is_runtime_source_question(message):
+        gateway_status = "已配置" if configured else "未配置"
+        answer = (
+            "这次回答来源：后端规则和运行状态检查。 "
+            f"当前模型网关：{gateway_status}；provider={provider}；model={model}；wire_api={wire_api}。 "
+            "复杂开放问题会在可用时进入模型网关；项目文件、任务状态和结果证据优先来自数据库。 "
+            "不会让模型自称来源，前端会显示后端返回的 response_source。"
+        )
+        intent = "runtime_source"
+    else:
+        return None
+    return {
+        "status": "answered",
+        "intent": intent,
+        "selected_skill": "runtime-source-reporter",
+        "response_source": "backend_context",
+        "answer": answer,
+        "retrieved_context": {"mode": "runtime_status", "results": []},
+        "tool_invocations": [],
+        "tool_trace": [
+            {
+                "stage": "runtime_source_reporter",
+                "status": "answered",
+                "mode": "deterministic",
+            }
+        ],
+        "safe_metadata": {
+            "lane": "read_only",
+            "production_task_created": False,
+            "response_source": "backend_context",
+            "runtime_reporter": "deterministic",
+        },
+        "events": [
+            {
+                "type": "agent.runtime_source_reporter",
+                "status": "answered",
+                "message": "Answered identity/runtime-source question without model generation.",
+            }
+        ],
+        "production_task_created": False,
+    }
+
+
 def _read_only_agent_fallback(message: str, *, project_id: int | None, project_context: dict) -> dict:
     if _is_inventory_capability_question(message):
         return {
@@ -652,6 +735,18 @@ def agent_run(req):
     project_context_reader = main_patch_attr("read_project_context", read_project_context)
     runner_factory, default_runner = _agent_runner_factory()
     project_context = project_context_reader(req.project_id, rows_fn=fetch_rows, workflows=main_patch_attr("WORKFLOWS", WORKFLOWS))
+    deterministic_result = _runtime_reporter_result(message)
+    if deterministic_result is not None:
+        result = normalize_agent_run_result(deterministic_result)
+        result["agent_run_id"] = agent_run_id
+        finish_agent_run(agent_run_id, result=result)
+        ledger = load_agent_run(agent_run_id) or {}
+        return build_agent_run_response_payload(
+            result,
+            ledger=ledger,
+            request_type="run",
+            project_id=req.project_id,
+        )
     if default_runner and not _agent_model_configured():
         result = normalize_agent_run_result(_read_only_agent_fallback(message, project_id=req.project_id, project_context=project_context))
         result = _annotate_read_only_agent_result(message, result)

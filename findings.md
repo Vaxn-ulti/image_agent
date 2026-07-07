@@ -528,3 +528,20 @@ Findings:
   - route "你是规则还是 LLM" to a deterministic runtime-source reporter;
   - add a T1 metric interpreter for structural outputs and normal-range limitations;
   - add browser regression cases that verify users see the source label during real interactions.
+
+## 2026-07-07 Runtime Source Reporter Findings
+
+- Root cause:
+  - identity/source questions were previously allowed to enter the normal LLM path;
+  - once the model answered, prose such as "I am based on an LLM" could be produced without proving the real backend source.
+- Production boundary:
+  - source-of-answer explanations must be backend-controlled and deterministic;
+  - the model is not allowed to self-certify whether the current answer came from rules, database context, RAG, workflow engine, or model gateway;
+  - identity answers must describe product scope and clinical caution without triggering workflow actions.
+- Implemented contract:
+  - `runtime-source-reporter` intercepts identity and runtime-source questions before model gateway selection;
+  - reporter results are marked as `response_source=backend_context`;
+  - safe metadata records `runtime_reporter=deterministic`.
+- Remaining product work:
+  - add a dedicated T1 metric interpreter so structural result questions produce useful, cautious explanations;
+  - perform browser acceptance tests for real upload/chat interactions and source-label visibility.

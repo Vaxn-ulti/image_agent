@@ -437,3 +437,30 @@ Next:
 - Add deterministic answers for identity/source questions.
 - Build the T1 metric explanation module.
 - Run authenticated browser tests against the deployed console once credentials/session are available.
+
+## 2026-07-07 Runtime Source Reporter Task
+
+Objective: stop identity/source questions from depending on model self-description.
+
+Status: completed locally as a subtask; overall interaction-intelligence goal remains active.
+
+Completed:
+
+- Added failing backend tests that forbid model-gateway calls for:
+  - `你是谁`;
+  - `你现在是基于规则脚本回答，还是基于LLM在回答`.
+- Implemented deterministic `runtime-source-reporter`.
+- Returned `response_source=backend_context` and `selected_skill=runtime-source-reporter`.
+- Persisted `runtime_reporter=deterministic` in safe ledger metadata.
+- Re-ran focused backend tests, full Agent API tests, Agent page tests, Dashboard tests, and frontend build.
+
+Boundaries:
+
+- This handles identity/source self-explanation only.
+- It does not yet solve T1 metric interpretation quality.
+- It does not yet complete full browser-based upload and interaction acceptance testing.
+
+Next:
+
+- Add a T1 metric explanation module with normal-range and limitation language.
+- Add browser regression coverage for real Agent interactions after upload and task completion.

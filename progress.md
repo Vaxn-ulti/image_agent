@@ -2297,3 +2297,20 @@
   - `python -m pytest apps/api/tests/test_api_flow.py::test_legacy_chat_endpoint_is_removed -q`: 1 passed;
   - `npm run test -- src/lib/api.test.ts --run`: 33 passed;
   - `npm run build` passed, Vite transformed 1666 modules.
+
+## 2026-07-07 Agent Runtime Source Reporter Iteration
+
+- Goal: make identity/source questions deterministic so the Agent cannot let a model hallucinate whether it is rule-based, model-based, or database-backed.
+- Backend changes:
+  - added a runtime-source reporter in `apps/api/app/services/agent_service.py`;
+  - identity questions such as `你是谁` now answer from backend-controlled product scope and project context;
+  - runtime source questions such as `你现在是基于规则脚本回答，还是基于LLM在回答` now bypass the model gateway and report the actual backend route;
+  - reporter answers use `intent=agent_identity` or `intent=runtime_source`, `selected_skill=runtime-source-reporter`, and `response_source=backend_context`;
+  - `agent_runs.safe_metadata_json` preserves `runtime_reporter=deterministic` for later audit.
+- Verification:
+  - red tests first confirmed identity/source questions still reached the model gateway;
+  - `python -m pytest apps/api/tests/test_agent_api.py::test_agent_run_answers_identity_question_without_model_call apps/api/tests/test_agent_api.py::test_agent_run_answers_runtime_source_question_without_model_call -q`: 2 passed;
+  - `python -m pytest apps/api/tests/test_agent_api.py -q`: 61 passed;
+  - `npm run test -- src/routes/AgentPage.test.tsx --run`: 12 passed;
+  - `npm run test -- src/routes/DashboardPage.test.tsx --run`: 31 passed;
+  - `npm run build` passed, Vite transformed 1666 modules.
