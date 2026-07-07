@@ -2314,3 +2314,18 @@
   - `npm run test -- src/routes/AgentPage.test.tsx --run`: 12 passed;
   - `npm run test -- src/routes/DashboardPage.test.tsx --run`: 31 passed;
   - `npm run build` passed, Vite transformed 1666 modules.
+
+## 2026-07-07 T1 Metric Interpreter Iteration
+
+- Goal: improve Agent interaction quality for T1 result questions such as `给我分析一下t1提取出来的指标，综合水平怎么样，符不符合正常水平`.
+- Backend changes:
+  - added a deterministic `t1-metric-interpreter` in `apps/api/app/services/agent_service.py`;
+  - T1 metric/normal-level questions now bypass model generation and answer from registered T1 result-summary artifacts;
+  - the interpreter summarizes task id, feature groups, parsed counts, registered tables, QC/report entrypoints, and one readable example metric when the brain-measures table is available;
+  - the answer explicitly states that normal/abnormal or overall clinical level cannot be determined from these outputs alone;
+  - when the project has no BOLD/DWI series, the answer states that no functional or diffusion indicators are being interpreted;
+  - `agent_runs.safe_metadata_json` preserves `t1_metric_interpreter=deterministic` for audit.
+- Verification:
+  - red test first confirmed T1 metric questions still reached the model gateway and failed with a forbidden gateway;
+  - `python -m pytest apps/api/tests/test_agent_api.py::test_agent_run_explains_t1_metrics_from_result_summary_without_model_call -q`: 1 passed;
+  - `python -m pytest apps/api/tests/test_agent_api.py -q`: 62 passed.

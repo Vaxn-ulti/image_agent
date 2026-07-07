@@ -1190,6 +1190,132 @@ def test_agent_run_answers_runtime_source_question_without_model_call(tmp_path, 
     assert body["safe_metadata"]["runtime_reporter"] == "deterministic"
 
 
+def test_agent_run_explains_t1_metrics_from_result_summary_without_model_call(tmp_path, monkeypatch):
+    from app.core import config
+    from app.db import database
+    from app import main
+    from app.main import app
+
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
+
+    class ForbiddenGateway:
+        def complete_structured(self, messages, *, purpose, structured_schema=None):
+            raise AssertionError("T1 metric explanations must not call the model gateway")
+
+        def complete_text(self, messages, *, purpose):
+            raise AssertionError("T1 metric explanations must not call the model gateway")
+
+    monkeypatch.setattr(main, "ModelGateway", lambda: ForbiddenGateway())
+    database.init_db()
+    _insert_project(database, 7)
+    out_dir = tmp_path / "project-7" / "derivatives" / "140" / "output"
+    summary_dir = out_dir / "summary"
+    tables_dir = out_dir / "tables"
+    summary_dir.mkdir(parents=True)
+    tables_dir.mkdir()
+    summary_path = summary_dir / "t1_result_summary.json"
+    brain_table = tables_dir / "t1_brain_measures.tsv"
+    brain_table.write_text("measure\tmetric\tdescription\tvalue\tunit\nBrainSegVol\tbrain_segmentation_volume\tBrain Segmentation Volume\t1199123.4\tmm^3\n", encoding="utf-8")
+    summary_path.write_text(
+        json.dumps(
+            {
+                "contract_version": "result_summary.v1",
+                "task_id": 140,
+                "workflow_type": "t1_deepprep_anat_report",
+                "modality": "T1",
+                "spaces": ["T1w", "MNI152"],
+                "feature_groups": [
+                    "segmentation_volumes",
+                    "cortical_thickness",
+                    "regional_morphometry",
+                    "quality_control",
+                ],
+                "outputs": {
+                    "tables": [
+                        {
+                            "name": "t1_brain_measures",
+                            "relative_path": "tables/t1_brain_measures.tsv",
+                            "download_url": "/tasks/140/artifacts/tables/t1_brain_measures.tsv",
+                        },
+                        {
+                            "name": "t1_t1w_regions",
+                            "relative_path": "tables/t1_t1w_regions.tsv",
+                            "download_url": "/tasks/140/artifacts/tables/t1_t1w_regions.tsv",
+                        },
+                    ],
+                    "qc": [
+                        {
+                            "name": "t1_qc_index",
+                            "relative_path": "qc/t1_qc_index.json",
+                            "download_url": "/tasks/140/artifacts/qc/t1_qc_index.json",
+                        }
+                    ],
+                    "reports": [
+                        {
+                            "name": "scientific_report",
+                            "relative_path": "reports/index.html",
+                            "download_url": "/tasks/140/artifacts/reports/index.html",
+                        }
+                    ],
+                },
+                "provenance": {
+                    "method": "deepprep_freesurfer_stats_parser",
+                    "placeholder_outputs": False,
+                    "extraction_status": "real_deepprep_freesurfer_stats",
+                    "parsed_counts": {"brain_measures": 12, "regions": 68, "maps": 4, "transforms": 2},
+                    "note": "Parsed real DeepPrep/Freesurfer stats.",
+                },
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    with database.connect() as conn:
+        conn.execute(
+            "INSERT INTO files(id, project_id, original_name, storage_path, file_type, size, sha256, created_at) VALUES(?,?,?,?,?,?,?,?)",
+            (3, 7, "sub-01_T1w.nii.gz", str(tmp_path / "sub-01_T1w.nii.gz"), "nifti", 12, "abc123", database.now_iso()),
+        )
+        conn.execute(
+            "INSERT INTO imaging_series(id, project_id, file_id, sequence_label, supported_for_processing, unsupported_reason, modality, format, confidence, metadata_json, status, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            (5, 7, 3, "sub-01_T1w", 1, None, "T1", "NIFTI", 0.99, "{}", "ready", database.now_iso()),
+        )
+        conn.execute(
+            "INSERT INTO tasks(id, project_id, series_id, workflow_type, status, progress, log_path, created_at, finished_at) VALUES(?,?,?,?,?,?,?,?,?)",
+            (140, 7, 5, "t1_deepprep_anat_report", "completed", 100, str(tmp_path / "task-140.log"), database.now_iso(), database.now_iso()),
+        )
+        conn.execute(
+            "INSERT INTO outputs(task_id, output_type, path, preview_path, metadata_json, created_at) VALUES(?,?,?,?,?,?)",
+            (
+                140,
+                "json",
+                str(summary_path),
+                None,
+                json.dumps({"kind": "result_summary", "modality": "T1"}),
+                database.now_iso(),
+            ),
+        )
+
+    result = TestClient(app).post(
+        "/agent/runs",
+        json={"project_id": 7, "message": "给我分析一下t1提取出来的指标，综合水平怎么样，符不符合正常水平"},
+    )
+
+    assert result.status_code == 200
+    body = result.json()
+    assert body["status"] == "answered"
+    assert body["intent"] == "t1_metric_interpretation"
+    assert body["selected_skill"] == "t1-metric-interpreter"
+    assert body["response_source"] == "backend_context"
+    assert "T1 结构化结果解读" in body["answer"]
+    assert "任务 #140" in body["answer"]
+    assert "脑分割体积" in body["answer"]
+    assert "BrainSegVol" in body["answer"]
+    assert "不能仅凭这些输出判断正常或异常" in body["answer"]
+    assert "没有发现 BOLD 或 DWI" in body["answer"]
+    assert body["safe_metadata"]["t1_metric_interpreter"] == "deterministic"
+
+
 def test_agent_run_response_redacts_nested_backend_paths(tmp_path, monkeypatch):
     from app.core import config
     from app.db import database

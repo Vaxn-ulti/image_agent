@@ -279,7 +279,15 @@ def _safe_result_metadata(result: dict[str, Any]) -> dict[str, Any]:
     normalized_from = _safe_symbol_value(safe_metadata.get("contract_status_normalized_from"))
     if normalized_from:
         metadata["contract_status_normalized_from"] = normalized_from
-    for key in ("agent_engine", "graph_runtime", "lane", "confirmation_gate", "response_source", "runtime_reporter"):
+    for key in (
+        "agent_engine",
+        "graph_runtime",
+        "lane",
+        "confirmation_gate",
+        "response_source",
+        "runtime_reporter",
+        "t1_metric_interpreter",
+    ):
         safe_value = _safe_symbol_value(safe_metadata.get(key))
         if safe_value:
             metadata[key] = safe_value
@@ -394,7 +402,15 @@ def _sanitize_safe_metadata(value: dict[str, Any]) -> dict[str, Any]:
     normalized_from = _safe_symbol_value(value.get("contract_status_normalized_from"))
     if normalized_from:
         safe["contract_status_normalized_from"] = normalized_from
-    for key in ("agent_engine", "graph_runtime", "lane", "confirmation_gate", "response_source", "runtime_reporter"):
+    for key in (
+        "agent_engine",
+        "graph_runtime",
+        "lane",
+        "confirmation_gate",
+        "response_source",
+        "runtime_reporter",
+        "t1_metric_interpreter",
+    ):
         safe_value = _safe_symbol_value(value.get(key))
         if safe_value:
             safe[key] = safe_value

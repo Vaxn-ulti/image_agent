@@ -545,3 +545,21 @@ Findings:
 - Remaining product work:
   - add a dedicated T1 metric interpreter so structural result questions produce useful, cautious explanations;
   - perform browser acceptance tests for real upload/chat interactions and source-label visibility.
+
+## 2026-07-07 T1 Metric Interpreter Findings
+
+- Root cause:
+  - result-analysis questions used the generic task/status reply, so completed T1 runs could be summarized as artifacts without explaining the extracted structural indicators;
+  - if such questions entered model generation, the model could overstate normality or mix in BOLD/DWI concepts that were not present in the project.
+- Production boundary:
+  - T1 metric interpretation must be read-only and evidence-bound to registered result-summary artifacts;
+  - the interpreter may explain extracted morphometry/segmentation tables and QC/report locations;
+  - it must not classify the subject as normal or abnormal without reference cohort, QC review, scanner/protocol context, and clinical background;
+  - it must explicitly avoid BOLD/DWI interpretations when those modalities are absent.
+- Implemented contract:
+  - `t1-metric-interpreter` intercepts T1 metric/normal-level questions before the model gateway;
+  - answers are marked as `response_source=backend_context`;
+  - safe metadata records `t1_metric_interpreter=deterministic`.
+- Remaining product work:
+  - add browser acceptance coverage that exercises the real chat UI after a completed T1 task;
+  - expand metric-level explanations from one example row to a compact table of major global and regional indicators once the frontend has a suitable display pattern.

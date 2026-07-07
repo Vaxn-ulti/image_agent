@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import ipaddress
 from pathlib import Path
@@ -490,6 +491,200 @@ def _is_runtime_source_question(message: str) -> bool:
     return asks_source and asks_answering
 
 
+def _is_t1_metric_question(message: str) -> bool:
+    text = _compact_question_text(message)
+    if not text:
+        return False
+    asks_t1 = "t1" in text or "解剖" in text or "结构" in text
+    asks_metrics = any(token in text for token in ("指标", "提取", "结果", "水平", "正常", "异常", "综合", "metric", "normal"))
+    return asks_t1 and asks_metrics
+
+
+def _load_registered_result_summaries(project_context: dict) -> list[dict]:
+    summaries: list[dict] = []
+    seen_paths: set[str] = set()
+    for summary in project_context.get("result_summaries") or []:
+        if isinstance(summary, dict):
+            summaries.append(summary)
+    for output in project_context.get("outputs") or []:
+        path_value = output.get("path")
+        if not path_value or str(path_value) in seen_paths:
+            continue
+        metadata = output.get("metadata") or output.get("metadata_json") or {}
+        if isinstance(metadata, str):
+            try:
+                metadata = json.loads(metadata)
+            except json.JSONDecodeError:
+                metadata = {}
+        kind = str(metadata.get("kind") or output.get("output_type") or "").lower()
+        path = Path(str(path_value))
+        if kind != "result_summary" and "result_summary" not in path.name.lower():
+            continue
+        seen_paths.add(str(path_value))
+        if not path.exists():
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(payload, dict):
+            payload.setdefault("_source_summary_path", str(path))
+            summaries.append(payload)
+    return summaries
+
+
+def _first_result_output(summary: dict, section: str, names: tuple[str, ...] = ()) -> dict | None:
+    outputs = summary.get("outputs") or {}
+    items = outputs.get(section) or []
+    if not isinstance(items, list):
+        return None
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "")
+        if not names or name in names:
+            return item
+    return None
+
+
+def _read_first_tsv_row(summary: dict, item: dict | None) -> dict | None:
+    if not item:
+        return None
+    relative_path = item.get("relative_path") or item.get("path")
+    source_summary_path = summary.get("_source_summary_path") or summary.get("summary_path")
+    if not relative_path or not source_summary_path:
+        return None
+    table_path = Path(str(source_summary_path)).parent.parent / str(relative_path)
+    if not table_path.exists():
+        return None
+    try:
+        lines = [line for line in table_path.read_text(encoding="utf-8", errors="ignore").splitlines() if line.strip()]
+    except OSError:
+        return None
+    if len(lines) < 2:
+        return None
+    headers = lines[0].split("\t")
+    values = lines[1].split("\t")
+    if len(values) < len(headers):
+        return None
+    return dict(zip(headers, values))
+
+
+def _format_t1_metric_example(row: dict | None) -> str:
+    if not row:
+        return "结构化表格已登记，但当前回答未读取到可展示的首行指标。"
+    measure = str(row.get("measure") or row.get("metric") or "T1 metric")
+    description = str(row.get("description") or "").strip()
+    value = str(row.get("value") or "").strip()
+    unit = str(row.get("unit") or "").strip()
+    label = "脑分割体积" if measure == "BrainSegVol" else (description or measure)
+    value_text = f"{value} {unit}".strip()
+    return f"示例指标：{label}（{measure}）= {value_text}。"
+
+
+def _t1_metric_interpreter_result(message: str, project_context: dict) -> dict | None:
+    if not _is_t1_metric_question(message):
+        return None
+    tasks = project_context.get("tasks") or []
+    summaries = [
+        summary
+        for summary in _load_registered_result_summaries(project_context)
+        if str(summary.get("modality") or "").upper() == "T1"
+        or str(summary.get("workflow_type") or "").lower().startswith("t1")
+    ]
+    completed_t1_tasks = [
+        task
+        for task in tasks
+        if str(task.get("workflow_type") or "").lower().startswith("t1")
+        and str(task.get("status") or "").lower() == "completed"
+    ]
+    if not summaries:
+        task_text = (
+            "；".join(
+                f"任务 #{task.get('id')} {task.get('workflow_type')} {task.get('status')} {task.get('progress')}%"
+                for task in tasks[:5]
+            )
+            or "当前没有任务记录"
+        )
+        answer = (
+            "T1 结构化结果解读：当前没有找到可审计的 T1 result summary。 "
+            f"已看到的任务状态：{task_text}。 "
+            "因此我不能分析提取指标，也不能判断正常或异常。请先确认 T1 DeepPrep 任务已完成并登记 result-summary。"
+        )
+        intent = "t1_metric_interpretation"
+        summary_count = 0
+    else:
+        summary = summaries[0]
+        provenance = summary.get("provenance") or {}
+        parsed_counts = provenance.get("parsed_counts") or {}
+        feature_groups = [str(item) for item in summary.get("feature_groups") or []]
+        table_count = len((summary.get("outputs") or {}).get("tables") or [])
+        qc_item = _first_result_output(summary, "qc")
+        report_item = _first_result_output(summary, "reports")
+        brain_table = _first_result_output(summary, "tables", ("t1_brain_measures",))
+        metric_example = _format_t1_metric_example(_read_first_tsv_row(summary, brain_table))
+        task_id = summary.get("task_id") or (completed_t1_tasks[0].get("id") if completed_t1_tasks else "未知")
+        method = provenance.get("method") or "未报告"
+        placeholder = provenance.get("placeholder_outputs") is True
+        confidence_line = (
+            "这些结果来自占位输出，不能作为真实指标解释。"
+            if placeholder
+            else "这些结果来自已登记的 DeepPrep/FreeSurfer 结构化输出。"
+        )
+        modality_set = {str(series.get("modality") or "").upper() for series in project_context.get("series") or []}
+        missing_modalities = []
+        if "BOLD" not in modality_set and "FMRI" not in modality_set:
+            missing_modalities.append("BOLD")
+        if "DWI" not in modality_set and "DTI" not in modality_set:
+            missing_modalities.append("DWI")
+        missing_text = f"没有发现 {' 或 '.join(missing_modalities)} 输入或任务，所以不会解释功能或弥散指标。 " if missing_modalities else ""
+        answer = (
+            "T1 结构化结果解读："
+            f"任务 #{task_id} 已登记 T1 result summary。"
+            f"{confidence_line} "
+            f"可用指标组包括：{', '.join(feature_groups) if feature_groups else '未报告'}。 "
+            f"解析数量：脑部全局指标 {parsed_counts.get('brain_measures', '未报告')} 个，皮层/区域指标 {parsed_counts.get('regions', '未报告')} 个，表格 {table_count} 个。 "
+            f"{metric_example} "
+            f"处理来源：{method}。 "
+            f"QC 入口：{qc_item.get('relative_path') if qc_item else '未登记'}；报告入口：{report_item.get('relative_path') if report_item else '未登记'}。 "
+            f"{missing_text}"
+            "综合水平方面，不能仅凭这些输出判断正常或异常；需要年龄、性别、扫描协议、质控通过情况、参考人群和临床背景。 "
+            "我可以说明哪些指标已被提取、在哪里查看表格和报告，但不会给出诊断结论。"
+        )
+        intent = "t1_metric_interpretation"
+        summary_count = len(summaries)
+    return {
+        "status": "answered",
+        "intent": intent,
+        "selected_skill": "t1-metric-interpreter",
+        "response_source": "backend_context",
+        "answer": answer,
+        "retrieved_context": {"mode": "t1_result_summary", "summary_count": summary_count},
+        "tool_invocations": [],
+        "tool_trace": [
+            {
+                "stage": "t1_metric_interpreter",
+                "status": "answered",
+                "mode": "deterministic",
+            }
+        ],
+        "safe_metadata": {
+            "lane": "read_only",
+            "production_task_created": False,
+            "response_source": "backend_context",
+            "t1_metric_interpreter": "deterministic",
+        },
+        "events": [
+            {
+                "type": "agent.t1_metric_interpreter",
+                "status": "answered",
+                "message": "Answered T1 metric interpretation from registered result-summary evidence.",
+            }
+        ],
+        "production_task_created": False,
+    }
+
+
 def _runtime_reporter_result(message: str) -> dict | None:
     status = public_model_status()
     provider = str(status.get("provider") or status.get("provider_profile") or "未配置")
@@ -738,6 +933,18 @@ def agent_run(req):
     deterministic_result = _runtime_reporter_result(message)
     if deterministic_result is not None:
         result = normalize_agent_run_result(deterministic_result)
+        result["agent_run_id"] = agent_run_id
+        finish_agent_run(agent_run_id, result=result)
+        ledger = load_agent_run(agent_run_id) or {}
+        return build_agent_run_response_payload(
+            result,
+            ledger=ledger,
+            request_type="run",
+            project_id=req.project_id,
+        )
+    t1_metric_result = _t1_metric_interpreter_result(message, project_context)
+    if t1_metric_result is not None:
+        result = normalize_agent_run_result(t1_metric_result)
         result["agent_run_id"] = agent_run_id
         finish_agent_run(agent_run_id, result=result)
         ledger = load_agent_run(agent_run_id) or {}

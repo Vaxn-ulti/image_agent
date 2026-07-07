@@ -464,3 +464,31 @@ Next:
 
 - Add a T1 metric explanation module with normal-range and limitation language.
 - Add browser regression coverage for real Agent interactions after upload and task completion.
+
+## 2026-07-07 T1 Metric Interpreter Task
+
+Objective: make T1 result questions useful and clinically cautious without relying on model self-inference.
+
+Status: completed locally as a subtask; overall interaction-intelligence goal remains active.
+
+Completed:
+
+- Added a failing backend test for a completed T1 result-summary question.
+- Verified the failure mode was an attempted model-gateway call.
+- Implemented deterministic `t1-metric-interpreter`.
+- Returned `intent=t1_metric_interpretation`, `selected_skill=t1-metric-interpreter`, and `response_source=backend_context`.
+- Included result-summary evidence: task id, feature groups, parsed counts, tables, QC/report paths, and a readable BrainSegVol example.
+- Added normal/abnormal boundary language and absent BOLD/DWI clarification.
+- Persisted `t1_metric_interpreter=deterministic` in safe ledger metadata.
+- Re-ran focused and full Agent API tests.
+
+Boundaries:
+
+- This does not yet render a richer metric table in the frontend.
+- This does not yet perform browser upload/chat acceptance testing.
+- This does not claim clinical normality.
+
+Next:
+
+- Add browser regression coverage for real Agent interactions.
+- Decide whether the frontend should render T1 metric evidence as structured UI instead of plain text.
