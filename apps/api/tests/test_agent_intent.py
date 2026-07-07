@@ -1,6 +1,56 @@
 from __future__ import annotations
 
-from app.agent.intent import normalize_intent_decision
+from app.agent.intent import classify_rule_intent, normalize_intent_decision
+
+
+def test_rule_classifier_detects_inventory_capability_as_authoritative_read_only():
+    signal = classify_rule_intent(
+        message="先解释我上传了什么，可以跑什么任务，不要启动",
+        project_context={"project_id": 1},
+    )
+
+    assert signal["category"] == "inventory_capability"
+    assert signal["intent"] == "answer_question"
+    assert signal["gate"] == "read_only"
+    assert signal["confidence"] == 1.0
+    assert signal["authoritative"] is True
+    assert "inventory_or_capability" in signal["matched_rules"]
+    assert "negated_launch" in signal["matched_rules"]
+
+
+def test_rule_classifier_detects_status_and_result_analysis_questions():
+    status_signal = classify_rule_intent(message="show task status", project_context={})
+    result_signal = classify_rule_intent(message="请完整分析结果和QC报告", project_context={})
+
+    assert status_signal["category"] == "status_question"
+    assert status_signal["intent"] == "answer_question"
+    assert status_signal["gate"] == "read_only"
+    assert "status_question" in status_signal["matched_rules"]
+    assert result_signal["category"] == "result_analysis"
+    assert result_signal["intent"] == "answer_question"
+    assert result_signal["gate"] == "read_only"
+    assert "result_analysis" in result_signal["matched_rules"]
+
+
+def test_rule_classifier_detects_explicit_fixed_workflow_launch():
+    signal = classify_rule_intent(message="请立即运行 T1 工作流", project_context={})
+
+    assert signal["category"] == "fixed_workflow_launch"
+    assert signal["intent"] == "run_workflow"
+    assert signal["gate"] == "candidate_confirmation"
+    assert signal["confidence"] >= 0.9
+    assert signal["authoritative"] is False
+    assert "explicit_launch" in signal["matched_rules"]
+
+
+def test_rule_classifier_detects_unknown_workflow_incubation_language():
+    signal = classify_rule_intent(message="帮我设计一个新的 DWI 连接组流程", project_context={})
+
+    assert signal["category"] == "toolchain_incubation"
+    assert signal["intent"] == "run_workflow"
+    assert signal["gate"] == "incubation"
+    assert signal["confidence"] >= 0.8
+    assert "incubation_language" in signal["matched_rules"]
 
 
 def test_inventory_question_forces_read_only_even_when_model_requests_run():

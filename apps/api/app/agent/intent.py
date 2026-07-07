@@ -10,6 +10,16 @@ from app.workflows.registry import FIXED_WORKFLOW, INCUBATION_LANE
 IntentName = Literal["answer_question", "run_workflow"]
 
 
+class RuleIntentSignal(BaseModel):
+    intent: IntentName
+    category: str
+    gate: str
+    confidence: float = Field(ge=0.0, le=1.0)
+    authoritative: bool = False
+    matched_rules: list[str] = Field(default_factory=list)
+    evidence: list[str] = Field(default_factory=list)
+
+
 class IntentDecision(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -21,6 +31,102 @@ class IntentDecision(BaseModel):
     summary: str | None = None
     confidence: float = Field(default=0.75, ge=0.0, le=1.0)
     requires_confirmation: bool | None = None
+
+
+def classify_rule_intent(*, message: str, project_context: dict[str, Any] | None = None) -> dict[str, Any]:
+    del project_context
+    text = _normalized_text(message)
+    matched_rules: list[str] = []
+    evidence: list[str] = []
+
+    if _contains_any(text, _inventory_tokens()) or _contains_any(text, _capability_tokens()):
+        matched_rules.append("inventory_or_capability")
+        evidence.append("inventory_or_capability_phrase")
+    if _contains_any(text, _negated_launch_tokens()):
+        matched_rules.append("negated_launch")
+        evidence.append("negated_launch_phrase")
+    if _contains_any(text, _status_tokens()):
+        matched_rules.append("status_question")
+        evidence.append("status_phrase")
+    if _contains_any(text, _result_analysis_tokens()):
+        matched_rules.append("result_analysis")
+        evidence.append("result_analysis_phrase")
+    if _contains_any(text, _incubation_tokens()):
+        matched_rules.append("incubation_language")
+        evidence.append("new_or_custom_workflow_phrase")
+    if _contains_any(text, _explicit_launch_tokens()):
+        matched_rules.append("explicit_launch")
+        evidence.append("launch_phrase")
+
+    if "inventory_or_capability" in matched_rules:
+        return RuleIntentSignal(
+            intent="answer_question",
+            category="inventory_capability",
+            gate="read_only",
+            confidence=1.0,
+            authoritative=True,
+            matched_rules=matched_rules,
+            evidence=evidence,
+        ).model_dump()
+    if "status_question" in matched_rules:
+        return RuleIntentSignal(
+            intent="answer_question",
+            category="status_question",
+            gate="read_only",
+            confidence=0.95,
+            authoritative=True,
+            matched_rules=matched_rules,
+            evidence=evidence,
+        ).model_dump()
+    if "result_analysis" in matched_rules:
+        return RuleIntentSignal(
+            intent="answer_question",
+            category="result_analysis",
+            gate="read_only",
+            confidence=0.95,
+            authoritative=True,
+            matched_rules=matched_rules,
+            evidence=evidence,
+        ).model_dump()
+    if "negated_launch" in matched_rules:
+        return RuleIntentSignal(
+            intent="answer_question",
+            category="read_only_answer",
+            gate="read_only",
+            confidence=0.95,
+            authoritative=True,
+            matched_rules=matched_rules,
+            evidence=evidence,
+        ).model_dump()
+    if "incubation_language" in matched_rules:
+        return RuleIntentSignal(
+            intent="run_workflow",
+            category="toolchain_incubation",
+            gate="incubation",
+            confidence=0.85,
+            authoritative=False,
+            matched_rules=matched_rules,
+            evidence=evidence,
+        ).model_dump()
+    if "explicit_launch" in matched_rules:
+        return RuleIntentSignal(
+            intent="run_workflow",
+            category="fixed_workflow_launch",
+            gate="candidate_confirmation",
+            confidence=0.9,
+            authoritative=False,
+            matched_rules=matched_rules,
+            evidence=evidence,
+        ).model_dump()
+    return RuleIntentSignal(
+        intent="answer_question",
+        category="read_only_answer",
+        gate="read_only",
+        confidence=0.4,
+        authoritative=False,
+        matched_rules=matched_rules,
+        evidence=evidence,
+    ).model_dump()
 
 
 def normalize_intent_decision(
@@ -148,11 +254,12 @@ def _normalized_text(message: str) -> str:
     return " ".join(str(message or "").lower().split())
 
 
-def _asks_for_inventory_or_capability_explanation(message: str) -> bool:
-    text = _normalized_text(message)
-    if not text:
-        return False
-    negated_launch_tokens = (
+def _contains_any(text: str, tokens: tuple[str, ...]) -> bool:
+    return any(token in text for token in tokens)
+
+
+def _negated_launch_tokens() -> tuple[str, ...]:
+    return (
         "do not run",
         "don't run",
         "do not start",
@@ -168,7 +275,10 @@ def _asks_for_inventory_or_capability_explanation(message: str) -> bool:
         "先解释",
         "先回答",
     )
-    explicit_launch_tokens = (
+
+
+def _explicit_launch_tokens() -> tuple[str, ...]:
+    return (
         "run now",
         "start now",
         "launch now",
@@ -184,11 +294,10 @@ def _asks_for_inventory_or_capability_explanation(message: str) -> bool:
         "创建任务",
         "申请跑",
     )
-    if any(token in text for token in explicit_launch_tokens) and not any(
-        token in text for token in negated_launch_tokens
-    ):
-        return False
-    inventory_tokens = (
+
+
+def _inventory_tokens() -> tuple[str, ...]:
+    return (
         "what did i upload",
         "what have i uploaded",
         "uploaded files",
@@ -204,7 +313,10 @@ def _asks_for_inventory_or_capability_explanation(message: str) -> bool:
         "哪些文件",
         "哪些数据",
     )
-    capability_tokens = (
+
+
+def _capability_tokens() -> tuple[str, ...]:
+    return (
         "what workflow",
         "what task",
         "what can run",
@@ -234,7 +346,57 @@ def _asks_for_inventory_or_capability_explanation(message: str) -> bool:
         "说明",
         "处理流程",
     )
-    return any(token in text for token in inventory_tokens) or any(token in text for token in capability_tokens)
+
+
+def _status_tokens() -> tuple[str, ...]:
+    return (
+        "task status",
+        "show status",
+        "status",
+        "progress",
+        "running",
+        "任务状态",
+        "进度",
+        "运行到哪",
+        "跑到哪",
+    )
+
+
+def _result_analysis_tokens() -> tuple[str, ...]:
+    return (
+        "result analysis",
+        "analyze result",
+        "qc report",
+        "review result",
+        "结果",
+        "qc报告",
+        "质量控制",
+        "完整分析",
+        "分析结果",
+    )
+
+
+def _incubation_tokens() -> tuple[str, ...]:
+    return (
+        "new workflow",
+        "custom workflow",
+        "design workflow",
+        "toolchain",
+        "新的",
+        "新流程",
+        "自定义",
+        "设计一个",
+        "连接组流程",
+    )
+
+
+def _asks_for_inventory_or_capability_explanation(message: str) -> bool:
+    text = _normalized_text(message)
+    if not text:
+        return False
+    if _contains_any(text, _explicit_launch_tokens()) and not _contains_any(text, _negated_launch_tokens()):
+        return False
+    return _contains_any(text, _inventory_tokens()) or _contains_any(text, _capability_tokens())
 
 
 def _asks_for_fixed_workflow_confirmation(message: str) -> bool:
