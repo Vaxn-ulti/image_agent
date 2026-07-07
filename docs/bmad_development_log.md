@@ -104,3 +104,23 @@
   - unknown/non-production workflow 只能进入 incubation/sandbox。
   - 所有执行必须有 provenance、safe graph state、event log、artifact manifest 和 QC boundary。
 - 本 checkpoint 只更新设计、计划和日志；没有远程 workflow run、没有 API restart、没有生产任务创建、没有远程部署配置变更。
+
+### Checkpoint 4: Target Graph Slice 1 Requirement Completeness Gate
+
+- 按新的 target graph 实施计划完成第一段代码切片：在 `select_skill` 之后、`task_planning` 之前加入 `requirement_completeness` 和 `clarification_interrupt`。
+- 生产边界：
+  - fixed workflow 请求在进入 task planning 前必须先检查最低可执行信息。
+  - 多序列且未指定 `series_id` 时进入 clarification interrupt，不创建 confirmation 或 production task。
+  - 未指定 `workflow_type` 但 registry 存在时允许后续 capability matcher 推断；只有没有 registry 可推断时才要求用户补充 workflow。
+  - clarification interrupt 使用 read-only lane 终止本轮图执行，并在 safe `graph_state` 与事件流中暴露审计信息。
+- 代码落点：
+  - `apps/api/app/agent/langgraph_runner.py`：新增 graph nodes、conditional edge、deterministic fallback 路径、public graph state 字段。
+  - `apps/api/app/agent/state.py`：新增 `requirement_completeness` state field。
+  - `apps/api/tests/test_agent_graph.py`：新增 compiled graph topology 和 ambiguous tool-task clarification 测试。
+- TDD / verification 记录：
+  - RED：新 graph topology 测试因缺少 `requirement_completeness` / `clarification_interrupt` nodes 失败。
+  - RED：ambiguous fixed workflow 测试因直接进入 confirmation/proposal 而非 clarification 失败。
+  - GREEN：`python -m pytest apps/api/tests/test_agent_graph.py::test_langgraph_compiled_graph_includes_requirement_completeness_before_task_planning apps/api/tests/test_agent_graph.py::test_langgraph_agent_runner_clarifies_incomplete_tool_task_before_confirmation -q` -> `2 passed`。
+  - Graph regression：`python -m pytest apps/api/tests/test_agent_graph.py -q` -> `56 passed`。
+  - Combined regression：`python -m pytest apps/api/tests/test_agent_intent.py apps/api/tests/test_agent_graph.py apps/api/tests/test_agent_api.py::test_agent_run_unconfigured_model_answers_inventory_without_confirmation apps/api/tests/test_agent_api.py::test_agent_run_forces_unknown_fixed_workflow_into_incubation_without_production_task -q` -> `69 passed, 3 warnings`。
+- 本 checkpoint 没有远程 workflow run、没有 API restart、没有生产任务创建、没有远程部署配置变更。

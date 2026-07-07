@@ -38,6 +38,7 @@ class ImageAgentState(TypedDict, total=False):
     router_lane: str | None
     risk_assessment: dict[str, Any]
     task_planning: dict[str, Any]
+    requirement_completeness: dict[str, Any]
     project_context: dict[str, Any]
     workflow_registry: list[dict[str, Any]]
     deployment_status: dict[str, Any]

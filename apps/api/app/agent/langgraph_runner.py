@@ -124,6 +124,8 @@ class LangGraphAgentRunner(AgentRunner):
         graph.add_node("answer_or_task_router", self._node_answer_or_task_router)
         graph.add_node("retrieve_rag", self._node_retrieve_rag)
         graph.add_node("select_skill", self._node_select_skill)
+        graph.add_node("requirement_completeness", self._node_requirement_completeness)
+        graph.add_node("clarification_interrupt", self._node_clarification_interrupt)
         graph.add_node("task_planning", self._node_task_planning)
         graph.add_node("read_only", self._node_read_only)
         graph.add_node("fixed_workflow", self._node_fixed_workflow)
@@ -142,7 +144,15 @@ class LangGraphAgentRunner(AgentRunner):
             self._route_after_skill_selection,
             {
                 READ_ONLY_LANE: "read_only",
-                TOOL_TASK_ROUTER_LANE: "task_planning",
+                TOOL_TASK_ROUTER_LANE: "requirement_completeness",
+            },
+        )
+        graph.add_conditional_edges(
+            "requirement_completeness",
+            self._route_requirement_completeness,
+            {
+                "needs_clarification": "clarification_interrupt",
+                "complete": "task_planning",
             },
         )
         graph.add_conditional_edges(
@@ -156,6 +166,7 @@ class LangGraphAgentRunner(AgentRunner):
             },
         )
         graph.add_edge("read_only", END)
+        graph.add_edge("clarification_interrupt", END)
         graph.add_edge("fixed_workflow", END)
         graph.add_edge("incubation", END)
         graph.add_edge("observe_repair", END)
@@ -174,6 +185,10 @@ class LangGraphAgentRunner(AgentRunner):
         ):
             state.update(node(state))
         if self._route_after_skill_selection(state) == TOOL_TASK_ROUTER_LANE:
+            state.update(self._node_requirement_completeness(state))
+            if self._route_requirement_completeness(state) == "needs_clarification":
+                state.update(self._node_clarification_interrupt(state))
+                return state
             state.update(self._node_task_planning(state))
             lane = self._route_lane(state)
             if lane == FIXED_WORKFLOW:
@@ -407,6 +422,82 @@ class LangGraphAgentRunner(AgentRunner):
                     "metadata": {"selected_skill": selected_skill},
                 },
             ),
+        }
+
+    def _node_requirement_completeness(self, state: ImageAgentState) -> dict[str, Any]:
+        decision = state.get("decision") or {}
+        project_context = state.get("project_context") or {}
+        missing_fields: list[str] = []
+        lane = decision.get("action_lane") or decision.get("lane")
+        if lane == FIXED_WORKFLOW:
+            series = project_context.get("series") or []
+            workflow_registry = project_context.get("workflows") or []
+            if not decision.get("workflow_type") and not workflow_registry:
+                missing_fields.append("workflow_type")
+            if decision.get("series_id") is None and len(series) != 1:
+                missing_fields.append("series_id")
+        status = "needs_clarification" if missing_fields else "complete"
+        clarification = None
+        if status == "needs_clarification":
+            clarification = "Which series and workflow should I prepare before creating a confirmation?"
+        completeness = {
+            "status": status,
+            "missing_fields": missing_fields,
+            "clarifying_question": clarification,
+            "safe_context": {
+                "series_count": len(project_context.get("series") or []),
+                "workflow_count": len(project_context.get("workflows") or []),
+                "lane": lane,
+            },
+            "production_task_created": False,
+        }
+        return {
+            "requirement_completeness": completeness,
+            "events": self._append_event(
+                state,
+                {
+                    "type": "agent.graph.requirement_completeness",
+                    "status": status,
+                    "message": "Checked tool-task requirement completeness.",
+                    "metadata": {
+                        "status": status,
+                        "missing_fields": missing_fields,
+                    },
+                },
+            ),
+        }
+
+    def _node_clarification_interrupt(self, state: ImageAgentState) -> dict[str, Any]:
+        completeness = state.get("requirement_completeness") or {}
+        question = completeness.get("clarifying_question") or "Please clarify the workflow request before I prepare execution."
+        result = {
+            "status": "needs_clarification",
+            "intent": state.get("intent") or "run_workflow",
+            "action_lane": READ_ONLY_LANE,
+            "answer": question,
+            "decision": state.get("decision") or {},
+            "requirement_completeness": completeness,
+            "production_task_created": False,
+        }
+        events = self._append_event(
+            state,
+            {
+                "type": "agent.graph.clarification_interrupt",
+                "status": "needs_clarification",
+                "message": question,
+                "metadata": {
+                    "missing_fields": completeness.get("missing_fields") or [],
+                    "production_task_created": False,
+                },
+            },
+        )
+        result["events"] = events
+        return {
+            "lane": READ_ONLY_LANE,
+            "result": result,
+            "answer": question,
+            "production_task_created": False,
+            "events": events,
         }
 
     def _node_task_planning(self, state: ImageAgentState) -> dict[str, Any]:
@@ -781,6 +872,12 @@ class LangGraphAgentRunner(AgentRunner):
             return TOOL_TASK_ROUTER_LANE
         return READ_ONLY_LANE
 
+    def _route_requirement_completeness(self, state: ImageAgentState) -> str:
+        completeness = state.get("requirement_completeness") or {}
+        if completeness.get("status") == "needs_clarification":
+            return "needs_clarification"
+        return "complete"
+
     def _state_to_result(self, state: ImageAgentState) -> dict[str, Any]:
         result = dict(state.get("result") or {})
         result.setdefault("status", "answered")
@@ -853,6 +950,7 @@ class LangGraphAgentRunner(AgentRunner):
             "intent_decision": state.get("intent_decision"),
             "rule_intent_signal": state.get("rule_intent_signal"),
             "llm_intent_signal": state.get("llm_intent_signal"),
+            "requirement_completeness": state.get("requirement_completeness"),
             "task_planning": state.get("task_planning"),
             "workflow_match": state.get("workflow_match"),
             "preflight": state.get("preflight"),

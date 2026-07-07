@@ -2082,3 +2082,105 @@ def test_langgraph_agent_runner_records_hierarchical_router_stages_for_task_requ
     assert result["graph_state"]["router_lane"] == "tool_task"
     assert result["graph_state"]["risk_assessment"]["level"] in {"low", "medium", "high"}
     assert result["graph_state"]["task_planning"]["mode"] == "fixed_first"
+
+
+def test_langgraph_compiled_graph_includes_requirement_completeness_before_task_planning(tmp_path, monkeypatch):
+    class FakeCompiledGraph:
+        def __init__(self, graph):
+            self.graph = graph
+
+        def invoke(self, state):
+            return state
+
+    class FakeStateGraph:
+        def __init__(self, state_type):
+            self.nodes = {}
+            self.edges = {}
+            self.conditional_edges = {}
+            self.entry = None
+
+        def add_node(self, name, node):
+            self.nodes[name] = node
+
+        def set_entry_point(self, name):
+            self.entry = name
+
+        def add_edge(self, source, target):
+            self.edges[source] = target
+
+        def add_conditional_edges(self, source, route_fn, mapping):
+            self.conditional_edges[source] = (route_fn, mapping)
+
+        def compile(self):
+            return FakeCompiledGraph(self)
+
+    fake_langgraph = types.ModuleType("langgraph")
+    fake_graph = types.ModuleType("langgraph.graph")
+    fake_graph.END = "__end__"
+    fake_graph.StateGraph = FakeStateGraph
+    monkeypatch.setitem(sys.modules, "langgraph", fake_langgraph)
+    monkeypatch.setitem(sys.modules, "langgraph.graph", fake_graph)
+
+    from app.agent.langgraph_runner import LangGraphAgentRunner
+
+    runner = LangGraphAgentRunner(gateway=FakeGateway({"intent": "answer_question"}), rag_root=tmp_path)
+    graph = runner._compiled_graph.graph
+
+    assert "requirement_completeness" in graph.nodes
+    assert "clarification_interrupt" in graph.nodes
+    assert graph.conditional_edges["select_skill"][1]["tool_task"] == "requirement_completeness"
+    assert graph.conditional_edges["requirement_completeness"][1]["needs_clarification"] == "clarification_interrupt"
+    assert graph.conditional_edges["requirement_completeness"][1]["complete"] == "task_planning"
+
+
+def test_langgraph_agent_runner_clarifies_incomplete_tool_task_before_confirmation(tmp_path, monkeypatch):
+    from app.agent import langgraph_runner
+    from app.agent.langgraph_runner import LangGraphAgentRunner
+
+    monkeypatch.setattr(langgraph_runner, "_langgraph_runtime_available", lambda: False)
+    gateway = FakeGateway(
+        {
+            "intent": "run_workflow",
+            "intent_category": "fixed_workflow_launch",
+            "intent_subcategory": "ambiguous_processing",
+            "action_lane": "fixed_workflow",
+            "lane": "fixed_workflow",
+            "workflow_type": None,
+            "series_id": None,
+            "summary": "Process uploaded data",
+            "requires_confirmation": True,
+            "confidence": 0.82,
+            "evidence_spans": ["process"],
+            "risk_level": "medium",
+            "ambiguities": ["No workflow or series selected."],
+            "route_recommendation": "fixed_workflow",
+        }
+    )
+
+    result = LangGraphAgentRunner(
+        gateway=gateway,
+        incubation_ledger=IncubationLedger(tmp_path / "ledger"),
+        rag_root=tmp_path,
+        thread_store=AgentThreadStore(tmp_path / "threads"),
+    ).run(
+        message="run processing",
+        project_context={
+            "project_id": 7,
+            "series": [
+                {"id": 11, "modality": "T1", "sequence_label": "T1w", "supported_for_processing": 1},
+                {"id": 12, "modality": "BOLD", "sequence_label": "rest", "supported_for_processing": 1},
+            ],
+            "workflows": [],
+        },
+    )
+
+    assert result["status"] == "needs_clarification"
+    assert result["production_task_created"] is False
+    assert "confirmation" not in result
+    assert result["graph_state"]["lane"] == "read_only"
+    assert result["graph_state"]["requirement_completeness"]["status"] == "needs_clarification"
+    assert set(result["graph_state"]["requirement_completeness"]["missing_fields"]) == {"workflow_type", "series_id"}
+    assert "Which series and workflow should I prepare" in result["answer"]
+    event_types = [event["type"] for event in result["events"]]
+    assert "agent.graph.requirement_completeness" in event_types
+    assert "agent.graph.clarification_interrupt" in event_types
