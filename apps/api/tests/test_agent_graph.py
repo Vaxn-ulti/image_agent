@@ -1465,6 +1465,12 @@ def test_langgraph_agent_runner_matches_fixed_workflow_from_capability_metadata_
     assert result["graph_state"]["capability_matcher"]["matched_workflow_type"] == "bold_fmriprep_xcpd_report"
     assert result["graph_state"]["fixed_workflow_recommendation"]["status"] == "recommended"
     assert result["graph_state"]["fixed_workflow_recommendation"]["workflow_type"] == "bold_fmriprep_xcpd_report"
+    assert result["graph_state"]["execution_plan_candidate"]["plan_version"] == "execution_plan_candidate.v1"
+    assert result["graph_state"]["execution_plan_candidate"]["workflow_type"] == "bold_fmriprep_xcpd_report"
+    assert result["graph_state"]["execution_plan_candidate"]["series_id"] == 11
+    assert result["graph_state"]["execution_plan_candidate"]["input_manifest"]["series_id"] == 11
+    assert result["graph_state"]["execution_plan_candidate"]["container_images"]
+    assert result["graph_state"]["plan_policy_gate"]["status"] == "passed"
     assert result["production_task_created"] is False
 
 
@@ -1588,6 +1594,52 @@ def test_langgraph_agent_runner_does_not_capability_match_non_agent_selectable_w
     assert "t1_deepprep_validate" in result["graph_state"]["capability_matcher"]["excluded_workflow_types"]
     assert result["graph_state"]["fixed_workflow_recommendation"]["status"] == "incubation_required"
     assert result["production_task_created"] is False
+
+
+def test_langgraph_agent_runner_blocks_unpinned_execution_plan_before_confirmation(tmp_path):
+    from app.agent.langgraph_runner import LangGraphAgentRunner
+
+    gateway = FakeGateway(
+        {
+            "intent": "run_workflow",
+            "action_lane": "fixed_workflow",
+            "workflow_type": "custom_latest_container_workflow",
+            "series_id": 41,
+            "summary": "Run custom workflow with latest image",
+            "requires_confirmation": True,
+        }
+    )
+    context = {
+        "project_id": 7,
+        "series": [{"id": 41, "modality": "T1", "supported_for_processing": 1, "sequence_label": "T1w_MPRAGE"}],
+        "workflows": [
+            {
+                "type": "custom_latest_container_workflow",
+                "label": "Custom latest container workflow",
+                "modality": "T1",
+                "lane": "fixed_workflow",
+                "agent_selectable": True,
+                "runtime_workflow_type": "custom_latest_container_workflow",
+                "container_images": {"custom": "example/custom:latest"},
+                "expected_outputs": ["result-summary.json"],
+                "qc_outputs": ["QC report"],
+            }
+        ],
+    }
+
+    result = LangGraphAgentRunner(
+        gateway=gateway,
+        incubation_ledger=IncubationLedger(tmp_path / "ledger"),
+        rag_root=tmp_path,
+        thread_store=AgentThreadStore(tmp_path / "threads"),
+    ).run(message="run custom latest workflow", project_context=context)
+
+    assert result["status"] == "plan_policy_blocked"
+    assert result["production_task_created"] is False
+    assert "confirmation" not in result
+    assert result["graph_state"]["execution_plan_candidate"]["workflow_type"] == "custom_latest_container_workflow"
+    assert result["graph_state"]["plan_policy_gate"]["status"] == "blocked"
+    assert "unpinned_container_images" in result["graph_state"]["plan_policy_gate"]["blocking_errors"]
 
 
 def test_langgraph_agent_runner_failed_task_uses_observe_repair_lane_without_retry(tmp_path):
@@ -2145,6 +2197,8 @@ def test_langgraph_compiled_graph_includes_requirement_completeness_before_task_
     assert "curated_workflow_registry" in graph.nodes
     assert "capability_matcher" in graph.nodes
     assert "fixed_workflow_recommendation" in graph.nodes
+    assert "execution_plan_candidate" in graph.nodes
+    assert "plan_policy_gate" in graph.nodes
     assert graph.conditional_edges["select_skill"][1]["tool_task"] == "requirement_completeness"
     assert graph.conditional_edges["requirement_completeness"][1]["needs_clarification"] == "clarification_interrupt"
     assert (
@@ -2156,7 +2210,9 @@ def test_langgraph_compiled_graph_includes_requirement_completeness_before_task_
     assert graph.edges["task_planning"] == "curated_workflow_registry"
     assert graph.edges["curated_workflow_registry"] == "capability_matcher"
     assert graph.edges["capability_matcher"] == "fixed_workflow_recommendation"
-    assert graph.conditional_edges["fixed_workflow_recommendation"][1]["fixed_workflow"] == "fixed_workflow"
+    assert graph.edges["fixed_workflow_recommendation"] == "execution_plan_candidate"
+    assert graph.edges["execution_plan_candidate"] == "plan_policy_gate"
+    assert graph.conditional_edges["plan_policy_gate"][1]["fixed_workflow"] == "fixed_workflow"
 
 
 def test_langgraph_agent_runner_clarifies_incomplete_tool_task_before_confirmation(tmp_path, monkeypatch):

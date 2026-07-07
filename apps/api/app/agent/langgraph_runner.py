@@ -21,7 +21,7 @@ from app.agent.thread_store import AgentThreadStore, confirmation_fingerprint
 from app.agent.tools import preflight_workflow
 from app.core.config import DATA_ROOT
 from app.imaging.detect import UNSUPPORTED_SEQUENCE_MESSAGE
-from app.workflows.registry import FIXED_WORKFLOW, INCUBATION_LANE, get_workflow
+from app.workflows.registry import FIXED_WORKFLOW, INCUBATION_LANE, RUNTIME_IMAGE_CONTRACTS, get_workflow
 
 
 READ_ONLY_LANE = "read_only"
@@ -134,6 +134,8 @@ class LangGraphAgentRunner(AgentRunner):
         graph.add_node("curated_workflow_registry", self._node_curated_workflow_registry)
         graph.add_node("capability_matcher", self._node_capability_matcher)
         graph.add_node("fixed_workflow_recommendation", self._node_fixed_workflow_recommendation)
+        graph.add_node("execution_plan_candidate", self._node_execution_plan_candidate)
+        graph.add_node("plan_policy_gate", self._node_plan_policy_gate)
         graph.add_node("read_only", self._node_read_only)
         graph.add_node("fixed_workflow", self._node_fixed_workflow)
         graph.add_node("incubation", self._node_incubation)
@@ -167,8 +169,10 @@ class LangGraphAgentRunner(AgentRunner):
         graph.add_edge("task_planning", "curated_workflow_registry")
         graph.add_edge("curated_workflow_registry", "capability_matcher")
         graph.add_edge("capability_matcher", "fixed_workflow_recommendation")
+        graph.add_edge("fixed_workflow_recommendation", "execution_plan_candidate")
+        graph.add_edge("execution_plan_candidate", "plan_policy_gate")
         graph.add_conditional_edges(
-            "fixed_workflow_recommendation",
+            "plan_policy_gate",
             self._route_lane,
             {
                 READ_ONLY_LANE: "read_only",
@@ -207,6 +211,8 @@ class LangGraphAgentRunner(AgentRunner):
             state.update(self._node_curated_workflow_registry(state))
             state.update(self._node_capability_matcher(state))
             state.update(self._node_fixed_workflow_recommendation(state))
+            state.update(self._node_execution_plan_candidate(state))
+            state.update(self._node_plan_policy_gate(state))
             lane = self._route_lane(state)
             if lane == FIXED_WORKFLOW:
                 state.update(self._node_fixed_workflow(state))
@@ -719,6 +725,92 @@ class LangGraphAgentRunner(AgentRunner):
             ),
         }
 
+    def _node_execution_plan_candidate(self, state: ImageAgentState) -> dict[str, Any]:
+        recommendation = state.get("fixed_workflow_recommendation") or {}
+        decision = state.get("decision") or {}
+        project_context = state.get("project_context") or {}
+        if recommendation.get("status") != "recommended":
+            candidate = {
+                "status": "not_applicable",
+                "reason": recommendation.get("reason") or "no fixed workflow recommendation",
+                "production_task_created": False,
+            }
+        else:
+            workflow_type = str(recommendation.get("workflow_type") or decision.get("workflow_type") or "")
+            runtime_workflow_type = str(recommendation.get("runtime_workflow_type") or workflow_type)
+            series_id = decision.get("series_id")
+            workflow = self._registry_workflow(workflow_type, state) or {}
+            input_manifest = self._execution_input_manifest(state, series_id)
+            candidate = {
+                "status": "candidate",
+                "plan_version": "execution_plan_candidate.v1",
+                "execution_kind": "fixed_workflow",
+                "project_id": project_context.get("project_id"),
+                "series_id": series_id,
+                "workflow_type": workflow_type,
+                "runtime_workflow_type": runtime_workflow_type,
+                "input_manifest": input_manifest,
+                "container_images": self._container_images_for_workflow(workflow_type, runtime_workflow_type, workflow),
+                "expected_outputs": workflow.get("expected_outputs") or [],
+                "qc_expectations": (workflow.get("qc_outputs") or workflow.get("report_outputs") or ["result-summary.json"]),
+                "mount_policy": {
+                    "input": "read_only",
+                    "output": "project_derivatives_only",
+                    "unsafe_mounts": [],
+                },
+                "authorization_required": True,
+                "production_task_created": False,
+            }
+        return {
+            "execution_plan_candidate": candidate,
+            "events": self._append_event(
+                state,
+                {
+                    "type": "agent.graph.execution_plan_candidate",
+                    "status": candidate["status"],
+                    "message": "Built execution plan candidate before authorization.",
+                    "metadata": {
+                        "status": candidate["status"],
+                        "workflow_type": candidate.get("workflow_type"),
+                        "series_id": candidate.get("series_id"),
+                        "container_image_count": len(candidate.get("container_images") or []),
+                    },
+                },
+            ),
+        }
+
+    def _node_plan_policy_gate(self, state: ImageAgentState) -> dict[str, Any]:
+        candidate = state.get("execution_plan_candidate") or {}
+        blocking_errors = self._plan_policy_blocking_errors(candidate)
+        status = "blocked" if blocking_errors else "passed"
+        if candidate.get("status") == "not_applicable":
+            status = "not_applicable"
+        gate = {
+            "status": status,
+            "blocking_errors": blocking_errors,
+            "checked_policies": [
+                "workflow_id_present",
+                "series_id_present",
+                "input_manifest_present",
+                "container_images_pinned",
+                "safe_mount_policy",
+                "qc_expectations_present",
+            ],
+            "production_task_created": False,
+        }
+        return {
+            "plan_policy_gate": gate,
+            "events": self._append_event(
+                state,
+                {
+                    "type": "agent.graph.plan_policy_gate",
+                    "status": status,
+                    "message": "Checked execution plan candidate policy before authorization.",
+                    "metadata": gate,
+                },
+            ),
+        }
+
     def _node_match_workflow(self, state: ImageAgentState) -> dict[str, Any]:
         decision = state.get("decision") or {}
         workflow_type = str(decision.get("workflow_type") or "")
@@ -792,6 +884,36 @@ class LangGraphAgentRunner(AgentRunner):
         return self._with_match_event(state, update)
 
     def _node_fixed_workflow(self, state: ImageAgentState) -> dict[str, Any]:
+        policy_gate = state.get("plan_policy_gate") or {}
+        if policy_gate.get("status") == "blocked":
+            answer = "Execution plan policy gate blocked confirmation: " + "; ".join(
+                policy_gate.get("blocking_errors") or ["policy requirements were not met"]
+            )
+            result = {
+                "status": "plan_policy_blocked",
+                "intent": state.get("intent") or "run_workflow",
+                "action_lane": FIXED_WORKFLOW,
+                "answer": answer,
+                "decision": state.get("decision") or {},
+                "execution_plan_candidate": state.get("execution_plan_candidate") or {},
+                "plan_policy_gate": policy_gate,
+                "production_task_created": False,
+            }
+            return {
+                "lane": FIXED_WORKFLOW,
+                "answer": answer,
+                "result": result,
+                "production_task_created": False,
+                "events": self._append_event(
+                    state,
+                    {
+                        "type": "agent.graph.plan_policy_blocked",
+                        "status": "blocked",
+                        "message": answer,
+                        "metadata": policy_gate,
+                    },
+                ),
+            }
         result = self._prepare_confirmation(
             decision=state.get("decision") or {},
             project_context=state.get("project_context") or {},
@@ -1152,6 +1274,8 @@ class LangGraphAgentRunner(AgentRunner):
             "curated_workflow_registry": state.get("curated_workflow_registry"),
             "capability_matcher": state.get("capability_matcher"),
             "fixed_workflow_recommendation": state.get("fixed_workflow_recommendation"),
+            "execution_plan_candidate": state.get("execution_plan_candidate"),
+            "plan_policy_gate": state.get("plan_policy_gate"),
             "task_planning": state.get("task_planning"),
             "workflow_match": state.get("workflow_match"),
             "preflight": state.get("preflight"),
@@ -1311,6 +1435,81 @@ class LangGraphAgentRunner(AgentRunner):
             "excluded_workflow_types": excluded,
             "production_task_created": False,
         }
+
+    def _execution_input_manifest(self, state: ImageAgentState, series_id: Any) -> dict[str, Any]:
+        for item in (state.get("sequence_normalization") or {}).get("series") or []:
+            if str(item.get("series_id")) == str(series_id):
+                return {
+                    "series_id": item.get("series_id"),
+                    "modality": item.get("modality"),
+                    "format": item.get("format"),
+                    "sequence_label": item.get("sequence_label"),
+                    "supported_for_processing": item.get("supported_for_processing"),
+                    "metadata_sources": item.get("metadata_sources") or [],
+                    "limitations": item.get("limitations") or [],
+                }
+        for item in (state.get("project_context") or {}).get("series") or []:
+            if str(item.get("id") or item.get("series_id")) == str(series_id):
+                return self._public_series_summary(item)
+        return {}
+
+    def _container_images_for_workflow(
+        self,
+        workflow_type: str,
+        runtime_workflow_type: str,
+        workflow: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        raw_images = (
+            workflow.get("container_images")
+            or workflow.get("runtime_images")
+            or RUNTIME_IMAGE_CONTRACTS.get(runtime_workflow_type)
+            or RUNTIME_IMAGE_CONTRACTS.get(workflow_type)
+            or {}
+        )
+        if isinstance(raw_images, list):
+            pairs = [(str(index), image) for index, image in enumerate(raw_images)]
+        elif isinstance(raw_images, dict):
+            pairs = [(str(name), image) for name, image in raw_images.items()]
+        else:
+            pairs = []
+        return [
+            {
+                "name": name,
+                "image": str(image),
+                "pinned": self._container_image_is_pinned(str(image)),
+            }
+            for name, image in pairs
+            if image
+        ]
+
+    @staticmethod
+    def _container_image_is_pinned(image: str) -> bool:
+        if "@sha256:" in image:
+            return True
+        if ":" not in image:
+            return False
+        tag = image.rsplit(":", 1)[-1].strip().lower()
+        return bool(tag) and tag != "latest"
+
+    def _plan_policy_blocking_errors(self, candidate: dict[str, Any]) -> list[str]:
+        if candidate.get("status") == "not_applicable":
+            return []
+        errors: list[str] = []
+        if not candidate.get("workflow_type"):
+            errors.append("missing_workflow_id")
+        if candidate.get("series_id") is None:
+            errors.append("missing_series_id")
+        if not candidate.get("input_manifest"):
+            errors.append("missing_input_manifest")
+        images = candidate.get("container_images") or []
+        if not images or any(item.get("pinned") is not True for item in images):
+            errors.append("unpinned_container_images")
+        mount_policy = candidate.get("mount_policy") or {}
+        if mount_policy.get("unsafe_mounts"):
+            errors.append("unsafe_mounts")
+        if not candidate.get("qc_expectations"):
+            errors.append("missing_qc_expectations")
+        return errors
 
     def _match_fixed_workflow_by_capability(self, state: ImageAgentState) -> dict[str, Any] | None:
         decision = state.get("decision") or {}

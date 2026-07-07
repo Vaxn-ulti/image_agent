@@ -44,6 +44,8 @@ class ImageAgentState(TypedDict, total=False):
     curated_workflow_registry: dict[str, Any]
     capability_matcher: dict[str, Any]
     fixed_workflow_recommendation: dict[str, Any]
+    execution_plan_candidate: dict[str, Any]
+    plan_policy_gate: dict[str, Any]
     project_context: dict[str, Any]
     workflow_registry: list[dict[str, Any]]
     deployment_status: dict[str, Any]

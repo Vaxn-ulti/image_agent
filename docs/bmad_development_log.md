@@ -165,3 +165,25 @@
   - GREEN：`python -m pytest apps/api/tests/test_agent_graph.py::test_langgraph_compiled_graph_includes_requirement_completeness_before_task_planning apps/api/tests/test_agent_graph.py::test_langgraph_agent_runner_matches_fixed_workflow_from_capability_metadata_when_planner_omits_type apps/api/tests/test_agent_graph.py::test_langgraph_agent_runner_matches_dwi_fixed_workflow_from_capability_metadata apps/api/tests/test_agent_graph.py::test_langgraph_agent_runner_does_not_capability_match_non_agent_selectable_workflow -q` -> `4 passed`。
   - Graph regression：`python -m pytest apps/api/tests/test_agent_graph.py -q` -> `58 passed`。
 - 本 checkpoint 没有远程 workflow run、没有 API restart、没有生产任务创建、没有远程部署配置变更。
+
+### Checkpoint 7: Target Graph Slice 4 ExecutionPlan Candidate And Policy Gate
+
+- 按 target graph 实施计划完成第四段代码切片：在 fixed workflow recommendation 之后、authorization/confirmation 之前加入：
+  - `execution_plan_candidate`
+  - `plan_policy_gate`
+- 生产边界：
+  - fixed workflow 在进入 confirmation 前必须生成可审计 plan candidate。
+  - policy gate 阻断缺 workflow id、缺 series id、缺 input manifest、容器镜像未固定、unsafe mount、缺 QC expectations 的计划。
+  - `:latest` 或无 tag 容器镜像不能进入 confirmation；本轮新增测试覆盖 `example/custom:latest` 被挡在 confirmation/thread 创建之前。
+  - 通过 gate 只代表允许进入人工确认卡，不代表已授权执行；本切片仍不创建 production task。
+- 代码落点：
+  - `apps/api/app/agent/langgraph_runner.py`：新增 plan candidate / policy gate nodes、fallback 顺序、container image pin 检查、input manifest 构造、blocked gate 返回。
+  - `apps/api/app/agent/state.py`：新增 `execution_plan_candidate` 和 `plan_policy_gate` state fields。
+  - `apps/api/tests/test_agent_graph.py`：新增 graph topology、固定 workflow plan candidate、unpinned image confirmation-block 测试。
+- TDD / verification 记录：
+  - RED：compiled graph test 因缺少 `execution_plan_candidate` / `plan_policy_gate` nodes 失败。
+  - RED：fixed workflow graph_state 测试因缺少 plan candidate / policy gate 失败。
+  - RED：custom `:latest` workflow 未被 gate 拦截并掉入 confirmation 准备失败。
+  - GREEN：`python -m pytest apps/api/tests/test_agent_graph.py::test_langgraph_compiled_graph_includes_requirement_completeness_before_task_planning apps/api/tests/test_agent_graph.py::test_langgraph_agent_runner_matches_fixed_workflow_from_capability_metadata_when_planner_omits_type apps/api/tests/test_agent_graph.py::test_langgraph_agent_runner_blocks_unpinned_execution_plan_before_confirmation -q` -> `3 passed`。
+  - Graph regression：`python -m pytest apps/api/tests/test_agent_graph.py -q` -> `59 passed`。
+- 本 checkpoint 没有远程 workflow run、没有 API restart、没有生产任务创建、没有远程部署配置变更。
