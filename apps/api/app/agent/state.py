@@ -39,6 +39,8 @@ class ImageAgentState(TypedDict, total=False):
     risk_assessment: dict[str, Any]
     task_planning: dict[str, Any]
     requirement_completeness: dict[str, Any]
+    neuroimaging_intake: dict[str, Any]
+    sequence_normalization: dict[str, Any]
     project_context: dict[str, Any]
     workflow_registry: list[dict[str, Any]]
     deployment_status: dict[str, Any]

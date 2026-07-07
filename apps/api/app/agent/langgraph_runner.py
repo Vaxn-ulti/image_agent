@@ -20,6 +20,7 @@ from app.agent.state import ImageAgentState
 from app.agent.thread_store import AgentThreadStore, confirmation_fingerprint
 from app.agent.tools import preflight_workflow
 from app.core.config import DATA_ROOT
+from app.imaging.detect import UNSUPPORTED_SEQUENCE_MESSAGE
 from app.workflows.registry import FIXED_WORKFLOW, INCUBATION_LANE, get_workflow
 
 
@@ -27,6 +28,7 @@ READ_ONLY_LANE = "read_only"
 TOOL_TASK_ROUTER_LANE = "tool_task"
 OBSERVE_REPAIR_LANE = "observe_repair"
 TOOLCHAIN_PROPOSAL_CONTRACT_VERSION = "toolchain_proposal.v1"
+SEQUENCE_METADATA_PRECEDENCE = ["sidecar_json", "dicom_tags", "nifti_header", "filename_tokens"]
 
 
 def build_langgraph_runner_factory(patch_attr: Callable[[str, Any], Any] | None = None) -> Callable[[], "LangGraphAgentRunner"]:
@@ -126,6 +128,8 @@ class LangGraphAgentRunner(AgentRunner):
         graph.add_node("select_skill", self._node_select_skill)
         graph.add_node("requirement_completeness", self._node_requirement_completeness)
         graph.add_node("clarification_interrupt", self._node_clarification_interrupt)
+        graph.add_node("neuroimaging_data_intake_validation", self._node_neuroimaging_data_intake_validation)
+        graph.add_node("sequence_metadata_normalization", self._node_sequence_metadata_normalization)
         graph.add_node("task_planning", self._node_task_planning)
         graph.add_node("read_only", self._node_read_only)
         graph.add_node("fixed_workflow", self._node_fixed_workflow)
@@ -152,9 +156,11 @@ class LangGraphAgentRunner(AgentRunner):
             self._route_requirement_completeness,
             {
                 "needs_clarification": "clarification_interrupt",
-                "complete": "task_planning",
+                "complete": "neuroimaging_data_intake_validation",
             },
         )
+        graph.add_edge("neuroimaging_data_intake_validation", "sequence_metadata_normalization")
+        graph.add_edge("sequence_metadata_normalization", "task_planning")
         graph.add_conditional_edges(
             "task_planning",
             self._route_lane,
@@ -189,6 +195,8 @@ class LangGraphAgentRunner(AgentRunner):
             if self._route_requirement_completeness(state) == "needs_clarification":
                 state.update(self._node_clarification_interrupt(state))
                 return state
+            state.update(self._node_neuroimaging_data_intake_validation(state))
+            state.update(self._node_sequence_metadata_normalization(state))
             state.update(self._node_task_planning(state))
             lane = self._route_lane(state)
             if lane == FIXED_WORKFLOW:
@@ -498,6 +506,90 @@ class LangGraphAgentRunner(AgentRunner):
             "answer": question,
             "production_task_created": False,
             "events": events,
+        }
+
+    def _node_neuroimaging_data_intake_validation(self, state: ImageAgentState) -> dict[str, Any]:
+        project_context = state.get("project_context") or {}
+        files = [self._public_project_file(item) for item in project_context.get("project_files") or []]
+        series = [self._public_series_summary(item) for item in project_context.get("series") or []]
+        unsupported_series = [
+            item
+            for item in series
+            if item.get("supported_for_processing") is False
+        ]
+        status = "empty"
+        if series or files:
+            status = "warning" if unsupported_series else "ok"
+        intake = {
+            "status": status,
+            "project_id": project_context.get("project_id"),
+            "file_count": len(files),
+            "series_count": len(series),
+            "supported_series_count": len(series) - len(unsupported_series),
+            "unsupported_series_count": len(unsupported_series),
+            "files": files,
+            "series": series,
+            "unsupported_series": unsupported_series,
+            "production_task_created": False,
+        }
+        return {
+            "neuroimaging_intake": intake,
+            "events": self._append_event(
+                state,
+                {
+                    "type": "agent.graph.neuroimaging_data_intake_validation",
+                    "status": status,
+                    "message": "Validated neuroimaging project context before task planning.",
+                    "metadata": {
+                        "project_id": intake["project_id"],
+                        "file_count": intake["file_count"],
+                        "series_count": intake["series_count"],
+                        "unsupported_series_count": intake["unsupported_series_count"],
+                    },
+                },
+            ),
+        }
+
+    def _node_sequence_metadata_normalization(self, state: ImageAgentState) -> dict[str, Any]:
+        normalized_series = [
+            self._normalized_sequence_summary(item)
+            for item in (state.get("project_context") or {}).get("series") or []
+        ]
+        unsupported_series = [
+            {
+                "series_id": item["series_id"],
+                "modality": item["modality"],
+                "sequence_label": item["sequence_label"],
+                "unsupported_reason": item["unsupported_reason"],
+            }
+            for item in normalized_series
+            if item.get("supported_for_processing") is False
+        ]
+        status = "empty"
+        if normalized_series:
+            status = "warning" if unsupported_series else "ok"
+        normalization = {
+            "status": status,
+            "metadata_precedence": SEQUENCE_METADATA_PRECEDENCE,
+            "series": normalized_series,
+            "unsupported_series": unsupported_series,
+            "production_task_created": False,
+        }
+        return {
+            "sequence_normalization": normalization,
+            "events": self._append_event(
+                state,
+                {
+                    "type": "agent.graph.sequence_metadata_normalization",
+                    "status": status,
+                    "message": "Normalized sequence metadata with deterministic precedence.",
+                    "metadata": {
+                        "series_count": len(normalized_series),
+                        "unsupported_series_count": len(unsupported_series),
+                        "metadata_precedence": SEQUENCE_METADATA_PRECEDENCE,
+                    },
+                },
+            ),
         }
 
     def _node_task_planning(self, state: ImageAgentState) -> dict[str, Any]:
@@ -951,6 +1043,8 @@ class LangGraphAgentRunner(AgentRunner):
             "rule_intent_signal": state.get("rule_intent_signal"),
             "llm_intent_signal": state.get("llm_intent_signal"),
             "requirement_completeness": state.get("requirement_completeness"),
+            "neuroimaging_intake": state.get("neuroimaging_intake"),
+            "sequence_normalization": state.get("sequence_normalization"),
             "task_planning": state.get("task_planning"),
             "workflow_match": state.get("workflow_match"),
             "preflight": state.get("preflight"),
@@ -958,6 +1052,106 @@ class LangGraphAgentRunner(AgentRunner):
             "task_observation": state.get("task_observation"),
             "production_task_created": False,
         }
+
+    def _public_project_file(self, item: Any) -> dict[str, Any]:
+        if not isinstance(item, dict):
+            return {"id": None, "original_name": None, "file_type": "UNKNOWN"}
+        return {
+            "id": item.get("id"),
+            "original_name": item.get("original_name") or item.get("name"),
+            "file_type": item.get("file_type") or item.get("format") or "UNKNOWN",
+            "size": item.get("size"),
+            "sha256": item.get("sha256"),
+        }
+
+    def _public_series_summary(self, item: Any) -> dict[str, Any]:
+        if not isinstance(item, dict):
+            return {
+                "series_id": None,
+                "modality": "UNKNOWN",
+                "sequence_label": "unknown",
+                "supported_for_processing": False,
+                "unsupported_reason": "Invalid series context record.",
+            }
+        supported = self._series_supported(item)
+        return {
+            "series_id": item.get("id") or item.get("series_id"),
+            "modality": str(item.get("modality") or "UNKNOWN").upper(),
+            "format": item.get("format") or "UNKNOWN",
+            "sequence_label": item.get("sequence_label") or "unknown",
+            "supported_for_processing": supported,
+            "unsupported_reason": self._unsupported_reason(item, supported),
+            "confidence": item.get("confidence"),
+            "status": item.get("status"),
+        }
+
+    def _normalized_sequence_summary(self, item: Any) -> dict[str, Any]:
+        if not isinstance(item, dict):
+            item = {}
+        metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+        supported = self._series_supported(item)
+        unsupported_reason = self._unsupported_reason(item, supported)
+        limitations = [unsupported_reason] if unsupported_reason else []
+        sidecars = {
+            "json": bool(metadata.get("sidecar_json_summary") or metadata.get("json_sidecar") or item.get("json_sidecar")),
+            "bval": bool(metadata.get("has_bval") or item.get("has_bval")),
+            "bvec": bool(metadata.get("has_bvec") or item.get("has_bvec")),
+        }
+        return {
+            "series_id": item.get("id") or item.get("series_id"),
+            "modality": str(item.get("modality") or metadata.get("modality") or "UNKNOWN").upper(),
+            "format": item.get("format") or metadata.get("format") or "UNKNOWN",
+            "sequence_label": item.get("sequence_label") or metadata.get("sequence_label") or "unknown",
+            "supported_for_processing": supported,
+            "unsupported_reason": unsupported_reason,
+            "limitations": limitations,
+            "metadata_sources": self._metadata_sources(item, metadata),
+            "metadata_precedence": SEQUENCE_METADATA_PRECEDENCE,
+            "sidecars": sidecars,
+            "metadata_confidence": item.get("confidence") or metadata.get("confidence"),
+        }
+
+    def _series_supported(self, item: dict[str, Any]) -> bool:
+        value = item.get("supported_for_processing", item.get("supported"))
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, int):
+            return value != 0
+        if isinstance(value, str):
+            return value.strip().lower() not in {"0", "false", "no", "unsupported"}
+        return True
+
+    def _unsupported_reason(self, item: dict[str, Any], supported: bool) -> str:
+        if supported:
+            return ""
+        metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+        reason = item.get("unsupported_reason") or metadata.get("unsupported_reason")
+        if reason:
+            return str(reason)
+        sequence_label = str(item.get("sequence_label") or metadata.get("sequence_label") or "")
+        if sequence_label and sequence_label != "unknown":
+            return UNSUPPORTED_SEQUENCE_MESSAGE
+        return "Unknown sequence; current software does not support processing for this sequence."
+
+    def _metadata_sources(self, item: dict[str, Any], metadata: dict[str, Any]) -> list[str]:
+        evidence = {
+            str(value)
+            for value in metadata.get("detection_evidence") or item.get("detection_evidence") or []
+        }
+        sources: list[str] = []
+        if metadata.get("sidecar_json_summary") or "json_sidecar_summary" in evidence:
+            sources.append("sidecar_json")
+        if metadata.get("dicom_tags") or "dicom_tags" in evidence or "dicom_header" in evidence:
+            sources.append("dicom_tags")
+        if (
+            "nifti_header" in evidence
+            or metadata.get("shape") is not None
+            or metadata.get("ndim") is not None
+        ):
+            sources.append("nifti_header")
+        if metadata.get("filename") or item.get("filename"):
+            sources.append("filename_tokens")
+        return sources or ["project_context"]
 
     def _registry_workflow(self, workflow_type: str, state: ImageAgentState) -> dict[str, Any] | None:
         for workflow in state.get("workflow_registry") or []:

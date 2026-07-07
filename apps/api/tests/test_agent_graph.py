@@ -2128,9 +2128,16 @@ def test_langgraph_compiled_graph_includes_requirement_completeness_before_task_
 
     assert "requirement_completeness" in graph.nodes
     assert "clarification_interrupt" in graph.nodes
+    assert "neuroimaging_data_intake_validation" in graph.nodes
+    assert "sequence_metadata_normalization" in graph.nodes
     assert graph.conditional_edges["select_skill"][1]["tool_task"] == "requirement_completeness"
     assert graph.conditional_edges["requirement_completeness"][1]["needs_clarification"] == "clarification_interrupt"
-    assert graph.conditional_edges["requirement_completeness"][1]["complete"] == "task_planning"
+    assert (
+        graph.conditional_edges["requirement_completeness"][1]["complete"]
+        == "neuroimaging_data_intake_validation"
+    )
+    assert graph.edges["neuroimaging_data_intake_validation"] == "sequence_metadata_normalization"
+    assert graph.edges["sequence_metadata_normalization"] == "task_planning"
 
 
 def test_langgraph_agent_runner_clarifies_incomplete_tool_task_before_confirmation(tmp_path, monkeypatch):
@@ -2184,3 +2191,133 @@ def test_langgraph_agent_runner_clarifies_incomplete_tool_task_before_confirmati
     event_types = [event["type"] for event in result["events"]]
     assert "agent.graph.requirement_completeness" in event_types
     assert "agent.graph.clarification_interrupt" in event_types
+
+
+def test_langgraph_agent_runner_normalizes_neuroimaging_series_before_task_planning(tmp_path, monkeypatch):
+    from app.agent import langgraph_runner
+    from app.agent.langgraph_runner import LangGraphAgentRunner
+
+    monkeypatch.setattr(langgraph_runner, "_langgraph_runtime_available", lambda: False)
+    gateway = FakeGateway(
+        {
+            "intent": "run_workflow",
+            "action_lane": "fixed_workflow",
+            "series_id": 21,
+            "workflow_type": "bold_fmriprep_xcpd_report",
+            "summary": "Run BOLD preprocessing",
+            "requires_confirmation": True,
+        }
+    )
+    context = {
+        "project_id": 7,
+        "project_files": [
+            {"id": 301, "original_name": "sub-01_task-rest_bold.nii.gz", "file_type": "NIFTI", "size": 1234},
+            {"id": 302, "original_name": "sub-01_task-rest_bold.json", "file_type": "JSON", "size": 300},
+        ],
+        "series": [
+            {
+                "id": 21,
+                "modality": "BOLD",
+                "format": "NIFTI_BIDS",
+                "sequence_label": "rsfMRI_BOLD",
+                "supported_for_processing": 1,
+                "confidence": 0.91,
+                "metadata": {
+                    "sidecar_json_summary": {"TaskName": "rest", "PhaseEncodingDirection": "j-"},
+                    "shape": [64, 64, 45, 180],
+                    "ndim": 4,
+                    "detection_evidence": ["json_sidecar_summary", "nifti_header"],
+                },
+            }
+        ],
+        "workflows": [
+            {
+                "type": "bold_fmriprep_xcpd_report",
+                "label": "BOLD fMRIPrep + XCP-D",
+                "modality": "BOLD",
+                "lane": "fixed_workflow",
+                "agent_selectable": True,
+            }
+        ],
+    }
+
+    result = LangGraphAgentRunner(
+        gateway=gateway,
+        incubation_ledger=IncubationLedger(tmp_path / "ledger"),
+        rag_root=tmp_path,
+        thread_store=AgentThreadStore(tmp_path / "threads"),
+    ).run(message="run bold preprocessing", project_context=context)
+
+    assert result["status"] == "confirmation_required"
+    intake = result["graph_state"]["neuroimaging_intake"]
+    normalization = result["graph_state"]["sequence_normalization"]
+    assert intake["status"] == "ok"
+    assert intake["series_count"] == 1
+    assert intake["file_count"] == 2
+    assert normalization["status"] == "ok"
+    assert normalization["metadata_precedence"] == ["sidecar_json", "dicom_tags", "nifti_header", "filename_tokens"]
+    assert normalization["series"][0]["series_id"] == 21
+    assert normalization["series"][0]["sequence_label"] == "rsfMRI_BOLD"
+    assert normalization["series"][0]["metadata_sources"] == ["sidecar_json", "nifti_header"]
+    assert normalization["series"][0]["sidecars"]["json"] is True
+    event_types = [event["type"] for event in result["events"]]
+    assert event_types.index("agent.graph.neuroimaging_data_intake_validation") < event_types.index(
+        "agent.graph.sequence_metadata_normalization"
+    )
+    assert event_types.index("agent.graph.sequence_metadata_normalization") < event_types.index(
+        "agent.graph.task_planning"
+    )
+
+
+def test_langgraph_agent_runner_records_unsupported_sequence_boundary(tmp_path, monkeypatch):
+    from app.agent import langgraph_runner
+    from app.agent.langgraph_runner import LangGraphAgentRunner
+    from app.imaging.detect import UNSUPPORTED_SEQUENCE_MESSAGE
+
+    monkeypatch.setattr(langgraph_runner, "_langgraph_runtime_available", lambda: False)
+    gateway = FakeGateway(
+        {
+            "intent": "run_workflow",
+            "action_lane": "fixed_workflow",
+            "series_id": 33,
+            "workflow_type": "t1_deepprep_anat_report",
+            "summary": "Run anatomical workflow",
+            "requires_confirmation": True,
+        }
+    )
+    context = {
+        "project_id": 7,
+        "series": [
+            {
+                "id": 33,
+                "modality": "FLAIR",
+                "format": "NIFTI",
+                "sequence_label": "T2_FLAIR",
+                "supported_for_processing": 0,
+                "unsupported_reason": UNSUPPORTED_SEQUENCE_MESSAGE,
+                "metadata": {"filename": "sub-01_FLAIR.nii.gz"},
+            }
+        ],
+        "workflows": [
+            {
+                "type": "t1_deepprep_anat_report",
+                "label": "T1 DeepPrep",
+                "modality": "T1",
+                "lane": "fixed_workflow",
+                "agent_selectable": True,
+            }
+        ],
+    }
+
+    result = LangGraphAgentRunner(
+        gateway=gateway,
+        incubation_ledger=IncubationLedger(tmp_path / "ledger"),
+        rag_root=tmp_path,
+        thread_store=AgentThreadStore(tmp_path / "threads"),
+    ).run(message="run anatomical workflow", project_context=context)
+
+    normalization = result["graph_state"]["sequence_normalization"]
+    assert normalization["status"] == "warning"
+    assert normalization["unsupported_series"][0]["series_id"] == 33
+    assert normalization["unsupported_series"][0]["unsupported_reason"] == UNSUPPORTED_SEQUENCE_MESSAGE
+    assert normalization["series"][0]["limitations"] == [UNSUPPORTED_SEQUENCE_MESSAGE]

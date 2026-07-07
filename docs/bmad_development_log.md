@@ -124,3 +124,22 @@
   - Graph regression：`python -m pytest apps/api/tests/test_agent_graph.py -q` -> `56 passed`。
   - Combined regression：`python -m pytest apps/api/tests/test_agent_intent.py apps/api/tests/test_agent_graph.py apps/api/tests/test_agent_api.py::test_agent_run_unconfigured_model_answers_inventory_without_confirmation apps/api/tests/test_agent_api.py::test_agent_run_forces_unknown_fixed_workflow_into_incubation_without_production_task -q` -> `69 passed, 3 warnings`。
 - 本 checkpoint 没有远程 workflow run、没有 API restart、没有生产任务创建、没有远程部署配置变更。
+
+### Checkpoint 5: Target Graph Slice 2 Neuroimaging Intake And Sequence Normalization
+
+- 按 target graph 实施计划完成第二段代码切片：在 `requirement_completeness` 之后、`task_planning` 之前加入 `neuroimaging_data_intake_validation` 和 `sequence_metadata_normalization`。
+- 生产边界：
+  - 本切片只消费已存在的 `project_context` / imaging ingest 结果，生成安全、可审计的 graph state；不读取原始影像文件、不运行 DICOM/NIfTI 转换、不创建任务。
+  - metadata precedence 固定为 `sidecar_json -> dicom_tags -> nifti_header -> filename_tokens`，作为 graph_state 契约暴露给后续 capability matcher / policy gate。
+  - unsupported recognized sequence 使用统一 limitation：`Current software does not support radiomics/processing for this sequence.`，后续 workflow 推荐不得绕开这个边界。
+  - public state 只暴露 file/series 的非敏感摘要字段，不暴露原始路径或完整 sidecar。
+- 代码落点：
+  - `apps/api/app/agent/langgraph_runner.py`：新增两个 target graph nodes、fallback 顺序、safe public graph_state、series/file normalization helpers。
+  - `apps/api/app/agent/state.py`：新增 `neuroimaging_intake` 和 `sequence_normalization` state fields。
+  - `apps/api/tests/test_agent_graph.py`：新增 graph topology、metadata precedence、sidecar/header source、unsupported sequence boundary 测试。
+- TDD / verification 记录：
+  - RED：compiled graph test 因缺少 `neuroimaging_data_intake_validation` / `sequence_metadata_normalization` nodes 失败。
+  - RED：runtime graph_state 测试因缺少 `neuroimaging_intake` 和 `sequence_normalization` 失败。
+  - GREEN：`python -m pytest apps/api/tests/test_agent_graph.py::test_langgraph_compiled_graph_includes_requirement_completeness_before_task_planning apps/api/tests/test_agent_graph.py::test_langgraph_agent_runner_normalizes_neuroimaging_series_before_task_planning apps/api/tests/test_agent_graph.py::test_langgraph_agent_runner_records_unsupported_sequence_boundary -q` -> `3 passed`。
+  - Graph regression：`python -m pytest apps/api/tests/test_agent_graph.py -q` -> `58 passed`。
+- 本 checkpoint 没有远程 workflow run、没有 API restart、没有生产任务创建、没有远程部署配置变更。
