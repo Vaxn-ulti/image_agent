@@ -106,6 +106,21 @@ def _assert_planner_schema(schema):
     assert "intent" in schema["schema"]["properties"]
     assert "requires_confirmation" in schema["schema"]["required"]
     assert schema["schema"]["properties"]["requires_confirmation"]["type"] == ["boolean", "null"]
+    for field in (
+        "intent_category",
+        "intent_subcategory",
+        "confidence",
+        "evidence_spans",
+        "risk_level",
+        "ambiguities",
+        "route_recommendation",
+    ):
+        assert field in schema["schema"]["required"]
+        assert field in schema["schema"]["properties"]
+    assert schema["schema"]["properties"]["confidence"]["minimum"] == 0
+    assert schema["schema"]["properties"]["confidence"]["maximum"] == 1
+    assert schema["schema"]["properties"]["evidence_spans"]["type"] == "array"
+    assert schema["schema"]["properties"]["ambiguities"]["type"] == "array"
     assert set(schema["schema"]["properties"]) == set(schema["schema"]["required"])
 
 

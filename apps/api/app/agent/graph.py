@@ -50,6 +50,13 @@ AGENT_PLANNER_DECISION_SCHEMA: dict[str, Any] = {
             "recommended_next_step",
             "tool_chain_hint",
             "requires_confirmation",
+            "intent_category",
+            "intent_subcategory",
+            "confidence",
+            "evidence_spans",
+            "risk_level",
+            "ambiguities",
+            "route_recommendation",
         ],
         "properties": {
             "intent": {
@@ -90,6 +97,38 @@ AGENT_PLANNER_DECISION_SCHEMA: dict[str, Any] = {
             "recommended_next_step": {"type": ["string", "null"]},
             "tool_chain_hint": {"type": ["string", "null"]},
             "requires_confirmation": {"type": ["boolean", "null"]},
+            "intent_category": {
+                "type": "string",
+                "enum": [
+                    "inventory_capability",
+                    "status_question",
+                    "result_analysis",
+                    "read_only_answer",
+                    "fixed_workflow_launch",
+                    "toolchain_incubation",
+                    "unknown_workflow",
+                    "needs_clarification",
+                    "safety_blocked",
+                ],
+            },
+            "intent_subcategory": {"type": ["string", "null"]},
+            "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+            "evidence_spans": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+            "risk_level": {
+                "type": "string",
+                "enum": ["low", "medium", "high", "blocked"],
+            },
+            "ambiguities": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+            "route_recommendation": {
+                "type": "string",
+                "enum": ["read_only", FIXED_WORKFLOW, INCUBATION_LANE, "needs_clarification"],
+            },
         },
     },
 }
