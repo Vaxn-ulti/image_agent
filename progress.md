@@ -2222,3 +2222,32 @@
 - Browser/test boundaries:
   - Browser runtime lacks file attachment API for `input[type=file]`; upload state was seeded via local API with synthetic files and verified in browser UI;
   - Browser URL policy blocked a later local Agent reload, so no policy workaround was attempted.
+
+## 2026-07-07 Remote Overlay Sync For Browser UX Fix
+
+- Pushed local backup branch `codex/backup-image-agent-langgraph-20260617` to GitHub at commit `0cfb5bad`.
+- Read-only remote probe confirmed:
+  - target `yyf@10.2.32.14`;
+  - live root `/home/yyf/project/image_agent` exists but has many uncommitted changes, so it was not modified;
+  - API port `8000` and Console port `5180` were running from the previous rootfix10 release overlay.
+- Created new release overlay without touching the live tree:
+  - `/home/yyf/project/image_agent_releases/codex-browser-ux-0cfb5bad-20260707T1905`;
+  - direct full patch application failed because rootfix10 differs from the local branch;
+  - applied the minimal runtime/test patch to the new overlay only.
+- Remote focused verification passed from the new overlay:
+  - API CORS focused tests: `3 passed`;
+  - API upload focused tests: `3 passed`;
+  - Console API error-message focused tests: `2 passed`;
+  - Console production build passed with Vite output under `dist/`.
+- Remote service switch:
+  - API preflight returned `active_task_drain:ok`, `port_owner:image_agent`, and `restart_preflight:ok`;
+  - API `8000` now runs from `/home/yyf/project/image_agent_releases/codex-browser-ux-0cfb5bad-20260707T1905/apps/api`;
+  - Console `5180` now runs from `/home/yyf/project/image_agent_releases/codex-browser-ux-0cfb5bad-20260707T1905/apps/console`;
+  - old `5173` desktop entry was intentionally left untouched.
+- Remote smoke:
+  - `/health` returns `{"status":"ok","app":"image_agent","version":"0.2.0"}`;
+  - CORS preflight for `Origin: http://10.2.32.14:5180` returns `access-control-allow-origin: http://10.2.32.14:5180`;
+  - failed login returns HTTP `401` with CORS and JSON detail instead of browser-opaque fetch failure;
+  - real browser opened `http://10.2.32.14:5180/` and saw the `Brain Image Agent Console` login form with no console errors.
+- Boundary:
+  - remote production credentials are custom; `demo/demo` and `operator/operator` are rejected, so authenticated upload/Agent browser testing on remote requires the operator's configured credentials.

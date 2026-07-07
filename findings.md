@@ -482,3 +482,15 @@ Findings:
   - Fix: structured backend `detail.message` is now used as the user-facing error message.
 - Browser automation was stopped by Browser URL policy during a later local Agent page reload.
   - Boundary: do not bypass Browser policy; final verification for the error-message fix uses frontend unit tests.
+
+## 2026-07-07 Remote Deployment Findings For Browser UX Fix
+
+- Remote product entry is `http://10.2.32.14:5180/`, not the local dev URL.
+- The remote API is `http://10.2.32.14:8000/`, with server-local health at `http://127.0.0.1:8000/health` on `yyf`.
+- The fix was deployed through a new release overlay:
+  - `/home/yyf/project/image_agent_releases/codex-browser-ux-0cfb5bad-20260707T1905`;
+  - API and Console `5180` both run from this overlay after restart;
+  - `/home/yyf/project/image_agent` was not modified because its working tree contains many existing remote changes.
+- Remote CORS now allows `Origin: http://10.2.32.14:5180`.
+- Remote login uses custom production credentials from `.env`; default `demo/demo` and `operator/operator` are rejected. This is expected for production-like deployment and blocks authenticated browser upload/Agent testing until the operator logs in with the configured account.
+- Real browser opened the remote Console login page successfully and saw no frontend console errors.

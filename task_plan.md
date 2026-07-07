@@ -360,3 +360,10 @@ Next:
 
 - Final verification and backup commit.
 - Later UX work: make Dashboard `Open Agent Copilot` navigation semantics clearer and add better long-running Agent progress feedback.
+
+Remote sync completion:
+
+- Commit `0cfb5bad` was pushed to `origin/codex/backup-image-agent-langgraph-20260617`.
+- Remote `yyf@10.2.32.14` now runs API `8000` and Console `5180` from release overlay `/home/yyf/project/image_agent_releases/codex-browser-ux-0cfb5bad-20260707T1905`.
+- Remote smoke verified health, CORS for `http://10.2.32.14:5180`, readable 401 login failure, and browser-loadable Console login page.
+- Authenticated remote upload/Agent browser testing remains pending on operator-provided production credentials.
