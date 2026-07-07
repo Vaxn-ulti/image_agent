@@ -95,6 +95,49 @@ Downstream behavior remains unchanged:
 - `run_workflow + fixed_workflow` goes to confirmation preparation.
 - `run_workflow + toolchain_incubation` goes to proposal creation.
 
+## Production LangGraph Design
+
+The current LangGraph has one `classify_intent` node that hides planner, rules, and fusion behind `_plan()`. The production graph must expose the layered routing stages as graph-level state and events.
+
+The target graph segment is:
+
+```text
+run_intake
+  -> safety_risk_router
+  -> rule_intent_classifier
+  -> llm_intent_planner
+  -> intent_fusion_gate
+  -> answer_or_task_router
+```
+
+The fallback graph must execute the same nodes in the same order when the LangGraph runtime is unavailable.
+
+Node responsibilities:
+
+- `rule_intent_classifier`
+  - Calls `classify_rule_intent(message, project_context)`.
+  - Stores `rule_intent_signal`.
+  - Emits `agent.graph.rule_intent_classifier`.
+- `llm_intent_planner`
+  - Calls the existing model planner path.
+  - Stores raw LLM planner output as `llm_intent_signal` / `decision`.
+  - Emits `agent.graph.llm_intent_planner`.
+- `intent_fusion_gate`
+  - Calls the fusion policy.
+  - Stores final `decision`, `intent`, and `intent_decision`.
+  - Emits `agent.graph.intent_fusion_gate`.
+- `answer_or_task_router`
+  - Routes only from the fused decision.
+
+Public graph state must include privacy-safe intent audit metadata:
+
+- `intent_decision`
+- `rule_intent_signal`
+- `llm_intent_signal`
+- no raw user message, backend paths, secrets, or PHI-like free text.
+
+The old `classify_intent` node can remain as an internal compatibility wrapper only if tests prove it delegates to the new nodes. New graph behavior should not depend on that wrapper.
+
 ## Testing Requirements
 
 The implementation must add focused tests for:
@@ -107,6 +150,8 @@ The implementation must add focused tests for:
 - Unknown workflow or non-production language routing to incubation.
 - Planner schema requiring production fields.
 - Graph trace including rule and fusion stages.
+- LangGraph node order including `rule_intent_classifier`, `llm_intent_planner`, and `intent_fusion_gate`.
+- Fallback graph parity for the same production intent stages.
 - API regressions for inventory answer and unknown-workflow incubation.
 
 ## Out Of Scope
@@ -125,6 +170,7 @@ Those belong to later BMAD checkpoints after this routing contract is stable.
 
 - Production intent schema and fusion policy are implemented in `apps/api/app/agent/intent.py`.
 - `AGENT_PLANNER_DECISION_SCHEMA` requires production intent fields.
+- `apps/api/app/agent/langgraph_runner.py` exposes rule, LLM, and fusion intent nodes in both compiled and fallback graph paths.
 - Existing graph routing continues to pass focused regressions.
 - Tests prove conservative handling of rule/LLM conflicts.
 - BMAD log records the work and checkpoint commits.
