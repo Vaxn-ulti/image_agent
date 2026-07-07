@@ -13,6 +13,7 @@ from app.agent.chat import (
     _status_reply,
 )
 from app.agent.incubation import IncubationLedger
+from app.agent.intent import normalize_intent_decision
 from app.agent.model_gateway import ModelGateway
 from app.agent.prompt_loader import load_prompt
 from app.agent.rag_orchestration import retrieve_reference_context
@@ -321,44 +322,8 @@ class AgentRunner:
                 {"intent": "answer_question", "summary": "The model did not return a structured decision."},
                 tool_trace,
             )
-        if self._asks_for_inventory_or_capability_explanation(message):
-            decision = {
-                **decision,
-                "intent": "answer_question",
-                "action_lane": None,
-                "lane": None,
-                "requires_confirmation": False,
-                "recommended_next_step": "Answer the uploaded-file inventory and runnable-workflow question before preparing any workflow confirmation.",
-            }
-            tool_trace = [
-                *tool_trace,
-                {
-                    "stage": "intent_guard",
-                    "status": "forced_read_only_inventory_capability_answer",
-                    "production_task_created": False,
-                },
-            ]
-        elif (
-            decision.get("intent") == "run_workflow"
-            and (decision.get("action_lane") or decision.get("lane") or FIXED_WORKFLOW) == FIXED_WORKFLOW
-            and not self._asks_for_fixed_workflow_confirmation(message)
-        ):
-            decision = {
-                **decision,
-                "intent": "answer_question",
-                "action_lane": None,
-                "lane": None,
-                "requires_confirmation": False,
-                "recommended_next_step": "Explain the current project, uploaded files, possible workflows, and ask before preparing confirmation.",
-            }
-            tool_trace = [
-                *tool_trace,
-                {
-                    "stage": "intent_guard",
-                    "status": "forced_read_only_until_explicit_fixed_workflow_launch",
-                    "production_task_created": False,
-                },
-            ]
+        decision, intent_trace = normalize_intent_decision(message=message, model_decision=decision)
+        tool_trace = [*tool_trace, *intent_trace]
         return decision, tool_trace
 
     @staticmethod

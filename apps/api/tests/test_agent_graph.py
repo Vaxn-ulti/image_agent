@@ -136,6 +136,59 @@ def test_agent_runner_passes_json_schema_to_no_tools_planner_fallback():
     _assert_planner_schema(gateway.structured_schema)
 
 
+def test_agent_plan_uses_structured_intent_guard_for_inventory_question():
+    gateway = FakeGateway(
+        {
+            "intent": "run_workflow",
+            "action_lane": "fixed_workflow",
+            "lane": "fixed_workflow",
+            "series_id": 11,
+            "workflow_type": "t1_deepprep_anat_report",
+            "summary": "Run T1 workflow",
+            "requires_confirmation": True,
+            "confidence": 0.91,
+        }
+    )
+
+    decision, trace = AgentRunner(gateway=gateway)._plan(
+        message="先解释我上传了什么，可以跑什么任务，不要启动",
+        project_context={"project_id": 1, "series": []},
+    )
+
+    assert decision["intent"] == "answer_question"
+    assert decision["intent_decision"]["category"] == "inventory_capability"
+    assert decision["intent_decision"]["gate"] == "read_only"
+    assert trace[-1]["stage"] == "intent_decision"
+    assert trace[-1]["status"] == "forced_read_only_inventory_capability_answer"
+    assert trace[-1]["production_task_created"] is False
+
+
+def test_agent_plan_preserves_explicit_fixed_workflow_launch():
+    gateway = FakeGateway(
+        {
+            "intent": "run_workflow",
+            "action_lane": "fixed_workflow",
+            "lane": "fixed_workflow",
+            "series_id": 11,
+            "workflow_type": "t1_deepprep_anat_report",
+            "summary": "Run T1 workflow",
+            "requires_confirmation": True,
+            "confidence": 0.88,
+        }
+    )
+
+    decision, trace = AgentRunner(gateway=gateway)._plan(
+        message="请立即运行 T1 工作流",
+        project_context={"project_id": 1, "series": []},
+    )
+
+    assert decision["intent"] == "run_workflow"
+    assert decision["action_lane"] == "fixed_workflow"
+    assert decision["intent_decision"]["category"] == "fixed_workflow_launch"
+    assert decision["intent_decision"]["gate"] == "confirmation_required"
+    assert all(item["stage"] != "intent_decision" for item in trace)
+
+
 def test_agent_runner_returns_confirmation_when_model_plans_workflow():
     gateway = FakeGateway(
         {
