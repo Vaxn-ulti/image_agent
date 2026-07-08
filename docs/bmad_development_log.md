@@ -315,3 +315,21 @@
   - 写入并登记 `summary/t1_result_summary.json` 与 `tables/t1_brain_measures.tsv`；
   - Agent 页面显示 `T1 结构化结果解读`、`BrainSegVol`、`不能仅凭这些输出判断正常或异常`、`Database and rules`。
 - 本 checkpoint 没有远程部署配置变更、没有生产任务创建、没有明文密钥写入 git-tracked 文件。
+
+### Checkpoint 13: Agent Reply Markdown Noise Cleanup
+
+- 本轮处理用户反馈中的显示层问题：Agent 回复含有过多 `**`、反引号、标题符、列表符号时，人类阅读不舒服。
+- 生产边界：
+  - 只改前端展示层 `formatAgentText`；
+  - 不改变后端事实来源、response source、ledger、任务创建或 confirmation 行为；
+  - `Database and rules` / `Model answer` 等来源标签继续保留。
+- 代码落点：
+  - `apps/console/src/lib/agentText.ts`：在既有粗体、反引号和 bullet 清理基础上，新增 Markdown heading marker 与 numbered-list prefix 清理。
+  - `apps/console/src/lib/agentText.test.ts`：新增模型风格 Markdown 回复净化测试。
+- TDD / verification 记录：
+  - RED：新增测试最初失败，旧 formatter 保留 `###` 和 `1.`。
+  - GREEN：`node node_modules/vitest/vitest.mjs run src/lib/agentText.test.ts --run` -> `2 passed`。
+  - Agent 页面回归：`node node_modules/vitest/vitest.mjs run src/routes/AgentPage.test.tsx --run` -> `12 passed`。
+  - Console build：`node node_modules/typescript/bin/tsc -b` -> passed。
+  - 真实浏览器回归：`node scripts/browser_upload_agent_smoke.mjs --root .tmp/browser-formatting-regression-20260708 --api-port 8150 --console-port 5190 --runtime-source-question --output-json .tmp/browser-formatting-regression-20260708.json` -> passed。
+- 本 checkpoint 没有后端逻辑变更、没有远程部署配置变更、没有生产任务创建、没有明文密钥写入 git-tracked 文件。

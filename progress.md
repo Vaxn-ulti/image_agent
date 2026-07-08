@@ -2647,3 +2647,21 @@
   - registered `summary/t1_result_summary.json` and `tables/t1_brain_measures.tsv`;
   - verified the page displayed `T1 结构化结果解读`, `BrainSegVol`, `不能仅凭这些输出判断正常或异常`, and `Database and rules`;
   - no LLM call is required for this interaction; the explanation comes from backend result-summary evidence.
+
+## 2026-07-08 Agent Text Readability Cleanup
+
+- Goal: reduce raw Markdown noise in Agent replies, matching the earlier user feedback that replies contained too many symbols and were uncomfortable to read.
+- Scope:
+  - frontend display-layer cleanup only;
+  - backend answer facts, response source labels, task/confirmation behavior, and evidence traces are unchanged.
+- TDD evidence:
+  - RED: added a `formatAgentText` test with model-style `###` heading, bold text, backticks, bullet list, numbered list, and extra blank lines;
+  - the test failed because the previous formatter left `###` and `1.` in the chat bubble text.
+- Implementation:
+  - `formatAgentText` now strips Markdown heading markers and numbered-list prefixes in addition to existing bold/code/bullet cleanup;
+  - line breaks and source labels remain intact.
+- Verification:
+  - `node node_modules/vitest/vitest.mjs run src/lib/agentText.test.ts --run`: 2 passed.
+  - `node node_modules/vitest/vitest.mjs run src/routes/AgentPage.test.tsx --run`: 12 passed.
+  - `node node_modules/typescript/bin/tsc -b`: passed.
+  - `node scripts/browser_upload_agent_smoke.mjs --root .tmp/browser-formatting-regression-20260708 --api-port 8150 --console-port 5190 --runtime-source-question --output-json .tmp/browser-formatting-regression-20260708.json`: passed.
