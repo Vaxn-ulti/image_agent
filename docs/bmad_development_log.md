@@ -361,3 +361,25 @@
   - `node --test src/lib/api.test.mjs` -> `10 passed`。
   - `node node_modules/vitest/vitest.mjs run src/routes/AgentPage.test.tsx --run` -> `13 passed`。
 - 本 checkpoint 未提交 `.env`，未在 git-tracked 文件写入明文密钥。
+
+### Checkpoint 15: Browser Workflow Quick Action Resume Smoke
+
+- 本轮继续降低 Agent 交互摩擦：把“准备 T1 workflow 确认”从手动输入 prompt，补成真实浏览器可点击的一键 quick action smoke。
+- 生产边界：
+  - quick action 只准备 confirmation，不直接创建或启动任务；
+  - 任务仍必须经过 Agent confirmation card 的 `Approve workflow`；
+  - approval 后通过 `/agent/runs/{thread_id}/resume` 创建真实后端任务；
+  - isolated browser smoke 不 seed 已有运行任务，避免伪造交互成功。
+- 代码落点：
+  - `apps/console/scripts/browser_upload_agent_smoke.mjs`：新增 `--workflow-quick-action-resume`，设置 `workflowConfirmationResume=true` 且 `workflowQuickActionResume=true`；浏览器 flow 点击 `Prepare T1 DeepPrep confirmation for series <id>` 按钮而不是填 `Agent query`。
+  - `apps/console/scripts/browser_upload_agent_smoke.test.mjs`：新增 CLI parse 和注入式 browser flow 测试，锁定不填输入框、点击 quick action、再审批并轮询任务列表。
+- TDD / verification 记录：
+  - RED：`--workflow-quick-action-resume` 最初报 `Unknown argument`。
+  - RED：quick-action flow 最初没有返回 `mode=quick_action`，仍等价于 typed prompt path。
+  - GREEN：`node node_modules/vitest/vitest.mjs run scripts/browser_upload_agent_smoke.test.mjs --run` -> `10 passed`。
+  - Agent 页面回归：`node node_modules/vitest/vitest.mjs run src/routes/AgentPage.test.tsx --run` -> `13 passed`。
+- 真实浏览器证据：
+  - `node scripts/browser_upload_agent_smoke.mjs --root .tmp/browser-workflow-quick-action-resume-20260708 --api-port 8151 --console-port 5191 --workflow-quick-action-resume --output-json .tmp/browser-workflow-quick-action-resume-20260708.json` -> passed。
+  - 输出 JSON：`workflow_confirmation_resume.mode=quick_action`、`seed_task=null`、`series_id=1`、`task.id=1`、`workflow_type=t1_deepprep_anat_report`、`workflow_confirmation_resume_status=passed_in_browser`。
+  - isolated task 后续因缺 `IMAGE_AGENT_SUDO_PASSWORD` 在真实 Docker runtime credential boundary 失败，这是无 sudo 密码环境下的预期边界；confirmation/approval/任务创建链路已通过浏览器验证。
+- 本 checkpoint 没有远程部署配置变更、没有明文密钥写入 git-tracked 文件。

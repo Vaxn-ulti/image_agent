@@ -38,6 +38,7 @@ export function parseArgs(argv) {
     runtimeSourceQuestion: false,
     t1MetricQuestion: false,
     workflowConfirmationResume: false,
+    workflowQuickActionResume: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -49,6 +50,9 @@ export function parseArgs(argv) {
       args.t1MetricQuestion = true;
     } else if (arg === '--workflow-confirmation-resume') {
       args.workflowConfirmationResume = true;
+    } else if (arg === '--workflow-quick-action-resume') {
+      args.workflowConfirmationResume = true;
+      args.workflowQuickActionResume = true;
     } else if (arg === '--root') {
       args.root = argv[++index];
     } else if (arg === '--api-port') {
@@ -389,6 +393,7 @@ async function driveBrowserFlow({
   root,
   t1MetricQuestion,
   workflowConfirmationResume,
+  workflowQuickActionResume,
 }, deps) {
   const browser = await deps.launchBrowser({ headless });
   try {
@@ -484,8 +489,15 @@ async function driveBrowserFlow({
         projectId,
         seriesId: uploadedSeriesId,
       });
-      await page.getByLabel('Agent query').fill(confirmationMessage);
-      await page.getByRole('button', { name: 'Send' }).click();
+      const resumeMode = workflowQuickActionResume ? 'quick_action' : 'typed_prompt';
+      if (workflowQuickActionResume) {
+        await page.getByRole('button', {
+          name: `Prepare T1 DeepPrep confirmation for series ${uploadedSeriesId}`,
+        }).click();
+      } else {
+        await page.getByLabel('Agent query').fill(confirmationMessage);
+        await page.getByRole('button', { name: 'Send' }).click();
+      }
       await page.getByText('Approve workflow').waitFor({ timeout: 20000 });
       await page.getByText('t1_deepprep_anat_report', { exact: true }).waitFor({ timeout: 20000 });
       await page.getByText('Task not created yet').waitFor({ timeout: 20000 });
@@ -496,6 +508,7 @@ async function driveBrowserFlow({
         seed: null,
         workflowConfirmationResume: {
           message: confirmationMessage,
+          mode: resumeMode,
           series_id: uploadedSeriesId,
           task,
         },
@@ -555,6 +568,7 @@ export async function runBrowserUploadAgentSmoke(options, injectedDeps = {}) {
       root,
       t1MetricQuestion: options.t1MetricQuestion === true,
       workflowConfirmationResume: options.workflowConfirmationResume === true,
+      workflowQuickActionResume: options.workflowQuickActionResume === true,
     }, deps);
     const runtimeSource = flow.runtimeSource || null;
     const t1Metric = flow.t1Metric || null;

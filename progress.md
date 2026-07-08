@@ -2686,3 +2686,27 @@
   - `python -m pytest tests/test_agent_api.py::test_agent_run_answers_identity_question_without_model_call tests/test_agent_api.py::test_agent_run_answers_runtime_source_question_without_model_call tests/test_agent_api.py::test_agent_run_answers_chinese_current_data_overview_readably_without_model -q --tb=short`: 3 passed, 3 warnings.
   - `node --test src/lib/api.test.mjs`: 10 passed.
   - `node node_modules/vitest/vitest.mjs run src/routes/AgentPage.test.tsx --run`: 13 passed.
+
+## 2026-07-08 Browser Workflow Quick Action Resume Smoke
+
+- Goal: make workflow confirmation easier to use by verifying the browser can click the Agent page quick action instead of requiring the user to type the exact confirmation prompt.
+- User-facing interaction covered:
+  - upload generated T1 NIfTI;
+  - open the project Agent page;
+  - click `Prepare T1 DeepPrep confirmation for series 1`;
+  - review the confirmation card;
+  - click `Approve workflow`;
+  - verify a backend `t1_deepprep_anat_report` task is created.
+- TDD evidence:
+  - RED: `--workflow-quick-action-resume` initially failed with `Unknown argument`;
+  - RED: the quick-action flow initially returned no `mode=quick_action`, proving it still used the typed-prompt path;
+  - GREEN: added CLI parsing, `workflowQuickActionResume`, click-by-role behavior, and `mode` evidence in the output payload.
+- Verification:
+  - `node node_modules/vitest/vitest.mjs run scripts/browser_upload_agent_smoke.test.mjs --run`: 10 passed.
+  - `node node_modules/vitest/vitest.mjs run src/routes/AgentPage.test.tsx --run`: 13 passed.
+  - `node scripts/browser_upload_agent_smoke.mjs --root .tmp/browser-workflow-quick-action-resume-20260708 --api-port 8151 --console-port 5191 --workflow-quick-action-resume --output-json .tmp/browser-workflow-quick-action-resume-20260708.json`: passed.
+- Runtime browser evidence:
+  - output JSON recorded `workflow_confirmation_resume.mode=quick_action`;
+  - `seed_task=null`;
+  - created backend task `#1` for `t1_deepprep_anat_report`;
+  - the task later stopped at the expected isolated-runtime credential boundary: `IMAGE_AGENT_SUDO_PASSWORD is required for real Docker workflows`.

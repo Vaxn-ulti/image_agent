@@ -70,6 +70,14 @@ describe('browser_upload_agent_smoke', () => {
     expect(args.agentMessage).toBe('');
   });
 
+  it('keeps workflow quick-action CLI mode on browser button confirmation', () => {
+    const args = parseArgs(['--workflow-quick-action-resume']);
+
+    expect(args.workflowConfirmationResume).toBe(true);
+    expect(args.workflowQuickActionResume).toBe(true);
+    expect(args.agentMessage).toBe('');
+  });
+
   it('keeps runtime source CLI mode on its generated source question', () => {
     const args = parseArgs(['--runtime-source-question']);
 
@@ -212,6 +220,80 @@ describe('browser_upload_agent_smoke', () => {
     ]);
     expect(actions).toContainEqual(['waitFor', 'text', 'Approve workflow']);
     expect(actions).toContainEqual(['waitFor', 'text', 't1_deepprep_anat_report']);
+    expect(actions).toContainEqual(['click', 'role', 'button:Approve workflow']);
+    expect(actions).toContainEqual(['waitFor', 'text', 'created for t1_deepprep_anat_report']);
+    expect(actions).toContainEqual(['requestJson', 'GET', 'http://api.local/projects/1/tasks']);
+  });
+
+  it('drives upload, Agent workflow quick action, and approval resume through the browser', async () => {
+    const actions = [];
+    const page = createFakePage(actions);
+    const browser = {
+      async close() {
+        actions.push(['browser.close']);
+      },
+      async newPage() {
+        actions.push(['browser.newPage']);
+        return page;
+      },
+    };
+    const deps = {
+      async createProject() {
+        actions.push(['createProject']);
+        return { project_id: 1 };
+      },
+      async launchBrowser() {
+        actions.push(['launchBrowser']);
+        return browser;
+      },
+      async requestJson(method, url) {
+        actions.push(['requestJson', method, url]);
+        return [
+          { id: 9102, project_id: 1, series_id: 1, status: 'queued', workflow_type: 't1_deepprep_anat_report' },
+        ];
+      },
+      async seedRunningT1Task() {
+        actions.push(['seedTask']);
+        throw new Error('workflow quick-action resume smoke must not seed an existing task');
+      },
+      async startApiServer({ root }) {
+        actions.push(['startApi', root.endsWith('isolated-root')]);
+        return { baseUrl: 'http://api.local', stop: vi.fn(async () => actions.push(['stopApi'])) };
+      },
+      async startConsoleServer({ apiBaseUrl }) {
+        actions.push(['startConsole', apiBaseUrl]);
+        return { baseUrl: 'http://console.local', stop: vi.fn(async () => actions.push(['stopConsole'])) };
+      },
+      async writeMinimalNifti(filePath) {
+        actions.push(['writeNifti', filePath.endsWith('sub-browser-smoke_T1w.nii.gz')]);
+      },
+    };
+
+    const result = await runBrowserUploadAgentSmoke(
+      {
+        headless: true,
+        root: 'C:/tmp/isolated-root',
+        workflowConfirmationResume: true,
+        workflowQuickActionResume: true,
+      },
+      deps,
+    );
+
+    expect(result.status).toBe('passed');
+    expect(result.workflow_confirmation_resume_status).toBe('passed_in_browser');
+    expect(result.workflow_confirmation_resume.mode).toBe('quick_action');
+    expect(result.seed_task).toBeNull();
+    expect(actions).not.toContainEqual(['seedTask']);
+    expect(actions).not.toContainEqual([
+      'fill',
+      'label',
+      'Agent query',
+      '请为项目1的序列1准备 t1_deepprep_anat_report 工作流确认，不要创建或启动任务',
+    ]);
+    expect(actions).toContainEqual(['click', 'role', 'button:Prepare T1 DeepPrep confirmation for series 1']);
+    expect(actions).toContainEqual(['waitFor', 'text', 'Approve workflow']);
+    expect(actions).toContainEqual(['waitFor', 'text', 't1_deepprep_anat_report']);
+    expect(actions).toContainEqual(['waitFor', 'text', 'Task not created yet']);
     expect(actions).toContainEqual(['click', 'role', 'button:Approve workflow']);
     expect(actions).toContainEqual(['waitFor', 'text', 'created for t1_deepprep_anat_report']);
     expect(actions).toContainEqual(['requestJson', 'GET', 'http://api.local/projects/1/tasks']);
