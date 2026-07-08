@@ -362,15 +362,18 @@ def test_legacy_chat_runtime_is_removed_from_app_layer():
     root = Path(__file__).resolve().parents[1]
     agent_service = (root / "app" / "services" / "agent_service.py").read_text(encoding="utf-8")
     agent_chat = root / "app" / "agent" / "chat.py"
+    context_replies = root / "app" / "agent" / "context_replies.py"
     app_factory = (root / "app" / "app_factory.py").read_text(encoding="utf-8")
     main_compat = (root / "app" / "main_compat.py").read_text(encoding="utf-8")
 
-    assert agent_chat.exists()
-    chat_source = agent_chat.read_text(encoding="utf-8")
-    assert "def _chat_intent(" in chat_source
-    assert "def _status_reply(" in chat_source
+    assert not agent_chat.exists()
+    assert context_replies.exists()
+    reply_source = context_replies.read_text(encoding="utf-8")
+    assert "def _chat_intent(" in reply_source
+    assert "def _status_reply(" in reply_source
 
     for forbidden in (
+        "from app.agent.chat",
         "def _chat_intent(",
         "def _status_reply(",
         "build_chat_backend_context",
@@ -388,7 +391,7 @@ def test_legacy_chat_runtime_is_removed_from_app_layer():
         "DeepSeekUnavailable",
         "build_chat_compatibility_response",
     ):
-        assert forbidden not in chat_source
+        assert forbidden not in reply_source
         assert forbidden not in main_compat
     assert "routes import agent, auth, chat" not in app_factory
 

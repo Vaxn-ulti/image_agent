@@ -117,5 +117,4 @@ export const api = {
   getOutputs: (taskId) => request(`/tasks/${taskId}/outputs`).then(sanitizeBackendResponse),
   getResultSummary: (taskId) => request(`/tasks/${taskId}/result-summary`).then(sanitizeBackendResponse),
   getArtifactManifest: (taskId) => request(`/tasks/${taskId}/artifact-manifest`).then(sanitizeBackendResponse),
-  chat: (projectId, message) => request('/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_id: projectId, message }) }).then(sanitizeAgentResponse),
 };

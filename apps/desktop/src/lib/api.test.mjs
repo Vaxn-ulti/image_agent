@@ -10,6 +10,11 @@ globalThis.localStorage = {
 
 const { api } = await import("./api.js");
 
+test("desktop API exposes Agent run gateway without legacy chat client", () => {
+  assert.equal(typeof api.runAgent, "function");
+  assert.equal(api.chat, undefined);
+});
+
 test("desktop DWI upload includes the required JSON sidecar field", async () => {
   let submittedForm;
   globalThis.fetch = async (_url, init) => {

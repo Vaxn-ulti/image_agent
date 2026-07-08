@@ -18,13 +18,21 @@ import { api } from '../lib/api';
 import { formatAgentText, formatResponseSourceLabel } from '../lib/agentText';
 import { queryKeys } from '../lib/query';
 import { safeEvidenceJson } from '../lib/redaction';
-import type { AgentConfirmation, AgentRunResponse, RagStatus, WorkflowCatalogItem } from '../lib/types';
+import type { AgentConfirmation, AgentRunResponse, RagStatus, Series, WorkflowCatalogItem } from '../lib/types';
 
 type Message = {
   role: 'user' | 'agent';
   content: string;
   response?: AgentRunResponse;
   timestamp: Date;
+};
+
+type WorkflowQuickAction = {
+  ariaLabel: string;
+  label: string;
+  message: string;
+  seriesLabel: string;
+  workflowType: string;
 };
 
 const SUGGESTIONS = [
@@ -67,6 +75,41 @@ function workflowMetadataFromConfirmation(confirmation: AgentConfirmation | unde
     return {};
   }
   return value as Partial<WorkflowCatalogItem>;
+}
+
+function workflowTypeFromItem(item: { workflow_type?: string; workflow_metadata?: WorkflowCatalogItem | null }) {
+  return String(item.workflow_type || item.workflow_metadata?.workflow_type || item.workflow_metadata?.type || '').trim();
+}
+
+function workflowActionName(workflowType: string, metadata?: WorkflowCatalogItem | null) {
+  if (workflowType === 't1_deepprep_anat_report') return 'T1 DeepPrep';
+  if (workflowType === 'bold_fmriprep_xcpd_report') return 'BOLD fMRIPrep + XCP-D';
+  if (workflowType === 'dwi_fast_gpu_dti') return 'DWI GPU DTI';
+  return metadata?.display_name || workflowType;
+}
+
+function buildWorkflowQuickActions(series: Series[] | undefined): WorkflowQuickAction[] {
+  const actions: WorkflowQuickAction[] = [];
+  const seen = new Set<string>();
+  for (const item of series || []) {
+    const seriesId = item.id;
+    for (const workflow of item.workflow_eligibility?.runnable_workflows || []) {
+      const workflowType = workflowTypeFromItem(workflow);
+      if (!workflowType) continue;
+      const key = `${seriesId}:${workflowType}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const label = workflowActionName(workflowType, workflow.workflow_metadata);
+      actions.push({
+        ariaLabel: `Prepare ${label} confirmation for series ${seriesId}`,
+        label,
+        message: `Prepare workflow confirmation for ${workflowType} on series ${seriesId}. Do not create or launch a task yet.`,
+        seriesLabel: item.sequence_label || `${item.modality || 'Series'} ${seriesId}`,
+        workflowType,
+      });
+    }
+  }
+  return actions.slice(0, 4);
 }
 
 export function AgentPage() {
@@ -157,19 +200,24 @@ export function AgentPage() {
     }
   }, [messages]);
 
-  function onSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!query.trim() || ask.isPending) return;
+  function submitAgentMessage(rawMessage: string) {
+    const message = rawMessage.trim();
+    if (!message || ask.isPending) return;
 
     const userMsg: Message = {
       role: 'user',
-      content: query.trim(),
+      content: message,
       timestamp: new Date()
     };
 
     setMessages(prev => [...prev, userMsg]);
-    ask.mutate(query.trim());
+    ask.mutate(message);
     setQuery('');
+  }
+
+  function onSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    submitAgentMessage(query);
   }
 
   const latestMessage = messages[messages.length - 1];
@@ -198,6 +246,7 @@ export function AgentPage() {
   const projectErrorMessage = projectQuery.error instanceof Error ? projectQuery.error.message : 'Project data could not be loaded.';
   const agentRunHistory = agentRunHistoryQuery.data?.agent_runs || [];
   const selectedAgentRun = selectedAgentRunQuery.data;
+  const workflowQuickActions = buildWorkflowQuickActions(projectQuery.data);
 
   if (projectQuery.isError) {
     return (
@@ -261,6 +310,29 @@ export function AgentPage() {
                     scientific workflow requirements based on your project data.
                   </p>
                 </div>
+                {workflowQuickActions.length > 0 ? (
+                  <div className="w-full max-w-lg text-left">
+                    <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-gray-400">Runnable workflow confirmations</div>
+                    <div className="grid grid-cols-1 gap-2">
+                      {workflowQuickActions.map(action => (
+                        <button
+                          key={`${action.workflowType}-${action.seriesLabel}`}
+                          type="button"
+                          aria-label={action.ariaLabel}
+                          onClick={() => submitAgentMessage(action.message)}
+                          disabled={ask.isPending}
+                          className="flex items-center justify-between gap-3 rounded-xl border border-[#065F46]/15 bg-[#ECFDF5] p-3 text-left text-xs font-medium text-[#065F46] transition-colors hover:bg-[#D1FAE5] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <span>
+                            <span className="block font-bold">{action.label}</span>
+                            <span className="mt-0.5 block text-[11px] font-medium text-[#047857]">Series {action.seriesLabel}</span>
+                          </span>
+                          <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
                 <div className="grid grid-cols-2 gap-3 w-full max-w-lg">
                   {SUGGESTIONS.map(s => (
                     <button

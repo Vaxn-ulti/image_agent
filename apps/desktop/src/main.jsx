@@ -180,14 +180,14 @@ function App() {
     e.preventDefault();
     const form = new FormData(e.currentTarget); const message = form.get('message'); if (!message) return;
     setChatMessages((prev) => [...prev, { role: 'user', content: message }]); e.currentTarget.reset();
-    const res = await api.chat(project?.id || null, message);
+    const res = await api.runAgent(project?.id || null, message);
     setChatMessages((prev) => [...prev, {
       role: 'assistant',
-      content: res.reply,
-      provider: res.provider,
+      content: res.answer,
+      provider: res.provider || res.model_gateway_access,
       intent: res.intent,
-      recommended_next_step: res.recommended_next_step,
-      tool_chain_hint: res.tool_chain_hint,
+      recommended_next_step: res.recommended_next_step || res.status,
+      tool_chain_hint: res.tool_chain_hint || res.selected_skill,
       tool_invocations: res.tool_invocations || [],
       rag_mode: res.rag_mode,
     }]);

@@ -2665,3 +2665,24 @@
   - `node node_modules/vitest/vitest.mjs run src/routes/AgentPage.test.tsx --run`: 12 passed.
   - `node node_modules/typescript/bin/tsc -b`: passed.
   - `node scripts/browser_upload_agent_smoke.mjs --root .tmp/browser-formatting-regression-20260708 --api-port 8150 --console-port 5190 --runtime-source-question --output-json .tmp/browser-formatting-regression-20260708.json`: passed.
+
+## 2026-07-08 Agent Gateway Cleanup And DeepSeek Env Refresh
+
+- Goal: remove the remaining legacy chat surface and refresh the local DeepSeek gateway configuration without committing secrets.
+- Boundary decisions:
+  - `/agent/runs` is the only runtime chat/agent gateway for the app;
+  - `/chat` remains absent at runtime and returns 404;
+  - the historical backend module name `app.agent.chat` was removed in favor of `app.agent.context_replies`;
+  - desktop UI now sends chat messages through `api.runAgent`, and the desktop API object no longer exposes `api.chat`;
+  - local `.env` is updated for DeepSeek but remains ignored by git.
+- DeepSeek local env shape:
+  - provider: `deepseek`;
+  - base URL: `https://api.deepseek.com`;
+  - model: `deepseek-v4-pro`;
+  - wire API: `chat_completions`;
+  - proxy trust: `false`.
+- Verification:
+  - `python -m pytest tests/test_agent_api.py::test_legacy_chat_endpoint_is_removed_from_runtime tests/test_main_architecture.py::test_legacy_chat_runtime_is_removed_from_app_layer -q --tb=short`: 2 passed, 3 warnings.
+  - `python -m pytest tests/test_agent_api.py::test_agent_run_answers_identity_question_without_model_call tests/test_agent_api.py::test_agent_run_answers_runtime_source_question_without_model_call tests/test_agent_api.py::test_agent_run_answers_chinese_current_data_overview_readably_without_model -q --tb=short`: 3 passed, 3 warnings.
+  - `node --test src/lib/api.test.mjs`: 10 passed.
+  - `node node_modules/vitest/vitest.mjs run src/routes/AgentPage.test.tsx --run`: 13 passed.

@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 from fastapi import HTTPException
 
 from app.agent.backend_context import build_rag_backend_context
-from app.agent.chat import (
+from app.agent.context_replies import (
     _inventory_capability_reply,
     _is_inventory_capability_question,
     _is_result_analysis_question,

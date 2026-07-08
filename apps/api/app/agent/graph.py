@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from app.agent.chat import (
+from app.agent.context_replies import (
     _generic_read_only_reply,
     _inventory_capability_reply,
     _is_inventory_capability_question,

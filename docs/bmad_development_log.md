@@ -333,3 +333,31 @@
   - Console build：`node node_modules/typescript/bin/tsc -b` -> passed。
   - 真实浏览器回归：`node scripts/browser_upload_agent_smoke.mjs --root .tmp/browser-formatting-regression-20260708 --api-port 8150 --console-port 5190 --runtime-source-question --output-json .tmp/browser-formatting-regression-20260708.json` -> passed。
 - 本 checkpoint 没有后端逻辑变更、没有远程部署配置变更、没有生产任务创建、没有明文密钥写入 git-tracked 文件。
+
+### Checkpoint 14: Agent Gateway Cleanup And DeepSeek Local Env Refresh
+
+- 本轮处理用户反馈：“旧 chat 为什么还在”与“写入新的 DeepSeek API”。
+- 生产边界：
+  - 运行时入口只允许新 Agent run 网关 `/agent/runs` 和 `/agent/runs/{thread_id}/resume`；
+  - 旧 `/chat` 端点继续保持 404，不再从桌面端客户端或运行时代码调用；
+  - 历史命名模块 `app.agent.chat` 重命名为 `app.agent.context_replies`，保留的是 backend context/rules 只读回复能力，不再叫 chat；
+  - 本地 `.env` 写入 DeepSeek 配置，但 `.env` 是 git-ignored，密钥不进入提交和日志。
+- 代码落点：
+  - `apps/api/app/agent/context_replies.py`：由旧 `chat.py` 重命名，承载只读上下文回复 helper；
+  - `apps/api/app/agent/graph.py`、`apps/api/app/agent/langgraph_runner.py`、`apps/api/app/services/agent_service.py`：改为从 `context_replies` 导入；
+  - `apps/desktop/src/lib/api.js`：删除旧 `api.chat` 客户端方法；
+  - `apps/desktop/src/main.jsx`：桌面端聊天表单改走 `api.runAgent`；
+  - `apps/api/tests/test_main_architecture.py`、`apps/desktop/src/lib/api.test.mjs`：增加防回归边界。
+- DeepSeek 本地环境：
+  - `IMAGE_AGENT_MODEL_PROVIDER=deepseek`；
+  - `IMAGE_AGENT_MODEL_BASE_URL=https://api.deepseek.com`；
+  - `IMAGE_AGENT_MODEL_NAME=deepseek-v4-pro`；
+  - `IMAGE_AGENT_MODEL_WIRE_API=chat_completions`；
+  - `DEEPSEEK_*` alias 同步；
+  - `IMAGE_AGENT_MODEL_TRUST_ENV_PROXY=false`。
+- Verification：
+  - `python -m pytest tests/test_agent_api.py::test_legacy_chat_endpoint_is_removed_from_runtime tests/test_main_architecture.py::test_legacy_chat_runtime_is_removed_from_app_layer -q --tb=short` -> `2 passed, 3 warnings`。
+  - `python -m pytest tests/test_agent_api.py::test_agent_run_answers_identity_question_without_model_call tests/test_agent_api.py::test_agent_run_answers_runtime_source_question_without_model_call tests/test_agent_api.py::test_agent_run_answers_chinese_current_data_overview_readably_without_model -q --tb=short` -> `3 passed, 3 warnings`。
+  - `node --test src/lib/api.test.mjs` -> `10 passed`。
+  - `node node_modules/vitest/vitest.mjs run src/routes/AgentPage.test.tsx --run` -> `13 passed`。
+- 本 checkpoint 未提交 `.env`，未在 git-tracked 文件写入明文密钥。
