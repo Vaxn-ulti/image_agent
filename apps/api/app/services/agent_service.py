@@ -370,29 +370,34 @@ def _fast_launch_readiness(*, agent: dict, production_readiness: dict) -> dict:
     provider_profile = agent.get("provider_profile")
     wire_api = agent.get("wire_api")
     model = agent.get("model")
+    base_url = agent.get("base_url")
     model_tool_loop = capabilities.get("model_tool_loop") is True
     deployment = agent.get("deployment") if isinstance(agent.get("deployment"), dict) else {}
     trust_env_proxy = agent.get("trust_env_proxy")
     model_gateway_access = deployment.get("model_gateway_access")
     direct_transport = trust_env_proxy is False and model_gateway_access == "direct"
+    deepseek_model_ready = model in {"deepseek-v4-pro", "deepseek-v4-flash"}
+    deepseek_base_ready = base_url == "https://api.deepseek.com"
 
     model_target = {
         "status": "passed"
         if (
             agent.get("configured") is True
-            and provider_profile == "rawchat"
-            and wire_api == "responses"
-            and model == "gpt-5.5"
-            and model_tool_loop
+            and provider_profile == "deepseek"
+            and wire_api == "chat_completions"
+            and deepseek_model_ready
+            and deepseek_base_ready
             and direct_transport
         )
         else "blocked",
-        "expected_provider_profile": "rawchat",
+        "expected_provider_profile": "deepseek",
         "actual_provider_profile": provider_profile,
-        "expected_wire_api": "responses",
+        "expected_wire_api": "chat_completions",
         "actual_wire_api": wire_api,
-        "expected_model": "gpt-5.5",
+        "expected_model": "deepseek-v4-pro|deepseek-v4-flash",
         "actual_model": model,
+        "expected_base_url": "https://api.deepseek.com",
+        "actual_base_url": base_url,
         "expected_trust_env_proxy": False,
         "actual_trust_env_proxy": trust_env_proxy,
         "expected_model_gateway_access": "direct",
@@ -435,7 +440,7 @@ def _fast_launch_readiness(*, agent: dict, production_readiness: dict) -> dict:
         else:
             blocking_reasons.append("Production deployment readiness is blocked.")
     if model_target["status"] != "passed":
-        blocking_reasons.append("Model gateway is not pinned to direct rawchat GPT-5.5 Responses with model tool loop.")
+        blocking_reasons.append("Model gateway is not pinned to direct DeepSeek chat-completions production transport.")
     if remote_acceptance["status"] != "passed":
         blocking_reasons.append("Strict remote acceptance evidence has not been verified for the upload-agent-workflow-result chain.")
     if rag_elasticsearch_hybrid["status"] != "passed":

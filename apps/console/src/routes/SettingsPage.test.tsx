@@ -74,7 +74,7 @@ describe('SettingsPage', () => {
 
   it('shows fast-launch readiness checks from deployment status', async () => {
     vi.mocked(api.deployment).mockResolvedValue({
-      agent: { configured: true, model: 'gpt-5.5', provider: 'rawchat' },
+      agent: { configured: true, model: 'deepseek-v4-pro', provider: 'deepseek' },
       backend_runtime_mode: 'remote',
       fast_launch_readiness: {
         blocking_reasons: [
@@ -95,18 +95,18 @@ describe('SettingsPage', () => {
             status: 'blocked',
           },
           model_gateway_target: {
-            actual_model: 'gpt-5.5',
+            actual_model: 'deepseek-v4-pro',
             actual_model_gateway_access: 'direct',
-            actual_provider_profile: 'rawchat',
+            actual_provider_profile: 'deepseek',
             actual_trust_env_proxy: false,
-            actual_wire_api: 'responses',
-            expected_model: 'gpt-5.5',
+            actual_wire_api: 'chat_completions',
+            expected_model: 'deepseek-v4-pro|deepseek-v4-flash',
             expected_model_gateway_access: 'direct',
-            expected_provider_profile: 'rawchat',
+            expected_provider_profile: 'deepseek',
             expected_trust_env_proxy: false,
-            expected_wire_api: 'responses',
+            expected_wire_api: 'chat_completions',
             direct_transport: true,
-            model_tool_loop: true,
+            model_tool_loop: false,
             status: 'passed',
           },
           strict_remote_acceptance: {
@@ -153,7 +153,7 @@ describe('SettingsPage', () => {
 
     expect(await screen.findByText('Fast Launch Readiness')).toBeInTheDocument();
     expect(await screen.findByText('Launch blocked')).toBeInTheDocument();
-    expect(await screen.findByText('rawchat / gpt-5.5 / responses')).toBeInTheDocument();
+    expect(await screen.findByText('deepseek / deepseek-v4-pro / chat_completions')).toBeInTheDocument();
     expect(await screen.findByText('Direct transport protected')).toBeInTheDocument();
     expect(await screen.findByText('Production deployment not enabled')).toBeInTheDocument();
     expect(await screen.findByText('Agent boundary protected')).toBeInTheDocument();

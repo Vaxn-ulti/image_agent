@@ -2543,3 +2543,26 @@
   - `node node_modules/vitest/vitest.mjs run scripts/browser_upload_agent_smoke.test.mjs --run`: 2 passed;
   - `node node_modules/typescript/bin/tsc -b`: passed;
   - `node scripts/browser_upload_agent_smoke.mjs --root .tmp/browser-upload-agent-smoke-final-20260708 --api-port 8145 --console-port 5185 --output-json .tmp/browser-upload-agent-smoke-final-20260708.json`: passed.
+
+## 2026-07-08 DeepSeek Gateway Cutover
+
+- Goal: remove the old rawchat/GPT-5.5 production target from fast-launch readiness and configure the local runtime for the new DeepSeek gateway.
+- Operator input:
+  - received a new DeepSeek API key and official docs URL;
+  - wrote the key only to the ignored local `.env` file, with no key material written into git-tracked logs or code.
+- Implementation:
+  - changed `/deployment.fast_launch_readiness.checks.model_gateway_target` to require:
+    - `provider_profile=deepseek`;
+    - `wire_api=chat_completions`;
+    - `model=deepseek-v4-pro` or `deepseek-v4-flash`;
+    - `base_url=https://api.deepseek.com`;
+    - `trust_env_proxy=false` and direct gateway access.
+  - changed the blocking reason to name the DeepSeek chat-completions production transport requirement.
+  - updated Settings/AppShell test fixtures and frontend types for the new model target fields.
+  - updated remote deployment and acceptance docs to use DeepSeek and to stop requiring Responses tool-loop evidence for the DeepSeek path.
+- Environment:
+  - local `.env` now has `IMAGE_AGENT_MODEL_PROVIDER=deepseek`, `IMAGE_AGENT_MODEL_BASE_URL=https://api.deepseek.com`, `IMAGE_AGENT_MODEL_NAME=deepseek-v4-pro`, `IMAGE_AGENT_MODEL_WIRE_API=chat_completions`, `IMAGE_AGENT_MODEL_TRUST_ENV_PROXY=0`, and compatible `DEEPSEEK_*` aliases.
+  - `.env` is git-ignored and was not staged.
+- TDD / verification so far:
+  - RED: focused deployment readiness tests failed because implementation still expected rawchat/GPT-5.5 Responses.
+  - GREEN: `python -m pytest apps/api/tests/test_agent_api.py::test_deployment_fast_launch_readiness_requires_deepseek_chat_completions_and_remote_evidence apps/api/tests/test_agent_api.py::test_deployment_fast_launch_readiness_blocks_deepseek_without_direct_transport apps/api/tests/test_agent_api.py::test_deployment_fast_launch_readiness_accepts_privacy_safe_remote_acceptance_id -q --tb=short`: 4 passed.

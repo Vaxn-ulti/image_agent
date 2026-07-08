@@ -209,3 +209,27 @@
   - GREEN：`python -m pytest apps/api/tests/test_agent_graph.py::test_langgraph_compiled_graph_includes_requirement_completeness_before_task_planning apps/api/tests/test_agent_graph.py::test_langgraph_agent_runner_matches_fixed_workflow_from_capability_metadata_when_planner_omits_type apps/api/tests/test_agent_graph.py::test_langgraph_agent_runner_resume_marks_fixed_workflow_graph_gate -q` -> `3 passed`。
   - Graph regression：`python -m pytest apps/api/tests/test_agent_graph.py -q` -> `59 passed`。
 - 本 checkpoint 没有远程 workflow run、没有 API restart、没有未授权生产任务创建、没有远程部署配置变更。
+
+### Checkpoint 9: DeepSeek Production Gateway Boundary Cutover
+
+- 按新的生产规划边界完成模型网关目标切换：
+  - fast-launch readiness 不再把 rawchat/GPT-5.5 Responses tool-loop 作为生产目标；
+  - 新生产目标为 DeepSeek OpenAI-compatible chat completions；
+  - DeepSeek 目标必须直连 `https://api.deepseek.com`，且 `trust_env_proxy=false`。
+- 生产边界：
+  - DeepSeek chat completions 支持文本和结构化 JSON，但不提供 Responses tool-loop；
+  - workflow 启动仍必须经过后端 pending confirmation / resume / fingerprint verified 路径；
+  - 旧 rawchat 相关历史日志保留为审计记录，但部署文档和 readiness gate 不再要求 rawchat。
+- 环境处理：
+  - 本地 `.env` 已写入新的 DeepSeek key 与 `IMAGE_AGENT_MODEL_*` / `DEEPSEEK_*` 配置；
+  - `.env` 被 `.gitignore` 覆盖，未进入 git；
+  - 日志只记录配置状态，不记录明文密钥。
+- 代码落点：
+  - `apps/api/app/services/agent_service.py`：更新 fast-launch model target gate 与 blocking reason。
+  - `apps/console/src/lib/types.ts`：补充 model target base URL evidence 字段。
+  - `docs/deployment/remote-agent-production.md`、`docs/deployment/remote-agent-acceptance-template.md`：部署和验收命令切到 DeepSeek，并移除 DeepSeek 路径下的 tool-loop 硬要求。
+  - `apps/api/tests/test_agent_api.py`、`apps/console/src/routes/SettingsPage.test.tsx`、`apps/console/src/components/AppShell.test.tsx`：更新测试期望。
+- TDD / verification 记录：
+  - RED：focused deployment readiness tests 因实现仍期待 rawchat/GPT-5.5 Responses 而失败。
+  - GREEN：`python -m pytest apps/api/tests/test_agent_api.py::test_deployment_fast_launch_readiness_requires_deepseek_chat_completions_and_remote_evidence apps/api/tests/test_agent_api.py::test_deployment_fast_launch_readiness_blocks_deepseek_without_direct_transport apps/api/tests/test_agent_api.py::test_deployment_fast_launch_readiness_accepts_privacy_safe_remote_acceptance_id -q --tb=short` -> `4 passed`。
+- 本 checkpoint 没有远程 workflow run、没有 API restart、没有生产任务创建、没有明文密钥写入 git-tracked 文件。

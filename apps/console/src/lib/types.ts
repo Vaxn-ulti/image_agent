@@ -135,11 +135,13 @@ export type FastLaunchReadiness = {
     };
     model_gateway_target?: {
       actual_model?: string;
+      actual_base_url?: string;
       actual_model_gateway_access?: string;
       actual_provider_profile?: string;
       actual_trust_env_proxy?: boolean;
       actual_wire_api?: string;
       expected_model?: string;
+      expected_base_url?: string;
       expected_model_gateway_access?: string;
       expected_provider_profile?: string;
       expected_trust_env_proxy?: boolean;

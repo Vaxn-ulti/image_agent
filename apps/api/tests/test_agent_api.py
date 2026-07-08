@@ -343,12 +343,12 @@ def test_deployment_fast_launch_readiness_requires_production_mode(monkeypatch):
     assert "secret-value" not in json.dumps(readiness)
 
 
-def test_deployment_fast_launch_readiness_requires_rawchat_responses_and_remote_evidence(monkeypatch):
-    monkeypatch.setenv("IMAGE_AGENT_MODEL_PROVIDER", "rawchat")
+def test_deployment_fast_launch_readiness_requires_deepseek_chat_completions_and_remote_evidence(monkeypatch):
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_PROVIDER", "deepseek")
     monkeypatch.setenv("IMAGE_AGENT_MODEL_API_KEY", "secret-value")
-    monkeypatch.setenv("IMAGE_AGENT_MODEL_BASE_URL", "https://rawchat.cn/codex")
-    monkeypatch.setenv("IMAGE_AGENT_MODEL_NAME", "gpt-5.5")
-    monkeypatch.setenv("IMAGE_AGENT_MODEL_WIRE_API", "responses")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_BASE_URL", "https://api.deepseek.com")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_NAME", "deepseek-v4-pro")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_WIRE_API", "chat_completions")
     monkeypatch.delenv("IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_STATUS", raising=False)
     monkeypatch.delenv("IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_ID", raising=False)
     from app.main import app
@@ -361,17 +361,19 @@ def test_deployment_fast_launch_readiness_requires_rawchat_responses_and_remote_
     assert readiness["status"] == "blocked"
     assert readiness["checks"]["model_gateway_target"] == {
         "status": "passed",
-        "expected_provider_profile": "rawchat",
-        "actual_provider_profile": "rawchat",
-        "expected_wire_api": "responses",
-        "actual_wire_api": "responses",
-        "expected_model": "gpt-5.5",
-        "actual_model": "gpt-5.5",
+        "expected_provider_profile": "deepseek",
+        "actual_provider_profile": "deepseek",
+        "expected_wire_api": "chat_completions",
+        "actual_wire_api": "chat_completions",
+        "expected_model": "deepseek-v4-pro|deepseek-v4-flash",
+        "actual_model": "deepseek-v4-pro",
+        "expected_base_url": "https://api.deepseek.com",
+        "actual_base_url": "https://api.deepseek.com",
         "expected_trust_env_proxy": False,
         "actual_trust_env_proxy": False,
         "expected_model_gateway_access": "direct",
         "actual_model_gateway_access": "direct",
-        "model_tool_loop": True,
+        "model_tool_loop": False,
         "direct_transport": True,
     }
     assert readiness["checks"]["agent_task_boundary"]["status"] == "passed"
@@ -392,7 +394,7 @@ def test_deployment_fast_launch_readiness_requires_rawchat_responses_and_remote_
         (True, "direct"),
     ],
 )
-def test_deployment_fast_launch_readiness_blocks_rawchat_without_direct_transport(
+def test_deployment_fast_launch_readiness_blocks_deepseek_without_direct_transport(
     monkeypatch,
     trust_env_proxy,
     gateway_access,
@@ -411,11 +413,12 @@ def test_deployment_fast_launch_readiness_blocks_rawchat_without_direct_transpor
         "public_model_status",
         lambda: {
             "configured": True,
-            "provider_profile": "rawchat",
-            "wire_api": "responses",
-            "model": "gpt-5.5",
+            "provider_profile": "deepseek",
+            "wire_api": "chat_completions",
+            "model": "deepseek-v4-pro",
+            "base_url": "https://api.deepseek.com",
             "trust_env_proxy": trust_env_proxy,
-            "capabilities": {"model_tool_loop": True},
+            "capabilities": {"model_tool_loop": False},
             "deployment": {"model_gateway_access": gateway_access},
         },
     )
@@ -428,21 +431,23 @@ def test_deployment_fast_launch_readiness_blocks_rawchat_without_direct_transpor
     assert readiness["status"] == "blocked"
     assert readiness["checks"]["model_gateway_target"] == {
         "status": "blocked",
-        "expected_provider_profile": "rawchat",
-        "actual_provider_profile": "rawchat",
-        "expected_wire_api": "responses",
-        "actual_wire_api": "responses",
-        "expected_model": "gpt-5.5",
-        "actual_model": "gpt-5.5",
+        "expected_provider_profile": "deepseek",
+        "actual_provider_profile": "deepseek",
+        "expected_wire_api": "chat_completions",
+        "actual_wire_api": "chat_completions",
+        "expected_model": "deepseek-v4-pro|deepseek-v4-flash",
+        "actual_model": "deepseek-v4-pro",
+        "expected_base_url": "https://api.deepseek.com",
+        "actual_base_url": "https://api.deepseek.com",
         "expected_trust_env_proxy": False,
         "actual_trust_env_proxy": trust_env_proxy,
         "expected_model_gateway_access": "direct",
         "actual_model_gateway_access": gateway_access,
-        "model_tool_loop": True,
+        "model_tool_loop": False,
         "direct_transport": False,
     }
     assert readiness["blocking_reasons"] == [
-        "Model gateway is not pinned to direct rawchat GPT-5.5 Responses with model tool loop."
+        "Model gateway is not pinned to direct DeepSeek chat-completions production transport."
     ]
 
 
@@ -450,11 +455,11 @@ def test_deployment_fast_launch_readiness_accepts_privacy_safe_remote_acceptance
     monkeypatch.setenv("IMAGE_AGENT_ENV", "production")
     monkeypatch.setenv("IMAGE_AGENT_CORS_ORIGINS", "https://console.example.com")
     monkeypatch.setenv("IMAGE_AGENT_PUBLIC_BASE_URL", "https://api.example.com")
-    monkeypatch.setenv("IMAGE_AGENT_MODEL_PROVIDER", "rawchat")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_PROVIDER", "deepseek")
     monkeypatch.setenv("IMAGE_AGENT_MODEL_API_KEY", "secret-value")
-    monkeypatch.setenv("IMAGE_AGENT_MODEL_BASE_URL", "https://rawchat.cn/codex")
-    monkeypatch.setenv("IMAGE_AGENT_MODEL_NAME", "gpt-5.5")
-    monkeypatch.setenv("IMAGE_AGENT_MODEL_WIRE_API", "responses")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_BASE_URL", "https://api.deepseek.com")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_NAME", "deepseek-v4-pro")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_WIRE_API", "chat_completions")
     monkeypatch.setenv("IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_STATUS", "passed")
     monkeypatch.setenv("IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_ID", "remote-smoke-20260616T120000Z")
     from app.services import agent_service
@@ -482,11 +487,11 @@ def test_deployment_fast_launch_readiness_accepts_privacy_safe_remote_acceptance
 
 
 def test_deployment_fast_launch_readiness_requires_elasticsearch_hybrid_components(monkeypatch):
-    monkeypatch.setenv("IMAGE_AGENT_MODEL_PROVIDER", "rawchat")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_PROVIDER", "deepseek")
     monkeypatch.setenv("IMAGE_AGENT_MODEL_API_KEY", "secret-value")
-    monkeypatch.setenv("IMAGE_AGENT_MODEL_BASE_URL", "https://rawchat.cn/codex")
-    monkeypatch.setenv("IMAGE_AGENT_MODEL_NAME", "gpt-5.5")
-    monkeypatch.setenv("IMAGE_AGENT_MODEL_WIRE_API", "responses")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_BASE_URL", "https://api.deepseek.com")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_NAME", "deepseek-v4-pro")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_WIRE_API", "chat_completions")
     monkeypatch.setenv("IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_STATUS", "passed")
     monkeypatch.setenv("IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_ID", "remote-smoke-20260616T120000Z")
     from app.services import agent_service
@@ -525,11 +530,11 @@ def test_deployment_fast_launch_readiness_requires_elasticsearch_hybrid_componen
 
 
 def test_deployment_fast_launch_readiness_requires_current_elasticsearch_hybrid(monkeypatch):
-    monkeypatch.setenv("IMAGE_AGENT_MODEL_PROVIDER", "rawchat")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_PROVIDER", "deepseek")
     monkeypatch.setenv("IMAGE_AGENT_MODEL_API_KEY", "secret-value")
-    monkeypatch.setenv("IMAGE_AGENT_MODEL_BASE_URL", "https://rawchat.cn/codex")
-    monkeypatch.setenv("IMAGE_AGENT_MODEL_NAME", "gpt-5.5")
-    monkeypatch.setenv("IMAGE_AGENT_MODEL_WIRE_API", "responses")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_BASE_URL", "https://api.deepseek.com")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_NAME", "deepseek-v4-pro")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_WIRE_API", "chat_completions")
     monkeypatch.setenv("IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_STATUS", "passed")
     monkeypatch.setenv("IMAGE_AGENT_STRICT_REMOTE_ACCEPTANCE_ID", "remote-smoke-20260616T120000Z")
     from app.services import agent_service
