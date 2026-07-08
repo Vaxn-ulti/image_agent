@@ -665,3 +665,19 @@ Findings:
 - Remaining product work:
   - add true browser file-input automation on top of this isolated backend harness;
   - add a similar live-smoke contract for workflow confirmation/resume wording.
+
+## 2026-07-08 Browser Upload-To-Agent Smoke Findings
+
+- Interaction testing gap:
+  - previous browser attempts could navigate and type but could not reliably set the OS file picker;
+  - without a file-input-capable harness, upload-to-Agent claims stayed weaker than the actual user workflow.
+- Implemented boundary:
+  - browser upload-to-Agent smoke now uses Playwright and the real console page;
+  - it validates a rendered upload result before asking Agent, so the chat is tied to visible project state;
+  - it validates the frontend source label `Database and rules`, proving the user sees that the answer came from backend records rather than model self-description.
+- CORS production lesson:
+  - isolated browser smokes need their actual console origin registered in the API CORS list;
+  - fixed via `run_isolated_api_server.py --cors-origin`, instead of expanding global default CORS origins for all environments.
+- Remaining product work:
+  - cover Agent workflow confirmation/resume in a real browser;
+  - decide whether login itself needs a separate auth smoke or remains outside upload/Agent interaction smoke scope.

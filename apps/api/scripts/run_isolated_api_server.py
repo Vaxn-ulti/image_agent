@@ -18,6 +18,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--host", default="127.0.0.1", help="Bind host.")
     parser.add_argument("--port", type=int, default=8000, help="Bind port.")
     parser.add_argument("--env-file", default="", help="Optional env file. Defaults to <root>/.env.")
+    parser.add_argument("--cors-origin", action="append", default=[], help="Allowed CORS origin. May be provided multiple times.")
     parser.add_argument("--require-auth", action="store_true", help="Require console bearer auth.")
     parser.add_argument("--print-config", action="store_true", help="Print effective config JSON and exit.")
     return parser.parse_args()
@@ -29,6 +30,8 @@ def _configure_environment(args: argparse.Namespace) -> None:
     os.environ["IMAGE_AGENT_ROOT"] = str(root)
     os.environ["IMAGE_AGENT_ENV_FILE"] = str(env_file)
     os.environ["IMAGE_AGENT_REQUIRE_AUTH"] = "1" if args.require_auth else "0"
+    if args.cors_origin:
+        os.environ["IMAGE_AGENT_CORS_ORIGINS"] = ",".join(args.cors_origin)
 
 
 def main() -> None:
@@ -36,6 +39,7 @@ def main() -> None:
     _configure_environment(args)
 
     from app.core import config
+    from app.app_factory import cors_origins
     from app.security import auth_required
 
     if args.print_config:
@@ -43,6 +47,7 @@ def main() -> None:
             json.dumps(
                 {
                     "auth_required": auth_required(),
+                    "cors_origins": cors_origins(),
                     "db_path": str(config.DB_PATH),
                     "env_path": str(config.ENV_PATH),
                     "projects_root": str(config.PROJECTS_ROOT),

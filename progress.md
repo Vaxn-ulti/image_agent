@@ -2512,3 +2512,34 @@
   - `python -m pytest apps/api/tests/test_smoke_isolated_upload_agent.py apps/api/tests/test_isolated_api_server_script.py -q --tb=short`: 2 passed;
   - `python -m pytest apps/api/tests/test_agent_api.py::test_agent_run_answers_chinese_current_data_overview_readably_without_model apps/api/tests/test_agent_api.py::test_agent_run_unconfigured_model_answers_inventory_without_confirmation apps/api/tests/test_agent_api.py::test_agent_run_falls_back_to_read_only_backend_answer_when_model_unconfigured apps/api/tests/test_agent_tools.py::test_read_project_context_enriches_series_workflow_eligibility -q`: 4 passed;
   - `python apps/api/scripts/smoke_isolated_upload_agent.py --root .tmp/isolated-upload-agent-smoke-verify-20260708 --port 8143 --output-json .tmp/isolated-upload-agent-smoke-verify-20260708.json`: passed.
+
+## 2026-07-08 Browser Upload-To-Agent Smoke
+
+- Goal: make the actual browser upload and Agent chat path repeatable with a file-input-capable harness.
+- Red tests and fixes:
+  - added `apps/console/scripts/browser_upload_agent_smoke.test.mjs`;
+  - first run failed because `browser_upload_agent_smoke.mjs` was missing;
+  - after adding the script, the test exposed missing project Playwright dependency;
+  - added `playwright` to console dev dependencies and updated the lockfile;
+  - added a Windows entrypoint helper after the script initially produced no CLI output on Windows paths.
+- Browser harness implementation:
+  - starts isolated API through `run_isolated_api_server.py`;
+  - starts the Vite console with the isolated API base;
+  - initializes an authenticated browser session through localStorage;
+  - opens `/projects/{id}/ingest`;
+  - sets `input[aria-label="NIfTI upload"]` with generated `sub-browser-smoke_T1w.nii.gz`;
+  - waits for the real upload response and rendered `T1w_MPRAGE`;
+  - seeds task `#9001` in the isolated DB;
+  - opens `/projects/{id}/agent`, sends `替我分析一下现在的数据`, and waits for `项目状态概览`, `任务 #`, `只读观察`, and `Database and rules`.
+- CORS finding/fix:
+  - real browser smoke initially failed because Vite port `5184` was not in the API default CORS origin list;
+  - added `--cors-origin` to `run_isolated_api_server.py`;
+  - browser smoke now passes the selected console origin into the isolated API launcher.
+- Environment note:
+  - first Playwright Chromium install failed with `ENOSPC`;
+  - cleaned Playwright browser cache under the local `ms-playwright` cache directory and retried successfully.
+- Verification:
+  - `python -m pytest apps/api/tests/test_isolated_api_server_script.py -q --tb=short`: 1 passed;
+  - `node node_modules/vitest/vitest.mjs run scripts/browser_upload_agent_smoke.test.mjs --run`: 2 passed;
+  - `node node_modules/typescript/bin/tsc -b`: passed;
+  - `node scripts/browser_upload_agent_smoke.mjs --root .tmp/browser-upload-agent-smoke-final-20260708 --api-port 8145 --console-port 5185 --output-json .tmp/browser-upload-agent-smoke-final-20260708.json`: passed.

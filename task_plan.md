@@ -646,3 +646,27 @@ Next:
 
 - Connect this smoke script to a browser harness that can set file inputs, then assert the same answer through the real Agent page.
 - Improve workflow confirmation/resume Chinese copy and cover it with the same live smoke style.
+
+## 2026-07-08 Browser Upload-To-Agent Smoke
+
+Objective: verify the inconvenient user path through a real browser: upload a NIfTI file in the console, then ask the Agent about the current data.
+
+Status: completed locally as a subtask; overall interaction-intelligence goal remains active.
+
+Completed:
+
+- Added `apps/console/scripts/browser_upload_agent_smoke.mjs`.
+- Added `apps/console/scripts/browser_upload_agent_smoke.test.mjs`.
+- Added Playwright as a console dev dependency for reproducible browser automation.
+- Extended `apps/api/scripts/run_isolated_api_server.py` with `--cors-origin` so isolated browser smokes can use arbitrary Vite ports.
+- Ran a real Chromium smoke against isolated API/console services: browser session initialized, project page opened, `NIfTI upload` file input set with a generated `.nii.gz`, upload reached the API, `T1w_MPRAGE` rendered, Agent query was sent, and the page displayed the required Chinese answer fragments and `Database and rules` source label.
+
+Boundaries:
+
+- The browser smoke initializes an already-authenticated operator session in localStorage instead of testing the login form; its scope is upload and Agent interaction.
+- The task row is still seeded directly in the isolated smoke DB to avoid running heavy neuroimaging containers.
+
+Next:
+
+- Add a second browser smoke for workflow confirmation/resume from the Agent page.
+- Use the same harness to polish and verify Chinese confirmation copy.
