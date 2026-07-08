@@ -600,3 +600,18 @@ Findings:
   - the current in-app browser automation can navigate, type, click, and read rendered UI;
   - it did not provide a usable file chooser or file-input setter in this session;
   - full browser file-picker automation should be moved to a Playwright-style harness or another browser tool with `setInputFiles`.
+
+## 2026-07-08 Chinese Agent Readability Findings
+
+- Interaction issue:
+  - Chinese inventory/capability questions were grounded correctly but still looked like internal logs;
+  - sequence lines used slash-separated English status text such as `T1 / T1w_MPRAGE / supported`;
+  - workflow descriptions reused English registry copy, which made the answer harder to read for Chinese users.
+- Implemented boundary:
+  - deterministic fallback answers now format Chinese uploads, series, and runnable workflows separately from English answers;
+  - known production workflows have curated Chinese display names and capability summaries;
+  - the response still includes machine-stable workflow ids such as `t1_deepprep_anat_report` so the user can map the prose back to executable workflow contracts.
+- Remaining product work:
+  - apply the same readability standard to generic task/status answers and T1 result-analysis answers;
+  - decide whether the frontend should render evidence as compact structured sections instead of plain chat text;
+  - keep browser/upload automation on the backlog until the harness can reliably set file inputs.

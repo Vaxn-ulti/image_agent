@@ -2405,3 +2405,38 @@
   - model was `deepseek-v4-pro`;
   - wire API was `chat_completions`;
   - key status was `set`.
+
+## 2026-07-08 Chinese Agent Readability Iteration
+
+- Goal: reduce machine-like punctuation and English-heavy fallback text in Chinese Agent inventory/capability answers.
+- Red test:
+  - strengthened `test_agent_run_unconfigured_model_answers_inventory_without_confirmation`;
+  - required Chinese answers to include `支持处理` and `T1 DeepPrep 解剖处理`;
+  - rejected English headings such as `Uploaded files` / `Detected series`;
+  - rejected slash-style sequence logs such as `T1 / T1w_MPRAGE / supported`.
+- Implementation:
+  - added helper formatting for files, series, and workflows in `apps/api/app/agent/chat.py`;
+  - Chinese series lines now read like `序列 21：T1，T1w_MPRAGE，支持处理`;
+  - Chinese workflow lines now use curated domain copy for `t1_deepprep_anat_report`, `bold_fmriprep_xcpd_report`, and `dwi_fast_gpu_dti`;
+  - English fallback behavior remains available for English questions.
+- Real API smoke:
+  - started an isolated API under `.tmp/agent-zh-readable-smoke-20260708`;
+  - uploaded a minimal T1 NIfTI through `/projects/{id}/upload`;
+  - asked `/agent/runs`: `我现在上传了什么数据？有没有BOLD或DWI？可以运行什么流程？`;
+  - verified the answer listed `sub-01_T1w.nii`, `T1w_MPRAGE`, `支持处理`, and `t1_deepprep_anat_report：T1 DeepPrep 解剖处理、质控和报告`;
+  - verified no `Uploaded files`, no ` / ` sequence format, and no English `supported` token in the answer.
+- Browser note:
+  - attempted a real Agent page browser smoke on an isolated frontend/backend pair;
+  - the browser automation timed out during login and was not counted as passing evidence;
+  - cleaned up the temporary ports afterwards;
+  - browser-level assertion for this exact copy remains pending for a file-input-capable, stable harness.
+- DeepSeek status:
+  - provider status probe still reported `configured=true`;
+  - provider was `deepseek`;
+  - model was `deepseek-v4-pro`;
+  - wire API was `chat_completions`;
+  - API key status was `set` and secret values were not printed.
+- Verification:
+  - `python -m pytest apps/api/tests/test_agent_api.py::test_agent_run_unconfigured_model_answers_inventory_without_confirmation -q`: 1 passed;
+  - `python -m pytest apps/api/tests/test_agent_api.py::test_agent_run_unconfigured_model_answers_inventory_without_confirmation apps/api/tests/test_agent_tools.py::test_read_project_context_enriches_series_workflow_eligibility -q`: 2 passed;
+  - `python -m pytest apps/api/tests/test_agent_tools.py -q`: 24 passed.

@@ -145,6 +145,57 @@ def _workflow_id(workflow: dict) -> str:
     return str(workflow.get("workflow_type") or workflow.get("type") or "unknown_workflow")
 
 
+_CHINESE_WORKFLOW_COPY = {
+    "t1_deepprep_anat_report": {
+        "display": "T1 DeepPrep 解剖处理、质控和报告",
+        "capability": "用于 T1 解剖像处理，生成结构指标、质控材料、表格、图像和 HTML 报告。",
+    },
+    "bold_fmriprep_xcpd_report": {
+        "display": "BOLD fMRIPrep + XCP-D 预处理、指标、质控和报告",
+        "capability": "用于 BOLD/fMRI 数据预处理和下游指标汇总，需要同项目 T1/anat 数据。",
+    },
+    "dwi_fast_gpu_dti": {
+        "display": "DWI 快速 GPU DTI 处理、图谱指标、质控和报告",
+        "capability": "用于 DWI 张量指标处理，需要 NIfTI、bval、bvec 和 eddy 元数据 JSON。",
+    },
+}
+
+
+def _file_item(item: dict, *, chinese: bool = False) -> str:
+    name = item.get("original_name") or "unnamed file"
+    file_type = item.get("file_type") or "unknown"
+    file_id = item.get("id")
+    if chinese:
+        return f"{name}，类型 {file_type}，ID {file_id}"
+    return f"{name} ({file_type}, id {file_id})"
+
+
+def _series_item(item: dict, *, chinese: bool = False) -> str:
+    series_id = item.get("id")
+    modality = item.get("modality") or "UNKNOWN"
+    label = item.get("sequence_label") or "unlabeled"
+    supported = bool(item.get("supported_for_processing", True))
+    if chinese:
+        status = "支持处理" if supported else "暂不支持处理"
+        return f"序列 {series_id}：{modality}，{label}，{status}"
+    status = "supported" if supported else "not supported"
+    return f"{series_id}: {modality} / {label} / {status}"
+
+
+def _workflow_item(workflow: dict, *, chinese: bool = False) -> str:
+    workflow_id = _workflow_id(workflow)
+    if chinese:
+        copy = _CHINESE_WORKFLOW_COPY.get(workflow_id, {})
+        display = copy.get("display") or workflow.get("display_name") or workflow.get("label") or workflow_id
+        capability = copy.get("capability") or workflow.get("capability_summary") or "请查看工作流元数据了解处理、质控和报告输出。"
+        return f"{workflow_id}：{display}。{capability}"
+    return "{workflow_id}: {display}. {capability}".format(
+        workflow_id=workflow_id,
+        display=workflow.get("display_name") or workflow.get("label") or workflow_id,
+        capability=workflow.get("capability_summary") or "See workflow metadata for processing, QC, and report outputs.",
+    )
+
+
 def _workflow_display_item(workflow: dict) -> dict:
     metadata = workflow.get("workflow_metadata")
     if not isinstance(metadata, dict):
@@ -196,28 +247,13 @@ def _inventory_capability_reply(project_context: dict, *, message: str = "") -> 
     files = project_context.get("project_files") or []
     series = project_context.get("series") or []
     workflows = _runnable_fixed_workflows(project_context)
-    file_items = [
-        f"{item.get('original_name')} ({item.get('file_type') or 'unknown'}, id {item.get('id')})"
-        for item in files[:10]
-    ] or ["No uploaded files are registered in this project yet."]
-    series_items = [
-        "{id}: {modality} / {label} / {status}".format(
-            id=item.get("id"),
-            modality=item.get("modality") or "UNKNOWN",
-            label=item.get("sequence_label") or "unlabeled",
-            status="supported" if item.get("supported_for_processing", True) else "not supported",
-        )
-        for item in series[:10]
-    ] or ["No imaging series are registered yet."]
-    workflow_items = [
-        "{workflow_id}: {display}. {capability}".format(
-            workflow_id=_workflow_id(workflow),
-            display=workflow.get("display_name") or workflow.get("label") or _workflow_id(workflow),
-            capability=workflow.get("capability_summary") or "See workflow metadata for processing, QC, and report outputs.",
-        )
-        for workflow in workflows[:8]
-    ] or ["No fixed workflow is currently runnable from the registered series."]
     if _looks_chinese(message):
+        file_items = [_file_item(item, chinese=True) for item in files[:10]] or ["这个项目还没有登记已上传文件。"]
+        series_items = [_series_item(item, chinese=True) for item in series[:10]] or ["还没有识别到影像序列。"]
+        workflow_items = [
+            _workflow_item(workflow, chinese=True)
+            for workflow in workflows[:8]
+        ] or ["当前已登记序列还没有可运行的固定工作流。"]
         return (
             "已上传文件\n"
             + _line_items(file_items)
@@ -227,6 +263,11 @@ def _inventory_capability_reply(project_context: dict, *, message: str = "") -> 
             + _line_items(workflow_items)
             + "\n\n没有创建审批请求。请告诉我要准备哪个工作流和哪条序列，我会先生成确认卡片供你审核。"
         )
+    file_items = [_file_item(item) for item in files[:10]] or ["No uploaded files are registered in this project yet."]
+    series_items = [_series_item(item) for item in series[:10]] or ["No imaging series are registered yet."]
+    workflow_items = [_workflow_item(workflow) for workflow in workflows[:8]] or [
+        "No fixed workflow is currently runnable from the registered series."
+    ]
     return (
         "Uploaded files\n"
         + _line_items(file_items)

@@ -805,7 +805,13 @@ def test_agent_run_unconfigured_model_answers_inventory_without_confirmation(tmp
     assert "sub-01_T1w.nii.gz" in body["answer"]
     assert "T1w_MPRAGE" in body["answer"]
     assert "t1_deepprep_anat_report" in body["answer"]
-    assert "T1 DeepPrep anatomical processing" in body["answer"]
+    assert "已上传" in body["answer"]
+    assert "支持处理" in body["answer"]
+    assert "T1 DeepPrep 解剖处理" in body["answer"]
+    assert "Uploaded files" not in body["answer"]
+    assert "Detected series" not in body["answer"]
+    assert " / " not in body["answer"]
+    assert "supported" not in body["answer"]
 
 
 def test_agent_run_unconfigured_model_returns_complete_result_analysis(tmp_path, monkeypatch):

@@ -547,3 +547,28 @@ Next:
 
 - Build a reusable browser/upload smoke harness with a tool that supports file inputs.
 - Improve the Agent answer wording so Chinese questions receive fully Chinese, less cluttered prose while preserving evidence labels.
+
+## 2026-07-08 Chinese Agent Readability Iteration
+
+Objective: make Chinese inventory/capability answers easier to read while preserving database-grounded evidence and workflow boundaries.
+
+Status: completed locally as a subtask; overall interaction-intelligence goal remains active.
+
+Completed:
+
+- Added a failing Agent API test that rejects English section headings and slash-style `T1 / label / supported` sequence logs for Chinese questions.
+- Added Chinese formatting helpers for uploaded files, detected series, and runnable workflows.
+- Added curated Chinese copy for the production workflow ids currently exposed in this path.
+- Verified a real API smoke against an isolated uploaded T1 project.
+- Re-verified DeepSeek gateway configuration without printing secret values.
+
+Boundaries:
+
+- This iteration improves deterministic backend fallback text for inventory/capability questions.
+- It does not yet redesign the frontend chat bubble layout or evidence panel.
+- It does not yet automate a true OS file-picker upload.
+
+Next:
+
+- Extend the same Chinese readability treatment to generic status, result-analysis, and workflow-confirmation answers.
+- Add browser-level assertions once a file-input-capable harness is available.
