@@ -2734,3 +2734,33 @@
   - `workflow_confirmation_resume.mode=quick_action_after_chat`;
   - `seed_task=null`;
   - backend task `#1` was created for `t1_deepprep_anat_report` only after approval.
+
+## 2026-07-08 T1-only Modality Boundary Clarification
+
+- Goal: make the Agent explain “I did not upload BOLD/DTI, why are these steps/results present?” from production records instead of a generic LLM answer.
+- User-facing issue covered:
+  - question: `我都没上传bold资料和DTI资料，为什么会跑这些步骤`;
+  - expected behavior: clarify that only T1 input and T1 DeepPrep/FreeSurfer records exist, no BOLD/DWI workflow ran, and Yeo/fsaverage label outputs are not BOLD functional connectivity or DTI metrics.
+- Implementation:
+  - added deterministic `modality_boundary_clarification` handling in the API Agent service;
+  - kept the answer source as backend context/rules and prevented model gateway calls for this case;
+  - allowed `modality_boundary_clarifier=deterministic` in the privacy-safe agent run ledger;
+  - added browser smoke mode `--modality-confusion-question`, which uploads T1, seeds a completed T1 task with Yeo label evidence, asks the exact user question, and waits for boundary fragments.
+- TDD evidence:
+  - RED: API test initially failed with a model-gateway 502;
+  - RED: safe metadata initially filtered the new clarifier marker;
+  - RED: smoke script initially rejected `--modality-confusion-question` and fell back to running-task seed;
+  - GREEN: backend and browser smoke tests now cover the intended rule path.
+- Verification:
+  - `python -m pytest tests/test_agent_api.py::test_agent_run_clarifies_bold_dwi_confusion_from_t1_only_records_without_model_call tests/test_agent_api.py::test_agent_run_explains_t1_metrics_from_result_summary_without_model_call tests/test_agent_api.py::test_agent_run_answers_chinese_current_data_overview_readably_without_model tests/test_agent_api.py::test_agent_run_answers_runtime_source_question_without_model_call -q --tb=short`: 4 passed, 3 warnings.
+  - `node node_modules/vitest/vitest.mjs run scripts/browser_upload_agent_smoke.test.mjs`: 14 passed.
+  - `node node_modules/typescript/bin/tsc -b`: passed.
+  - `node scripts/browser_upload_agent_smoke.mjs --modality-confusion-question --output-json tmp_modality_confusion_smoke.json`: passed.
+- Runtime browser evidence:
+  - uploaded generated `sub-browser-smoke_T1w.nii.gz`;
+  - seeded completed task `#9141` for `t1_deepprep_anat_report`;
+  - registered `Recon/fsaverage/label/lh.Yeo_Brainmap_10to14Comp_TopSpecializationComp.csv` with the legacy `connectome` output type;
+  - verified the page displayed `没有运行 BOLD 或 DWI 工作流`, `当前只登记到 T1 序列`, `Yeo`, `不是基于 BOLD 计算的功能连接`, `不是 DTI`, and `Database and rules`.
+- Local env:
+  - refreshed git-ignored `.env` for DeepSeek provider/key aliases;
+  - no plaintext secret was written to git-tracked files.

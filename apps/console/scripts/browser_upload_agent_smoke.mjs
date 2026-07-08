@@ -13,6 +13,7 @@ const API_ROOT = path.join(REPO_ROOT, 'apps', 'api');
 const DEFAULT_AGENT_MESSAGE = '替我分析一下现在的数据';
 const DEFAULT_RUNTIME_SOURCE_MESSAGE = '你现在是基于规则脚本回答，还是基于LLM在回答';
 const DEFAULT_T1_METRIC_MESSAGE = '给我分析一下t1提取出来的指标，综合水平怎么样，符不符合正常水平';
+const DEFAULT_MODALITY_CONFUSION_MESSAGE = '我都没上传bold资料和DTI资料，为什么会跑这些步骤';
 const DEFAULT_WORKFLOW_CONFIRMATION_MESSAGE = ({ projectId, seriesId }) =>
   `请为项目${projectId}的序列${seriesId}准备 t1_deepprep_anat_report 工作流确认，不要创建或启动任务`;
 const REQUIRED_ANSWER_FRAGMENTS = ['项目状态概览', '任务 #', '只读观察'];
@@ -26,6 +27,13 @@ const T1_METRIC_REQUIRED_FRAGMENTS = [
   'BrainSegVol',
   '不能仅凭这些输出判断正常或异常',
 ];
+const MODALITY_CONFUSION_REQUIRED_FRAGMENTS = [
+  '没有运行 BOLD 或 DWI 工作流',
+  '当前只登记到 T1 序列',
+  'Yeo',
+  '不是基于 BOLD 计算的功能连接',
+  '不是 DTI',
+];
 
 export function parseArgs(argv) {
   const args = {
@@ -35,6 +43,7 @@ export function parseArgs(argv) {
     headless: true,
     outputJson: '',
     root: '',
+    modalityConfusionQuestion: false,
     runtimeSourceQuestion: false,
     t1MetricQuestion: false,
     workflowConfirmationResume: false,
@@ -49,6 +58,8 @@ export function parseArgs(argv) {
       args.runtimeSourceQuestion = true;
     } else if (arg === '--t1-metric-question') {
       args.t1MetricQuestion = true;
+    } else if (arg === '--modality-confusion-question') {
+      args.modalityConfusionQuestion = true;
     } else if (arg === '--workflow-confirmation-resume') {
       args.workflowConfirmationResume = true;
     } else if (arg === '--workflow-quick-action-resume') {
@@ -340,6 +351,63 @@ print("seeded-completed-t1")
   };
 }
 
+async function seedCompletedT1ModalityBoundary({ projectId, root, seriesId }) {
+  const script = `
+import json
+from pathlib import Path
+from app.db import database
+
+database.init_db()
+now = database.now_iso()
+task_id = 9141
+root = Path(ROOT_VALUE)
+out_dir = root / "projects" / str(PROJECT_ID_VALUE) / "derivatives" / str(task_id) / "output"
+label_dir = out_dir / "Recon" / "fsaverage" / "label"
+label_dir.mkdir(parents=True, exist_ok=True)
+label_path = label_dir / "lh.Yeo_Brainmap_10to14Comp_TopSpecializationComp.csv"
+label_path.write_text("label,value\\\\nYeo_10,1\\\\n", encoding="utf-8")
+with database.connect() as conn:
+    conn.execute(
+        "INSERT INTO tasks(id, project_id, series_id, workflow_type, runtime_workflow_type, status, progress, log_path, error_message, created_at, started_at, finished_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+        (task_id, PROJECT_ID_VALUE, SERIES_ID_VALUE, "t1_deepprep_anat_report", "t1_deepprep", "completed", 100, str(out_dir / "task-9141.log"), None, now, now, now),
+    )
+    conn.execute(
+        "INSERT INTO outputs(task_id, output_type, path, preview_path, metadata_json, created_at) VALUES(?,?,?,?,?,?)",
+        (task_id, "connectome", "Recon/fsaverage/label/lh.Yeo_Brainmap_10to14Comp_TopSpecializationComp.csv", None, json.dumps({"source": "deepprep_freesurfer_label", "modality": "T1"}), now),
+    )
+print("seeded-completed-t1-boundary")
+`.replace('ROOT_VALUE', JSON.stringify(root).replaceAll('\\\\', '\\\\\\\\'))
+    .replaceAll('PROJECT_ID_VALUE', String(projectId))
+    .replaceAll('SERIES_ID_VALUE', String(seriesId));
+  const seedPath = path.join(root, 'seed_completed_t1_modality_boundary.py');
+  await writeFile(seedPath, script, 'utf8');
+  await new Promise((resolve, reject) => {
+    const proc = spawn('python', [seedPath], {
+      cwd: API_ROOT,
+      env: {
+        ...process.env,
+        IMAGE_AGENT_ENV_FILE: path.join(root, '.env'),
+        IMAGE_AGENT_ROOT: root,
+        PYTHONPATH: API_ROOT,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+    let stderr = '';
+    proc.stderr.on('data', chunk => {
+      stderr += chunk.toString();
+    });
+    proc.on('exit', code => {
+      if (code === 0) resolve();
+      else reject(new Error(stderr || `seed completed T1 modality-boundary exited with code ${code}`));
+    });
+  });
+  return {
+    task_id: 9141,
+    workflow_type: 't1_deepprep_anat_report',
+  };
+}
+
 async function writeMinimalNifti(filePath) {
   const header = Buffer.alloc(348);
   header.writeInt32LE(348, 0);
@@ -393,6 +461,7 @@ async function driveBrowserFlow({
   apiBaseUrl,
   consoleBaseUrl,
   headless,
+  modalityConfusionQuestion,
   projectId,
   runtimeSourceQuestion,
   root,
@@ -490,6 +559,23 @@ async function driveBrowserFlow({
         },
       };
     }
+    if (modalityConfusionQuestion) {
+      const seed = await deps.seedCompletedT1ModalityBoundary({ projectId, root, seriesId: uploadedSeriesId });
+      const modalityMessage = agentMessage || DEFAULT_MODALITY_CONFUSION_MESSAGE;
+      await page.getByLabel('Agent query').fill(modalityMessage);
+      await page.getByRole('button', { name: 'Send' }).click();
+      for (const fragment of MODALITY_CONFUSION_REQUIRED_FRAGMENTS) {
+        await page.getByText(fragment).waitFor({ timeout: 20000 });
+      }
+      await page.getByText('Database and rules').waitFor({ timeout: 10000 });
+      return {
+        modalityConfusion: {
+          message: modalityMessage,
+          required_fragments: MODALITY_CONFUSION_REQUIRED_FRAGMENTS,
+        },
+        seed,
+      };
+    }
     let priorWorkflowMessage = null;
     if (workflowQuickActionAfterChat) {
       priorWorkflowMessage = DEFAULT_RUNTIME_SOURCE_MESSAGE;
@@ -559,6 +645,7 @@ export async function runBrowserUploadAgentSmoke(options, injectedDeps = {}) {
     launchBrowser,
     requestJson,
     seedCompletedT1ResultSummary,
+    seedCompletedT1ModalityBoundary,
     seedRunningT1Task,
     startApiServer,
     startConsoleServer,
@@ -577,11 +664,13 @@ export async function runBrowserUploadAgentSmoke(options, injectedDeps = {}) {
     const flow = await driveBrowserFlow({
       agentMessage: options.workflowConfirmationResume === true || options.runtimeSourceQuestion === true
         || options.t1MetricQuestion === true
+        || options.modalityConfusionQuestion === true
         ? options.agentMessage
         : options.agentMessage || DEFAULT_AGENT_MESSAGE,
       apiBaseUrl: apiServer.baseUrl,
       consoleBaseUrl: consoleServer.baseUrl,
       headless: options.headless !== false,
+      modalityConfusionQuestion: options.modalityConfusionQuestion === true,
       projectId: project.project_id,
       runtimeSourceQuestion: options.runtimeSourceQuestion === true,
       root,
@@ -591,6 +680,7 @@ export async function runBrowserUploadAgentSmoke(options, injectedDeps = {}) {
       workflowQuickActionResume: options.workflowQuickActionResume === true,
     }, deps);
     const runtimeSource = flow.runtimeSource || null;
+    const modalityConfusion = flow.modalityConfusion || null;
     const t1Metric = flow.t1Metric || null;
     const workflowConfirmationResume = flow.workflowConfirmationResume || null;
     return {
@@ -598,6 +688,8 @@ export async function runBrowserUploadAgentSmoke(options, injectedDeps = {}) {
       agent_interaction_status: 'passed_in_browser',
       project,
       root_scope: 'isolated',
+      modality_confusion: modalityConfusion,
+      modality_confusion_status: modalityConfusion ? 'passed_in_browser' : 'not_requested',
       runtime_source: runtimeSource,
       runtime_source_status: runtimeSource ? 'passed_in_browser' : 'not_requested',
       seed_task: flow.seed,

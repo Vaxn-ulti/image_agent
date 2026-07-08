@@ -101,6 +101,13 @@ describe('browser_upload_agent_smoke', () => {
     expect(args.agentMessage).toBe('');
   });
 
+  it('keeps modality-confusion CLI mode on its generated boundary question', () => {
+    const args = parseArgs(['--modality-confusion-question']);
+
+    expect(args.modalityConfusionQuestion).toBe(true);
+    expect(args.agentMessage).toBe('');
+  });
+
   it('drives login, NIfTI file input upload, and Agent current-data chat through the browser', async () => {
     const actions = [];
     const page = createFakePage(actions);
@@ -508,6 +515,76 @@ describe('browser_upload_agent_smoke', () => {
     expect(actions).toContainEqual(['waitFor', 'text', 'T1 结构化结果解读']);
     expect(actions).toContainEqual(['waitFor', 'text', 'BrainSegVol']);
     expect(actions).toContainEqual(['waitFor', 'text', '不能仅凭这些输出判断正常或异常']);
+    expect(actions).toContainEqual(['waitFor', 'text', 'Database and rules']);
+  });
+
+  it('drives upload, T1-only Yeo label evidence, and Agent modality-boundary clarification through the browser', async () => {
+    const actions = [];
+    const page = createFakePage(actions);
+    const browser = {
+      async close() {
+        actions.push(['browser.close']);
+      },
+      async newPage() {
+        actions.push(['browser.newPage']);
+        return page;
+      },
+    };
+    const deps = {
+      async createProject() {
+        actions.push(['createProject']);
+        return { project_id: 1 };
+      },
+      async launchBrowser() {
+        actions.push(['launchBrowser']);
+        return browser;
+      },
+      async seedCompletedT1ModalityBoundary({ projectId, root, seriesId }) {
+        actions.push(['seedCompletedT1Boundary', root.endsWith('isolated-root'), projectId, seriesId]);
+        return { task_id: 9141, workflow_type: 't1_deepprep_anat_report' };
+      },
+      async seedRunningT1Task() {
+        actions.push(['seedTask']);
+        throw new Error('modality-boundary smoke must not seed a running task');
+      },
+      async startApiServer({ root }) {
+        actions.push(['startApi', root.endsWith('isolated-root')]);
+        return { baseUrl: 'http://api.local', stop: vi.fn(async () => actions.push(['stopApi'])) };
+      },
+      async startConsoleServer({ apiBaseUrl }) {
+        actions.push(['startConsole', apiBaseUrl]);
+        return { baseUrl: 'http://console.local', stop: vi.fn(async () => actions.push(['stopConsole'])) };
+      },
+      async writeMinimalNifti(filePath) {
+        actions.push(['writeNifti', filePath.endsWith('sub-browser-smoke_T1w.nii.gz')]);
+      },
+    };
+
+    const result = await runBrowserUploadAgentSmoke(
+      {
+        headless: true,
+        modalityConfusionQuestion: true,
+        root: 'C:/tmp/isolated-root',
+      },
+      deps,
+    );
+
+    expect(result.status).toBe('passed');
+    expect(result.modality_confusion_status).toBe('passed_in_browser');
+    expect(result.seed_task).toEqual({ task_id: 9141, workflow_type: 't1_deepprep_anat_report' });
+    expect(actions).not.toContainEqual(['seedTask']);
+    expect(actions).toContainEqual(['seedCompletedT1Boundary', true, 1, 1]);
+    expect(actions).toContainEqual([
+      'fill',
+      'label',
+      'Agent query',
+      '我都没上传bold资料和DTI资料，为什么会跑这些步骤',
+    ]);
+    expect(actions).toContainEqual(['waitFor', 'text', '没有运行 BOLD 或 DWI 工作流']);
+    expect(actions).toContainEqual(['waitFor', 'text', '当前只登记到 T1 序列']);
+    expect(actions).toContainEqual(['waitFor', 'text', 'Yeo']);
+    expect(actions).toContainEqual(['waitFor', 'text', '不是基于 BOLD 计算的功能连接']);
+    expect(actions).toContainEqual(['waitFor', 'text', '不是 DTI']);
     expect(actions).toContainEqual(['waitFor', 'text', 'Database and rules']);
   });
 });

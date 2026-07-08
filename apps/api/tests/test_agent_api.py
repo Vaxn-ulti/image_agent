@@ -1460,6 +1460,77 @@ def test_agent_run_explains_t1_metrics_from_result_summary_without_model_call(tm
     assert body["safe_metadata"]["t1_metric_interpreter"] == "deterministic"
 
 
+def test_agent_run_clarifies_bold_dwi_confusion_from_t1_only_records_without_model_call(tmp_path, monkeypatch):
+    from app.core import config
+    from app.db import database
+    from app import main
+    from app.main import app
+
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_API_KEY", "test-key")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_PROVIDER", "deepseek")
+    monkeypatch.setenv("IMAGE_AGENT_MODEL_NAME", "deepseek-v4-pro")
+
+    class ForbiddenGateway:
+        def complete_structured(self, messages, *, purpose, structured_schema=None):
+            raise AssertionError("T1-only modality confusion must not call the model gateway")
+
+        def complete_text(self, messages, *, purpose):
+            raise AssertionError("T1-only modality confusion must not call the model gateway")
+
+    monkeypatch.setattr(main, "ModelGateway", lambda: ForbiddenGateway())
+    database.init_db()
+    _insert_project(database, 7)
+    with database.connect() as conn:
+        conn.execute(
+            "INSERT INTO files(id, project_id, original_name, storage_path, file_type, size, sha256, created_at) VALUES(?,?,?,?,?,?,?,?)",
+            (3, 7, "sub-01_T1w.nii.gz", str(tmp_path / "sub-01_T1w.nii.gz"), "NIFTI", 12, "abc123", database.now_iso()),
+        )
+        conn.execute(
+            "INSERT INTO imaging_series(id, project_id, file_id, sequence_label, supported_for_processing, unsupported_reason, modality, format, confidence, metadata_json, status, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            (5, 7, 3, "T1w_MPRAGE", 1, None, "T1", "NIFTI", 0.99, "{}", "ready", database.now_iso()),
+        )
+        conn.execute(
+            "INSERT INTO tasks(id, project_id, series_id, workflow_type, status, progress, log_path, created_at) VALUES(?,?,?,?,?,?,?,?)",
+            (140, 7, 5, "t1_deepprep_anat_report", "completed", 100, str(tmp_path / "task-140.log"), database.now_iso()),
+        )
+        conn.execute(
+            "INSERT INTO outputs(task_id, output_type, path, preview_path, metadata_json, created_at) VALUES(?,?,?,?,?,?)",
+            (
+                140,
+                "connectome",
+                "Recon/fsaverage/label/lh.Yeo_Brainmap_10to14Comp_TopSpecializationComp.csv",
+                None,
+                json.dumps({"source": "deepprep_freesurfer_label", "modality": "T1"}),
+                database.now_iso(),
+            ),
+        )
+
+    result = TestClient(app).post(
+        "/agent/runs",
+        json={"project_id": 7, "message": "我都没上传bold资料和DTI资料，为什么会跑这些步骤"},
+    )
+
+    assert result.status_code == 200
+    body = result.json()
+    assert body["status"] == "answered"
+    assert body["intent"] == "modality_boundary_clarification"
+    assert body["selected_skill"] == "modality-boundary-clarifier"
+    assert body["response_source"] == "backend_context"
+    assert "没有运行 BOLD 或 DWI 工作流" in body["answer"]
+    assert "当前只登记到 T1 序列" in body["answer"]
+    assert "任务 #140" in body["answer"]
+    assert "Yeo" in body["answer"]
+    assert "FreeSurfer" in body["answer"]
+    assert "不是基于 BOLD 计算的功能连接" in body["answer"]
+    assert "不是 DTI" in body["answer"]
+    assert "不会解释功能或弥散指标" in body["answer"]
+    assert "BOLD/fMRI preprocessing is handled" not in body["answer"]
+    assert body["safe_metadata"]["modality_boundary_clarifier"] == "deterministic"
+    assert body["safe_metadata"]["production_task_created"] is False
+
+
 def test_agent_run_response_redacts_nested_backend_paths(tmp_path, monkeypatch):
     from app.core import config
     from app.db import database

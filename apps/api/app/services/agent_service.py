@@ -511,6 +511,16 @@ def _is_t1_metric_question(message: str) -> bool:
     return asks_t1 and asks_metrics
 
 
+def _is_modality_boundary_confusion_question(message: str) -> bool:
+    text = _compact_question_text(message)
+    if not text:
+        return False
+    mentions_missing_inputs = any(token in text for token in ("没上传", "没有上传", "未上传", "没传", "没有传", "notupload", "didnotupload"))
+    mentions_functional_or_diffusion = any(token in text for token in ("bold", "fmri", "功能", "dti", "dwi", "弥散", "扩散"))
+    asks_why_ran = any(token in text for token in ("为什么会跑", "为什么跑", "怎么会跑", "为什么会生成", "怎么会有", "这些步骤", "这些结果"))
+    return mentions_missing_inputs and mentions_functional_or_diffusion and asks_why_ran
+
+
 def _load_registered_result_summaries(project_context: dict) -> list[dict]:
     summaries: list[dict] = []
     seen_paths: set[str] = set()
@@ -591,6 +601,87 @@ def _format_t1_metric_example(row: dict | None) -> str:
     label = "脑分割体积" if measure == "BrainSegVol" else (description or measure)
     value_text = f"{value} {unit}".strip()
     return f"示例指标：{label}（{measure}）= {value_text}。"
+
+
+def _modality_boundary_clarifier_result(message: str, project_context: dict) -> dict | None:
+    if not _is_modality_boundary_confusion_question(message):
+        return None
+    series = project_context.get("series") or []
+    tasks = project_context.get("tasks") or []
+    outputs = project_context.get("outputs") or []
+    modalities = [str(item.get("modality") or "UNKNOWN").upper() for item in series]
+    workflow_types = [str(task.get("workflow_type") or "") for task in tasks]
+    has_bold_or_dwi_input = any(modality in {"BOLD", "FMRI", "DWI", "DTI"} for modality in modalities)
+    has_bold_or_dwi_task = any(workflow.lower().startswith(("bold", "dwi")) for workflow in workflow_types)
+    t1_tasks = [
+        task
+        for task in tasks
+        if str(task.get("workflow_type") or "").lower().startswith("t1")
+    ]
+    t1_task_text = "、".join(
+        f"任务 #{task.get('id')} {task.get('workflow_type')} {task.get('status')} {task.get('progress')}%"
+        for task in t1_tasks[:5]
+    ) or "当前没有 T1 任务记录"
+    t1_series_text = "、".join(
+        f"序列 {item.get('id')}：{item.get('modality')}，{item.get('sequence_label') or '未命名'}"
+        for item in series[:5]
+    ) or "当前没有登记影像序列"
+    label_outputs = [
+        str(output.get("path") or "")
+        for output in outputs
+        if "yeo" in str(output.get("path") or "").lower()
+        or "fsaverage/label" in str(output.get("path") or "").lower()
+    ]
+    label_text = (
+        "；".join(label_outputs[:3])
+        if label_outputs
+        else "未看到 Yeo/fsaverage label 输出记录"
+    )
+    if has_bold_or_dwi_input or has_bold_or_dwi_task:
+        boundary = "当前记录里存在 BOLD/DWI 输入或任务，需要逐项核对对应任务。"
+    else:
+        boundary = "没有运行 BOLD 或 DWI 工作流；当前只登记到 T1 序列和 T1 处理任务。"
+    answer = (
+        f"{boundary} "
+        f"当前只登记到 T1 序列：{t1_series_text}。 "
+        f"当前相关任务：{t1_task_text}。 "
+        f"你看到的 Yeo/fsaverage label 或 connectome 标记更可能来自 T1 DeepPrep/FreeSurfer 的 atlas/label 产物：{label_text}。 "
+        "这不是基于 BOLD 计算的功能连接，也不是 DTI 弥散指标。 "
+        "在没有 BOLD 或 DWI 输入和任务记录时，系统不会解释功能或弥散指标。 "
+        "如果页面某处把这些 T1 标签显示成 connectome，可以把它理解为产物分类命名不够精细，而不是实际跑了 BOLD/DTI。"
+    )
+    return {
+        "status": "answered",
+        "intent": "modality_boundary_clarification",
+        "selected_skill": "modality-boundary-clarifier",
+        "response_source": "backend_context",
+        "answer": answer,
+        "retrieved_context": {"mode": "backend_context", "results": []},
+        "tool_invocations": [],
+        "tool_trace": [
+            {
+                "stage": "modality_boundary_clarifier",
+                "status": "answered",
+                "mode": "deterministic",
+                "has_bold_or_dwi_input": has_bold_or_dwi_input,
+                "has_bold_or_dwi_task": has_bold_or_dwi_task,
+            }
+        ],
+        "safe_metadata": {
+            "lane": "read_only",
+            "modality_boundary_clarifier": "deterministic",
+            "production_task_created": False,
+            "response_source": "backend_context",
+        },
+        "events": [
+            {
+                "type": "agent.modality_boundary_clarifier",
+                "status": "answered",
+                "message": "Clarified T1-only records versus missing BOLD/DWI inputs without model generation.",
+            }
+        ],
+        "production_task_created": False,
+    }
 
 
 def _t1_metric_interpreter_result(message: str, project_context: dict) -> dict | None:
@@ -944,6 +1035,18 @@ def agent_run(req):
     deterministic_result = _runtime_reporter_result(message)
     if deterministic_result is not None:
         result = normalize_agent_run_result(deterministic_result)
+        result["agent_run_id"] = agent_run_id
+        finish_agent_run(agent_run_id, result=result)
+        ledger = load_agent_run(agent_run_id) or {}
+        return build_agent_run_response_payload(
+            result,
+            ledger=ledger,
+            request_type="run",
+            project_id=req.project_id,
+        )
+    modality_boundary_result = _modality_boundary_clarifier_result(message, project_context)
+    if modality_boundary_result is not None:
+        result = normalize_agent_run_result(modality_boundary_result)
         result["agent_run_id"] = agent_run_id
         finish_agent_run(agent_run_id, result=result)
         ledger = load_agent_run(agent_run_id) or {}

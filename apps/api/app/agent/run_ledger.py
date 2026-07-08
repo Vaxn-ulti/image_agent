@@ -287,6 +287,7 @@ def _safe_result_metadata(result: dict[str, Any]) -> dict[str, Any]:
         "response_source",
         "runtime_reporter",
         "t1_metric_interpreter",
+        "modality_boundary_clarifier",
     ):
         safe_value = _safe_symbol_value(safe_metadata.get(key))
         if safe_value:
@@ -410,6 +411,7 @@ def _sanitize_safe_metadata(value: dict[str, Any]) -> dict[str, Any]:
         "response_source",
         "runtime_reporter",
         "t1_metric_interpreter",
+        "modality_boundary_clarifier",
     ):
         safe_value = _safe_symbol_value(value.get(key))
         if safe_value:

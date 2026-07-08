@@ -406,3 +406,36 @@
   - 输出 JSON：`workflow_confirmation_resume.mode=quick_action_after_chat`、`prior_message=你现在是基于规则脚本回答，还是基于LLM在回答`、`seed_task=null`、`task.id=1`、`workflow_type=t1_deepprep_anat_report`。
   - isolated task 后续因缺 `IMAGE_AGENT_SUDO_PASSWORD` 停在真实 Docker runtime credential boundary，符合无 sudo 密码环境的预期。
 - 本 checkpoint 没有远程部署配置变更、没有明文密钥写入 git-tracked 文件。
+
+### Checkpoint 17: T1-only Modality Boundary Clarification
+
+- 本轮处理用户反馈：“我都没上传 BOLD/DTI，为什么会跑这些步骤”。
+- 生产边界：
+  - 这类问题必须走后端数据库事实和规则层，不调用 LLM；
+  - 当前只登记 T1 序列、T1 DeepPrep/FreeSurfer 任务时，Agent 必须明确说明没有运行 BOLD 或 DWI 工作流；
+  - `Yeo/fsaverage/label` 或旧分类 `connectome` 只解释为 T1/FreeSurfer atlas/label 产物，不解释成功能连接或 DTI 指标；
+  - 只读澄清，不创建、不启动任务。
+- 代码落点：
+  - `apps/api/app/services/agent_service.py`：新增 `modality_boundary_clarification` deterministic 分支；
+  - `apps/api/app/agent/run_ledger.py`：允许 `modality_boundary_clarifier` 写入 privacy-safe metadata；
+  - `apps/api/tests/test_agent_api.py`：新增禁止模型网关调用的 T1-only modality confusion 回归测试；
+  - `apps/console/scripts/browser_upload_agent_smoke.mjs`：新增 `--modality-confusion-question` 真实浏览器 smoke；
+  - `apps/console/scripts/browser_upload_agent_smoke.test.mjs`：新增 CLI parse 与注入式 browser flow 测试。
+- TDD / verification 记录：
+  - RED：API 测试最初返回 502，因为该问题误走模型网关；
+  - RED：ledger 最初过滤掉 `modality_boundary_clarifier` metadata；
+  - RED：browser smoke 新参数最初报 `Unknown argument`，且 flow 落回 running-task seed；
+  - GREEN：`python -m pytest tests/test_agent_api.py::test_agent_run_clarifies_bold_dwi_confusion_from_t1_only_records_without_model_call -q --tb=short` -> `1 passed, 3 warnings`；
+  - GREEN：`python -m pytest tests/test_agent_api.py::test_agent_run_clarifies_bold_dwi_confusion_from_t1_only_records_without_model_call tests/test_agent_api.py::test_agent_run_explains_t1_metrics_from_result_summary_without_model_call tests/test_agent_api.py::test_agent_run_answers_chinese_current_data_overview_readably_without_model tests/test_agent_api.py::test_agent_run_answers_runtime_source_question_without_model_call -q --tb=short` -> `4 passed, 3 warnings`；
+  - GREEN：`node node_modules/vitest/vitest.mjs run scripts/browser_upload_agent_smoke.test.mjs` -> `14 passed`；
+  - GREEN：`node node_modules/typescript/bin/tsc -b` -> passed；
+  - 真实浏览器：`node scripts/browser_upload_agent_smoke.mjs --modality-confusion-question --output-json tmp_modality_confusion_smoke.json` -> passed。
+- 真实浏览器证据：
+  - 上传 generated T1 smoke NIfTI；
+  - seed completed task `#9141` / `t1_deepprep_anat_report`；
+  - 登记旧分类为 `connectome` 的 `Recon/fsaverage/label/lh.Yeo_Brainmap_10to14Comp_TopSpecializationComp.csv`；
+  - Agent 页面显示 `没有运行 BOLD 或 DWI 工作流`、`当前只登记到 T1 序列`、`Yeo`、`不是基于 BOLD 计算的功能连接`、`不是 DTI`、`Database and rules`。
+- DeepSeek 本地环境：
+  - 已刷新 git-ignored `.env` 中的 `IMAGE_AGENT_MODEL_API_KEY` 与 `DEEPSEEK_API_KEY`；
+  - `.env` 未被 git track，日志与提交不记录明文密钥。
+- 本 checkpoint 没有远程部署配置变更、没有生产任务创建、没有明文密钥写入 git-tracked 文件。
