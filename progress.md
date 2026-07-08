@@ -2598,3 +2598,26 @@
 - Boundary note:
   - the confirmation-resume browser smoke created task `#1` only after approval;
   - in the isolated test environment the task then failed at runtime with `IMAGE_AGENT_SUDO_PASSWORD is required for real Docker workflows`, which is expected for a real Docker workflow without privileged runtime credentials.
+
+## 2026-07-08 Browser Runtime-Source Transparency Smoke
+
+- Goal: make the “are you rule-based or LLM-based?” interaction testable in the real browser, because this is a high-trust user question and must not depend on the model describing itself.
+- Existing backend behavior confirmed:
+  - identity/source questions are answered by `runtime-source-reporter`;
+  - the model gateway is not called for these questions;
+  - the response source is `backend_context`, and the frontend displays `Database and rules`.
+- TDD evidence:
+  - RED: added browser smoke expectations for `--runtime-source-question`; the script failed with `Unknown argument: --runtime-source-question`.
+  - RED: the injected browser flow tried to seed a T1 task for the runtime-source question, proving the mode was still falling through to the current-data path.
+  - GREEN: added the runtime-source mode, default question, required answer fragments, no-task behavior, and JSON status output.
+- Verification:
+  - `node node_modules/vitest/vitest.mjs run scripts/browser_upload_agent_smoke.test.mjs --run`: 6 passed.
+  - `python -m pytest apps/api/tests/test_agent_api.py::test_agent_run_answers_identity_question_without_model_call apps/api/tests/test_agent_api.py::test_agent_run_answers_runtime_source_question_without_model_call apps/api/tests/test_agent_api.py::test_agent_run_answers_chinese_current_data_overview_readably_without_model -q --tb=short`: 3 passed, 3 warnings.
+  - `node node_modules/typescript/bin/tsc -b`: passed.
+  - `node scripts/browser_upload_agent_smoke.mjs --root .tmp/browser-runtime-source-smoke-20260708 --api-port 8148 --console-port 5188 --runtime-source-question --output-json .tmp/browser-runtime-source-smoke-20260708.json`: passed.
+- Runtime browser evidence:
+  - uploaded generated `sub-browser-smoke_T1w.nii.gz`;
+  - opened `/projects/1/agent`;
+  - asked `你现在是基于规则脚本回答，还是基于LLM在回答`;
+  - verified the page displayed `这次回答来源：后端规则和运行状态检查`, `当前模型网关`, and `Database and rules`;
+  - verified this mode did not seed or create any task.

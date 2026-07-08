@@ -11,10 +11,15 @@ const CONSOLE_ROOT = path.resolve(path.dirname(__filename), '..');
 const REPO_ROOT = path.resolve(CONSOLE_ROOT, '..', '..');
 const API_ROOT = path.join(REPO_ROOT, 'apps', 'api');
 const DEFAULT_AGENT_MESSAGE = '替我分析一下现在的数据';
+const DEFAULT_RUNTIME_SOURCE_MESSAGE = '你现在是基于规则脚本回答，还是基于LLM在回答';
 const DEFAULT_WORKFLOW_CONFIRMATION_MESSAGE = ({ projectId, seriesId }) =>
   `请为项目${projectId}的序列${seriesId}准备 t1_deepprep_anat_report 工作流确认，不要创建或启动任务`;
 const REQUIRED_ANSWER_FRAGMENTS = ['项目状态概览', '任务 #', '只读观察'];
 const FORBIDDEN_ANSWER_FRAGMENTS = ['Tasks:', 'Model gateway is not configured'];
+const RUNTIME_SOURCE_REQUIRED_FRAGMENTS = [
+  '这次回答来源：后端规则和运行状态检查',
+  '当前模型网关',
+];
 
 export function parseArgs(argv) {
   const args = {
@@ -24,12 +29,15 @@ export function parseArgs(argv) {
     headless: true,
     outputJson: '',
     root: '',
+    runtimeSourceQuestion: false,
     workflowConfirmationResume: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--headed') {
       args.headless = false;
+    } else if (arg === '--runtime-source-question') {
+      args.runtimeSourceQuestion = true;
     } else if (arg === '--workflow-confirmation-resume') {
       args.workflowConfirmationResume = true;
     } else if (arg === '--root') {
@@ -282,6 +290,7 @@ async function driveBrowserFlow({
   consoleBaseUrl,
   headless,
   projectId,
+  runtimeSourceQuestion,
   root,
   workflowConfirmationResume,
 }, deps) {
@@ -341,6 +350,22 @@ async function driveBrowserFlow({
     await firstT1SequenceText.waitFor({ timeout: 15000 });
 
     await page.goto(`${consoleBaseUrl}/projects/${projectId}/agent`);
+    if (runtimeSourceQuestion) {
+      const sourceMessage = agentMessage || DEFAULT_RUNTIME_SOURCE_MESSAGE;
+      await page.getByLabel('Agent query').fill(sourceMessage);
+      await page.getByRole('button', { name: 'Send' }).click();
+      for (const fragment of RUNTIME_SOURCE_REQUIRED_FRAGMENTS) {
+        await page.getByText(fragment).waitFor({ timeout: 20000 });
+      }
+      await page.getByText('Database and rules').waitFor({ timeout: 10000 });
+      return {
+        runtimeSource: {
+          message: sourceMessage,
+          required_fragments: RUNTIME_SOURCE_REQUIRED_FRAGMENTS,
+        },
+        seed: null,
+      };
+    }
     if (workflowConfirmationResume) {
       const confirmationMessage = agentMessage || DEFAULT_WORKFLOW_CONFIRMATION_MESSAGE({
         projectId,
@@ -404,22 +429,26 @@ export async function runBrowserUploadAgentSmoke(options, injectedDeps = {}) {
     const project = await deps.createProject({ apiBaseUrl: apiServer.baseUrl });
     consoleServer = await deps.startConsoleServer({ apiBaseUrl: apiServer.baseUrl, port: effectiveConsolePort });
     const flow = await driveBrowserFlow({
-      agentMessage: options.workflowConfirmationResume === true
+      agentMessage: options.workflowConfirmationResume === true || options.runtimeSourceQuestion === true
         ? options.agentMessage
         : options.agentMessage || DEFAULT_AGENT_MESSAGE,
       apiBaseUrl: apiServer.baseUrl,
       consoleBaseUrl: consoleServer.baseUrl,
       headless: options.headless !== false,
       projectId: project.project_id,
+      runtimeSourceQuestion: options.runtimeSourceQuestion === true,
       root,
       workflowConfirmationResume: options.workflowConfirmationResume === true,
     }, deps);
+    const runtimeSource = flow.runtimeSource || null;
     const workflowConfirmationResume = flow.workflowConfirmationResume || null;
     return {
       agent_answer_required_fragments: REQUIRED_ANSWER_FRAGMENTS,
       agent_interaction_status: 'passed_in_browser',
       project,
       root_scope: 'isolated',
+      runtime_source: runtimeSource,
+      runtime_source_status: runtimeSource ? 'passed_in_browser' : 'not_requested',
       seed_task: flow.seed,
       status: 'passed',
       upload_status: 'passed_in_browser',

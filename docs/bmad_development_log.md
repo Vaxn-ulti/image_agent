@@ -265,3 +265,27 @@
   - `node scripts/browser_upload_agent_smoke.mjs --root .tmp/browser-workflow-confirmation-resume-20260708e --api-port 8146 --console-port 5186 --workflow-confirmation-resume --output-json .tmp/browser-workflow-confirmation-resume-20260708e.json` -> passed。
   - `node scripts/browser_upload_agent_smoke.mjs --root .tmp/browser-upload-agent-smoke-regression-20260708 --api-port 8147 --console-port 5187 --output-json .tmp/browser-upload-agent-smoke-regression-20260708.json` -> passed。
 - 本 checkpoint 没有远程部署配置变更、没有明文密钥写入 git-tracked 文件；真实浏览器 isolated smoke 在 approval 后创建 task，随后因缺 `IMAGE_AGENT_SUDO_PASSWORD` 按预期停在真实 Docker runtime credential boundary。
+
+### Checkpoint 11: Runtime Source Transparency Browser Smoke
+
+- 本轮继续围绕真实交互打通高信任问题：“你现在是基于规则脚本回答，还是基于 LLM 在回答？”
+- 生产边界：
+  - 这类问题必须由后端运行状态和规则回答，不允许调用模型后再让模型自称来源；
+  - 前端必须能显示 `Database and rules` response source；
+  - 该交互不应 seed、创建或启动任何 workflow task。
+- 代码落点：
+  - `apps/console/scripts/browser_upload_agent_smoke.mjs`：新增 `--runtime-source-question` 模式、默认中文来源问题、必需页面片段、no-task 返回状态。
+  - `apps/console/scripts/browser_upload_agent_smoke.test.mjs`：新增 CLI parse test 和注入式浏览器 flow test，确保该模式不落入 current-data seed path。
+- TDD / verification 记录：
+  - RED：`--runtime-source-question` 最初报 `Unknown argument`。
+  - RED：runtime-source flow 最初误走普通 current-data 分支并尝试 seed task。
+  - GREEN：`node node_modules/vitest/vitest.mjs run scripts/browser_upload_agent_smoke.test.mjs --run` -> `6 passed`。
+  - 后端来源透明度回归：`python -m pytest apps/api/tests/test_agent_api.py::test_agent_run_answers_identity_question_without_model_call apps/api/tests/test_agent_api.py::test_agent_run_answers_runtime_source_question_without_model_call apps/api/tests/test_agent_api.py::test_agent_run_answers_chinese_current_data_overview_readably_without_model -q --tb=short` -> `3 passed, 3 warnings`。
+  - Console build：`node node_modules/typescript/bin/tsc -b` -> passed。
+  - 真实浏览器：`node scripts/browser_upload_agent_smoke.mjs --root .tmp/browser-runtime-source-smoke-20260708 --api-port 8148 --console-port 5188 --runtime-source-question --output-json .tmp/browser-runtime-source-smoke-20260708.json` -> passed。
+- 真实浏览器证据：
+  - 上传 T1 smoke NIfTI 后打开 Agent 页面；
+  - 发送 `你现在是基于规则脚本回答，还是基于LLM在回答`；
+  - 页面出现 `这次回答来源：后端规则和运行状态检查`、`当前模型网关`、`Database and rules`；
+  - `seed_task=null`，没有任务创建。
+- 本 checkpoint 没有远程部署配置变更、没有生产任务创建、没有明文密钥写入 git-tracked 文件。
