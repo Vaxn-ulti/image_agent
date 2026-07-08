@@ -383,3 +383,26 @@
   - 输出 JSON：`workflow_confirmation_resume.mode=quick_action`、`seed_task=null`、`series_id=1`、`task.id=1`、`workflow_type=t1_deepprep_anat_report`、`workflow_confirmation_resume_status=passed_in_browser`。
   - isolated task 后续因缺 `IMAGE_AGENT_SUDO_PASSWORD` 在真实 Docker runtime credential boundary 失败，这是无 sudo 密码环境下的预期边界；confirmation/approval/任务创建链路已通过浏览器验证。
 - 本 checkpoint 没有远程部署配置变更、没有明文密钥写入 git-tracked 文件。
+
+### Checkpoint 16: Persistent Workflow Quick Actions After Chat
+
+- 本轮继续处理 Agent 交互摩擦：workflow quick action 不能只在空聊天页出现，否则用户问过一个问题后又要回到手打 prompt。
+- 生产边界：
+  - quick action 仍只准备 workflow confirmation；
+  - 仍必须由用户点击 confirmation card 的 `Approve workflow` 后，后端才创建任务；
+  - browser smoke 不 seed 运行任务，真实验证 upload -> prior chat -> quick action -> approval -> task created。
+- 代码落点：
+  - `apps/console/src/routes/AgentPage.tsx`：把 runnable workflow quick actions 从空态块移动到输入区上方的持久操作条；空态和已有消息状态共用同一组按钮，避免重复按钮。
+  - `apps/console/src/routes/AgentPage.test.tsx`：新增“聊天已有消息后仍能点击 workflow quick action”测试。
+  - `apps/console/scripts/browser_upload_agent_smoke.mjs`：新增 `--workflow-quick-action-after-chat-resume`；先发送来源透明度问题，再点击 quick action 并审批。
+  - `apps/console/scripts/browser_upload_agent_smoke.test.mjs`：新增 CLI parse 和注入式 flow 测试。
+- TDD / verification 记录：
+  - RED：AgentPage 新测试最初找不到 `Prepare T1 DeepPrep confirmation for series 11`，因为按钮只在空态。
+  - RED：browser smoke 新参数最初报 `Unknown argument`，after-chat flow 也只返回 `mode=quick_action`。
+  - GREEN：`node node_modules/vitest/vitest.mjs run src/routes/AgentPage.test.tsx --run` -> `14 passed`。
+  - GREEN：`node node_modules/vitest/vitest.mjs run scripts/browser_upload_agent_smoke.test.mjs --run` -> `12 passed`。
+- 真实浏览器证据：
+  - `node scripts/browser_upload_agent_smoke.mjs --root .tmp/browser-workflow-quick-action-after-chat-20260708 --api-port 8152 --console-port 5192 --workflow-quick-action-after-chat-resume --output-json .tmp/browser-workflow-quick-action-after-chat-20260708.json` -> passed。
+  - 输出 JSON：`workflow_confirmation_resume.mode=quick_action_after_chat`、`prior_message=你现在是基于规则脚本回答，还是基于LLM在回答`、`seed_task=null`、`task.id=1`、`workflow_type=t1_deepprep_anat_report`。
+  - isolated task 后续因缺 `IMAGE_AGENT_SUDO_PASSWORD` 停在真实 Docker runtime credential boundary，符合无 sudo 密码环境的预期。
+- 本 checkpoint 没有远程部署配置变更、没有明文密钥写入 git-tracked 文件。

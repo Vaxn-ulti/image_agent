@@ -38,6 +38,7 @@ export function parseArgs(argv) {
     runtimeSourceQuestion: false,
     t1MetricQuestion: false,
     workflowConfirmationResume: false,
+    workflowQuickActionAfterChat: false,
     workflowQuickActionResume: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -52,6 +53,10 @@ export function parseArgs(argv) {
       args.workflowConfirmationResume = true;
     } else if (arg === '--workflow-quick-action-resume') {
       args.workflowConfirmationResume = true;
+      args.workflowQuickActionResume = true;
+    } else if (arg === '--workflow-quick-action-after-chat-resume') {
+      args.workflowConfirmationResume = true;
+      args.workflowQuickActionAfterChat = true;
       args.workflowQuickActionResume = true;
     } else if (arg === '--root') {
       args.root = argv[++index];
@@ -393,6 +398,7 @@ async function driveBrowserFlow({
   root,
   t1MetricQuestion,
   workflowConfirmationResume,
+  workflowQuickActionAfterChat,
   workflowQuickActionResume,
 }, deps) {
   const browser = await deps.launchBrowser({ headless });
@@ -484,12 +490,24 @@ async function driveBrowserFlow({
         },
       };
     }
+    let priorWorkflowMessage = null;
+    if (workflowQuickActionAfterChat) {
+      priorWorkflowMessage = DEFAULT_RUNTIME_SOURCE_MESSAGE;
+      await page.getByLabel('Agent query').fill(priorWorkflowMessage);
+      await page.getByRole('button', { name: 'Send' }).click();
+      for (const fragment of RUNTIME_SOURCE_REQUIRED_FRAGMENTS) {
+        await page.getByText(fragment).waitFor({ timeout: 20000 });
+      }
+      await page.getByText('Database and rules').waitFor({ timeout: 10000 });
+    }
     if (workflowConfirmationResume) {
       const confirmationMessage = agentMessage || DEFAULT_WORKFLOW_CONFIRMATION_MESSAGE({
         projectId,
         seriesId: uploadedSeriesId,
       });
-      const resumeMode = workflowQuickActionResume ? 'quick_action' : 'typed_prompt';
+      const resumeMode = workflowQuickActionAfterChat
+        ? 'quick_action_after_chat'
+        : workflowQuickActionResume ? 'quick_action' : 'typed_prompt';
       if (workflowQuickActionResume) {
         await page.getByRole('button', {
           name: `Prepare T1 DeepPrep confirmation for series ${uploadedSeriesId}`,
@@ -509,6 +527,7 @@ async function driveBrowserFlow({
         workflowConfirmationResume: {
           message: confirmationMessage,
           mode: resumeMode,
+          prior_message: priorWorkflowMessage,
           series_id: uploadedSeriesId,
           task,
         },
@@ -568,6 +587,7 @@ export async function runBrowserUploadAgentSmoke(options, injectedDeps = {}) {
       root,
       t1MetricQuestion: options.t1MetricQuestion === true,
       workflowConfirmationResume: options.workflowConfirmationResume === true,
+      workflowQuickActionAfterChat: options.workflowQuickActionAfterChat === true,
       workflowQuickActionResume: options.workflowQuickActionResume === true,
     }, deps);
     const runtimeSource = flow.runtimeSource || null;

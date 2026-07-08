@@ -310,29 +310,6 @@ export function AgentPage() {
                     scientific workflow requirements based on your project data.
                   </p>
                 </div>
-                {workflowQuickActions.length > 0 ? (
-                  <div className="w-full max-w-lg text-left">
-                    <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-gray-400">Runnable workflow confirmations</div>
-                    <div className="grid grid-cols-1 gap-2">
-                      {workflowQuickActions.map(action => (
-                        <button
-                          key={`${action.workflowType}-${action.seriesLabel}`}
-                          type="button"
-                          aria-label={action.ariaLabel}
-                          onClick={() => submitAgentMessage(action.message)}
-                          disabled={ask.isPending}
-                          className="flex items-center justify-between gap-3 rounded-xl border border-[#065F46]/15 bg-[#ECFDF5] p-3 text-left text-xs font-medium text-[#065F46] transition-colors hover:bg-[#D1FAE5] disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          <span>
-                            <span className="block font-bold">{action.label}</span>
-                            <span className="mt-0.5 block text-[11px] font-medium text-[#047857]">Series {action.seriesLabel}</span>
-                          </span>
-                          <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
                 <div className="grid grid-cols-2 gap-3 w-full max-w-lg">
                   {SUGGESTIONS.map(s => (
                     <button
@@ -437,6 +414,24 @@ export function AgentPage() {
 
           {/* Input Area */}
           <div className="p-6 border-t border-gray-100 bg-white">
+            {workflowQuickActions.length > 0 ? (
+              <div aria-label="Runnable workflow confirmations" className="mb-3 flex flex-wrap gap-2">
+                {workflowQuickActions.map(action => (
+                  <button
+                    key={`${action.workflowType}-${action.seriesLabel}`}
+                    type="button"
+                    aria-label={action.ariaLabel}
+                    onClick={() => submitAgentMessage(action.message)}
+                    disabled={ask.isPending}
+                    className="inline-flex max-w-full items-center gap-2 rounded-xl border border-[#065F46]/15 bg-[#ECFDF5] px-3 py-2 text-left text-[11px] font-bold text-[#065F46] transition-colors hover:bg-[#D1FAE5] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <span className="truncate">{action.label}</span>
+                    <span className="shrink-0 font-semibold text-[#047857]">Series {action.seriesLabel}</span>
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                  </button>
+                ))}
+              </div>
+            ) : null}
             <form className="relative" onSubmit={onSubmit}>
               <input
                 aria-label="Agent query"

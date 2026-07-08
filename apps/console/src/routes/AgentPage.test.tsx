@@ -194,6 +194,72 @@ describe('AgentPage', () => {
     expect(screen.getByText('Task not created yet')).toBeInTheDocument();
   });
 
+  it('keeps workflow quick actions available after the chat has messages', async () => {
+    vi.mocked(api.listSeries).mockResolvedValueOnce([
+      {
+        confidence: 0.99,
+        format: 'NIFTI',
+        id: 11,
+        modality: 'T1',
+        project_id: 13,
+        sequence_label: 'T1w_MPRAGE',
+        supported_for_processing: true,
+        workflow_eligibility: {
+          runnable_workflows: [
+            {
+              workflow_type: 't1_deepprep_anat_report',
+              workflow_metadata: {
+                display_name: 'T1 DeepPrep anatomical processing, QC, and report',
+              },
+            },
+          ],
+        },
+      },
+    ]);
+    vi.mocked(api.runAgent)
+      .mockResolvedValueOnce({
+        agent_run_id: 'agent_run_overview_123',
+        answer: '当前项目有 1 个 T1 序列，可以准备 T1 处理确认。',
+        response_source: 'backend_context',
+        status: 'answered',
+      })
+      .mockResolvedValueOnce({
+        agent_run_id: 'agent_run_confirm_123',
+        answer: 'Approval required for t1_deepprep_anat_report.',
+        confirmation: {
+          series_id: 11,
+          workflow_type: 't1_deepprep_anat_report',
+        },
+        response_source: 'backend_context',
+        status: 'confirmation_required',
+        thread_id: 'thread-confirm-123',
+      });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/projects/13/agent']}>
+          <Routes>
+            <Route element={<AgentPage />} path="/projects/:projectId/agent" />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await userEvent.type(screen.getByLabelText('Agent query'), '先分析一下当前数据');
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    expect(await screen.findByText('当前项目有 1 个 T1 序列，可以准备 T1 处理确认。')).toBeInTheDocument();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Prepare T1 DeepPrep confirmation for series 11' }));
+
+    expect(api.runAgent).toHaveBeenLastCalledWith(
+      13,
+      'Prepare workflow confirmation for t1_deepprep_anat_report on series 11. Do not create or launch a task yet.',
+    );
+    expect(await screen.findByText('Approval required')).toBeInTheDocument();
+    expect(screen.getByText('Task not created yet')).toBeInTheDocument();
+  });
+
   it('keeps multi-line Agent answers readable in the chat bubble', async () => {
     vi.mocked(api.runAgent).mockResolvedValueOnce({
       agent_run_id: 'agent_run_inventory_123',

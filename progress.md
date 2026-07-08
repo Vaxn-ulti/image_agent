@@ -2710,3 +2710,27 @@
   - `seed_task=null`;
   - created backend task `#1` for `t1_deepprep_anat_report`;
   - the task later stopped at the expected isolated-runtime credential boundary: `IMAGE_AGENT_SUDO_PASSWORD is required for real Docker workflows`.
+
+## 2026-07-08 Persistent Workflow Quick Actions After Chat
+
+- Goal: keep runnable workflow quick actions available after the user has already exchanged messages with the Agent.
+- User-facing issue covered:
+  - before this slice, the quick action lived only in the empty chat state;
+  - after asking any question, the user had to type a workflow-confirmation prompt manually again.
+- Implementation:
+  - moved workflow quick actions to a compact persistent operation row above the Agent input;
+  - removed the duplicate empty-state quick action block;
+  - added browser smoke mode `--workflow-quick-action-after-chat-resume`, which sends a prior runtime-source question before clicking the quick action.
+- TDD evidence:
+  - RED: `AgentPage` test could not find the quick action after a normal Agent answer;
+  - RED: smoke script did not recognize `--workflow-quick-action-after-chat-resume` and returned `mode=quick_action` instead of after-chat evidence;
+  - GREEN: component and smoke script tests now cover the after-chat path.
+- Verification:
+  - `node node_modules/vitest/vitest.mjs run src/routes/AgentPage.test.tsx --run`: 14 passed.
+  - `node node_modules/vitest/vitest.mjs run scripts/browser_upload_agent_smoke.test.mjs --run`: 12 passed.
+  - `node scripts/browser_upload_agent_smoke.mjs --root .tmp/browser-workflow-quick-action-after-chat-20260708 --api-port 8152 --console-port 5192 --workflow-quick-action-after-chat-resume --output-json .tmp/browser-workflow-quick-action-after-chat-20260708.json`: passed.
+- Runtime browser evidence:
+  - prior message: `你现在是基于规则脚本回答，还是基于LLM在回答`;
+  - `workflow_confirmation_resume.mode=quick_action_after_chat`;
+  - `seed_task=null`;
+  - backend task `#1` was created for `t1_deepprep_anat_report` only after approval.
