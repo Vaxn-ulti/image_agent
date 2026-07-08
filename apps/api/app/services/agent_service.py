@@ -843,6 +843,40 @@ def _runtime_reporter_result(message: str) -> dict | None:
     }
 
 
+def _inventory_capability_result(message: str, project_context: dict) -> dict | None:
+    if not _is_inventory_capability_question(message):
+        return None
+    return {
+        "status": "answered",
+        "intent": "inventory_capability",
+        "selected_skill": "backend-context-fallback",
+        "response_source": "backend_context",
+        "answer": _inventory_capability_reply(project_context, message=message),
+        "retrieved_context": {"mode": "backend_context", "results": []},
+        "tool_invocations": [],
+        "tool_trace": [
+            {
+                "stage": "inventory_capability_reporter",
+                "status": "answered",
+                "mode": "deterministic",
+            }
+        ],
+        "safe_metadata": {
+            "lane": "read_only",
+            "production_task_created": False,
+            "response_source": "backend_context",
+        },
+        "events": [
+            {
+                "type": "agent.inventory_capability_reporter",
+                "status": "answered",
+                "message": "Answered project inventory and runnable workflow guidance without model generation.",
+            }
+        ],
+        "production_task_created": False,
+    }
+
+
 def _read_only_agent_fallback(message: str, *, project_id: int | None, project_context: dict) -> dict:
     if _is_inventory_capability_question(message):
         return {
@@ -1035,6 +1069,18 @@ def agent_run(req):
     deterministic_result = _runtime_reporter_result(message)
     if deterministic_result is not None:
         result = normalize_agent_run_result(deterministic_result)
+        result["agent_run_id"] = agent_run_id
+        finish_agent_run(agent_run_id, result=result)
+        ledger = load_agent_run(agent_run_id) or {}
+        return build_agent_run_response_payload(
+            result,
+            ledger=ledger,
+            request_type="run",
+            project_id=req.project_id,
+        )
+    inventory_capability_result = _inventory_capability_result(message, project_context)
+    if inventory_capability_result is not None:
+        result = normalize_agent_run_result(inventory_capability_result)
         result["agent_run_id"] = agent_run_id
         finish_agent_run(agent_run_id, result=result)
         ledger = load_agent_run(agent_run_id) or {}

@@ -439,3 +439,32 @@
   - 已刷新 git-ignored `.env` 中的 `IMAGE_AGENT_MODEL_API_KEY` 与 `DEEPSEEK_API_KEY`；
   - `.env` 未被 git track，日志与提交不记录明文密钥。
 - 本 checkpoint 没有远程部署配置变更、没有生产任务创建、没有明文密钥写入 git-tracked 文件。
+
+### Checkpoint 18: Deterministic Next-step Guidance
+
+- 本轮继续处理 Agent 交互摩擦：用户上传 T1 后常问 `下一步我应该做什么`，这类问题不能交给 LLM 泛化回答。
+- 生产边界：
+  - “下一步 / 接下来 / 怎么办 / what next” 归入只读 inventory + capability guidance；
+  - 即使模型网关已配置，也优先用后端项目上下文回答；
+  - 回答展示已上传文件、识别到的序列、可运行固定工作流；
+  - 不创建 confirmation，不创建 workflow task。
+- 代码落点：
+  - `apps/api/app/agent/context_replies.py`：把中英文下一步表达加入 inventory/capability 规则识别；
+  - `apps/api/app/services/agent_service.py`：新增 `_inventory_capability_result` early deterministic branch，放在模型路径之前；
+  - `apps/api/tests/test_agent_api.py`：新增禁止模型调用的下一步问题回归测试；
+  - `apps/console/scripts/browser_upload_agent_smoke.mjs`：新增 `--next-step-question` 真实浏览器 smoke；
+  - `apps/console/scripts/browser_upload_agent_smoke.test.mjs`：新增 CLI parse 与 browser flow 测试。
+- TDD / verification 记录：
+  - RED：API 测试最初返回 502，因为本地 DeepSeek 已配置后问题进入模型网关；
+  - RED：browser smoke 新参数最初报 `Unknown argument`，且 flow 落回 running-task seed；
+  - GREEN：`python -m pytest tests/test_agent_api.py::test_agent_run_next_step_question_uses_inventory_capability_without_model -q --tb=short` -> `1 passed, 3 warnings`；
+  - GREEN：`python -m pytest tests/test_agent_api.py::test_agent_run_next_step_question_uses_inventory_capability_without_model tests/test_agent_api.py::test_agent_run_unconfigured_model_answers_inventory_without_confirmation tests/test_agent_api.py::test_agent_run_answers_chinese_current_data_overview_readably_without_model tests/test_agent_api.py::test_agent_run_answers_runtime_source_question_without_model_call tests/test_agent_api.py::test_agent_run_clarifies_bold_dwi_confusion_from_t1_only_records_without_model_call -q --tb=short` -> `5 passed, 3 warnings`；
+  - GREEN：`node node_modules/vitest/vitest.mjs run scripts/browser_upload_agent_smoke.test.mjs` -> `16 passed`；
+  - GREEN：`node node_modules/typescript/bin/tsc -b` -> passed；
+  - 真实浏览器：`node scripts/browser_upload_agent_smoke.mjs --next-step-question --output-json tmp_next_step_smoke.json` -> passed。
+- 真实浏览器证据：
+  - 上传 generated T1 smoke NIfTI；
+  - Agent 页面发送 `下一步我应该做什么`；
+  - 页面显示 `已上传文件`、`识别到的序列`、`可运行的固定工作流`、`没有创建审批请求`、`Database and rules`；
+  - 输出 JSON 记录 `seed_task=null`、`next_step_status=passed_in_browser`。
+- 本 checkpoint 没有远程部署配置变更、没有生产任务创建、没有明文密钥写入 git-tracked 文件。

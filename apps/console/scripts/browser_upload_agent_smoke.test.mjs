@@ -108,6 +108,13 @@ describe('browser_upload_agent_smoke', () => {
     expect(args.agentMessage).toBe('');
   });
 
+  it('keeps next-step CLI mode on its generated guidance question', () => {
+    const args = parseArgs(['--next-step-question']);
+
+    expect(args.nextStepQuestion).toBe(true);
+    expect(args.agentMessage).toBe('');
+  });
+
   it('drives login, NIfTI file input upload, and Agent current-data chat through the browser', async () => {
     const actions = [];
     const page = createFakePage(actions);
@@ -585,6 +592,70 @@ describe('browser_upload_agent_smoke', () => {
     expect(actions).toContainEqual(['waitFor', 'text', 'Yeo']);
     expect(actions).toContainEqual(['waitFor', 'text', '不是基于 BOLD 计算的功能连接']);
     expect(actions).toContainEqual(['waitFor', 'text', '不是 DTI']);
+    expect(actions).toContainEqual(['waitFor', 'text', 'Database and rules']);
+  });
+
+  it('drives upload and Agent next-step guidance through the browser without seeding a task', async () => {
+    const actions = [];
+    const page = createFakePage(actions);
+    const browser = {
+      async close() {
+        actions.push(['browser.close']);
+      },
+      async newPage() {
+        actions.push(['browser.newPage']);
+        return page;
+      },
+    };
+    const deps = {
+      async createProject() {
+        actions.push(['createProject']);
+        return { project_id: 1 };
+      },
+      async launchBrowser() {
+        actions.push(['launchBrowser']);
+        return browser;
+      },
+      async seedRunningT1Task() {
+        actions.push(['seedTask']);
+        throw new Error('next-step smoke must not seed a running task');
+      },
+      async startApiServer({ root }) {
+        actions.push(['startApi', root.endsWith('isolated-root')]);
+        return { baseUrl: 'http://api.local', stop: vi.fn(async () => actions.push(['stopApi'])) };
+      },
+      async startConsoleServer({ apiBaseUrl }) {
+        actions.push(['startConsole', apiBaseUrl]);
+        return { baseUrl: 'http://console.local', stop: vi.fn(async () => actions.push(['stopConsole'])) };
+      },
+      async writeMinimalNifti(filePath) {
+        actions.push(['writeNifti', filePath.endsWith('sub-browser-smoke_T1w.nii.gz')]);
+      },
+    };
+
+    const result = await runBrowserUploadAgentSmoke(
+      {
+        headless: true,
+        nextStepQuestion: true,
+        root: 'C:/tmp/isolated-root',
+      },
+      deps,
+    );
+
+    expect(result.status).toBe('passed');
+    expect(result.next_step_status).toBe('passed_in_browser');
+    expect(result.seed_task).toBeNull();
+    expect(actions).not.toContainEqual(['seedTask']);
+    expect(actions).toContainEqual([
+      'fill',
+      'label',
+      'Agent query',
+      '下一步我应该做什么',
+    ]);
+    expect(actions).toContainEqual(['waitFor', 'text', '已上传文件']);
+    expect(actions).toContainEqual(['waitFor', 'text', '识别到的序列']);
+    expect(actions).toContainEqual(['waitFor', 'text', '可运行的固定工作流']);
+    expect(actions).toContainEqual(['waitFor', 'text', '没有创建审批请求']);
     expect(actions).toContainEqual(['waitFor', 'text', 'Database and rules']);
   });
 });

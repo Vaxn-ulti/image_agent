@@ -95,6 +95,16 @@ def _is_inventory_capability_question(message: str) -> bool:
         "\u54ea\u4e9b\u5de5\u4f5c\u6d41",
         "\u4f1a\u505a\u4ec0\u4e48",
         "\u5904\u7406\u6d41\u7a0b",
+        "\u4e0b\u4e00\u6b65",
+        "\u63a5\u4e0b\u6765",
+        "\u600e\u4e48\u529e",
+        "\u5e94\u8be5\u505a\u4ec0\u4e48",
+        "\u5efa\u8bae\u6211\u505a\u4ec0\u4e48",
+        "\u5efa\u8bae\u4e0b\u4e00\u6b65",
+        "next step",
+        "next steps",
+        "what should i do next",
+        "what next",
     )
     return any(token in text for token in inventory_tokens) or any(token in text for token in capability_tokens)
 

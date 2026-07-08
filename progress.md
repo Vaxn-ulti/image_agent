@@ -2764,3 +2764,28 @@
 - Local env:
   - refreshed git-ignored `.env` for DeepSeek provider/key aliases;
   - no plaintext secret was written to git-tracked files.
+
+## 2026-07-08 Deterministic Next-step Guidance
+
+- Goal: make the Agent answer `下一步我应该做什么` from project inventory and runnable workflow evidence instead of routing to the model.
+- User-facing issue covered:
+  - after upload, the user should not need to know the exact prompt `我上传了什么文件，可以跑什么任务`;
+  - common next-step wording should produce the same read-only uploaded-files / detected-series / runnable-workflows guidance.
+- Implementation:
+  - added Chinese and English next-step phrases to inventory/capability detection;
+  - added an early deterministic inventory-capability branch in `/agent/runs`, before model execution;
+  - added browser smoke mode `--next-step-question`.
+- TDD evidence:
+  - RED: API test initially returned 502 because configured DeepSeek caused the question to enter the model gateway;
+  - RED: smoke script initially rejected `--next-step-question` and fell back to the running-task seed path;
+  - GREEN: API and browser smoke tests now cover the no-model, no-task behavior.
+- Verification:
+  - `python -m pytest tests/test_agent_api.py::test_agent_run_next_step_question_uses_inventory_capability_without_model tests/test_agent_api.py::test_agent_run_unconfigured_model_answers_inventory_without_confirmation tests/test_agent_api.py::test_agent_run_answers_chinese_current_data_overview_readably_without_model tests/test_agent_api.py::test_agent_run_answers_runtime_source_question_without_model_call tests/test_agent_api.py::test_agent_run_clarifies_bold_dwi_confusion_from_t1_only_records_without_model_call -q --tb=short`: 5 passed, 3 warnings.
+  - `node node_modules/vitest/vitest.mjs run scripts/browser_upload_agent_smoke.test.mjs`: 16 passed.
+  - `node node_modules/typescript/bin/tsc -b`: passed.
+  - `node scripts/browser_upload_agent_smoke.mjs --next-step-question --output-json tmp_next_step_smoke.json`: passed.
+- Runtime browser evidence:
+  - uploaded generated `sub-browser-smoke_T1w.nii.gz`;
+  - asked `下一步我应该做什么`;
+  - verified `已上传文件`, `识别到的序列`, `可运行的固定工作流`, `没有创建审批请求`, and `Database and rules`;
+  - `seed_task=null`, so no task or confirmation was created.

@@ -14,6 +14,7 @@ const DEFAULT_AGENT_MESSAGE = '替我分析一下现在的数据';
 const DEFAULT_RUNTIME_SOURCE_MESSAGE = '你现在是基于规则脚本回答，还是基于LLM在回答';
 const DEFAULT_T1_METRIC_MESSAGE = '给我分析一下t1提取出来的指标，综合水平怎么样，符不符合正常水平';
 const DEFAULT_MODALITY_CONFUSION_MESSAGE = '我都没上传bold资料和DTI资料，为什么会跑这些步骤';
+const DEFAULT_NEXT_STEP_MESSAGE = '下一步我应该做什么';
 const DEFAULT_WORKFLOW_CONFIRMATION_MESSAGE = ({ projectId, seriesId }) =>
   `请为项目${projectId}的序列${seriesId}准备 t1_deepprep_anat_report 工作流确认，不要创建或启动任务`;
 const REQUIRED_ANSWER_FRAGMENTS = ['项目状态概览', '任务 #', '只读观察'];
@@ -34,6 +35,12 @@ const MODALITY_CONFUSION_REQUIRED_FRAGMENTS = [
   '不是基于 BOLD 计算的功能连接',
   '不是 DTI',
 ];
+const NEXT_STEP_REQUIRED_FRAGMENTS = [
+  '已上传文件',
+  '识别到的序列',
+  '可运行的固定工作流',
+  '没有创建审批请求',
+];
 
 export function parseArgs(argv) {
   const args = {
@@ -44,6 +51,7 @@ export function parseArgs(argv) {
     outputJson: '',
     root: '',
     modalityConfusionQuestion: false,
+    nextStepQuestion: false,
     runtimeSourceQuestion: false,
     t1MetricQuestion: false,
     workflowConfirmationResume: false,
@@ -60,6 +68,8 @@ export function parseArgs(argv) {
       args.t1MetricQuestion = true;
     } else if (arg === '--modality-confusion-question') {
       args.modalityConfusionQuestion = true;
+    } else if (arg === '--next-step-question') {
+      args.nextStepQuestion = true;
     } else if (arg === '--workflow-confirmation-resume') {
       args.workflowConfirmationResume = true;
     } else if (arg === '--workflow-quick-action-resume') {
@@ -462,6 +472,7 @@ async function driveBrowserFlow({
   consoleBaseUrl,
   headless,
   modalityConfusionQuestion,
+  nextStepQuestion,
   projectId,
   runtimeSourceQuestion,
   root,
@@ -576,6 +587,22 @@ async function driveBrowserFlow({
         seed,
       };
     }
+    if (nextStepQuestion) {
+      const nextStepMessage = agentMessage || DEFAULT_NEXT_STEP_MESSAGE;
+      await page.getByLabel('Agent query').fill(nextStepMessage);
+      await page.getByRole('button', { name: 'Send' }).click();
+      for (const fragment of NEXT_STEP_REQUIRED_FRAGMENTS) {
+        await page.getByText(fragment).waitFor({ timeout: 20000 });
+      }
+      await page.getByText('Database and rules').waitFor({ timeout: 10000 });
+      return {
+        nextStep: {
+          message: nextStepMessage,
+          required_fragments: NEXT_STEP_REQUIRED_FRAGMENTS,
+        },
+        seed: null,
+      };
+    }
     let priorWorkflowMessage = null;
     if (workflowQuickActionAfterChat) {
       priorWorkflowMessage = DEFAULT_RUNTIME_SOURCE_MESSAGE;
@@ -665,12 +692,14 @@ export async function runBrowserUploadAgentSmoke(options, injectedDeps = {}) {
       agentMessage: options.workflowConfirmationResume === true || options.runtimeSourceQuestion === true
         || options.t1MetricQuestion === true
         || options.modalityConfusionQuestion === true
+        || options.nextStepQuestion === true
         ? options.agentMessage
         : options.agentMessage || DEFAULT_AGENT_MESSAGE,
       apiBaseUrl: apiServer.baseUrl,
       consoleBaseUrl: consoleServer.baseUrl,
       headless: options.headless !== false,
       modalityConfusionQuestion: options.modalityConfusionQuestion === true,
+      nextStepQuestion: options.nextStepQuestion === true,
       projectId: project.project_id,
       runtimeSourceQuestion: options.runtimeSourceQuestion === true,
       root,
@@ -681,6 +710,7 @@ export async function runBrowserUploadAgentSmoke(options, injectedDeps = {}) {
     }, deps);
     const runtimeSource = flow.runtimeSource || null;
     const modalityConfusion = flow.modalityConfusion || null;
+    const nextStep = flow.nextStep || null;
     const t1Metric = flow.t1Metric || null;
     const workflowConfirmationResume = flow.workflowConfirmationResume || null;
     return {
@@ -690,6 +720,8 @@ export async function runBrowserUploadAgentSmoke(options, injectedDeps = {}) {
       root_scope: 'isolated',
       modality_confusion: modalityConfusion,
       modality_confusion_status: modalityConfusion ? 'passed_in_browser' : 'not_requested',
+      next_step: nextStep,
+      next_step_status: nextStep ? 'passed_in_browser' : 'not_requested',
       runtime_source: runtimeSource,
       runtime_source_status: runtimeSource ? 'passed_in_browser' : 'not_requested',
       seed_task: flow.seed,

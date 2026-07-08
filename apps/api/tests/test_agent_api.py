@@ -819,6 +819,83 @@ def test_agent_run_unconfigured_model_answers_inventory_without_confirmation(tmp
     assert "supported" not in body["answer"]
 
 
+def test_agent_run_next_step_question_uses_inventory_capability_without_model(tmp_path, monkeypatch):
+    from app.core import config
+    from app.db import database
+    from app import main
+    from app.main import app
+
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
+
+    class ForbiddenGateway:
+        def complete_structured(self, messages, *, purpose, structured_schema=None):
+            raise AssertionError("next-step guidance from project inventory must not call the model gateway")
+
+        def complete_text(self, messages, *, purpose):
+            raise AssertionError("next-step guidance from project inventory must not call the model gateway")
+
+    monkeypatch.setattr(main, "ModelGateway", lambda: ForbiddenGateway())
+    database.init_db()
+    _insert_project(database, 7)
+    monkeypatch.setattr(
+        main,
+        "read_project_context",
+        lambda project_id, *, rows_fn, workflows: {
+            "project_id": project_id,
+            "project_files": [
+                {"id": 31, "original_name": "sub-01_T1w.nii.gz", "file_type": "NIFTI"},
+            ],
+            "series": [
+                {
+                    "id": 11,
+                    "modality": "T1",
+                    "sequence_label": "T1w_MPRAGE",
+                    "supported_for_processing": 1,
+                    "workflow_eligibility": {
+                        "policy_version": "workflow_eligibility_v1",
+                        "production_task_created": False,
+                        "runnable_workflows": [
+                            {
+                                "workflow_type": "t1_deepprep_anat_report",
+                                "label": "T1 DeepPrep anat-only with full features and HTML report",
+                                "modality": "T1",
+                                "workflow_metadata": {
+                                    "lane": "fixed_workflow",
+                                    "agent_selectable": True,
+                                    "display_name": "T1 DeepPrep anatomical processing, QC, and report",
+                                    "capability_summary": "Runs anatomical T1 processing with QC and report outputs.",
+                                },
+                            }
+                        ],
+                    },
+                }
+            ],
+            "workflows": workflows,
+        },
+    )
+
+    result = TestClient(app).post(
+        "/agent/runs",
+        json={"project_id": 7, "message": "下一步我应该做什么"},
+    )
+
+    assert result.status_code == 200
+    body = result.json()
+    assert body["status"] == "answered"
+    assert body["intent"] == "inventory_capability"
+    assert body["selected_skill"] == "backend-context-fallback"
+    assert body["response_source"] == "backend_context"
+    assert "已上传文件" in body["answer"]
+    assert "识别到的序列" in body["answer"]
+    assert "可运行的固定工作流" in body["answer"]
+    assert "t1_deepprep_anat_report" in body["answer"]
+    assert "没有创建审批请求" in body["answer"]
+    assert "Model gateway is not configured" not in body["answer"]
+    assert "confirmation" not in body
+    assert body["production_task_created"] is False
+
+
 def test_agent_run_unconfigured_model_returns_complete_result_analysis(tmp_path, monkeypatch):
     from app.core import config
     from app.db import database
