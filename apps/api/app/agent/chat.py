@@ -133,6 +133,13 @@ def _is_result_analysis_question(message: str) -> bool:
             "qc\u603b\u7ed3",
             "\u4ea7\u7269",
             "\u8f93\u51fa",
+            "\u5206\u6790\u4e00\u4e0b\u73b0\u5728\u7684\u6570\u636e",
+            "\u5206\u6790\u73b0\u5728\u7684\u6570\u636e",
+            "\u5206\u6790\u5f53\u524d\u6570\u636e",
+            "\u73b0\u5728\u7684\u6570\u636e",
+            "\u5f53\u524d\u6570\u636e",
+            "\u6570\u636e\u600e\u4e48\u6837",
+            "\u5206\u6790\u6570\u636e",
         )
     )
 
@@ -180,6 +187,31 @@ def _series_item(item: dict, *, chinese: bool = False) -> str:
         return f"序列 {series_id}：{modality}，{label}，{status}"
     status = "supported" if supported else "not supported"
     return f"{series_id}: {modality} / {label} / {status}"
+
+
+_CHINESE_TASK_STATUS = {
+    "completed": "已完成",
+    "failed": "失败",
+    "running": "运行中",
+    "queued": "排队中",
+    "pending": "等待中",
+    "cancelled": "已取消",
+    "canceled": "已取消",
+}
+
+
+def _task_item(item: dict, *, chinese: bool = False) -> str:
+    task_id = item.get("id")
+    workflow = item.get("workflow_type") or "unknown_workflow"
+    status = str(item.get("status") or "unknown")
+    progress = item.get("progress") if item.get("progress") is not None else 0
+    error = item.get("error_message")
+    if chinese:
+        status_text = _CHINESE_TASK_STATUS.get(status.lower(), status)
+        error_text = f"，错误：{error}" if error else ""
+        return f"任务 #{task_id}：{workflow}，状态 {status_text}，进度 {progress}%{error_text}"
+    error_text = f", error={error}" if error else ""
+    return f"#{task_id} {workflow} {status} {progress}%{error_text}"
 
 
 def _workflow_item(workflow: dict, *, chinese: bool = False) -> str:
@@ -365,12 +397,48 @@ def _registered_result_summaries(project_context: dict) -> list[dict]:
 
 def _status_reply(project_context: dict, recommended_next_step: str, *, message: str = "") -> str:
     tasks = project_context.get("tasks") or []
+    if _looks_chinese(message):
+        next_step = str(recommended_next_step)
+        if next_step == "Review backend task records and registered result artifacts before preparing any workflow.":
+            next_step = "先查看后端任务记录和已登记结果产物，再准备任何工作流。"
+        task_items = [_task_item(task, chinese=True) for task in tasks[:8]] or ["当前没有任务记录。"]
+        base_reply = (
+            "项目状态概览\n"
+            + "\n\n当前任务\n"
+            + _line_items(task_items)
+            + "\n\n建议下一步\n"
+            + next_step
+        )
+        if not _is_result_analysis_question(message):
+            return base_reply + "\n\n没有启动任何工作流。只有在你明确指定工作流和序列后，我才会生成确认卡片。"
+        summaries = _registered_result_summaries(project_context)
+        observation_lines = [_task_item(task, chinese=True) for task in tasks[:5]] or ["当前没有任务记录。"]
+        artifact_lines = []
+        qc_lines = []
+        for summary in summaries[:3]:
+            reports = _summary_artifact_paths(summary, "reports")
+            qc_paths = _summary_artifact_paths(summary, "qc") or _summary_artifact_paths(summary, "figures")
+            if reports:
+                artifact_lines.append(f"任务 {summary.get('task_id')}：" + "，".join(reports))
+            if qc_paths:
+                qc_lines.append(f"任务 {summary.get('task_id')}：" + "，".join(qc_paths))
+        if not artifact_lines:
+            artifact_lines = ["匹配任务还没有登记 result-summary 报告产物。"]
+        if not qc_lines:
+            qc_lines = ["匹配任务的 result summary 中没有找到 QC 产物。"]
+        return (
+            base_reply
+            + "\n\n观察摘要\n"
+            + _line_items(observation_lines)
+            + "\n\n结果产物\n"
+            + _line_items(artifact_lines)
+            + "\n\n质控观察\n"
+            + _line_items(qc_lines)
+            + "\n\n只读观察：我没有启动任何工作流；以上内容只来自后端任务记录和已登记结果产物。"
+        )
     if not tasks:
         return f"Tasks: none. Recommended next step: {recommended_next_step}"
-    parts = []
-    for task in tasks:
-        error = f", error={task['error_message']}" if task.get("error_message") else ""
-        parts.append(f"#{task['id']} {task['workflow_type']} {task['status']} {task['progress']}%{error}")
+    parts = [_task_item(task) for task in tasks]
     reply = "Tasks: " + "; ".join(parts) + f". Recommended next step: {recommended_next_step}"
     if not _is_result_analysis_question(message):
         return reply

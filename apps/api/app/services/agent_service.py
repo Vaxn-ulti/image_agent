@@ -748,7 +748,7 @@ def _read_only_agent_fallback(message: str, *, project_id: int | None, project_c
             "intent": "inventory_capability",
             "selected_skill": "backend-context-fallback",
             "response_source": "backend_context",
-            "answer": _inventory_capability_reply(project_context),
+            "answer": _inventory_capability_reply(project_context, message=message),
             "retrieved_context": {"mode": "backend_context", "results": []},
             "tool_invocations": [],
             "tool_trace": [

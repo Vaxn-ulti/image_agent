@@ -2440,3 +2440,25 @@
   - `python -m pytest apps/api/tests/test_agent_api.py::test_agent_run_unconfigured_model_answers_inventory_without_confirmation -q`: 1 passed;
   - `python -m pytest apps/api/tests/test_agent_api.py::test_agent_run_unconfigured_model_answers_inventory_without_confirmation apps/api/tests/test_agent_tools.py::test_read_project_context_enriches_series_workflow_eligibility -q`: 2 passed;
   - `python -m pytest apps/api/tests/test_agent_tools.py -q`: 24 passed.
+
+## 2026-07-08 Chinese Current-Data Overview Iteration
+
+- Goal: make broad Chinese data-overview questions useful and readable, especially `替我分析一下现在的数据`.
+- Red test:
+  - added `test_agent_run_answers_chinese_current_data_overview_readably_without_model`;
+  - first failure showed the question was classified as `answer_question` instead of `result_analysis`;
+  - after intent routing was fixed, the test exposed that DeepSeek `.env` could make model-configured paths run unless the test explicitly isolates `public_model_status`.
+- Implementation:
+  - added Chinese current-data phrases to `_is_result_analysis_question`;
+  - added Chinese task status labels and `_task_item`;
+  - `_status_reply` now has a Chinese branch with `项目状态概览`, `当前任务`, `建议下一步`, `观察摘要`, `结果产物`, `质控观察`, and `只读观察`;
+  - model-unconfigured inventory fallback now passes the original user message into `_inventory_capability_reply`, so Chinese inventory questions keep Chinese formatting in that path too;
+  - model-unconfigured tests now monkeypatch `agent_service.public_model_status` to avoid accidental DeepSeek calls from root `.env`.
+- Verification:
+  - `python -m pytest apps/api/tests/test_agent_api.py::test_agent_run_answers_chinese_current_data_overview_readably_without_model -q`: 1 passed;
+  - `python -m pytest apps/api/tests/test_agent_api.py::test_agent_run_falls_back_to_read_only_backend_answer_when_model_unconfigured -q`: 1 passed;
+  - combined focused command covering current-data overview, inventory readability, legacy fallback, and context enrichment: 4 passed.
+- Smoke boundary:
+  - attempted a live uvicorn smoke with an isolated `IMAGE_AGENT_ROOT`;
+  - `/projects` still returned root-database projects, so the smoke was rejected as invalid evidence;
+  - cleaned up the temporary port and left uvicorn env isolation as follow-up work.

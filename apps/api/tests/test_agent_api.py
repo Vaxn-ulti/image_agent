@@ -1098,10 +1098,12 @@ def test_agent_run_falls_back_to_read_only_backend_answer_when_model_unconfigure
     from app.db import database
     from app import main
     from app.main import app
+    from app.services import agent_service
 
     monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
     monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
     monkeypatch.setattr(main, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(agent_service, "public_model_status", lambda: {"configured": False})
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     database.init_db()
     _insert_project(database, 7)
@@ -1137,6 +1139,51 @@ def test_agent_run_falls_back_to_read_only_backend_answer_when_model_unconfigure
     assert row["status"] == "answered"
     assert row["selected_skill"] == "backend-status-fallback"
     assert "model_gateway_unconfigured" in row["safe_metadata_json"]
+
+
+def test_agent_run_answers_chinese_current_data_overview_readably_without_model(tmp_path, monkeypatch):
+    from app.core import config
+    from app.db import database
+    from app import main
+    from app.main import app
+    from app.services import agent_service
+
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(main, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(agent_service, "public_model_status", lambda: {"configured": False})
+    database.init_db()
+    _insert_project(database, 7)
+    with database.connect() as conn:
+        conn.execute(
+            "INSERT INTO files(id, project_id, original_name, storage_path, file_type, size, sha256, created_at) VALUES(?,?,?,?,?,?,?,?)",
+            (3, 7, "sub-01_T1w.nii.gz", str(tmp_path / "sub-01_T1w.nii.gz"), "NIFTI", 12, "abc123", database.now_iso()),
+        )
+        conn.execute(
+            "INSERT INTO imaging_series(id, project_id, file_id, sequence_label, supported_for_processing, unsupported_reason, modality, format, confidence, metadata_json, status, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            (5, 7, 3, "T1w_MPRAGE", 1, None, "T1", "NIFTI", 0.99, "{}", "ready", database.now_iso()),
+        )
+        conn.execute(
+            "INSERT INTO tasks(id, project_id, series_id, workflow_type, status, progress, log_path, created_at) VALUES(?,?,?,?,?,?,?,?)",
+            (41, 7, 5, "t1_deepprep_anat_report", "running", 35, str(tmp_path / "task-41.log"), database.now_iso()),
+        )
+
+    result = TestClient(app).post("/agent/runs", json={"project_id": 7, "message": "替我分析一下现在的数据"})
+
+    assert result.status_code == 200
+    body = result.json()
+    assert body["status"] == "answered"
+    assert body["intent"] == "result_analysis"
+    assert body["selected_skill"] == "backend-context-fallback"
+    assert body["response_source"] == "backend_context"
+    assert "项目状态概览" in body["answer"]
+    assert "任务 #41" in body["answer"]
+    assert "进度 35%" in body["answer"]
+    assert "只读观察" in body["answer"]
+    assert "Tasks:" not in body["answer"]
+    assert "Recommended next step" not in body["answer"]
+    assert "Observation summary" not in body["answer"]
+    assert "Model gateway is not configured" not in body["answer"]
 
 
 def test_agent_run_answers_identity_question_without_model_call(tmp_path, monkeypatch):

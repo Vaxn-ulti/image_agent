@@ -572,3 +572,29 @@ Next:
 
 - Extend the same Chinese readability treatment to generic status, result-analysis, and workflow-confirmation answers.
 - Add browser-level assertions once a file-input-capable harness is available.
+
+## 2026-07-08 Chinese Current-Data Overview Iteration
+
+Objective: make broad Chinese questions such as "替我分析一下现在的数据" route to a readable, read-only project overview instead of generic English/RAG fallback.
+
+Status: completed locally as a subtask; overall interaction-intelligence goal remains active.
+
+Completed:
+
+- Added a failing Agent API test for Chinese current-data overview questions.
+- Extended result-analysis intent detection to cover current-data/data-overview Chinese phrasing.
+- Added Chinese task/status formatting to `_status_reply`.
+- Preserved read-only behavior: no workflow launch, no confirmation creation.
+- Fixed the model-unconfigured inventory fallback to pass the original message into `_inventory_capability_reply`.
+- Isolated model-unconfigured tests from the now-configured DeepSeek `.env`.
+
+Boundaries:
+
+- This covers backend/TestClient behavior and deterministic fallback text.
+- A live uvicorn smoke attempt still picked up the root database instead of the intended isolated root, so it was not counted as passing evidence.
+- Browser-level assertions remain pending until the local smoke harness can reliably isolate env/DB and drive login/upload.
+
+Next:
+
+- Fix the isolated uvicorn smoke harness so it does not reuse the root `.env`/database.
+- Apply the same Chinese readability contract to workflow confirmation/resume messages.

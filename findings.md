@@ -615,3 +615,19 @@ Findings:
   - apply the same readability standard to generic task/status answers and T1 result-analysis answers;
   - decide whether the frontend should render evidence as compact structured sections instead of plain chat text;
   - keep browser/upload automation on the backlog until the harness can reliably set file inputs.
+
+## 2026-07-08 Chinese Current-Data Overview Findings
+
+- Interaction issue:
+  - broad Chinese questions about "现在的数据" did not consistently map to result/status analysis;
+  - when they missed that route, the Agent could fall back to generic answer/RAG behavior instead of explaining current uploaded data and task state.
+- Implemented boundary:
+  - current-data Chinese phrasing is now treated as read-only result/status analysis;
+  - task state is rendered as Chinese project overview text, not `Tasks:`/`Recommended next step` English text;
+  - the answer explicitly says it is a read-only observation and does not launch workflows.
+- Test isolation finding:
+  - after configuring DeepSeek in ignored `.env`, tests that assume "model unconfigured" must explicitly patch model status;
+  - deleting only `OPENAI_API_KEY` is no longer sufficient because generic and DeepSeek provider variables can configure the gateway.
+- Smoke harness finding:
+  - live uvicorn smoke still reused root database state despite attempted env isolation;
+  - this is now a harness problem, not accepted product evidence, and should be fixed before relying on browser/live-server claims.
