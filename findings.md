@@ -631,3 +631,20 @@ Findings:
 - Smoke harness finding:
   - live uvicorn smoke still reused root database state despite attempted env isolation;
   - this is now a harness problem, not accepted product evidence, and should be fixed before relying on browser/live-server claims.
+
+## 2026-07-08 Isolated Live API Smoke Harness Findings
+
+- Root cause:
+  - previous live uvicorn smoke attempts set isolation variables too late or from a parent command path that still allowed the app import path and root `.env` assumptions to leak in;
+  - once `app.main` or `app.core.config` has been imported, changing `IMAGE_AGENT_ROOT` is not reliable because module-level paths are already resolved.
+- Implemented boundary:
+  - live smoke and browser harnesses must start the API through a launcher that sets runtime root and env file before importing API modules;
+  - the launcher provides `--print-config` so tests can assert the effective root/database/auth settings before trusting a running service;
+  - the script also makes `apps/api` importable explicitly, so execution from `scripts/` does not depend on incidental `PYTHONPATH`.
+- Evidence:
+  - an isolated live uvicorn run now starts with empty `/projects`;
+  - a fresh T1 upload and seeded task appear in the same isolated DB;
+  - the Agent answers the current-data question from that isolated backend state, not from the root database or old chat history.
+- Remaining product work:
+  - reuse this launcher for a full browser upload/chat smoke once the browser harness can set file inputs;
+  - keep production service configuration separate from this local smoke helper.

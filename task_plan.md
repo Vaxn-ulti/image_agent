@@ -598,3 +598,28 @@ Next:
 
 - Fix the isolated uvicorn smoke harness so it does not reuse the root `.env`/database.
 - Apply the same Chinese readability contract to workflow confirmation/resume messages.
+
+## 2026-07-08 Isolated Live API Smoke Harness
+
+Objective: make live API and browser-style Agent tests reliable by forcing a clean runtime root before the API app is imported.
+
+Status: completed locally as a subtask; overall interaction-intelligence goal remains active.
+
+Completed:
+
+- Added `apps/api/scripts/run_isolated_api_server.py`, a reusable uvicorn launcher that sets `IMAGE_AGENT_ROOT`, `IMAGE_AGENT_ENV_FILE`, and auth mode before importing `app.main`.
+- Added a regression test for `--print-config` so the launcher proves the effective root, database path, and auth boundary.
+- Re-ran a live uvicorn smoke against an isolated temporary root.
+- Verified `/projects` started empty, created project `1`, uploaded a minimal T1 NIfTI, seeded task `#9001`, and received a Chinese read-only Agent overview from `/agent/runs`.
+- Confirmed the live answer included `项目状态概览`, `任务 #9001`, `进度 35%`, and `只读观察`, without old `Tasks:` or model-unconfigured noise.
+
+Boundaries:
+
+- This is API-level upload plus Agent interaction evidence, not yet a full browser file-picker automation.
+- The launcher is intended for local/live smoke and test harnesses; production deployment should set env directly in the service manager.
+- Secrets remain outside Git; the DeepSeek key stays only in ignored environment configuration.
+
+Next:
+
+- Build or adopt a browser harness that supports file input setting, then reuse this isolated server launcher for full UI upload/chat assertions.
+- Apply the Chinese readability contract to workflow confirmation/resume messages.

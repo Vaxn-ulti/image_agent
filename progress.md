@@ -2462,3 +2462,28 @@
   - attempted a live uvicorn smoke with an isolated `IMAGE_AGENT_ROOT`;
   - `/projects` still returned root-database projects, so the smoke was rejected as invalid evidence;
   - cleaned up the temporary port and left uvicorn env isolation as follow-up work.
+
+## 2026-07-08 Isolated Live API Smoke Harness
+
+- Goal: make live API and future browser Agent tests use a genuinely isolated database instead of accidentally reading the root workspace state.
+- Red test:
+  - added `apps/api/tests/test_isolated_api_server_script.py`;
+  - first run failed because `apps/api/scripts/run_isolated_api_server.py` did not exist;
+  - after adding the script, the next run exposed that Python executed from `scripts/` could not import `app.security` until `apps/api` was inserted into `sys.path`.
+- Implementation:
+  - added `apps/api/scripts/run_isolated_api_server.py`;
+  - the script sets `IMAGE_AGENT_ROOT`, `IMAGE_AGENT_ENV_FILE`, and `IMAGE_AGENT_REQUIRE_AUTH` before importing API modules;
+  - added `--print-config` so tests can prove the effective `ROOT`, `DB_PATH`, `PROJECTS_ROOT`, env file, and auth mode without starting uvicorn;
+  - fixed the script import path by inserting the API root into `sys.path`.
+- Live isolated smoke evidence:
+  - started uvicorn through the new script on port `8141` with a temporary `image-agent-isolated-live-smoke-*` root;
+  - verified `GET /projects` returned `[]`;
+  - created project `1`;
+  - uploaded `sub-001_T1w.nii.gz` through `POST /projects/1/upload`;
+  - verified uploaded series `1` was classified as `T1`;
+  - seeded task `#9001` into the same isolated DB with workflow `t1_deepprep_anat_report`, status `running`, and progress `35`;
+  - asked `/agent/runs`: `替我分析一下现在的数据`;
+  - verified the answer included `项目状态概览`, `任务 #9001`, `进度 35%`, and `只读观察`;
+  - verified the answer did not contain old English `Tasks:` text or `Model gateway is not configured` noise.
+- Verification:
+  - `python -m pytest apps/api/tests/test_isolated_api_server_script.py -q --tb=short`: 1 passed.
