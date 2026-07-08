@@ -77,6 +77,13 @@ describe('browser_upload_agent_smoke', () => {
     expect(args.agentMessage).toBe('');
   });
 
+  it('keeps T1 metric CLI mode on its generated metric question', () => {
+    const args = parseArgs(['--t1-metric-question']);
+
+    expect(args.t1MetricQuestion).toBe(true);
+    expect(args.agentMessage).toBe('');
+  });
+
   it('drives login, NIfTI file input upload, and Agent current-data chat through the browser', async () => {
     const actions = [];
     const page = createFakePage(actions);
@@ -269,6 +276,74 @@ describe('browser_upload_agent_smoke', () => {
     ]);
     expect(actions).toContainEqual(['waitFor', 'text', '这次回答来源：后端规则和运行状态检查']);
     expect(actions).toContainEqual(['waitFor', 'text', '当前模型网关']);
+    expect(actions).toContainEqual(['waitFor', 'text', 'Database and rules']);
+  });
+
+  it('drives upload, completed T1 result evidence, and Agent T1 metric explanation through the browser', async () => {
+    const actions = [];
+    const page = createFakePage(actions);
+    const browser = {
+      async close() {
+        actions.push(['browser.close']);
+      },
+      async newPage() {
+        actions.push(['browser.newPage']);
+        return page;
+      },
+    };
+    const deps = {
+      async createProject() {
+        actions.push(['createProject']);
+        return { project_id: 1 };
+      },
+      async launchBrowser() {
+        actions.push(['launchBrowser']);
+        return browser;
+      },
+      async seedCompletedT1ResultSummary({ projectId, root, seriesId }) {
+        actions.push(['seedCompletedT1', root.endsWith('isolated-root'), projectId, seriesId]);
+        return { task_id: 9140, workflow_type: 't1_deepprep_anat_report' };
+      },
+      async seedRunningT1Task() {
+        actions.push(['seedTask']);
+        throw new Error('T1 metric smoke must not seed a running task');
+      },
+      async startApiServer({ root }) {
+        actions.push(['startApi', root.endsWith('isolated-root')]);
+        return { baseUrl: 'http://api.local', stop: vi.fn(async () => actions.push(['stopApi'])) };
+      },
+      async startConsoleServer({ apiBaseUrl }) {
+        actions.push(['startConsole', apiBaseUrl]);
+        return { baseUrl: 'http://console.local', stop: vi.fn(async () => actions.push(['stopConsole'])) };
+      },
+      async writeMinimalNifti(filePath) {
+        actions.push(['writeNifti', filePath.endsWith('sub-browser-smoke_T1w.nii.gz')]);
+      },
+    };
+
+    const result = await runBrowserUploadAgentSmoke(
+      {
+        headless: true,
+        root: 'C:/tmp/isolated-root',
+        t1MetricQuestion: true,
+      },
+      deps,
+    );
+
+    expect(result.status).toBe('passed');
+    expect(result.t1_metric_status).toBe('passed_in_browser');
+    expect(result.seed_task).toEqual({ task_id: 9140, workflow_type: 't1_deepprep_anat_report' });
+    expect(actions).not.toContainEqual(['seedTask']);
+    expect(actions).toContainEqual(['seedCompletedT1', true, 1, 1]);
+    expect(actions).toContainEqual([
+      'fill',
+      'label',
+      'Agent query',
+      '给我分析一下t1提取出来的指标，综合水平怎么样，符不符合正常水平',
+    ]);
+    expect(actions).toContainEqual(['waitFor', 'text', 'T1 结构化结果解读']);
+    expect(actions).toContainEqual(['waitFor', 'text', 'BrainSegVol']);
+    expect(actions).toContainEqual(['waitFor', 'text', '不能仅凭这些输出判断正常或异常']);
     expect(actions).toContainEqual(['waitFor', 'text', 'Database and rules']);
   });
 });

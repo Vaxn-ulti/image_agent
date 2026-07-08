@@ -12,6 +12,7 @@ const REPO_ROOT = path.resolve(CONSOLE_ROOT, '..', '..');
 const API_ROOT = path.join(REPO_ROOT, 'apps', 'api');
 const DEFAULT_AGENT_MESSAGE = '替我分析一下现在的数据';
 const DEFAULT_RUNTIME_SOURCE_MESSAGE = '你现在是基于规则脚本回答，还是基于LLM在回答';
+const DEFAULT_T1_METRIC_MESSAGE = '给我分析一下t1提取出来的指标，综合水平怎么样，符不符合正常水平';
 const DEFAULT_WORKFLOW_CONFIRMATION_MESSAGE = ({ projectId, seriesId }) =>
   `请为项目${projectId}的序列${seriesId}准备 t1_deepprep_anat_report 工作流确认，不要创建或启动任务`;
 const REQUIRED_ANSWER_FRAGMENTS = ['项目状态概览', '任务 #', '只读观察'];
@@ -19,6 +20,11 @@ const FORBIDDEN_ANSWER_FRAGMENTS = ['Tasks:', 'Model gateway is not configured']
 const RUNTIME_SOURCE_REQUIRED_FRAGMENTS = [
   '这次回答来源：后端规则和运行状态检查',
   '当前模型网关',
+];
+const T1_METRIC_REQUIRED_FRAGMENTS = [
+  'T1 结构化结果解读',
+  'BrainSegVol',
+  '不能仅凭这些输出判断正常或异常',
 ];
 
 export function parseArgs(argv) {
@@ -30,6 +36,7 @@ export function parseArgs(argv) {
     outputJson: '',
     root: '',
     runtimeSourceQuestion: false,
+    t1MetricQuestion: false,
     workflowConfirmationResume: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -38,6 +45,8 @@ export function parseArgs(argv) {
       args.headless = false;
     } else if (arg === '--runtime-source-question') {
       args.runtimeSourceQuestion = true;
+    } else if (arg === '--t1-metric-question') {
+      args.t1MetricQuestion = true;
     } else if (arg === '--workflow-confirmation-resume') {
       args.workflowConfirmationResume = true;
     } else if (arg === '--root') {
@@ -236,6 +245,92 @@ async function seedRunningT1Task({ projectId, root, seriesId }) {
   };
 }
 
+async function seedCompletedT1ResultSummary({ projectId, root, seriesId }) {
+  const script = `
+import json
+from pathlib import Path
+from app.db import database
+
+database.init_db()
+now = database.now_iso()
+task_id = 9140
+root = Path(ROOT_VALUE)
+out_dir = root / "projects" / str(PROJECT_ID_VALUE) / "derivatives" / str(task_id) / "output"
+summary_dir = out_dir / "summary"
+tables_dir = out_dir / "tables"
+summary_dir.mkdir(parents=True, exist_ok=True)
+tables_dir.mkdir(parents=True, exist_ok=True)
+summary_path = summary_dir / "t1_result_summary.json"
+brain_table = tables_dir / "t1_brain_measures.tsv"
+brain_table.write_text(
+    "measure\\tmetric\\tdescription\\tvalue\\tunit\\n"
+    "BrainSegVol\\tbrain_segmentation_volume\\tBrain Segmentation Volume\\t1199123.4\\tmm^3\\n",
+    encoding="utf-8",
+)
+summary_path.write_text(json.dumps({
+    "contract_version": "result_summary.v1",
+    "task_id": task_id,
+    "workflow_type": "t1_deepprep_anat_report",
+    "modality": "T1",
+    "spaces": ["T1w", "MNI152"],
+    "feature_groups": ["segmentation_volumes", "cortical_thickness", "regional_morphometry", "quality_control"],
+    "outputs": {
+        "tables": [
+            {"name": "t1_brain_measures", "relative_path": "tables/t1_brain_measures.tsv", "download_url": f"/tasks/{task_id}/artifacts/tables/t1_brain_measures.tsv"},
+            {"name": "t1_t1w_regions", "relative_path": "tables/t1_t1w_regions.tsv", "download_url": f"/tasks/{task_id}/artifacts/tables/t1_t1w_regions.tsv"},
+        ],
+        "qc": [{"name": "t1_qc_index", "relative_path": "qc/t1_qc_index.json", "download_url": f"/tasks/{task_id}/artifacts/qc/t1_qc_index.json"}],
+        "reports": [{"name": "scientific_report", "relative_path": "reports/index.html", "download_url": f"/tasks/{task_id}/artifacts/reports/index.html"}],
+    },
+    "provenance": {
+        "method": "deepprep_freesurfer_stats_parser",
+        "placeholder_outputs": False,
+        "extraction_status": "real_deepprep_freesurfer_stats",
+        "parsed_counts": {"brain_measures": 12, "regions": 68, "maps": 4, "transforms": 2},
+    },
+}, ensure_ascii=False, indent=2), encoding="utf-8")
+with database.connect() as conn:
+    conn.execute(
+        "INSERT INTO tasks(id, project_id, series_id, workflow_type, runtime_workflow_type, status, progress, log_path, error_message, created_at, started_at, finished_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+        (task_id, PROJECT_ID_VALUE, SERIES_ID_VALUE, "t1_deepprep_anat_report", "t1_deepprep", "completed", 100, str(out_dir / "task-9140.log"), None, now, now, now),
+    )
+    conn.execute(
+        "INSERT INTO outputs(task_id, output_type, path, preview_path, metadata_json, created_at) VALUES(?,?,?,?,?,?)",
+        (task_id, "json", str(summary_path), None, json.dumps({"kind": "result_summary", "modality": "T1"}), now),
+    )
+print("seeded-completed-t1")
+`.replace('ROOT_VALUE', JSON.stringify(root).replaceAll('\\\\', '\\\\\\\\'))
+    .replaceAll('PROJECT_ID_VALUE', String(projectId))
+    .replaceAll('SERIES_ID_VALUE', String(seriesId));
+  const seedPath = path.join(root, 'seed_completed_t1_result_summary.py');
+  await writeFile(seedPath, script, 'utf8');
+  await new Promise((resolve, reject) => {
+    const proc = spawn('python', [seedPath], {
+      cwd: API_ROOT,
+      env: {
+        ...process.env,
+        IMAGE_AGENT_ENV_FILE: path.join(root, '.env'),
+        IMAGE_AGENT_ROOT: root,
+        PYTHONPATH: API_ROOT,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+    let stderr = '';
+    proc.stderr.on('data', chunk => {
+      stderr += chunk.toString();
+    });
+    proc.on('exit', code => {
+      if (code === 0) resolve();
+      else reject(new Error(stderr || `seed completed T1 result-summary exited with code ${code}`));
+    });
+  });
+  return {
+    task_id: 9140,
+    workflow_type: 't1_deepprep_anat_report',
+  };
+}
+
 async function writeMinimalNifti(filePath) {
   const header = Buffer.alloc(348);
   header.writeInt32LE(348, 0);
@@ -292,6 +387,7 @@ async function driveBrowserFlow({
   projectId,
   runtimeSourceQuestion,
   root,
+  t1MetricQuestion,
   workflowConfirmationResume,
 }, deps) {
   const browser = await deps.launchBrowser({ headless });
@@ -366,6 +462,23 @@ async function driveBrowserFlow({
         seed: null,
       };
     }
+    if (t1MetricQuestion) {
+      const seed = await deps.seedCompletedT1ResultSummary({ projectId, root, seriesId: uploadedSeriesId });
+      const metricMessage = agentMessage || DEFAULT_T1_METRIC_MESSAGE;
+      await page.getByLabel('Agent query').fill(metricMessage);
+      await page.getByRole('button', { name: 'Send' }).click();
+      for (const fragment of T1_METRIC_REQUIRED_FRAGMENTS) {
+        await page.getByText(fragment).waitFor({ timeout: 20000 });
+      }
+      await page.getByText('Database and rules').waitFor({ timeout: 10000 });
+      return {
+        seed,
+        t1Metric: {
+          message: metricMessage,
+          required_fragments: T1_METRIC_REQUIRED_FRAGMENTS,
+        },
+      };
+    }
     if (workflowConfirmationResume) {
       const confirmationMessage = agentMessage || DEFAULT_WORKFLOW_CONFIRMATION_MESSAGE({
         projectId,
@@ -413,6 +526,7 @@ export async function runBrowserUploadAgentSmoke(options, injectedDeps = {}) {
     createProject,
     launchBrowser,
     requestJson,
+    seedCompletedT1ResultSummary,
     seedRunningT1Task,
     startApiServer,
     startConsoleServer,
@@ -430,6 +544,7 @@ export async function runBrowserUploadAgentSmoke(options, injectedDeps = {}) {
     consoleServer = await deps.startConsoleServer({ apiBaseUrl: apiServer.baseUrl, port: effectiveConsolePort });
     const flow = await driveBrowserFlow({
       agentMessage: options.workflowConfirmationResume === true || options.runtimeSourceQuestion === true
+        || options.t1MetricQuestion === true
         ? options.agentMessage
         : options.agentMessage || DEFAULT_AGENT_MESSAGE,
       apiBaseUrl: apiServer.baseUrl,
@@ -438,9 +553,11 @@ export async function runBrowserUploadAgentSmoke(options, injectedDeps = {}) {
       projectId: project.project_id,
       runtimeSourceQuestion: options.runtimeSourceQuestion === true,
       root,
+      t1MetricQuestion: options.t1MetricQuestion === true,
       workflowConfirmationResume: options.workflowConfirmationResume === true,
     }, deps);
     const runtimeSource = flow.runtimeSource || null;
+    const t1Metric = flow.t1Metric || null;
     const workflowConfirmationResume = flow.workflowConfirmationResume || null;
     return {
       agent_answer_required_fragments: REQUIRED_ANSWER_FRAGMENTS,
@@ -451,6 +568,8 @@ export async function runBrowserUploadAgentSmoke(options, injectedDeps = {}) {
       runtime_source_status: runtimeSource ? 'passed_in_browser' : 'not_requested',
       seed_task: flow.seed,
       status: 'passed',
+      t1_metric: t1Metric,
+      t1_metric_status: t1Metric ? 'passed_in_browser' : 'not_requested',
       upload_status: 'passed_in_browser',
       workflow_confirmation_resume: workflowConfirmationResume,
       workflow_confirmation_resume_status: workflowConfirmationResume ? 'passed_in_browser' : 'not_requested',

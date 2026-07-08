@@ -2621,3 +2621,29 @@
   - asked `你现在是基于规则脚本回答，还是基于LLM在回答`;
   - verified the page displayed `这次回答来源：后端规则和运行状态检查`, `当前模型网关`, and `Database and rules`;
   - verified this mode did not seed or create any task.
+
+## 2026-07-08 Browser T1 Metric Interpretation Smoke
+
+- Goal: verify the exact user-facing T1 metric question through the real browser instead of relying only on API unit tests.
+- User-facing issue covered:
+  - question: `给我分析一下t1提取出来的指标，综合水平怎么样，符不符合正常水平`;
+  - expected behavior: explain registered T1 result-summary evidence, show at least one concrete metric, and clearly refuse normal/abnormal diagnosis from these outputs alone.
+- Implementation:
+  - added `--t1-metric-question` to `apps/console/scripts/browser_upload_agent_smoke.mjs`;
+  - added `seedCompletedT1ResultSummary`, which inserts a completed `t1_deepprep_anat_report` task and writes a minimal real result-summary/table pair into the isolated test root;
+  - browser flow uploads generated T1 NIfTI, seeds completed T1 result evidence, opens Agent, sends the T1 metric question, and waits for deterministic answer fragments.
+- TDD evidence:
+  - RED: `--t1-metric-question` initially failed with `Unknown argument`;
+  - RED: the browser flow initially fell through to the current-data path and tried to seed a running task;
+  - GREEN: script test now covers CLI parsing, no-running-task behavior, completed T1 result seed, and required answer fragments.
+- Verification:
+  - `node node_modules/vitest/vitest.mjs run scripts/browser_upload_agent_smoke.test.mjs --run`: 8 passed.
+  - `python -m pytest apps/api/tests/test_agent_api.py::test_agent_run_explains_t1_metrics_from_result_summary_without_model_call apps/api/tests/test_agent_api.py::test_agent_run_answers_chinese_current_data_overview_readably_without_model -q --tb=short`: 2 passed, 3 warnings.
+  - `node node_modules/typescript/bin/tsc -b`: passed.
+  - `node scripts/browser_upload_agent_smoke.mjs --root .tmp/browser-t1-metric-smoke-20260708 --api-port 8149 --console-port 5189 --t1-metric-question --output-json .tmp/browser-t1-metric-smoke-20260708.json`: passed.
+- Runtime browser evidence:
+  - uploaded generated `sub-browser-smoke_T1w.nii.gz`;
+  - seeded completed task `#9140` with `t1_deepprep_anat_report`;
+  - registered `summary/t1_result_summary.json` and `tables/t1_brain_measures.tsv`;
+  - verified the page displayed `T1 结构化结果解读`, `BrainSegVol`, `不能仅凭这些输出判断正常或异常`, and `Database and rules`;
+  - no LLM call is required for this interaction; the explanation comes from backend result-summary evidence.

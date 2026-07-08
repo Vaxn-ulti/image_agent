@@ -289,3 +289,29 @@
   - 页面出现 `这次回答来源：后端规则和运行状态检查`、`当前模型网关`、`Database and rules`；
   - `seed_task=null`，没有任务创建。
 - 本 checkpoint 没有远程部署配置变更、没有生产任务创建、没有明文密钥写入 git-tracked 文件。
+
+### Checkpoint 12: Browser T1 Metric Interpretation Smoke
+
+- 本轮把用户原始 T1 指标追问纳入真实浏览器验收：
+  - `给我分析一下t1提取出来的指标，综合水平怎么样，符不符合正常水平`
+- 生产边界：
+  - T1 指标解释必须来自已登记 `result-summary` 和表格证据；
+  - 可以说明已提取的指标组、解析数量、示例指标、QC/报告入口；
+  - 不允许仅凭输出判断正常/异常，不给诊断结论；
+  - 该交互是只读解释，不创建、不启动 workflow task。
+- 代码落点：
+  - `apps/console/scripts/browser_upload_agent_smoke.mjs`：新增 `--t1-metric-question` 模式和 `seedCompletedT1ResultSummary`；
+  - `apps/console/scripts/browser_upload_agent_smoke.test.mjs`：新增 CLI parse 和注入式浏览器 flow 测试，确保该模式 seed completed T1 result evidence，而不是 seed running task。
+- TDD / verification 记录：
+  - RED：`--t1-metric-question` 最初报 `Unknown argument`。
+  - RED：T1 metric flow 最初误走 current-data 分支并尝试 seed running task。
+  - GREEN：`node node_modules/vitest/vitest.mjs run scripts/browser_upload_agent_smoke.test.mjs --run` -> `8 passed`。
+  - 后端 T1 回归：`python -m pytest apps/api/tests/test_agent_api.py::test_agent_run_explains_t1_metrics_from_result_summary_without_model_call apps/api/tests/test_agent_api.py::test_agent_run_answers_chinese_current_data_overview_readably_without_model -q --tb=short` -> `2 passed, 3 warnings`。
+  - Console build：`node node_modules/typescript/bin/tsc -b` -> passed。
+  - 真实浏览器：`node scripts/browser_upload_agent_smoke.mjs --root .tmp/browser-t1-metric-smoke-20260708 --api-port 8149 --console-port 5189 --t1-metric-question --output-json .tmp/browser-t1-metric-smoke-20260708.json` -> passed。
+- 真实浏览器证据：
+  - 上传 T1 smoke NIfTI；
+  - seed completed task `#9140` / `t1_deepprep_anat_report`；
+  - 写入并登记 `summary/t1_result_summary.json` 与 `tables/t1_brain_measures.tsv`；
+  - Agent 页面显示 `T1 结构化结果解读`、`BrainSegVol`、`不能仅凭这些输出判断正常或异常`、`Database and rules`。
+- 本 checkpoint 没有远程部署配置变更、没有生产任务创建、没有明文密钥写入 git-tracked 文件。
