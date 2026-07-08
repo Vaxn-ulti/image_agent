@@ -2487,3 +2487,28 @@
   - verified the answer did not contain old English `Tasks:` text or `Model gateway is not configured` noise.
 - Verification:
   - `python -m pytest apps/api/tests/test_isolated_api_server_script.py -q --tb=short`: 1 passed.
+
+## 2026-07-08 Reusable Upload-To-Agent Live Smoke
+
+- Goal: make the upload-to-Agent interaction smoke repeatable instead of relying on one-off Node/Python snippets.
+- Red test:
+  - added `apps/api/tests/test_smoke_isolated_upload_agent.py`;
+  - first run failed with `isolated upload-agent smoke script is missing`;
+  - the test requires a safe JSON payload, empty initial project list, real upload call, task seeding call, Chinese Agent question, and no local path/secret leakage in the output.
+- Implementation:
+  - added `apps/api/scripts/smoke_isolated_upload_agent.py`;
+  - the script starts `run_isolated_api_server.py`, waits for `/health`, asserts `/projects == []`, creates a project, uploads `sub-isolated-smoke_T1w.nii.gz`, seeds task `#9001`, and asks `/agent/runs`;
+  - answer validation requires `项目状态概览`, `任务 #`, and `只读观察`;
+  - answer validation rejects old noisy text such as `Tasks:` and `Model gateway is not configured`;
+  - output keeps `root_scope=isolated` instead of writing host paths.
+- Live isolated smoke evidence:
+  - ran `python apps/api/scripts/smoke_isolated_upload_agent.py --root .tmp/isolated-upload-agent-smoke-20260708 --port 8142 --output-json .tmp/isolated-upload-agent-smoke-20260708.json`;
+  - verified initial projects were empty;
+  - verified project `1`, series `1`, modality `T1`, sequence `T1w_MPRAGE`;
+  - verified seeded task `#9001`, workflow `t1_deepprep_anat_report`, status `running`, progress `35`;
+  - verified Agent returned `status=answered`, `intent=result_analysis`, `response_source=backend_context`, `selected_skill=backend-context-fallback`;
+  - verified the answer included the required Chinese overview/task/read-only fragments and excluded the old English/no-model noise.
+- Verification:
+  - `python -m pytest apps/api/tests/test_smoke_isolated_upload_agent.py apps/api/tests/test_isolated_api_server_script.py -q --tb=short`: 2 passed;
+  - `python -m pytest apps/api/tests/test_agent_api.py::test_agent_run_answers_chinese_current_data_overview_readably_without_model apps/api/tests/test_agent_api.py::test_agent_run_unconfigured_model_answers_inventory_without_confirmation apps/api/tests/test_agent_api.py::test_agent_run_falls_back_to_read_only_backend_answer_when_model_unconfigured apps/api/tests/test_agent_tools.py::test_read_project_context_enriches_series_workflow_eligibility -q`: 4 passed;
+  - `python apps/api/scripts/smoke_isolated_upload_agent.py --root .tmp/isolated-upload-agent-smoke-verify-20260708 --port 8143 --output-json .tmp/isolated-upload-agent-smoke-verify-20260708.json`: passed.

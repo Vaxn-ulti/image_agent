@@ -623,3 +623,26 @@ Next:
 
 - Build or adopt a browser harness that supports file input setting, then reuse this isolated server launcher for full UI upload/chat assertions.
 - Apply the Chinese readability contract to workflow confirmation/resume messages.
+
+## 2026-07-08 Reusable Upload-To-Agent Live Smoke
+
+Objective: turn the previously manual isolated upload/Agent interaction check into a repeatable smoke command.
+
+Status: completed locally as a subtask; overall interaction-intelligence goal remains active.
+
+Completed:
+
+- Added `apps/api/scripts/smoke_isolated_upload_agent.py`.
+- The script starts the isolated API server, verifies `/projects` is empty, creates a project, uploads a minimal T1 NIfTI, seeds a controlled running T1 task, and asks `/agent/runs` the Chinese current-data question.
+- Added `apps/api/tests/test_smoke_isolated_upload_agent.py` with a red-green test for payload shape, call sequence, path redaction, upload behavior, task seeding, and Agent answer validation.
+- Ran the real script against an isolated root and verified the Agent returned `intent=result_analysis`, `response_source=backend_context`, `status=answered`, T1 upload evidence, task `#9001`, and Chinese read-only status prose.
+
+Boundaries:
+
+- This is still API-level live interaction rather than true browser file-picker automation.
+- It creates a synthetic task directly in the isolated smoke database to test the exact uploaded-data-plus-task-status conversation without running heavy neuroimaging containers.
+
+Next:
+
+- Connect this smoke script to a browser harness that can set file inputs, then assert the same answer through the real Agent page.
+- Improve workflow confirmation/resume Chinese copy and cover it with the same live smoke style.

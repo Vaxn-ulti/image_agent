@@ -648,3 +648,20 @@ Findings:
 - Remaining product work:
   - reuse this launcher for a full browser upload/chat smoke once the browser harness can set file inputs;
   - keep production service configuration separate from this local smoke helper.
+
+## 2026-07-08 Reusable Upload-To-Agent Live Smoke Findings
+
+- Interaction testing gap:
+  - before this step, the strongest upload-to-Agent evidence lived in ad hoc live-smoke code from the session;
+  - that made it too easy to regress the path from upload state to Agent answer without a named command to rerun.
+- Implemented boundary:
+  - upload-to-Agent live smoke is now a first-class script under `apps/api/scripts/`;
+  - it verifies isolation first by requiring an empty project list before creating any test data;
+  - it tests the exact user-facing scenario of uploaded T1 data plus a running task, while avoiding expensive container execution by seeding a controlled task in the isolated smoke DB.
+- Answer contract:
+  - the Agent must answer the Chinese current-data question from backend context;
+  - the answer must include readable Chinese project/task/read-only status markers;
+  - the answer must not include legacy English `Tasks:` fallback text or model-gateway-missing noise.
+- Remaining product work:
+  - add true browser file-input automation on top of this isolated backend harness;
+  - add a similar live-smoke contract for workflow confirmation/resume wording.
