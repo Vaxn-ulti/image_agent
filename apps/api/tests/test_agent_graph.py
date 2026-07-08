@@ -1756,13 +1756,14 @@ def test_langgraph_agent_runner_result_analysis_answer_is_complete_even_if_model
     assert result["status"] == "answered"
     assert result["safe_metadata"]["lane"] == "read_only"
     assert result["production_task_created"] is False
-    assert "Observation summary" in result["answer"]
-    assert "task 140" in result["answer"]
-    assert "Result artifacts" in result["answer"]
+    assert "项目状态概览" in result["answer"]
+    assert "观察摘要" in result["answer"]
+    assert "任务 #140" in result["answer"]
+    assert "结果产物" in result["answer"]
     assert "reports/index.html" in result["answer"]
-    assert "QC observations" in result["answer"]
+    assert "质控观察" in result["answer"]
     assert "sub-01_desc-surfparc_T1w.svg" in result["answer"]
-    assert "No workflow was launched" in result["answer"]
+    assert "只读观察" in result["answer"]
     assert "confirmation" not in result
 
 
@@ -1802,10 +1803,11 @@ def test_langgraph_agent_runner_result_analysis_handles_natural_chinese_question
 
     assert result["status"] == "answered"
     assert result["production_task_created"] is False
-    assert "Observation summary" in result["answer"]
-    assert "Result artifacts" in result["answer"]
-    assert "QC observations" in result["answer"]
-    assert "No workflow was launched" in result["answer"]
+    assert "项目状态概览" in result["answer"]
+    assert "观察摘要" in result["answer"]
+    assert "结果产物" in result["answer"]
+    assert "质控观察" in result["answer"]
+    assert "只读观察" in result["answer"]
     assert "confirmation" not in result
 
 

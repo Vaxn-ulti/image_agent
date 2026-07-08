@@ -11,22 +11,27 @@ const CONSOLE_ROOT = path.resolve(path.dirname(__filename), '..');
 const REPO_ROOT = path.resolve(CONSOLE_ROOT, '..', '..');
 const API_ROOT = path.join(REPO_ROOT, 'apps', 'api');
 const DEFAULT_AGENT_MESSAGE = '替我分析一下现在的数据';
+const DEFAULT_WORKFLOW_CONFIRMATION_MESSAGE = ({ projectId, seriesId }) =>
+  `请为项目${projectId}的序列${seriesId}准备 t1_deepprep_anat_report 工作流确认，不要创建或启动任务`;
 const REQUIRED_ANSWER_FRAGMENTS = ['项目状态概览', '任务 #', '只读观察'];
 const FORBIDDEN_ANSWER_FRAGMENTS = ['Tasks:', 'Model gateway is not configured'];
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const args = {
-    agentMessage: DEFAULT_AGENT_MESSAGE,
+    agentMessage: '',
     apiPort: 0,
     consolePort: 0,
     headless: true,
     outputJson: '',
     root: '',
+    workflowConfirmationResume: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--headed') {
       args.headless = false;
+    } else if (arg === '--workflow-confirmation-resume') {
+      args.workflowConfirmationResume = true;
     } else if (arg === '--root') {
       args.root = argv[++index];
     } else if (arg === '--api-port') {
@@ -248,7 +253,38 @@ async function launchBrowser({ headless }) {
   return chromium.launch({ headless });
 }
 
-async function driveBrowserFlow({ agentMessage, apiBaseUrl, consoleBaseUrl, headless, projectId, root }, deps) {
+async function waitForCreatedWorkflowTask({ apiBaseUrl, projectId }, deps) {
+  const url = `${apiBaseUrl}/projects/${projectId}/tasks`;
+  const deadline = Date.now() + 20000;
+  let tasks = [];
+  while (Date.now() < deadline) {
+    tasks = await deps.requestJson('GET', url);
+    if (
+      Array.isArray(tasks)
+      && tasks.some(task => task?.workflow_type === 't1_deepprep_anat_report' && Number(task?.id) > 0)
+    ) {
+      break;
+    }
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
+  if (
+    !Array.isArray(tasks)
+    || !tasks.some(task => task?.workflow_type === 't1_deepprep_anat_report' && Number(task?.id) > 0)
+  ) {
+    throw new Error('created workflow task did not become ready');
+  }
+  return tasks.find(task => task?.workflow_type === 't1_deepprep_anat_report' && Number(task?.id) > 0);
+}
+
+async function driveBrowserFlow({
+  agentMessage,
+  apiBaseUrl,
+  consoleBaseUrl,
+  headless,
+  projectId,
+  root,
+  workflowConfirmationResume,
+}, deps) {
   const browser = await deps.launchBrowser({ headless });
   try {
     const page = await browser.newPage();
@@ -292,10 +328,43 @@ async function driveBrowserFlow({ agentMessage, apiBaseUrl, consoleBaseUrl, head
     if (!uploadResponse.ok()) {
       throw new Error(`Browser upload failed: HTTP ${uploadResponse.status()} ${await uploadResponse.text()}`);
     }
-    await page.getByText('T1w_MPRAGE').waitFor({ timeout: 15000 });
-    const seed = await deps.seedRunningT1Task({ projectId, root, seriesId: 1 });
+    let uploadedSeriesId = 1;
+    try {
+      const uploadPayload = await uploadResponse.json();
+      uploadedSeriesId = Number(uploadPayload?.series?.id || uploadPayload?.series_id || uploadedSeriesId);
+    } catch {
+      uploadedSeriesId = 1;
+    }
+    const t1SequenceText = page.getByText('T1w_MPRAGE');
+    const firstT1SequenceText =
+      typeof t1SequenceText.first === 'function' ? t1SequenceText.first() : t1SequenceText;
+    await firstT1SequenceText.waitFor({ timeout: 15000 });
 
     await page.goto(`${consoleBaseUrl}/projects/${projectId}/agent`);
+    if (workflowConfirmationResume) {
+      const confirmationMessage = agentMessage || DEFAULT_WORKFLOW_CONFIRMATION_MESSAGE({
+        projectId,
+        seriesId: uploadedSeriesId,
+      });
+      await page.getByLabel('Agent query').fill(confirmationMessage);
+      await page.getByRole('button', { name: 'Send' }).click();
+      await page.getByText('Approve workflow').waitFor({ timeout: 20000 });
+      await page.getByText('t1_deepprep_anat_report', { exact: true }).waitFor({ timeout: 20000 });
+      await page.getByText('Task not created yet').waitFor({ timeout: 20000 });
+      await page.getByRole('button', { name: 'Approve workflow' }).click();
+      await page.getByText('created for t1_deepprep_anat_report').waitFor({ timeout: 20000 });
+      const task = await deps.waitForCreatedWorkflowTask({ apiBaseUrl, projectId }, deps);
+      return {
+        seed: null,
+        workflowConfirmationResume: {
+          message: confirmationMessage,
+          series_id: uploadedSeriesId,
+          task,
+        },
+      };
+    }
+
+    const seed = await deps.seedRunningT1Task({ projectId, root, seriesId: uploadedSeriesId });
     await page.getByLabel('Agent query').fill(agentMessage);
     await page.getByRole('button', { name: 'Send' }).click();
     for (const fragment of REQUIRED_ANSWER_FRAGMENTS) {
@@ -318,9 +387,11 @@ export async function runBrowserUploadAgentSmoke(options, injectedDeps = {}) {
   const deps = {
     createProject,
     launchBrowser,
+    requestJson,
     seedRunningT1Task,
     startApiServer,
     startConsoleServer,
+    waitForCreatedWorkflowTask,
     writeMinimalNifti,
     ...injectedDeps,
   };
@@ -333,13 +404,17 @@ export async function runBrowserUploadAgentSmoke(options, injectedDeps = {}) {
     const project = await deps.createProject({ apiBaseUrl: apiServer.baseUrl });
     consoleServer = await deps.startConsoleServer({ apiBaseUrl: apiServer.baseUrl, port: effectiveConsolePort });
     const flow = await driveBrowserFlow({
-      agentMessage: options.agentMessage || DEFAULT_AGENT_MESSAGE,
+      agentMessage: options.workflowConfirmationResume === true
+        ? options.agentMessage
+        : options.agentMessage || DEFAULT_AGENT_MESSAGE,
       apiBaseUrl: apiServer.baseUrl,
       consoleBaseUrl: consoleServer.baseUrl,
       headless: options.headless !== false,
       projectId: project.project_id,
       root,
+      workflowConfirmationResume: options.workflowConfirmationResume === true,
     }, deps);
+    const workflowConfirmationResume = flow.workflowConfirmationResume || null;
     return {
       agent_answer_required_fragments: REQUIRED_ANSWER_FRAGMENTS,
       agent_interaction_status: 'passed_in_browser',
@@ -348,6 +423,8 @@ export async function runBrowserUploadAgentSmoke(options, injectedDeps = {}) {
       seed_task: flow.seed,
       status: 'passed',
       upload_status: 'passed_in_browser',
+      workflow_confirmation_resume: workflowConfirmationResume,
+      workflow_confirmation_resume_status: workflowConfirmationResume ? 'passed_in_browser' : 'not_requested',
     };
   } finally {
     if (consoleServer) await consoleServer.stop();

@@ -23,6 +23,7 @@ from app.agent.contracts import (
     normalize_agent_run_result,
 )
 from app.agent.graph import AgentRunner
+from app.agent.intent import classify_rule_intent
 from app.agent.langgraph_runner import build_langgraph_runner_factory
 from app.agent.rag_orchestration import build_rag_response
 from app.agent.report_verification import verify_scientific_reports
@@ -467,6 +468,11 @@ def _agent_runner_factory():
     if engine == "legacy":
         return AgentRunner, True
     return AgentRunner, True
+
+
+def _is_model_free_fixed_workflow_confirmation_request(message: str, project_context: dict) -> bool:
+    signal = classify_rule_intent(message=message, project_context=project_context)
+    return signal.get("intent") == "run_workflow" and signal.get("category") == "fixed_workflow_launch"
 
 
 def _compact_question_text(message: str) -> str:
@@ -959,7 +965,11 @@ def agent_run(req):
             request_type="run",
             project_id=req.project_id,
         )
-    if default_runner and not _agent_model_configured():
+    if (
+        default_runner
+        and not _agent_model_configured()
+        and not _is_model_free_fixed_workflow_confirmation_request(message, project_context)
+    ):
         result = normalize_agent_run_result(_read_only_agent_fallback(message, project_id=req.project_id, project_context=project_context))
         result = _annotate_read_only_agent_result(message, result)
         result["agent_run_id"] = agent_run_id

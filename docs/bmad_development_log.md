@@ -233,3 +233,35 @@
   - RED：focused deployment readiness tests 因实现仍期待 rawchat/GPT-5.5 Responses 而失败。
   - GREEN：`python -m pytest apps/api/tests/test_agent_api.py::test_deployment_fast_launch_readiness_requires_deepseek_chat_completions_and_remote_evidence apps/api/tests/test_agent_api.py::test_deployment_fast_launch_readiness_blocks_deepseek_without_direct_transport apps/api/tests/test_agent_api.py::test_deployment_fast_launch_readiness_accepts_privacy_safe_remote_acceptance_id -q --tb=short` -> `4 passed`。
 - 本 checkpoint 没有远程 workflow run、没有 API restart、没有生产任务创建、没有明文密钥写入 git-tracked 文件。
+
+### Checkpoint 10: Model-Free Workflow Confirmation And Browser Resume UX
+
+- 按新的生产规划继续补齐 Agent 交互边界：让固定工作流确认卡在模型网关不可用时也能通过确定性规则生成，但仍不允许未授权创建任务。
+- 生产边界：
+  - `准备工作流确认 / workflow confirmation` 这类显式请求进入 fixed workflow confirmation lane；
+  - `不要创建或启动任务` 不再把“准备确认卡”误判为纯只读回答；
+  - 首次 Agent run 只创建 pending confirmation/thread，不创建 workflow task；
+  - 只有用户点击批准后，后端 resume endpoint 通过 fingerprint/pending confirmation 才能创建 task；
+  - 缺 Docker sudo/runtime credentials 时，真实 workflow task 可以失败在运行阶段，但这发生在审批后，属于执行环境边界而不是 Agent 绕过审批。
+- 代码落点：
+  - `apps/api/app/agent/intent.py`：新增显式确认准备短语和 rule intent evidence。
+  - `apps/api/app/agent/graph.py`：新增 model-gateway-unconfigured 时的 deterministic fixed workflow planner fallback。
+  - `apps/api/app/services/agent_service.py`：让 model-free fixed workflow confirmation request 绕过只读 fallback，进入 LangGraph confirmation path。
+  - `apps/api/tests/test_agent_api.py`、`apps/api/tests/test_agent_graph.py`：补充 model-free confirmation 与中文稳定结果摘要断言。
+  - `apps/console/scripts/browser_upload_agent_smoke.mjs`：新增 `--workflow-confirmation-resume`，真实浏览器上传、发送确认请求、点击批准并轮询 created task。
+  - `apps/console/src/routes/AgentPage.tsx`：审批卡移入主聊天流，移除右侧 Evidence 面板的关键操作按钮，避免点击被布局遮挡。
+- TDD / verification 记录：
+  - RED：model-free 确认请求最初返回 `answered`，没有生成 confirmation。
+  - GREEN：API regression 验证 `confirmation_required`、`image-agent-workflow-runner`、pending confirmation row、approval 前无 task。
+  - RED：浏览器 smoke 首次发现 CLI workflow 模式仍发送默认“分析当前数据”消息。
+  - GREEN：CLI parse test 锁定 workflow 模式默认使用 generated approval message。
+  - RED：真实浏览器发现重复文本 locator 和右侧 approval button click interception。
+  - GREEN：审批卡进入主聊天流后，真实浏览器完整通过 upload -> confirmation -> approve -> task created。
+- Verification：
+  - `python -m pytest apps/api/tests/test_agent_api.py::test_agent_run_prepares_workflow_confirmation_without_model_when_user_says_do_not_launch apps/api/tests/test_agent_api.py::test_agent_run_unconfigured_model_answers_inventory_without_confirmation apps/api/tests/test_agent_api.py::test_agent_run_falls_back_to_read_only_backend_answer_when_model_unconfigured apps/api/tests/test_agent_api.py::test_agent_resume_approved_confirmation_creates_real_task apps/api/tests/test_agent_graph.py -q --tb=short` -> `63 passed, 3 warnings`。
+  - `node node_modules/vitest/vitest.mjs run src/routes/AgentPage.test.tsx --run` -> `12 passed`。
+  - `node node_modules/vitest/vitest.mjs run scripts/browser_upload_agent_smoke.test.mjs --run` -> `4 passed`。
+  - `node node_modules/typescript/bin/tsc -b` -> passed。
+  - `node scripts/browser_upload_agent_smoke.mjs --root .tmp/browser-workflow-confirmation-resume-20260708e --api-port 8146 --console-port 5186 --workflow-confirmation-resume --output-json .tmp/browser-workflow-confirmation-resume-20260708e.json` -> passed。
+  - `node scripts/browser_upload_agent_smoke.mjs --root .tmp/browser-upload-agent-smoke-regression-20260708 --api-port 8147 --console-port 5187 --output-json .tmp/browser-upload-agent-smoke-regression-20260708.json` -> passed。
+- 本 checkpoint 没有远程部署配置变更、没有明文密钥写入 git-tracked 文件；真实浏览器 isolated smoke 在 approval 后创建 task，随后因缺 `IMAGE_AGENT_SUDO_PASSWORD` 按预期停在真实 Docker runtime credential boundary。

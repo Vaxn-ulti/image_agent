@@ -84,7 +84,11 @@ def classify_rule_intent(*, message: str, project_context: dict[str, Any] | None
     if _contains_any(text, _inventory_tokens()) or _contains_any(text, _capability_tokens()):
         matched_rules.append("inventory_or_capability")
         evidence.append("inventory_or_capability_phrase")
-    if _contains_any(text, _negated_launch_tokens()):
+    confirmation_preparation = _contains_any(text, _confirmation_preparation_tokens())
+    if confirmation_preparation:
+        matched_rules.append("explicit_confirmation_preparation")
+        evidence.append("confirmation_preparation_phrase")
+    if _contains_any(text, _negated_launch_tokens()) and not confirmation_preparation:
         matched_rules.append("negated_launch")
         evidence.append("negated_launch_phrase")
     if _contains_any(text, _status_tokens()):
@@ -106,6 +110,16 @@ def classify_rule_intent(*, message: str, project_context: dict[str, Any] | None
             category="inventory_capability",
             gate="read_only",
             confidence=1.0,
+            authoritative=True,
+            matched_rules=matched_rules,
+            evidence=evidence,
+        ).model_dump()
+    if "explicit_confirmation_preparation" in matched_rules:
+        return RuleIntentSignal(
+            intent="run_workflow",
+            category="fixed_workflow_launch",
+            gate="candidate_confirmation",
+            confidence=0.95,
             authoritative=True,
             matched_rules=matched_rules,
             evidence=evidence,
@@ -417,6 +431,19 @@ def _explicit_launch_tokens() -> tuple[str, ...]:
         "立即运行",
         "创建任务",
         "申请跑",
+    )
+
+
+def _confirmation_preparation_tokens() -> tuple[str, ...]:
+    return (
+        "prepare workflow confirmation",
+        "prepare confirmation",
+        "workflow confirmation",
+        "confirmation card",
+        "准备工作流确认",
+        "准备确认",
+        "工作流确认",
+        "确认卡",
     )
 
 

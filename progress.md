@@ -2566,3 +2566,35 @@
 - TDD / verification so far:
   - RED: focused deployment readiness tests failed because implementation still expected rawchat/GPT-5.5 Responses.
   - GREEN: `python -m pytest apps/api/tests/test_agent_api.py::test_deployment_fast_launch_readiness_requires_deepseek_chat_completions_and_remote_evidence apps/api/tests/test_agent_api.py::test_deployment_fast_launch_readiness_blocks_deepseek_without_direct_transport apps/api/tests/test_agent_api.py::test_deployment_fast_launch_readiness_accepts_privacy_safe_remote_acceptance_id -q --tb=short`: 4 passed.
+
+## 2026-07-08 Browser Workflow Confirmation Resume
+
+- Goal: make the Agent usable for the real upload-to-workflow path, even when the model gateway is unavailable, and verify the flow through an actual browser.
+- Root cause:
+  - `/agent/runs` short-circuited to the read-only backend fallback whenever the model gateway was unconfigured.
+  - Explicit requests like `准备 t1_deepprep_anat_report 工作流确认，不要创建或启动任务` therefore never reached the LangGraph confirmation-card path.
+  - The browser smoke also exposed two frontend interaction issues: brittle duplicate text locators and an approval button rendered in the right evidence sidebar whose click target was intercepted by the page layout.
+- Implementation:
+  - added deterministic rule intent support for explicit workflow-confirmation preparation phrases;
+  - allowed fixed workflow confirmation requests to reach the LangGraph runner without model access;
+  - added a deterministic planner fallback for fixed workflow confirmation preparation when the model gateway is unconfigured;
+  - kept the production boundary unchanged: first run creates only a pending confirmation, and task creation still requires server-side resume approval;
+  - extended `browser_upload_agent_smoke.mjs` with `--workflow-confirmation-resume`;
+  - moved the Agent approval card into the main chat stream and removed the duplicate sidebar approval button.
+- TDD / regression evidence:
+  - RED: API regression initially returned `answered` instead of `confirmation_required` for model-free confirmation preparation.
+  - GREEN: focused API regression now returns `confirmation_required`, selected skill `image-agent-workflow-runner`, no task before approval, and a pending confirmation row.
+  - RED: browser harness initially seeded a task for the confirmation-resume path and used the normal current-data message in CLI mode.
+  - GREEN: CLI parsing now keeps workflow-confirmation mode on its generated approval message; harness tests cover upload, confirmation, approve, and task polling.
+  - RED: real browser found duplicate text strict-mode failures and the sidebar approval button click interception.
+  - GREEN: approval card in the chat stream is clickable and the real browser flow completes.
+- Verification:
+  - `python -m pytest apps/api/tests/test_agent_api.py::test_agent_run_prepares_workflow_confirmation_without_model_when_user_says_do_not_launch apps/api/tests/test_agent_api.py::test_agent_run_unconfigured_model_answers_inventory_without_confirmation apps/api/tests/test_agent_api.py::test_agent_run_falls_back_to_read_only_backend_answer_when_model_unconfigured apps/api/tests/test_agent_api.py::test_agent_resume_approved_confirmation_creates_real_task apps/api/tests/test_agent_graph.py -q --tb=short`: 63 passed, 3 warnings.
+  - `node node_modules/vitest/vitest.mjs run src/routes/AgentPage.test.tsx --run`: 12 passed.
+  - `node node_modules/vitest/vitest.mjs run scripts/browser_upload_agent_smoke.test.mjs --run`: 4 passed.
+  - `node node_modules/typescript/bin/tsc -b`: passed.
+  - `node scripts/browser_upload_agent_smoke.mjs --root .tmp/browser-workflow-confirmation-resume-20260708e --api-port 8146 --console-port 5186 --workflow-confirmation-resume --output-json .tmp/browser-workflow-confirmation-resume-20260708e.json`: passed.
+  - `node scripts/browser_upload_agent_smoke.mjs --root .tmp/browser-upload-agent-smoke-regression-20260708 --api-port 8147 --console-port 5187 --output-json .tmp/browser-upload-agent-smoke-regression-20260708.json`: passed.
+- Boundary note:
+  - the confirmation-resume browser smoke created task `#1` only after approval;
+  - in the isolated test environment the task then failed at runtime with `IMAGE_AGENT_SUDO_PASSWORD is required for real Docker workflows`, which is expected for a real Docker workflow without privileged runtime credentials.

@@ -298,6 +298,55 @@ export function AgentPage() {
                 </div>
               </div>
             ))}
+            {pendingConfirmation ? (
+              <div className="flex justify-start">
+                <div className="ml-11 w-full max-w-xl space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900 shadow-sm">
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Approval required</div>
+                    <div className="mt-1 font-semibold leading-5 text-amber-950">{pendingConfirmationDisplayName}</div>
+                    {pendingConfirmationMetadata.capability_summary ? (
+                      <div className="mt-1 leading-5 text-amber-800">{pendingConfirmationMetadata.capability_summary}</div>
+                    ) : null}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 rounded-md bg-white/70 p-3">
+                    <span className="text-amber-700">Stable workflow ID</span>
+                    <span className="truncate font-semibold text-right">{pendingConfirmationWorkflowType}</span>
+                    <span className="text-amber-700">Series</span>
+                    <span className="font-semibold text-right">#{String(pendingConfirmation.confirmation.series_id || 'unknown')}</span>
+                  </div>
+                  <div className="rounded-md border border-amber-200 bg-white px-3 py-2">
+                    <div className="font-bold text-amber-900">Task not created yet</div>
+                    <div className="mt-1 text-[11px] text-amber-700">Backend API creates the task after approval.</div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={resume.isPending}
+                      onClick={() => resume.mutate({
+                        approved: true,
+                        confirmation: pendingConfirmation.confirmation,
+                        threadId: pendingConfirmation.threadId,
+                      })}
+                      className="flex-1 rounded-md bg-[#065F46] px-3 py-2 text-[11px] font-bold text-white shadow-sm hover:bg-[#044E3A] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Approve workflow
+                    </button>
+                    <button
+                      type="button"
+                      disabled={resume.isPending}
+                      onClick={() => resume.mutate({
+                        approved: false,
+                        confirmation: pendingConfirmation.confirmation,
+                        threadId: pendingConfirmation.threadId,
+                      })}
+                      className="rounded-md border border-amber-200 bg-white px-3 py-2 text-[11px] font-bold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
             {ask.isPending && (
               <div className="flex justify-start">
                 <div className="flex gap-3 max-w-[85%]">
@@ -507,56 +556,6 @@ export function AgentPage() {
                       {lastResponse.recommended_next_step || lastResponse.tool_chain_hint || 'Verify result summary details.'}
                     </div>
                   </div>
-
-                  {pendingConfirmation ? (
-                    <div>
-                      <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Approval required</div>
-                      <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-                        <div>
-                          <div className="font-semibold leading-5 text-amber-950">{pendingConfirmationDisplayName}</div>
-                          {pendingConfirmationMetadata.capability_summary ? (
-                            <div className="mt-1 leading-5 text-amber-800">{pendingConfirmationMetadata.capability_summary}</div>
-                          ) : null}
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <span className="text-amber-700">Stable workflow ID</span>
-                          <span className="truncate font-semibold text-right">{pendingConfirmationWorkflowType}</span>
-                          <span className="text-amber-700">Series</span>
-                          <span className="font-semibold text-right">#{String(pendingConfirmation.confirmation.series_id || 'unknown')}</span>
-                        </div>
-                        <div className="rounded-md border border-amber-200 bg-white px-3 py-2">
-                          <div className="font-bold text-amber-900">Task not created yet</div>
-                          <div className="mt-1 text-[11px] text-amber-700">Backend API creates the task after approval.</div>
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            disabled={resume.isPending}
-                            onClick={() => resume.mutate({
-                              approved: true,
-                              confirmation: pendingConfirmation.confirmation,
-                              threadId: pendingConfirmation.threadId,
-                            })}
-                            className="flex-1 rounded-md bg-[#065F46] px-3 py-2 text-[11px] font-bold text-white shadow-sm hover:bg-[#044E3A] disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            Approve workflow
-                          </button>
-                          <button
-                            type="button"
-                            disabled={resume.isPending}
-                            onClick={() => resume.mutate({
-                              approved: false,
-                              confirmation: pendingConfirmation.confirmation,
-                              threadId: pendingConfirmation.threadId,
-                            })}
-                            className="rounded-md border border-amber-200 bg-white px-3 py-2 text-[11px] font-bold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ) : null}
 
                   {(lastResponse.events || []).length > 0 ? (
                     <div>

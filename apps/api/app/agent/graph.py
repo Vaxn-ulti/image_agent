@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -13,8 +14,8 @@ from app.agent.chat import (
     _status_reply,
 )
 from app.agent.incubation import IncubationLedger
-from app.agent.intent import normalize_intent_decision
-from app.agent.model_gateway import ModelGateway
+from app.agent.intent import classify_rule_intent, normalize_intent_decision
+from app.agent.model_gateway import ModelGateway, ModelGatewayError
 from app.agent.prompt_loader import load_prompt
 from app.agent.rag_orchestration import retrieve_reference_context
 from app.agent.skill_loader import load_skill_context, select_skill
@@ -344,37 +345,127 @@ class AgentRunner:
                 + json.dumps(project_context, ensure_ascii=False)[:20000],
             },
         ]
-        if hasattr(self.gateway, "complete_structured_with_tools"):
-            planned = self.gateway.complete_structured_with_tools(
-                messages,
-                purpose="agent_plan",
-                structured_schema=AGENT_PLANNER_DECISION_SCHEMA,
-                tool_context={"project_context": project_context, "rag_root": self.rag_root},
+        try:
+            if hasattr(self.gateway, "complete_structured_with_tools"):
+                planned = self.gateway.complete_structured_with_tools(
+                    messages,
+                    purpose="agent_plan",
+                    structured_schema=AGENT_PLANNER_DECISION_SCHEMA,
+                    tool_context={"project_context": project_context, "rag_root": self.rag_root},
+                )
+                decision = planned.get("decision", {})
+                planned_tool_trace = planned.get("tool_trace", [])
+                planner_mode = (
+                    "openai_structured_without_tool_loop"
+                    if planned_tool_trace and planned_tool_trace[0].get("status") == "skipped"
+                    else "openai_function_tools_dispatched"
+                )
+                tool_trace = [
+                    {"stage": "planner", "mode": planner_mode},
+                    *planned_tool_trace,
+                ]
+            else:
+                decision = self.gateway.complete_structured(
+                    messages,
+                    purpose="agent_plan",
+                    structured_schema=AGENT_PLANNER_DECISION_SCHEMA,
+                )
+                tool_trace = [{"stage": "planner", "mode": "openai_function_tools_schema_exposed"}]
+        except ModelGatewayError as exc:
+            deterministic = self._deterministic_rule_planner_decision(
+                message=message,
+                project_context=project_context,
             )
-            decision = planned.get("decision", {})
-            planned_tool_trace = planned.get("tool_trace", [])
-            planner_mode = (
-                "openai_structured_without_tool_loop"
-                if planned_tool_trace and planned_tool_trace[0].get("status") == "skipped"
-                else "openai_function_tools_dispatched"
+            if deterministic is None:
+                raise
+            return (
+                deterministic,
+                [
+                    {
+                        "stage": "planner",
+                        "mode": "deterministic_rule_fallback",
+                        "status": "model_gateway_unavailable",
+                        "reason": str(exc),
+                        "production_task_created": False,
+                    }
+                ],
             )
-            tool_trace = [
-                {"stage": "planner", "mode": planner_mode},
-                *planned_tool_trace,
-            ]
-        else:
-            decision = self.gateway.complete_structured(
-                messages,
-                purpose="agent_plan",
-                structured_schema=AGENT_PLANNER_DECISION_SCHEMA,
-            )
-            tool_trace = [{"stage": "planner", "mode": "openai_function_tools_schema_exposed"}]
         if not isinstance(decision, dict):
             return (
                 {"intent": "answer_question", "summary": "The model did not return a structured decision."},
                 tool_trace,
             )
         return decision, tool_trace
+
+    def _deterministic_rule_planner_decision(
+        self,
+        *,
+        message: str,
+        project_context: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        signal = classify_rule_intent(message=message, project_context=project_context)
+        if signal.get("intent") != "run_workflow" or signal.get("category") != "fixed_workflow_launch":
+            return None
+        workflow_type = self._extract_workflow_type_from_message(message, project_context)
+        series_id = self._extract_series_id_from_message(message)
+        ambiguities: list[str] = []
+        if workflow_type is None:
+            ambiguities.append("workflow_type_not_explicit")
+        if series_id is None and len(project_context.get("series") or []) != 1:
+            ambiguities.append("series_id_not_explicit")
+        return {
+            "intent": "run_workflow",
+            "action_lane": FIXED_WORKFLOW,
+            "lane": FIXED_WORKFLOW,
+            "workflow_type": workflow_type,
+            "series_id": series_id,
+            "summary": "Prepare a human confirmation for a fixed workflow without creating a task.",
+            "objective": "Prepare workflow confirmation only.",
+            "modality": None,
+            "input_modality": None,
+            "toolchain": None,
+            "primitives": None,
+            "script_paths": None,
+            "script_text": None,
+            "risks": ["confirmation_required_before_task_creation"],
+            "recommended_next_step": "Show the workflow confirmation card and wait for approval.",
+            "tool_chain_hint": "server_side_resume_confirmation_only",
+            "requires_confirmation": True,
+            "intent_category": "fixed_workflow_launch",
+            "intent_subcategory": "deterministic_confirmation_preparation",
+            "confidence": float(signal.get("confidence") or 0.9),
+            "evidence_spans": [str(item) for item in signal.get("evidence") or []],
+            "risk_level": "low",
+            "ambiguities": ambiguities,
+            "route_recommendation": FIXED_WORKFLOW,
+        }
+
+    @staticmethod
+    def _extract_series_id_from_message(message: str) -> int | None:
+        text = str(message or "")
+        patterns = (
+            r"\bseries[_\s#:-]*(\d+)\b",
+            r"\bseries_id[_\s=:-]*(\d+)\b",
+            r"序列\s*#?\s*(\d+)",
+        )
+        for pattern in patterns:
+            match = re.search(pattern, text, flags=re.IGNORECASE)
+            if match:
+                return int(match.group(1))
+        return None
+
+    @staticmethod
+    def _extract_workflow_type_from_message(message: str, project_context: dict[str, Any]) -> str | None:
+        text = str(message or "").lower()
+        workflow_types = [
+            str(workflow.get("type") or "")
+            for workflow in project_context.get("workflows") or []
+            if isinstance(workflow, dict) and workflow.get("type")
+        ]
+        for workflow_type in workflow_types:
+            if workflow_type.lower() in text:
+                return workflow_type
+        return None
 
     @staticmethod
     def _asks_for_inventory_or_capability_explanation(message: str) -> bool:
@@ -466,6 +557,18 @@ class AgentRunner:
         text = " ".join(str(message or "").lower().split())
         if not text:
             return False
+        confirmation_preparation_phrases = (
+            "prepare workflow confirmation",
+            "prepare confirmation",
+            "workflow confirmation",
+            "confirmation card",
+            "准备工作流确认",
+            "准备确认",
+            "工作流确认",
+            "确认卡",
+        )
+        if any(phrase in text for phrase in confirmation_preparation_phrases):
+            return True
         read_only_phrases = (
             "do not run",
             "don't run",

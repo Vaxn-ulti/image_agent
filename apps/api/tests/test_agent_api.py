@@ -948,6 +948,72 @@ def test_agent_run_confirmation_does_not_create_task_before_resume(tmp_path, mon
     assert row["task_id"] is None
 
 
+def test_agent_run_prepares_workflow_confirmation_without_model_when_user_says_do_not_launch(
+    tmp_path,
+    monkeypatch,
+):
+    from app.core import config
+    from app.db import database
+    from app import main
+    from app.main import app
+
+    monkeypatch.setattr(config, "DATA_ROOT", tmp_path)
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(config, "PROJECTS_ROOT", tmp_path / "projects")
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "app.db")
+    monkeypatch.setattr(main, "PROJECTS_ROOT", tmp_path / "projects")
+    monkeypatch.setenv("IMAGE_AGENT_THREAD_ROOT", str(tmp_path / "agent_threads"))
+    database.init_db()
+    with database.connect() as conn:
+        conn.execute("INSERT INTO projects(id, name, description, created_at) VALUES(?,?,?,?)", (1, "P", "", database.now_iso()))
+        conn.execute(
+            "INSERT INTO files(id, project_id, original_name, storage_path, file_type, size, sha256, created_at) VALUES(?,?,?,?,?,?,?,?)",
+            (1, 1, "sub-01_T1w.nii.gz", str(tmp_path / "sub-01_T1w.nii.gz"), "NIFTI", 1, "x", database.now_iso()),
+        )
+        conn.execute(
+            "INSERT INTO imaging_series(id, project_id, file_id, sequence_label, supported_for_processing, unsupported_reason, modality, format, confidence, metadata_json, status, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            (11, 1, 1, "T1w_MPRAGE", 1, "", "T1", "NIFTI", 0.9, json.dumps({}), "detected", database.now_iso()),
+        )
+
+    result = TestClient(app).post(
+        "/agent/runs",
+        json={
+            "project_id": 1,
+            "message": "请为项目1的序列11准备 t1_deepprep_anat_report 工作流确认，不要创建或启动任务",
+        },
+    )
+
+    assert result.status_code == 200
+    body = result.json()
+    assert body["status"] == "confirmation_required"
+    assert body["intent"] == "run_workflow"
+    assert body["selected_skill"] == "image-agent-workflow-runner"
+    assert body["production_task_created"] is False
+    assert body["confirmation"]["project_id"] == 1
+    assert body["confirmation"]["series_id"] == 11
+    assert body["confirmation"]["workflow_type"] == "t1_deepprep_anat_report"
+    assert body["confirmation"]["runtime_workflow_type"] == "t1_deepprep"
+    assert body["confirmation"]["action_lane"] == "fixed_workflow"
+    assert body["confirmation"]["fingerprint"]
+    assert body["confirmation"]["workflow_metadata"]["is_report_only"] is False
+    assert body["confirmation"]["preflight"]["ok"] is True
+    assert body["safe_metadata"].get("fallback_reason") != "model_gateway_unconfigured"
+
+    with database.connect() as conn:
+        task_count = conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
+        confirmation_row = conn.execute(
+            "SELECT * FROM agent_confirmations WHERE thread_id=?",
+            (body["thread_id"],),
+        ).fetchone()
+        run_row = conn.execute("SELECT * FROM agent_runs WHERE agent_run_id=?", (body["agent_run_id"],)).fetchone()
+
+    assert task_count == 0
+    assert confirmation_row["status"] == "pending_confirmation"
+    assert confirmation_row["workflow_type"] == "t1_deepprep_anat_report"
+    assert run_row["status"] == "confirmation_required"
+    assert run_row["task_id"] is None
+
+
 def test_agent_run_forces_unknown_fixed_workflow_into_incubation_without_production_task(tmp_path, monkeypatch):
     from app.core import config
     from app.db import database
